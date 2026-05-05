@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JZV Portal</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+            },
+            colors: {
+              brand: {
+                DEFAULT: "#6C3483",
+                dark: "#5B2C6F",
+                bright: "#8E44AD",
+                soft: "#9B59B6",
+                deep: "#7D3C98",
+              },
+              pink: {
+                primary: "#E84393",
+                dark: "#D81B60",
+                light: "#FF6FB5",
+                deep: "#C2185B",
+              },
+              teal: {
+                primary: "#1ABC9C",
+                dark: "#117A65",
+                muted: "#16A085",
+                light: "#48C9B0",
+              },
+              green: { bright: "#2ECC71", dark: "#27AE60", deep: "#0E6655" },
+              blue: {
+                primary: "#3C8DBC",
+                bright: "#3498DB",
+                medium: "#2E86C1",
+                dark: "#1F618D",
+              },
+              yellow: {
+                primary: "#F1C40F",
+                gold: "#F39C12",
+                google: "#F4B400",
+                light: "#F7DC6F",
+                dark: "#D4AC0D",
+              },
+              orange: {
+                primary: "#E67E22",
+                dark: "#D35400",
+                soft: "#EB984E",
+                burnt: "#CA6F1E",
+              },
+              red: {
+                primary: "#E74C3C",
+                dark: "#C0392B",
+                muted: "#CB4335",
+                deep: "#922B21",
+              },
+              dark: {
+                primary: "#2C3E50",
+                charcoal: "#2D3436",
+                deepblue: "#1C2833",
+                almostblack: "#17202A",
+              },
+              light: {
+                white: "#FFFFFF",
+                soft: "#FDFEFE",
+                bg: "#F8F9F9",
+                ui: "#EAEAEA",
+                border: "#D5D8DC",
+                muted: "#CCD1D1",
+              },
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

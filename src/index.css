@@ -1,0 +1,82 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  font-family: "Inter", sans-serif;
+  background-color: #064e3b;
+  color: #65a30d;
+}
+h4 {
+  @apply text-lg sm:text-xl lg:text-2xl font-bold;
+}
+h5 {
+  @apply text-base sm:text-lg lg:text-xl font-bold;
+}
+.m0-regular {
+  @apply text-base sm:text-lg lg:text-xl;
+}
+.m1-regular {
+  @apply text-lg sm:text-xl lg:text-2xl;
+}
+
+.md1-bold {
+  @apply text-lg sm:text-xl lg:text-2xl font-bold;
+}
+
+.modal-open {
+  overflow: hidden;
+}
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #6c3483;
+}
+.timeline-border {
+  border-left: 2px solid #6c3483;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #eaeaea;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #ccd1d1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6c3483;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(108, 52, 131, 0.3);
+  border-radius: inherit;
+}
+
+.urdu-text {
+  font-family:
+    "Jameel Noori Nastaleeq", "Jameel Noori Nastaleeq Regular",
+    "Noto Nastaliq Urdu", "Alvi Nastaleeq", "Arial", sans-serif;
+  direction: rtl; /* Right-to-Left for Urdu */
+  line-height: 1.8; /* Better spacing for Nastaleeq */
+  font-weight: normal;
+}
