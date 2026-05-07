@@ -284,7 +284,7 @@ const Courses = ({ courseView, setCourseView }) => {
           <div className="absolute top-0 right-0 bg-brand-dark text-white px-4 sm:px-6 py-2 rounded-bl-2xl font-bold text-lg sm:text-xl">
             PCC
           </div>
-          <div className="p-6 sm:p-10 lg:p-12 flex-1">
+          <div className="p-3 sm:p-5 lg:p-6 flex-1">
             <p className="px-10 sm:px-12 text-lg sm:text-xl text-brand-dark tracking-[0.2em]">
               AALIMIYAT
             </p>
@@ -292,32 +292,31 @@ const Courses = ({ courseView, setCourseView }) => {
               <i className="fas fa-award mr-4 text-brand shrink-0"></i> Platinum
               Certificate
             </h4>
-            <ul className="list-none space-y-4 sm:space-y-6 text-lg sm:text-xl text-dark-charcoal">
+            <ul className="list-none space-y-2 sm:space-y-4 text-lg sm:text-xl text-dark-charcoal">
               <li className="flex items-center gap-3">
-                <i className="fas fa-child text-brand-soft w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-child text-brand-soft w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Entry Age:</strong>{" "}
                 <span className="ml-3">6 to 8 years</span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-check-circle text-brand-soft w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-check-circle text-brand-soft w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Criteria:</strong>{" "}
                 <span className="ml-3">1st Standard Pass</span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-hourglass-half text-brand-soft w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-hourglass-half text-brand-soft w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Duration:</strong>{" "}
                 <span className="ml-3">13 years (3+3+3+4)</span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-flag-checkered text-brand-soft w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-flag-checkered text-brand-soft w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Completion:</strong>{" "}
                 <span className="ml-3">19 or 20 years</span>
               </li>
               <li className="flex items-start gap-3">
-                <i className="fas fa-graduation-cap text-brand-soft w-8 sm:w-10 text-xl sm:text-3xl mt-1 text-center shrink-0"></i>
-                <span className="flex-1 ml-3">
-                  <strong>Outcome:</strong> Aalimiyat & 10th/12th (NIOS)
-                </span>
+                <i className="fas fa-graduation-cap text-brand-soft w-8 sm:w-10 text-xl sm:text-2xl mt-1 text-center shrink-0"></i>
+                <strong>Outcome:</strong>{" "}
+                <span className="ml-3">Aalimiyat & 10th/12th (NIOS)</span>
               </li>
             </ul>
           </div>
@@ -334,7 +333,7 @@ const Courses = ({ courseView, setCourseView }) => {
           <div className="absolute top-0 right-0 bg-yellow-gold text-white px-4 sm:px-6 py-2 rounded-bl-2xl font-bold text-lg sm:text-xl">
             GCC
           </div>
-          <div className="p-6 sm:p-10 lg:p-12 flex-1">
+          <div className="p-3 sm:p-5 lg:p-6 flex-1">
             <p className="px-12 sm:px-14 text-lg sm:text-xl text-yellow-dark tracking-[0.2em]">
               AALIMIYAT
             </p>
@@ -342,37 +341,31 @@ const Courses = ({ courseView, setCourseView }) => {
               <i className="fas fa-medal mr-4 text-yellow-gold shrink-0"></i>{" "}
               Golden Certificate
             </h4>
-            <ul className="list-none space-y-4 sm:space-y-6 text-lg sm:text-xl text-dark-charcoal">
+            <ul className="list-none space-y-2 sm:space-y-4 text-lg sm:text-xl text-dark-charcoal">
               <li className="flex items-start gap-3">
-                <i className="fas fa-child text-yellow-gold w-8 sm:w-10 text-xl sm:text-3xl mt-1 text-center shrink-0"></i>
+                <i className="fas fa-child text-yellow-gold w-8 sm:w-10 text-xl sm:text-2xl mt-1 text-center shrink-0"></i>
                 <span className="flex-1 ml-3">
                   <strong>Entry Age:</strong> 10 to 12 years <br />
-                  <span className="text-sm sm:text-lg text-dark-muted font-normal">
-                    (Max age: 12 years 6 months)
-                  </span>
                 </span>
               </li>
               <li className="flex items-start gap-3">
-                <i className="fas fa-check-circle text-yellow-gold w-8 sm:w-10 text-xl sm:text-3xl mt-1 text-center shrink-0"></i>
+                <i className="fas fa-check-circle text-yellow-gold w-8 sm:w-10 text-xl sm:text-2xl mt-1 text-center shrink-0"></i>
                 <span className="flex-1 ml-3">
                   <strong>Criteria:</strong>5th Pass <br />
-                  <span className="text-sm sm:text-lg text-dark-muted font-normal">
-                    (Not after this)
-                  </span>
                 </span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-hourglass-half text-yellow-gold w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-hourglass-half text-yellow-gold w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Duration:</strong>{" "}
                 <span className="ml-3">10 Years (2+2+3+3)</span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-flag-checkered text-yellow-gold w-8 sm:w-10 text-xl sm:text-3xl text-center shrink-0"></i>
+                <i className="fas fa-flag-checkered text-yellow-gold w-8 sm:w-10 text-xl sm:text-2xl text-center shrink-0"></i>
                 <strong>Completion:</strong>{" "}
                 <span className="ml-3">20 to 21 years</span>
               </li>
               <li className="flex items-start gap-3">
-                <i className="fas fa-graduation-cap text-yellow-gold w-8 sm:w-10 text-xl sm:text-3xl mt-1 text-center shrink-0"></i>
+                <i className="fas fa-graduation-cap text-yellow-gold w-8 sm:w-10 text-xl sm:text-2xl mt-1 text-center shrink-0"></i>
                 <span className="flex-1 ml-3">
                   <strong>Outcome:</strong> Aalimiyat & 10th/12th (NIOS)
                 </span>
