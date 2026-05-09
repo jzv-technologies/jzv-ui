@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "../../utils/supabase";
 
-export default function CheckApplicationStatus({ onBack, inModal = false }) {
+export default function CheckApplicationStatus({ inModal = false }) {
   const [searchType, setSearchType] = useState("id"); // 'id', 'name', 'mobile'
   const [searchData, setSearchData] = useState({
     id: "",
@@ -67,13 +67,6 @@ export default function CheckApplicationStatus({ onBack, inModal = false }) {
       }
     >
       <div className="max-w-3xl mx-auto">
-        <button
-          onClick={onBack}
-          className="mb-6 text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2"
-        >
-          ← Back
-        </button>
-
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">
             Check Application Status
@@ -211,13 +204,6 @@ export default function CheckApplicationStatus({ onBack, inModal = false }) {
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-2 px-6 rounded-lg transition-colors"
               >
                 {loading ? "Searching..." : "Search"}
-              </button>
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-6 rounded-lg transition-colors"
-              >
-                Back
               </button>
             </div>
           </form>

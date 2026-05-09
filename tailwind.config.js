@@ -5,14 +5,17 @@ export default {
       colors: {
         brand: {
           DEFAULT: "#6C3483",
+          primary: "#6C3483",
           dark: "#5B2C6F",
           bright: "#8E44AD",
           soft: "#9B59B6",
           deep: "#7D3C98",
           lbg: "#f5e6fb",
+          burnt: "#65237f",
         },
         pine: {
           lbg: "#ecfdf5",
+          soft: "#34d399",
           50: "#ecfdf5", // your value
           100: "#d1fae5", // your value
           200: "#a7f3d0",
@@ -26,6 +29,11 @@ export default {
         },
         olive: {
           lbg: "#f0ffce",
+          primary: "#84cc16",
+          dark: "#65a30d",
+          light: "#bef264",
+          deep: "#4d7c0f",
+          soft: "#a3e635",
           50: "#ecf7d4",
           100: "#ecfccb",
           200: "#d9f99d",
@@ -43,6 +51,7 @@ export default {
           dark: "#D81B60",
           light: "#FF6FB5",
           deep: "#C2185B",
+          soft: "#F8BBD0",
         },
         teal: {
           lbg: "rgb(218, 255, 251)",
@@ -50,6 +59,7 @@ export default {
           dark: "#117A65",
           muted: "#16A085",
           light: "#48C9B0",
+          soft: "#A2D9CE",
         },
         green: {
           lbg: "#c6f9db",
@@ -57,6 +67,7 @@ export default {
           dark: "#27AE60",
           deep: "#0E6655",
           light: "#7DCEA0",
+          soft: "#a0f4c3",
         },
         blue: {
           lbg: "#D6EAF8",
@@ -65,6 +76,7 @@ export default {
           medium: "#2E86C1",
           dark: "#1F618D",
           light: "#85C1E9",
+          soft: "#96caec",
         },
         yellow: {
           lbg: "#fef7dc",
@@ -73,6 +85,7 @@ export default {
           google: "#F4B400",
           light: "#F7DC6F",
           dark: "#D4AC0D",
+          soft: "#F9E79F",
         },
         orange: {
           lbg: "#ffedd5",
@@ -87,6 +100,7 @@ export default {
           dark: "#C0392B",
           muted: "#CB4335",
           deep: "#922B21",
+          soft: "#F1948A",
         },
         dark: {
           lbg: "#c2e0fe",
@@ -94,6 +108,8 @@ export default {
           charcoal: "#2D3436",
           deepblue: "#1C2833",
           almostblack: "#17202A",
+          soft: "#566573",
+          dark: "#212F3D",
         },
         light: {
           white: "#FFFFFF",

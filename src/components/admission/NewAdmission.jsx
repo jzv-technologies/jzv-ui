@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "../../utils/supabase";
 
-export default function NewApplication({ onBack, inModal = false, onSuccess }) {
+export default function NewAdmission({ inModal = false }) {
   const [formData, setFormData] = useState({
     studentName: "",
     dateOfBirth: "",
@@ -17,20 +17,17 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
     mothersEducation: "",
     fathersOccupation: "",
   });
-
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [successData, setSuccessData] = useState(null);
+  const [showOverlay, setShowOverlay] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const resetForm = () => {
+  const resetForm = () =>
     setFormData({
       studentName: "",
       dateOfBirth: "",
@@ -46,29 +43,21 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
       mothersEducation: "",
       fathersOccupation: "",
     });
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setLoading(true);
     setMessage("");
-
     try {
-      // Generate Application ID
       const currentYear = new Date().getFullYear();
-
       const { count } = await supabase
         .from("applications")
         .select("*", { count: "exact", head: true })
         .gte("created_at", `${currentYear}-01-01`)
         .lt("created_at", `${currentYear + 1}-01-01`);
 
-      const sequenceNumber = (count + 1).toString().padStart(3, "0");
+      const applicationId = `JZV-${currentYear}-${(count + 1).toString().padStart(3, "0")}`;
 
-      const applicationId = `JZV-${currentYear}-${sequenceNumber}`;
-
-      // Insert application
       const { data, error } = await supabase
         .from("applications")
         .insert([
@@ -97,20 +86,14 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
         setMessage(`Error: ${error.message}`);
       } else {
         resetForm();
-
-        // Close current modal and open success modal
-        onBack();
-
-        // Open success modal with application data
-        if (onSuccess) {
-          onSuccess({
-            applicationId: data[0].application_id,
-            studentName: data[0].student_name,
-          });
-        }
+        setSuccessData({
+          applicationId: data[0].application_id,
+          studentName: data[0].student_name,
+        });
+        setShowOverlay(true);
       }
-    } catch (error) {
-      setMessage(`Error: ${error.message}`);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -119,44 +102,61 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
   const containerClass = inModal
     ? "py-4 px-4"
     : "min-h-screen bg-gradient-to-b from-blue-50 to-white py-12 px-4";
-
   const cardClass = inModal
     ? "bg-white rounded-lg p-6"
     : "bg-white rounded-lg shadow-lg p-8";
 
   return (
-    <div className={containerClass}>
-      <div className="max-w-3xl mx-auto">
-        <button
-          onClick={onBack}
-          className="mb-6 text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-2"
-        >
-          ← Back
-        </button>
-
-        <div className={cardClass}>
-          <h1
-            className={`font-bold text-gray-900 mb-8 ${
-              inModal ? "text-2xl" : "text-3xl"
-            }`}
-          >
-            New Application Form
-          </h1>
-
-          {message && (
-            <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-700">
-              {message}
+    <>
+      {/* ── Success overlay ─────────────────────────────────────────────── */}
+      {showOverlay && successData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md mx-4 w-full text-center">
+            <div className="text-6xl mb-6 animate-pulse">✅</div>
+            <h2 className="text-3xl font-bold text-green-600 mb-4">Success!</h2>
+            <p className="text-gray-700 mb-6 text-lg">
+              Application submitted successfully.
+            </p>
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 mb-6">
+              <p className="text-sm text-gray-500 mb-1">Application ID</p>
+              <p className="text-2xl font-bold text-green-700 font-mono tracking-widest">
+                {successData.applicationId}
+              </p>
             </div>
-          )}
+            <p className="text-sm text-gray-400 mb-6">
+              Keep this ID safe for future reference.
+            </p>
+            <button
+              onClick={() => {
+                setShowOverlay(false);
+                setSuccessData(null);
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-8 rounded-lg transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Student Details */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-                Student Details
-              </h2>
+      {/* ── Form ────────────────────────────────────────────────────────── */}
+      <div className={containerClass}>
+        <div className="max-w-3xl mx-auto">
+          <div className={cardClass}>
+            <h1
+              className={`font-bold text-gray-900 mb-8 ${inModal ? "text-2xl" : "text-3xl"}`}
+            >
+              Admission Enquiry Form
+            </h1>
 
-              <div className="grid md:grid-cols-2 gap-4">
+            {message && (
+              <div className="mb-6 p-4 rounded-lg bg-red-100 text-red-700">
+                {message}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <Section title="Student Details">
                 <InputField
                   label="Student Name *"
                   name="studentName"
@@ -164,15 +164,13 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="Enter full name"
                 />
-
                 <InputField
-                  type="date"
                   label="Date of Birth *"
                   name="dateOfBirth"
                   value={formData.dateOfBirth}
                   onChange={handleChange}
+                  type="date"
                 />
-
                 <InputField
                   label="Last School Attended *"
                   name="lastSchoolAttended"
@@ -180,7 +178,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="School name"
                 />
-
                 <InputField
                   label="Last Class Attended *"
                   name="lastClassAttended"
@@ -188,16 +185,9 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="e.g., Class 10"
                 />
-              </div>
-            </div>
+              </Section>
 
-            {/* Parent Details */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-                Parent Details
-              </h2>
-
-              <div className="grid md:grid-cols-2 gap-4">
+              <Section title="Parent Details">
                 <InputField
                   label="Parent's Name *"
                   name="parentName"
@@ -205,7 +195,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="Enter parent's name"
                 />
-
                 <InputField
                   label="Father's Education *"
                   name="fathersEducation"
@@ -213,7 +202,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="e.g., B.A., B.Tech"
                 />
-
                 <InputField
                   label="Mother's Education *"
                   name="mothersEducation"
@@ -221,7 +209,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="e.g., B.A., B.Tech"
                 />
-
                 <InputField
                   label="Father's Occupation *"
                   name="fathersOccupation"
@@ -229,26 +216,18 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="e.g., Engineer, Doctor"
                 />
-              </div>
-            </div>
+              </Section>
 
-            {/* Contact Details */}
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
-                Contact Details
-              </h2>
-
-              <div className="grid md:grid-cols-2 gap-4">
+              <Section title="Contact Details">
                 <InputField
-                  type="tel"
                   label="Mobile No *"
                   name="mobileNo"
                   value={formData.mobileNo}
                   onChange={handleChange}
+                  type="tel"
                   placeholder="10-digit mobile number"
                   pattern="[0-9]{10}"
                 />
-
                 <InputField
                   label="Address *"
                   name="address"
@@ -256,7 +235,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="Street address"
                 />
-
                 <InputField
                   label="Area *"
                   name="area"
@@ -264,7 +242,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="Area/Locality"
                 />
-
                 <InputField
                   label="City *"
                   name="city"
@@ -272,7 +249,6 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   onChange={handleChange}
                   placeholder="City"
                 />
-
                 <InputField
                   label="Pincode *"
                   name="pincode"
@@ -281,30 +257,39 @@ export default function NewApplication({ onBack, inModal = false, onSuccess }) {
                   placeholder="6-digit pincode"
                   pattern="[0-9]{6}"
                 />
+              </Section>
+
+              <div className="flex gap-4 pt-6">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                >
+                  {loading ? "Submitting..." : "Submit Application"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg transition-colors"
+                >
+                  Reset
+                </button>
               </div>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-4 pt-6">
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-              >
-                {loading ? "Submitting..." : "Submit Application"}
-              </button>
-
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-6 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
+    </>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <div>
+      <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-2">
+        {title}
+      </h2>
+      <div className="grid md:grid-cols-2 gap-4">{children}</div>
     </div>
   );
 }
@@ -323,7 +308,6 @@ function InputField({
       <label className="block text-sm font-medium text-gray-700 mb-2">
         {label}
       </label>
-
       <input
         type={type}
         name={name}
