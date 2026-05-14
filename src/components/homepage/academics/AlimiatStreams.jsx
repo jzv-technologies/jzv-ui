@@ -1,6 +1,6 @@
 import React from "react";
 
-const Streams = (streamView, setStreamView) => {
+const AlimiatStreams = (streamView, setStreamView) => {
   if (streamView === "law") {
     return (
       <div className="max-w-6xl mx-auto flex flex-col pb-10">
@@ -821,4 +821,4 @@ const Streams = (streamView, setStreamView) => {
   );
 };
 
-export default Streams;
+export default AlimiatStreams;

@@ -80,3 +80,10 @@ h5 {
   line-height: 1.8; /* Better spacing for Nastaleeq */
   font-weight: normal;
 }
+.goog-logo-link {
+  display: none !important;
+}
+.goog-te-gadget {
+  font-family: inherit !important;
+  font-size: 0.9rem !important;
+}

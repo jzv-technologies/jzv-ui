@@ -1,6 +1,6 @@
 import React from "react";
 
-const DailyRoutine = () => {
+const DailySchedule = () => {
   return (
     <div className="max-w-6xl mx-auto flex flex-col pb-10">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 sm:gap-10">
@@ -200,4 +200,4 @@ const DailyRoutine = () => {
   );
 };
 
-export default DailyRoutine;
+export default DailySchedule;

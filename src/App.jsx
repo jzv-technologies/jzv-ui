@@ -1,26 +1,26 @@
 import React, { useState, useEffect } from "react";
 import AOS from "aos";
 import "aos/dist/aos.css";
-import WhyJzv from "./components/homepage/WhyJzv";
-import VisionMission from "./components/homepage/VisionMission";
-import Courses from "./components/homepage/Courses";
+import WhyJzv from "./components/homepage/about-us/WhyJzv";
+import VisionMission from "./components/homepage/about-us/VisionMission";
+import Courses from "./components/homepage/academics/Courses";
 import LoginPortal from "./components/LoginPortal";
-import _4Ts from "./components/homepage/4Ts";
-import NIOS from "./components/homepage/NIOS";
-import Streams from "./components/homepage/Steams";
-import FeeStructure from "./components/homepage/FeeStructure";
-import DailyRoutine from "./components/homepage/DailyRoutine";
-import TahfeezulQuran from "./components/homepage/TahfeezulQuran";
-import SportsAndAgility from "./components/homepage/SportsAndAgility";
-import AdmissionProcess from "./components/homepage/AdmissionProcess";
-import Policies from "./components/homepage/Policies";
-import ExtraCurriculars from "./components/homepage/ExtraCurriculars";
+import _4Ts from "./components/homepage/about-us/4Ts";
+import NIOS from "./components/homepage/academics/NIOS";
+import AlimiatStreams from "./components/homepage/academics/AlimiatStreams";
+import FeeStructure from "./components/homepage/admission/FeeStructure";
+import DailySchedule from "./components/homepage/life-at-jzv/DailySchedule";
+import TahfeezulQuran from "./components/homepage/academics/TahfeezulQuran";
+import SportsAndAgility from "./components/homepage/life-at-jzv/SportsAndAgility";
+import AdmissionProcess from "./components/homepage/policies/AdmissionProcess";
+import Policies from "./components/homepage/policies/Policies";
+import ExtraCurriculars from "./components/homepage/life-at-jzv/ExtraCurriculars";
 import CampusGallery from "./components/homepage/CampusGallery";
-import NewAdmission from "./components/admission/NewAdmission";
-import CheckApplicationStatus from "./components/admission/CheckStatus";
-
+import NewAdmission from "./components/homepage/admission/NewAdmission";
+import CheckApplicationStatus from "./components/homepage/admission/CheckStatus";
+import DynamicForm from "./components/DynamicForm";
+import { CARD_THEMES } from "./utils/cardTheme";
 // ─── Tab groups ────────────────────────────────────────────────────────────────
-// ids[0] is always the default tab when the group entry card is clicked
 const TAB_GROUPS = [
   { name: "about-us", ids: ["why-jzv", "vision", "system-4t"] },
   { name: "academic", ids: ["courses", "streams", "nios", "hifz"] },
@@ -32,7 +32,6 @@ const TAB_GROUPS = [
   },
 ];
 
-// All ids that belong to a group — these are hidden from the main grid
 const GROUPED_IDS = new Set(TAB_GROUPS.flatMap((g) => g.ids));
 
 const getGroupByName = (name) =>
@@ -40,13 +39,46 @@ const getGroupByName = (name) =>
 const getGroupById = (id) => TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
 
 const App = () => {
-  // activeModal is either a group name ("academic") or a solo card id ("why-jzv")
   const [activeModal, setActiveModal] = useState(null);
-  const [activeTab, setActiveTab] = useState(null); // only used for group modals
-
+  const [activeTab, setActiveTab] = useState(null);
   const [showLoginPortal, setShowLoginPortal] = useState(false);
   const [selectedLoginType, setSelectedLoginType] = useState(null);
   const [user, setUser] = useState(null);
+
+  // Google Translate initialization
+  useEffect(() => {
+    // Function to load Google Translate script
+    const addGoogleTranslateScript = () => {
+      const script = document.createElement("script");
+      script.src =
+        "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+      script.async = true;
+      document.body.appendChild(script);
+    };
+
+    // Global callback for Google Translate
+    window.googleTranslateElementInit = () => {
+      if (window.google && window.google.translate) {
+        new window.google.translate.TranslateElement(
+          {
+            pageLanguage: "en",
+            includedLanguages: "ar,en,ta,ur", // Only Arabic, English, Tamil, Urdu
+            layout:
+              window.google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false,
+          },
+          "google_translate_element",
+        );
+      }
+    };
+
+    // If script is already present, just init, otherwise add it
+    if (!document.querySelector('script[src*="translate.google.com"]')) {
+      addGoogleTranslateScript();
+    } else if (window.google && window.google.translate) {
+      window.googleTranslateElementInit();
+    }
+  }, []);
 
   useEffect(() => {
     AOS.init({ once: true, offset: 50, duration: 400 });
@@ -92,10 +124,7 @@ const App = () => {
       id: "why-jzv",
       title: "Why JZV",
       icon: "fa-building-columns",
-      color: "bg-pink-primary",
-      textColor: "text-pink-primary",
-      bgcontent: "bg-pink-lbg",
-      bgSoft: "bg-pink-soft",
+      ...CARD_THEMES.pink,
       showAtHome: false,
       content: <WhyJzv />,
     },
@@ -103,10 +132,7 @@ const App = () => {
       id: "vision",
       title: "Vision & Mission",
       icon: "fa-eye",
-      color: "bg-blue-primary",
-      textColor: "text-blue-primary",
-      bgcontent: "bg-blue-lbg",
-      bgSoft: "bg-blue-soft",
+      ...CARD_THEMES.blue,
       showAtHome: false,
       content: (
         <VisionMission visionLang={visionLang} setVisionLang={setVisionLang} />
@@ -116,10 +142,7 @@ const App = () => {
       id: "system-4t",
       title: "4Ts Pedagogy",
       icon: "fa-leaf",
-      color: "bg-teal-primary",
-      textColor: "text-teal-primary",
-      bgcontent: "bg-teal-lbg",
-      bgSoft: "bg-teal-soft",
+      ...CARD_THEMES.teal,
       showAtHome: false,
       content: <_4Ts />,
     },
@@ -127,10 +150,7 @@ const App = () => {
       id: "hifz",
       title: "Tahfeez ul Quran",
       icon: "fa-book-quran",
-      color: "bg-green-dark",
-      textColor: "text-green-dark",
-      bgcontent: "bg-green-lbg",
-      bgSoft: "bg-green-soft",
+      ...CARD_THEMES.green,
       showAtHome: false,
       content: <TahfeezulQuran />,
     },
@@ -138,21 +158,15 @@ const App = () => {
       id: "schedule",
       title: "Daily Schedule",
       icon: "fa-clock",
-      color: "bg-yellow-gold",
-      textColor: "text-yellow-gold",
-      bgcontent: "bg-yellow-lbg",
-      bgSoft: "bg-yellow-soft",
+      ...CARD_THEMES.orange,
       showAtHome: false,
-      content: <DailyRoutine />,
+      content: <DailySchedule />,
     },
     {
       id: "extracurricular",
       title: "Extra-Curriculars",
       icon: "fa-palette",
-      color: "bg-pink-primary",
-      textColor: "text-pink-primary",
-      bgcontent: "bg-pink-lbg",
-      bgSoft: "bg-pink-soft",
+      ...CARD_THEMES.pink,
       showAtHome: false,
       content: <ExtraCurriculars />,
     },
@@ -160,34 +174,25 @@ const App = () => {
       id: "sports",
       title: "Sports & Agility",
       icon: "fa-futbol",
-      color: "bg-brand-bright",
-      textColor: "text-brand-bright",
-      bgcontent: "bg-brand-lbg",
-      bgSoft: "bg-brand-soft",
+      ...CARD_THEMES.brand,
       showAtHome: false,
       content: <SportsAndAgility />,
     },
 
-    // ── Group entry-point cards (shown on grid, open tabbed modal) ───────────
+    // ── Group entry-point cards ───────────────────────────────────────────
     {
       id: "__about__jzv",
       title: "About Us",
       icon: "fa-compass",
-      color: "bg-pink-primary",
-      textColor: "text-pink-primary",
-      bgcontent: "bg-pink-lbg",
-      bgSoft: "bg-pink-soft",
+      ...CARD_THEMES.pink,
       isGroupEntry: true,
       groupName: "about-us",
     },
     {
       id: "__entry__academic",
-      title: "Our Academics",
+      title: "Academics",
       icon: "fa-graduation-cap",
-      color: "bg-brand-bright",
-      textColor: "text-brand-bright",
-      bgcontent: "bg-brand-lbg",
-      bgSoft: "bg-brand-soft",
+      ...CARD_THEMES.brand,
       isGroupEntry: true,
       groupName: "academic",
     },
@@ -195,10 +200,7 @@ const App = () => {
       id: "__campus__life",
       title: "Life at JZV",
       icon: "fa-school-flag",
-      color: "bg-green-dark",
-      textColor: "text-green-dark",
-      bgcontent: "bg-green-lbg",
-      bgSoft: "bg-green-soft",
+      ...CARD_THEMES.green,
       isGroupEntry: true,
       groupName: "campus-life",
     },
@@ -206,10 +208,7 @@ const App = () => {
       id: "__entry__policy",
       title: "Policies",
       icon: "fa-scale-balanced",
-      color: "bg-dark-primary",
-      textColor: "text-dark-primary",
-      bgcontent: "bg-dark-lbg",
-      bgSoft: "bg-dark-soft",
+      ...CARD_THEMES.dark,
       isGroupEntry: true,
       groupName: "policy",
     },
@@ -217,10 +216,7 @@ const App = () => {
       id: "__entry__admission",
       title: "Admissions",
       icon: "fa-user-graduate",
-      color: "bg-blue-dark",
-      textColor: "text-blue-dark",
-      bgcontent: "bg-blue-lbg",
-      bgSoft: "bg-blue-soft",
+      ...CARD_THEMES.brand,
       isGroupEntry: true,
       groupName: "admission",
     },
@@ -228,10 +224,7 @@ const App = () => {
       id: "gallery",
       title: "Campus Gallery",
       icon: "fa-images",
-      color: "bg-pink-deep",
-      textColor: "text-pink-deep",
-      bgcontent: "bg-pink-lbg",
-      bgSoft: "bg-pink-soft",
+      ...CARD_THEMES.pink,
       showAtHome: true,
       content: (
         <CampusGallery
@@ -243,15 +236,12 @@ const App = () => {
       ),
     },
 
-    // ── Grouped detail cards (hidden from grid, rendered inside tabbed modal) ─
+    // ── Grouped detail cards ───────────────────────────────────────────────
     {
       id: "courses",
       title: "Courses (PCC & GCC)",
       icon: "fa-graduation-cap",
-      color: "bg-brand-bright",
-      textColor: "text-brand-bright",
-      bgcontent: "bg-brand-lbg",
-      bgSoft: "bg-brand-soft",
+      ...CARD_THEMES.brand,
       content: (
         <Courses courseView={courseView} setCourseView={setCourseView} />
       ),
@@ -260,73 +250,69 @@ const App = () => {
       id: "streams",
       title: "Aalimiyat Streams",
       icon: "fa-code-branch",
-      color: "bg-blue-primary",
-      textColor: "text-blue-primary",
-      bgcontent: "bg-blue-lbg",
-      bgSoft: "bg-blue-soft",
+      ...CARD_THEMES.blue,
       content: (
-        <Streams streamView={streamView} setStreamView={setStreamView} />
+        <AlimiatStreams streamView={streamView} setStreamView={setStreamView} />
       ),
     },
     {
       id: "nios",
       title: "NIOS (10th & 12th)",
       icon: "fa-certificate",
-      color: "bg-red-primary",
-      textColor: "text-red-primary",
-      bgcontent: "bg-red-lbg",
-      bgSoft: "bg-red-soft",
+      ...CARD_THEMES.red,
       content: <NIOS niosTab={niosTab} setNiosTab={setNiosTab} />,
     },
     {
       id: "policies",
       title: "Institution Policies",
       icon: "fa-file-contract",
-      color: "bg-dark-primary",
-      textColor: "text-dark-primary",
-      bgcontent: "bg-dark-lbg",
-      bgSoft: "bg-dark-soft",
+      ...CARD_THEMES.dark,
       content: <Policies />,
     },
     {
       id: "fees",
       title: "Fee Structure",
       icon: "fa-indian-rupee-sign",
-      color: "bg-teal-dark",
-      textColor: "text-teal-dark",
-      bgcontent: "bg-teal-lbg",
-      bgSoft: "bg-teal-soft",
+      ...CARD_THEMES.tealDark,
       content: <FeeStructure />,
     },
     {
       id: "admission-process",
       title: "Admission Process",
       icon: "fa-clipboard-list",
-      color: "bg-blue-dark",
-      textColor: "text-blue-dark",
-      bgcontent: "bg-blue-lbg",
-      bgSoft: "bg-blue-soft",
+      ...CARD_THEMES.blueDark,
       content: <AdmissionProcess />,
     },
     {
       id: "new-admission",
       title: "Admission Enquiry",
       icon: "fa-pen-to-square",
-      color: "bg-dark-charcoal",
-      textColor: "text-dark-charcoal",
-      bgcontent: "bg-dark-lbg",
-      bgSoft: "bg-dark-soft",
+      ...CARD_THEMES.darkCharcoal,
       content: <NewAdmission inModal={true} />,
     },
     {
       id: "check-admission-status",
       title: "Check Admission Status",
       icon: "fa-search",
-      color: "bg-orange-dark",
-      textColor: "text-orange-dark",
-      bgcontent: "bg-orange-lbg",
-      bgSoft: "bg-orange-soft",
+      ...CARD_THEMES.orange,
       content: <CheckApplicationStatus inModal={true} />,
+    },
+    // ── New dynamic form cards ─────────────────────────────────────────────
+    {
+      id: "complaint-register",
+      title: "Complaint Register",
+      icon: "fa-clipboard-list",
+      ...CARD_THEMES.brand,
+      showAtHome: true,
+      content: <DynamicForm uuid="complaint" textColor="text-brand-bright" />,
+    },
+    {
+      id: "career",
+      title: "Career",
+      icon: "fa-briefcase",
+      ...CARD_THEMES.blueDark,
+      showAtHome: true,
+      content: <DynamicForm uuid="career" />,
     },
   ];
 
@@ -342,7 +328,6 @@ const App = () => {
     }
 
     if (card.isGroupEntry) {
-      // Group entry: open first tab of that group
       const grp = getGroupByName(card.groupName);
       const firstTab = grp?.ids[0];
       if (!grp || !firstTab) return;
@@ -350,7 +335,6 @@ const App = () => {
       setActiveModal(card.groupName);
       setActiveTab(firstTab);
     } else {
-      // Solo card
       resetCardState(id);
       setActiveModal(id);
       setActiveTab(null);
@@ -365,12 +349,11 @@ const App = () => {
     document.body.classList.remove("modal-open");
   };
 
-  // ─── Derive render props ─────────────────────────────────────────────────────
+  // ─── Derive render props ────────────────────────────────────────────────────
   const activeGroup = activeModal ? getGroupByName(activeModal) : null;
   const isTabbed = !!activeGroup;
   const activeCard = isTabbed ? getCard(activeTab) : getCard(activeModal);
 
-  // Grid: cards with showAtHome:true  +  group entry-point cards
   const gridCards = cards.filter(
     (c) => c.showAtHome === true || c.isGroupEntry === true,
   );
@@ -379,14 +362,15 @@ const App = () => {
     <div id="dashboard-section" className="min-h-screen pb-16">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="bg-light-white shadow-sm sticky top-0 z-40 border-b border-light-border">
-        <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center">
-          <div className="flex flex-col sm:flex-row items-center gap-4">
+        <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3">
+          {/* Logo & tagline */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 flex-1 min-w-0">
             <img
               src="../src/media/jzv-rectangle-tranparent.png"
               alt="JZV Logo"
-              className="h-14 sm:h-16"
+              className="h-14 sm:h-16 shrink-0"
             />
-            <p className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
+            <div className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
               <p className="text-teal-dark">
                 a modern madrasa system integrated with 21st-century
                 competencies
@@ -394,24 +378,34 @@ const App = () => {
               <p className="text-blue-dark">
                 preparing your child to succeed in this Life and the Hereafter.
               </p>
-            </p>
+            </div>
           </div>
-          <button
-            onClick={() => setShowLoginPortal(!showLoginPortal)}
-            className="ml-auto flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-orange-primary hover:bg-orange-600 text-white font-bold rounded-lg transition-all duration-200 ease-out active:scale-95 min-h-[44px]"
-            title="Portal Login"
-          >
-            <i className="fas fa-sign-in-alt text-lg"></i>
-            <span className="hidden sm:inline text-sm sm:text-base">
-              Portal Login
-            </span>
-          </button>
+
+          {/* Right side: Google Translate + Login button */}
+          <div className="flex items-center gap-3">
+            {/* Google Translate container */}
+            <div
+              id="google_translate_element"
+              className="translate-selector [&_.goog-te-combo]:border [&_.goog-te-combo]:border-light-border [&_.goog-te-combo]:rounded-lg [&_.goog-te-combo]:px-2 [&_.goog-te-combo]:py-1 [&_.goog-te-combo]:text-sm"
+            ></div>
+
+            <button
+              onClick={() => setShowLoginPortal(!showLoginPortal)}
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-orange-primary hover:bg-orange-600 text-white font-bold rounded-lg transition-all duration-200 ease-out active:scale-95 min-h-[44px]"
+              title="Portal Login"
+            >
+              <i className="fas fa-sign-in-alt text-lg"></i>
+              <span className="hidden sm:inline text-sm sm:text-base">
+                Portal Login
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* ── Card grid ──────────────────────────────────────────────────────── */}
-      <main className="w-screen mt-8 sm:mt-12 bg-cover bg-no-repeat bg-center bg-[url('../src/media/jzv-building01.png')]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <main className="w-screen mt-8 sm:mt-12 min-h-[70vh] bg-cover bg-no-repeat bg-center bg-[url('../src/media/jzv-building01.png')]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-4 pb-6 sm:pb-8">
           <div
             className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6"
             id="card-container"
@@ -459,16 +453,15 @@ const App = () => {
             >
               {isTabbed ? (
                 /* ── TABBED header ─────────────────────────────────────────── */
-                <>
-                  {/* Flex grid of tab tiles */}
-                  <div className="flex w-full">
+                <div className="flex flex-col w-full">
+                  <div className="flex flex-col sm:flex-row w-full gap-2 sm:gap-0">
                     {activeGroup.ids.map((tabId) => {
                       const tabCard = getCard(tabId);
                       const isActive = activeTab === tabId;
                       if (!tabCard) return null;
 
                       return (
-                        <div key={tabId} className="flex-1 px-0.5">
+                        <div key={tabId} className="w-full sm:flex-1 sm:px-0.5">
                           <button
                             key={tabId}
                             onClick={() => setActiveTab(tabId)}
@@ -493,7 +486,6 @@ const App = () => {
                             }
                           `}
                           >
-                            {/* Icon badge */}
                             <span
                               className={`
                               w-6 h-6 sm:w-7 sm:h-7 rounded-lg
@@ -513,16 +505,24 @@ const App = () => {
                         </div>
                       );
                     })}
+                    <button
+                      onClick={closeModal}
+                      className="hidden sm:flex w-12 h-12 rounded-full bg-light-ui hover:bg-light-muted active:scale-[0.95] text-dark-primary hover:text-red-primary transition-all duration-200 ease-out items-center justify-center shrink-0 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-primary shadow-[2px_2px_5px_rgba(0,0,0,0.18),-1px_-1px_3px_rgba(255,255,255,0.85)]"
+                    >
+                      <i className="fas fa-times" />
+                    </button>
                   </div>
 
-                  {/* Single close button */}
-                  <button
-                    onClick={closeModal}
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-light-ui hover:bg-light-muted active:scale-[0.95] text-dark-primary hover:text-red-primary transition-all duration-200 ease-out flex items-center justify-center shrink-0 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-primary shadow-[2px_2px_5px_rgba(0,0,0,0.18),-1px_-1px_3px_rgba(255,255,255,0.85)]"
-                  >
-                    <i className="fas fa-times" />
-                  </button>
-                </>
+                  <div className="sm:hidden w-full mt-3">
+                    <button
+                      onClick={closeModal}
+                      className={`flex items-center gap-2 text-sm font-semibold hover:text-olive-700 transition-colors ${activeCard.textColor}`}
+                    >
+                      <i className="fas fa-arrow-left text-xs" />
+                      <span>back to home</span>
+                    </button>
+                  </div>
+                </div>
               ) : (
                 /* ── SOLO header ───────────────────────────────────────────── */
                 <>
