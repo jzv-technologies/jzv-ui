@@ -6,30 +6,17 @@ import { supabase } from "./utils/supabase";
 import useGoogleTranslate from "./hooks/useGoogleTranslate";
 import LoginPortal from "./components/LoginPortal";
 import _4Ts from "./components/homepage/about-us/4Ts";
-import { getCards } from "./data/cards";
+import { getCards, TAB_GROUPS, GROUPED_IDS, getGroupByName, getGroupById, HOME_CARD_SEQUENCE } from "./components/homepage/CardsData";
 import Header from "./components/layout/Header";
 import ModalContainer from "./components/layout/ModalContainer";
 import HomeGrid from "./components/layout/HomeGrid";
-import AdminView from "./components/AdminView";
 import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
+import AdminPortal from "./components/portals/AdminPortal";
+import RolePortal from "./components/portals/RolePortal";
+import DynamicForm from "./components/DynamicForm";
+import { CARD_THEMES } from "./utils/cardTheme";
 
-// ─── Tab groups ────────────────────────────────────────────────────────────────
-const TAB_GROUPS = [
-  { name: "about-us", ids: ["why-jzv", "vision", "system-4t"] },
-  { name: "academic", ids: ["courses", "streams", "nios", "hifz"] },
-  { name: "campus-life", ids: ["schedule", "extracurricular", "sports"] },
-  { name: "policy", ids: ["admission-process", "policies"] },
-  {
-    name: "admission",
-    ids: ["new-admission", "check-admission-status", "fees"],
-  },
-];
 
-const GROUPED_IDS = new Set(TAB_GROUPS.flatMap((g) => g.ids));
-
-const getGroupByName = (name) =>
-  TAB_GROUPS.find((g) => g.name === name) ?? null;
-const getGroupById = (id) => TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
 
 const App = () => {
   useGoogleTranslate();
@@ -49,7 +36,7 @@ const App = () => {
   const location = useLocation();
   const [adminSubView, setAdminSubView] = useState(null); // users, students
 
-  const fetchRoles = async (userId) => {
+  const fetchRoles = async (userId, authEvent) => {
     setRolesLoading(true);
     try {
       const { data, error } = await supabase
@@ -83,12 +70,6 @@ const App = () => {
             .filter(Boolean);
           setUserRoles(roles);
 
-          // Auto-redirect after roles are fetched
-          if (roles.length === 1) {
-            navigate(`/portal/${roles[0]}`);
-          } else if (roles.length > 1) {
-            navigate("/portal");
-          }
         } else {
           setUserRoles([]);
         }
@@ -111,7 +92,7 @@ const App = () => {
       setUser(currentUser);
       if (currentUser) {
         setFullName(currentUser.user_metadata?.full_name || "");
-        fetchRoles(currentUser.id);
+        fetchRoles(currentUser.id, _event);
       } else {
         setUserRoles([]);
         setFullName("");
@@ -175,6 +156,7 @@ const App = () => {
     setGalleryTitle,
     visionLang,
     setVisionLang,
+    currentUser: user,
   });
 
   const getCard = (id) => cards.find((c) => c.id === id);
@@ -224,9 +206,22 @@ const App = () => {
   const isTabbed = !!activeGroup;
   const activeCard = isTabbed ? getCard(activeTab) : getCard(activeModal);
 
-  const gridCards = cards.filter(
-    (c) => c.showAtHome === true || c.isGroupEntry === true || (user && c.id === "my-portal"),
-  );
+  const gridCards = cards
+    .filter(
+      (c) =>
+        c.showAtHome === true ||
+        c.isGroupEntry === true ||
+        (user && c.id === "my-portal"),
+    )
+    .sort((a, b) => {
+      const indexA = HOME_CARD_SEQUENCE.indexOf(a.id);
+      const indexB = HOME_CARD_SEQUENCE.indexOf(b.id);
+      // Fallback if an ID is missing from sequence: append to the end
+      if (indexA === -1 && indexB === -1) return 0;
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
 
   return (
     <div id="dashboard-section" className="min-h-screen pb-16">
@@ -261,44 +256,39 @@ const App = () => {
 
           <Route path="/portal/admin" element={
             user && userRoles.includes("admin") ? (
-              <AdminView
-                currentView="admin"
+              <AdminPortal
+                userRoles={userRoles}
                 subView={adminSubView}
                 onSetSubView={setAdminSubView}
-                onGoHome={() => {
-                  navigate("/");
-                  setAdminSubView(null);
-                }}
               />
             ) : <Navigate to="/" replace />
           } />
 
-          {["teacher", "parent", "management"].map(role => (
-            <Route key={role} path={`/portal/${role}`} element={
-              user && userRoles.includes(role) ? (
-                <div className="max-w-6xl mx-auto px-6 py-20 text-center">
-                  <div className="w-24 h-24 bg-orange-50 text-orange-primary rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl">
-                    <i className={`fas ${
-                      role === 'teacher' ? 'fa-chalkboard-user' : 
-                      role === 'parent' ? 'fa-home' : 'fa-users-gear'
-                    }`}></i>
-                  </div>
-                  <h2 className="text-3xl font-bold text-dark-deepblue mb-4 capitalize">
-                    {role} Portal
-                  </h2>
-                  <p className="text-dark-muted text-lg mb-10 max-w-xl mx-auto">
-                    Welcome to the {role} portal. This section is currently being prepared.
-                  </p>
-                  <button
-                    onClick={() => navigate("/")}
-                    className="px-8 py-3 bg-orange-primary text-white font-bold rounded-xl hover:bg-orange-600 transition-all shadow-lg"
-                  >
-                    Go Back Home
-                  </button>
-                </div>
-              ) : <Navigate to="/" replace />
-            } />
-          ))}
+          {["teacher", "parent", "management"].map(role => {
+            const tiles = [
+              {
+                id: "complaint-register",
+                title: "Complaint Register",
+                description: "Submit and track your requests or complaints directly with the administration.",
+                icon: "fa-clipboard-list",
+                buttonColor: "bg-orange-primary text-white",
+                onClick: () => openModal("complaint-register")
+              }
+            ];
+            
+            return (
+              <Route key={role} path={`/portal/${role}`} element={
+                user && userRoles.includes(role) ? (
+                  <RolePortal 
+                    userRoles={userRoles}
+                    role={role}
+                    tiles={tiles}
+                    openModal={openModal}
+                  />
+                ) : <Navigate to="/" replace />
+              } />
+            );
+          })}
         </Routes>
       </main>
 

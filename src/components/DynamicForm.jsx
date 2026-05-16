@@ -7,9 +7,9 @@ import {
   Circle,
   CircleCheckBig,
 } from "lucide-react";
+import { CARD_THEMES } from "../utils/cardTheme";
 
-const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbxEmk8cvXoSwo-3XgYy0p7O-DG_79COuIknsTc15ad0npo5Qw3fmrqCmivYatVXY33h/exec";
+const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
 // Helper: parse "Required" column
 const isRequired = (value) => {
@@ -281,7 +281,10 @@ const SuccessModal = ({ message, onClose }) => {
 // MAIN FORM
 // =========================
 
-const DynamicForm = ({ uuid, textColor }) => {
+const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
+  const bgColor = textColor.replace('text-', 'bg-');
+  const borderColor = textColor.replace('text-', 'border-');
+
   const [fields, setFields] = useState([]);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -471,7 +474,10 @@ const DynamicForm = ({ uuid, textColor }) => {
     try {
       const body = {
         uuid: uuid,
-        data: submitData,
+        data: {
+          ...submitData,
+          ...additionalData,
+        },
       };
 
       const url = `${APPS_SCRIPT_URL}?action=submit`;
@@ -591,8 +597,8 @@ const DynamicForm = ({ uuid, textColor }) => {
 
                       ${
                         checked
-                          ? `${textColor.replace("text-", "bg-")} text-white border-blue-600 shadow-md`
-                          : "bg-gray-50 border-gray-300 hover:border-blue-400"
+                          ? `${borderColor} ${bgColor} text-white shadow-md`
+                          : `${borderColor} bg-white hover:${bgColor}/50 `
                       }
                     `}
                   >
@@ -641,10 +647,6 @@ const DynamicForm = ({ uuid, textColor }) => {
               {listValues.map((val) => {
                 const active = formData[key] === val;
 
-                const borderColor = textColor.replace("text-", "border-");
-
-                const bgColor = textColor.replace("text-", "bg-");
-
                 return (
                   <button
                     type="button"
@@ -657,17 +659,12 @@ const DynamicForm = ({ uuid, textColor }) => {
                 transition-all duration-200
                 ${
                   active
-                    ? `${borderColor} ${bgColor}/10 text-gray-800 shadow-md`
-                    : "border-gray-200 bg-white hover:border-blue-300"
+                    ? `${borderColor} ${bgColor} text-white shadow-md`
+                    : `border-gray-200 bg-white hover:${bgColor}/50 `
                 }
               `}
                   >
-                    <div
-                      className={`
-                  transition-all duration-200
-                  ${active ? textColor : "text-gray-400"}
-                `}
-                    >
+                    <div className={`transition-all duration-200`}>
                       {active ? (
                         <CircleCheckBig
                           size={16}

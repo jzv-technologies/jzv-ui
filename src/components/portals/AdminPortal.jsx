@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { supabase } from "../utils/supabase";
+import { supabase } from "../../utils/supabase";
+import RolePortal from "./RolePortal";
 
-const AdminView = ({ currentView, subView, onSetSubView, onGoHome }) => {
+const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
+
+const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [cacheLoading, setCacheLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
   const fetchAllUsers = async () => {
@@ -31,7 +35,6 @@ const AdminView = ({ currentView, subView, onSetSubView, onGoHome }) => {
     setSaving(true);
     setMessage({ type: "", text: "" });
     try {
-      // Use upsert to handle case where user_id might be new to user_roles table
       const { error } = await supabase
         .from("user_roles")
         .upsert({ 
@@ -54,75 +57,97 @@ const AdminView = ({ currentView, subView, onSetSubView, onGoHome }) => {
     }
   };
 
-  const Breadcrumbs = () => (
-    <div className="flex items-center gap-2 text-sm text-dark-muted mb-8 bg-green-50 p-4 border border-light-border">
-      <button onClick={onGoHome} className="hover:text-orange-primary flex items-center gap-1 transition-colors">
-        <i className="fas fa-home"></i> Home
-      </button>
-      <i className="fas fa-chevron-right text-[10px] opacity-30"></i>
-      <button 
-        onClick={() => onSetSubView(null)} 
-        className={`${!subView ? 'text-orange-primary font-bold' : 'hover:text-orange-primary'} transition-colors`}
-      >
-        Admin Portal
-      </button>
-      {subView && (
-        <>
-          <i className="fas fa-chevron-right text-[10px] opacity-30"></i>
-          <span className="text-orange-primary font-bold capitalize">{subView}</span>
-        </>
-      )}
-    </div>
-  );
+  const handleInvalidateCache = async () => {
+    if (cacheLoading) return;
+    setCacheLoading(true);
+    setMessage({ type: "info", text: "Invalidating form cache..." });
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain",
+        },
+        body: JSON.stringify({
+          action: "invalidate-form-cache",
+          uuid: "admin"
+        }),
+      });
+      
+      const result = await res.json();
+      if (result.success) {
+        setMessage({ 
+          type: "success", 
+          text: result.data?.message || "Form cache invalidated successfully!" 
+        });
+      } else {
+        throw new Error(result.error || "Failed to invalidate cache");
+      }
+    } catch (err) {
+      console.error("Cache error:", err);
+      setMessage({ type: "error", text: "Failed to invalidate cache. Please check console." });
+    } finally {
+      setCacheLoading(false);
+    }
+  };
+
+  const adminTiles = [
+    {
+      id: "users",
+      title: "User Management",
+      description: "Manage roles and permissions for all users.",
+      icon: "fa-users",
+      buttonColor: "bg-orange-primary text-white",
+      shadow: "shadow-orange-200",
+      onClick: () => onSetSubView('users')
+    },
+    {
+      id: "students",
+      title: "Student Database",
+      description: "View and assign student records to parents.",
+      icon: "fa-user-graduate",
+      buttonColor: "bg-green-dark text-white",
+      shadow: "shadow-green-200",
+      onClick: () => onSetSubView('students')
+    },
+    {
+      id: "clear-cache",
+      title: "Clear Form Cache",
+      description: cacheLoading ? "Processing request..." : "Force refresh dynamic form configurations from source.",
+      icon: cacheLoading ? "fa-spinner fa-spin" : "fa-sync-alt",
+      buttonColor: "bg-red-600 text-white",
+      shadow: "shadow-red-200",
+      onClick: handleInvalidateCache
+    }
+  ];
 
   return (
-    <div className="max-w-9xl">
-      <Breadcrumbs />
-
-      {!subView ? (
-        <div className="max-w-9xl space-y-12 px mx-auto px-6 py-10">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <button 
-              onClick={() => onSetSubView('users')}
-              className="group p-10 bg-white border border-light-border rounded-3xl hover:border-orange-primary hover:shadow-2xl transition-all flex items-center gap-8 text-left"
-            >
-              <div className="w-20 h-20 bg-orange-50 text-orange-primary rounded-2xl flex items-center justify-center text-3xl group-hover:bg-orange-primary group-hover:text-white transition-all">
-                <i className="fas fa-users"></i>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-dark-deepblue">User Management</h3>
-                <p className="text-dark-muted">Manage roles and permissions for all users.</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => onSetSubView('students')}
-              className="group p-10 bg-white border border-light-border rounded-3xl hover:border-green-primary hover:shadow-2xl transition-all flex items-center gap-8 text-left"
-            >
-              <div className="w-20 h-20 bg-green-50 text-green-primary rounded-2xl flex items-center justify-center text-3xl group-hover:bg-green-primary group-hover:text-white transition-all">
-                <i className="fas fa-user-graduate"></i>
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-dark-deepblue">Student Database</h3>
-                <p className="text-dark-muted">View and assign student records to parents.</p>
-              </div>
-            </button>
+    <RolePortal 
+      userRoles={userRoles} 
+      role="admin" 
+      tiles={adminTiles}
+      subView={subView}
+      onSetSubView={onSetSubView}
+    >
+      <div className="mb-6 h-10 flex items-center justify-center">
+        {message.text && (
+          <div className={`px-6 py-2 rounded-full text-sm font-bold shadow-lg animate-in fade-in zoom-in duration-300 ${
+            message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 
+            message.type === 'info' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
+            'bg-green-50 text-green-600 border border-green-100'
+          }`}>
+            <i className={`fas ${message.type === 'error' ? 'fa-exclamation-circle' : message.type === 'info' ? 'fa-info-circle' : 'fa-check-circle'} mr-2`}></i>
+            {message.text}
           </div>
-        </div>
-      ) : subView === "users" ? (
-        <div className="bg-white border border-light-border shadow-xl overflow-hidden">
+        )}
+      </div>
+
+      {subView === "users" ? (
+        <div className="bg-white border border-light-border shadow-xl overflow-hidden rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="p-8 border-b border-light-border flex justify-between items-center bg-gray-50/50">
             <div>
               <h3 className="text-2xl font-bold text-dark-deepblue">Manage Users</h3>
               <p className="text-sm text-dark-muted">Assign role shorthand (A,M,T,P) and student IDs.</p>
             </div>
-            {message.text && (
-              <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-              }`}>
-                {message.text}
-              </div>
-            )}
           </div>
 
           <div className="overflow-x-auto">
@@ -148,8 +173,8 @@ const AdminView = ({ currentView, subView, onSetSubView, onGoHome }) => {
             </table>
           </div>
         </div>
-      ) : (
-        <div className="bg-white p-20 rounded-3xl border border-light-border text-center">
+      ) : subView === "students" ? (
+        <div className="bg-white p-20 rounded-3xl border border-light-border text-center shadow-md animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="w-20 h-20 bg-green-50 text-green-primary rounded-full flex items-center justify-center mx-auto mb-6 text-3xl">
             <i className="fas fa-graduation-cap"></i>
           </div>
@@ -162,8 +187,8 @@ const AdminView = ({ currentView, subView, onSetSubView, onGoHome }) => {
             Go Back
           </button>
         </div>
-      )}
-      </div>
+      ) : null}
+    </RolePortal>
   );
 };
 
@@ -210,4 +235,4 @@ const UserRow = ({ user, onSave, saving }) => {
   );
 };
 
-export default AdminView;
+export default AdminPortal;

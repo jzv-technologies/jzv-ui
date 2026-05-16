@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../utils/supabase";
 
 const LoginPortal = ({
@@ -20,6 +21,7 @@ const LoginPortal = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isOpen) {
@@ -37,13 +39,16 @@ const LoginPortal = ({
   // Handle mode transition when user logs in (e.g. via Social redirect)
   useEffect(() => {
     if (user && isOpen && authMode !== "selection" && authMode !== "pending") {
-      if (userRoles.length > 0) {
+      if (userRoles.length === 1) {
+        navigate(`/portal/${userRoles[0]}`);
+        handleClose();
+      } else if (userRoles.length > 1) {
         setAuthMode("selection");
       } else if (!rolesLoading) {
         setAuthMode("pending");
       }
     }
-  }, [user, userRoles, rolesLoading, isOpen, authMode]);
+  }, [user, userRoles, rolesLoading, isOpen, authMode, navigate]);
 
   if (!isOpen) return null;
 
@@ -403,6 +408,7 @@ const LoginPortal = ({
                           key={login.type}
                           onClick={() => {
                             setSelectedLoginType(login.type);
+                            navigate(`/portal/${login.type}`);
                             handleClose();
                           }}
                           className={`${login.color} w-full p-5 rounded-2xl border text-left hover:shadow-md transition-all group flex items-center gap-4`}

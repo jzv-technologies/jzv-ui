@@ -1,21 +1,55 @@
-import WhyJzv from "../components/homepage/about-us/WhyJzv";
-import VisionMission from "../components/homepage/about-us/VisionMission";
-import _4Ts from "../components/homepage/about-us/4Ts";
-import TahfeezulQuran from "../components/homepage/academic/TahfeezulQuran";
-import DailySchedule from "../components/homepage/campus-life/DailySchedule";
-import ExtraCurriculars from "../components/homepage/campus-life/ExtraCurriculars";
-import SportsAndAgility from "../components/homepage/campus-life/SportsAndAgility";
-import Courses from "../components/homepage/academic/Courses";
-import AlimiatStreams from "../components/homepage/academic/AlimiatStreams";
-import NIOS from "../components/homepage/academic/NIOS";
-import Policies from "../components/homepage/policy/Policies";
-import FeeStructure from "../components/homepage/admission/FeeStructure";
-import AdmissionProcess from "../components/homepage/admission/AdmissionProcess";
-import NewAdmission from "../components/homepage/admission/NewAdmission";
-import CheckApplicationStatus from "../components/homepage/admission/CheckApplicationStatus";
-import CampusGallery from "../components/homepage/CampusGallery";
-import DynamicForm from "../components/DynamicForm";
-import { CARD_THEMES } from "../utils/cardTheme";
+import WhyJzv from "./about-us/WhyJzv";
+import VisionMission from "./about-us/VisionMission";
+import _4Ts from "./about-us/4Ts";
+import TahfeezulQuran from "./academic/TahfeezulQuran";
+import DailySchedule from "./campus-life/DailySchedule";
+import ExtraCurriculars from "./campus-life/ExtraCurriculars";
+import SportsAndAgility from "./campus-life/SportsAndAgility";
+import Courses from "./academic/Courses";
+import AlimiatStreams from "./academic/AlimiatStreams";
+import NIOS from "./academic/NIOS";
+import Policies from "./policy/Policies";
+import FeeStructure from "./admission/FeeStructure";
+import AdmissionProcess from "./admission/AdmissionProcess";
+import NewAdmission from "./admission/NewAdmission";
+import CheckApplicationStatus from "./admission/CheckApplicationStatus";
+import CampusGallery from "./CampusGallery";
+import ContactUs from "./ContactUs";
+import DynamicForm from "../DynamicForm";
+import { CARD_THEMES } from "../../utils/cardTheme";
+
+// ─── Tab groups ────────────────────────────────────────────────────────────────
+export const TAB_GROUPS = [
+  { name: "about-us", ids: ["why-jzv", "vision", "system-4t"] },
+  { name: "academic", ids: ["courses", "streams", "nios", "hifz"] },
+  { name: "campus-life", ids: ["schedule", "extracurricular", "sports"] },
+  {
+    name: "admission",
+    ids: ["admission-process", "new-admission", "check-admission-status", "fees"],
+  },
+];
+
+export const GROUPED_IDS = new Set(TAB_GROUPS.flatMap((g) => g.ids));
+
+export const getGroupByName = (name) =>
+  TAB_GROUPS.find((g) => g.name === name) ?? null;
+export const getGroupById = (id) => TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
+
+// ─── Home card sequence ────────────────────────────────────────────────────────
+// Use this array to easily reorder the cards on the main home page.
+// The IDs must exactly match the `id` property of the cards defined below.
+export const HOME_CARD_SEQUENCE = [
+  "__about__jzv",
+  "__entry__academic",
+  "__campus__life",
+  "policies",
+  "__entry__admission",
+  "gallery",
+  "career",
+  "my-portal",
+  "complaint-register",
+  "contact-us",
+];
 
 export const getCards = ({
   courseView,
@@ -30,6 +64,7 @@ export const getCards = ({
   setGalleryTitle,
   visionLang,
   setVisionLang,
+  currentUser,
 }) => [
   // ── Standalone ──────────────────────────────────────────────────────────
   {
@@ -93,16 +128,9 @@ export const getCards = ({
 
   // ── Group entry-point cards ───────────────────────────────────────────
   {
-    id: "my-portal",
-    title: "My Portal",
-    icon: "fa-user-circle",
-    ...CARD_THEMES.brand,
-    showAtHome: false, // We dynamically enable this in App.jsx when logged in
-  },
-  {
     id: "__about__jzv",
     title: "About Us",
-    icon: "fa-compass",
+    icon: "fa-compass", 
     ...CARD_THEMES.pink,
     isGroupEntry: true,
     groupName: "about-us",
@@ -123,14 +151,7 @@ export const getCards = ({
     isGroupEntry: true,
     groupName: "campus-life",
   },
-  {
-    id: "__entry__policy",
-    title: "Policies",
-    icon: "fa-scale-balanced",
-    ...CARD_THEMES.dark,
-    isGroupEntry: true,
-    groupName: "policy",
-  },
+  
   {
     id: "__entry__admission",
     title: "Admissions",
@@ -184,6 +205,7 @@ export const getCards = ({
     title: "Institution Policies",
     icon: "fa-file-contract",
     ...CARD_THEMES.dark,
+    showAtHome: true,
     content: <Policies />,
   },
   {
@@ -220,9 +242,13 @@ export const getCards = ({
     title: "Complaint Register",
     icon: "fa-clipboard-list",
     ...CARD_THEMES.orange,
-    showAtHome: true,
+    showAtHome: false,
     content: (
-      <DynamicForm uuid="complaint" textColor={CARD_THEMES.orange.textColor} />
+      <DynamicForm 
+        uuid="complaint" 
+        textColor={CARD_THEMES.orange.textColor} 
+        additionalData={{ email: currentUser?.email }}
+      />
     ),
   },
   {
@@ -234,5 +260,20 @@ export const getCards = ({
     content: (
       <DynamicForm uuid="career" textColor={CARD_THEMES.blueDark.textColor} />
     ),
+  },
+  {
+    id: "contact-us",
+    title: "Contact Us",
+    icon: "fa-phone-alt",
+    ...CARD_THEMES.teal,
+    showAtHome: true,
+    content: <ContactUs />,
+  },
+    {
+    id: "my-portal",
+    title: "My Portal",
+    icon: "fa-user-circle",
+    ...CARD_THEMES.brand,
+    showAtHome: false, // We dynamically enable this in App.jsx when logged in
   },
 ];

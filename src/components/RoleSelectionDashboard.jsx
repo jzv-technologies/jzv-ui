@@ -40,14 +40,6 @@ const RoleSelectionDashboard = ({ userRoles, onSelectView }) => {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 sm:py-20">
-      <div className="text-center mb-12 sm:mb-16">
-        <h2 className="text-3xl sm:text-4xl font-bold text-dark-deepblue mb-4">
-          Welcome back!
-        </h2>
-        <p className="text-lg text-dark-muted">
-          Select a portal to continue with your session.
-        </p>
-      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {activePortals.map((portal) => (

@@ -44,7 +44,7 @@ const ModalContainer = ({
                           ${
                             isActive
                               ? `${tabCard.color} shadow-inner py-3 sm:py-4 rounded-b-lg`
-                              : `${tabCard.color}/50 py-2 sm:py-3`
+                              : `${tabCard.color} opacity-50 py-2 sm:py-3`
                           }
                         `}
                       >
