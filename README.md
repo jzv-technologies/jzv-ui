@@ -33,3 +33,27 @@ npm run dev
 - The public page highlights the 4Ts pedagogy, Aalimiyat and Hifz program details, and mission messaging.
 - Role-based portal views are implemented using React state.
   "
+## google app script api
+### seach payload
+```json
+  {
+  "action": "search",
+  "uuid": "complaint",
+  "criteria": {
+    "Department": "Engineering",
+    "Status": "Active"
+  }
+}
+```
+### update payload
+```json
+{
+  "action": "update",
+  "uuid": "career",
+  "uniqueId": 12,
+  "data": {
+    "Status": "Terminated",
+    "Notes": "Moved to another division"
+  }
+}
+```
