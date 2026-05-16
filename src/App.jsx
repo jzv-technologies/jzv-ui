@@ -1,25 +1,18 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
 import AOS from "aos";
 import "aos/dist/aos.css";
-import WhyJzv from "./components/homepage/about-us/WhyJzv";
-import VisionMission from "./components/homepage/about-us/VisionMission";
-import Courses from "./components/homepage/academics/Courses";
+import { supabase } from "./utils/supabase";
+import useGoogleTranslate from "./hooks/useGoogleTranslate";
 import LoginPortal from "./components/LoginPortal";
 import _4Ts from "./components/homepage/about-us/4Ts";
-import NIOS from "./components/homepage/academics/NIOS";
-import AlimiatStreams from "./components/homepage/academics/AlimiatStreams";
-import FeeStructure from "./components/homepage/admission/FeeStructure";
-import DailySchedule from "./components/homepage/life-at-jzv/DailySchedule";
-import TahfeezulQuran from "./components/homepage/academics/TahfeezulQuran";
-import SportsAndAgility from "./components/homepage/life-at-jzv/SportsAndAgility";
-import AdmissionProcess from "./components/homepage/policies/AdmissionProcess";
-import Policies from "./components/homepage/policies/Policies";
-import ExtraCurriculars from "./components/homepage/life-at-jzv/ExtraCurriculars";
-import CampusGallery from "./components/homepage/CampusGallery";
-import NewAdmission from "./components/homepage/admission/NewAdmission";
-import CheckApplicationStatus from "./components/homepage/admission/CheckStatus";
-import DynamicForm from "./components/DynamicForm";
-import { CARD_THEMES } from "./utils/cardTheme";
+import { getCards } from "./data/cards";
+import Header from "./components/layout/Header";
+import ModalContainer from "./components/layout/ModalContainer";
+import HomeGrid from "./components/layout/HomeGrid";
+import AdminView from "./components/AdminView";
+import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
+
 // ─── Tab groups ────────────────────────────────────────────────────────────────
 const TAB_GROUPS = [
   { name: "about-us", ids: ["why-jzv", "vision", "system-4t"] },
@@ -39,50 +32,102 @@ const getGroupByName = (name) =>
 const getGroupById = (id) => TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
 
 const App = () => {
+  useGoogleTranslate();
+
   const [activeModal, setActiveModal] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
   const [showLoginPortal, setShowLoginPortal] = useState(false);
   const [selectedLoginType, setSelectedLoginType] = useState(null);
   const [user, setUser] = useState(null);
+  const [userRoles, setUserRoles] = useState([]);
+  const [fullName, setFullName] = useState("");
+  const [studentIds, setStudentIds] = useState("");
+  const [rolesLoading, setRolesLoading] = useState(false);
+  
+  // Navigation State
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [adminSubView, setAdminSubView] = useState(null); // users, students
 
-  // Google Translate initialization
-  useEffect(() => {
-    // Function to load Google Translate script
-    const addGoogleTranslateScript = () => {
-      const script = document.createElement("script");
-      script.src =
-        "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-      script.async = true;
-      document.body.appendChild(script);
-    };
+  const fetchRoles = async (userId) => {
+    setRolesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role_ids, student_ids")
+        .eq("user_id", userId)
+        .single();
 
-    // Global callback for Google Translate
-    window.googleTranslateElementInit = () => {
-      if (window.google && window.google.translate) {
-        new window.google.translate.TranslateElement(
-          {
-            pageLanguage: "en",
-            includedLanguages: "ar,en,ta,ur", // Only Arabic, English, Tamil, Urdu
-            layout:
-              window.google.translate.TranslateElement.InlineLayout.SIMPLE,
-            autoDisplay: false,
-          },
-          "google_translate_element",
-        );
+      if (error) {
+        if (error.code === "PGRST116") {
+          setUserRoles([]);
+          setStudentIds("");
+          return;
+        }
+        throw error;
       }
-    };
 
-    // If script is already present, just init, otherwise add it
-    if (!document.querySelector('script[src*="translate.google.com"]')) {
-      addGoogleTranslateScript();
-    } else if (window.google && window.google.translate) {
-      window.googleTranslateElementInit();
+      if (data) {
+        setStudentIds(data.student_ids || "");
+
+        if (data.role_ids) {
+          const roleMap = {
+            A: "admin",
+            M: "management",
+            T: "teacher",
+            P: "parent",
+          };
+          const roles = data.role_ids
+            .split(",")
+            .map((code) => roleMap[code.trim().toUpperCase()])
+            .filter(Boolean);
+          setUserRoles(roles);
+
+          // Auto-redirect after roles are fetched
+          if (roles.length === 1) {
+            navigate(`/portal/${roles[0]}`);
+          } else if (roles.length > 1) {
+            navigate("/portal");
+          }
+        } else {
+          setUserRoles([]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching roles:", err);
+      setUserRoles([]);
+    } finally {
+      setRolesLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     AOS.init({ once: true, offset: 50, duration: 400 });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        setFullName(currentUser.user_metadata?.full_name || "");
+        fetchRoles(currentUser.id);
+      } else {
+        setUserRoles([]);
+        setFullName("");
+        setStudentIds("");
+        setSelectedLoginType(null);
+        // Navigation handles views now
+        setAdminSubView(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   useEffect(() => {
     const onKey = (e) => {
@@ -117,209 +162,34 @@ const App = () => {
     if (id === "nios") setNiosTab("overview");
   };
 
-  // ─── Card definitions ───────────────────────────────────────────────────────
-  const cards = [
-    // ── Standalone ──────────────────────────────────────────────────────────
-    {
-      id: "why-jzv",
-      title: "Why JZV",
-      icon: "fa-building-columns",
-      ...CARD_THEMES.pink,
-      showAtHome: false,
-      content: <WhyJzv />,
-    },
-    {
-      id: "vision",
-      title: "Vision & Mission",
-      icon: "fa-eye",
-      ...CARD_THEMES.blue,
-      showAtHome: false,
-      content: (
-        <VisionMission visionLang={visionLang} setVisionLang={setVisionLang} />
-      ),
-    },
-    {
-      id: "system-4t",
-      title: "4Ts Pedagogy",
-      icon: "fa-leaf",
-      ...CARD_THEMES.teal,
-      showAtHome: false,
-      content: <_4Ts />,
-    },
-    {
-      id: "hifz",
-      title: "Tahfeez ul Quran",
-      icon: "fa-book-quran",
-      ...CARD_THEMES.green,
-      showAtHome: false,
-      content: <TahfeezulQuran />,
-    },
-    {
-      id: "schedule",
-      title: "Daily Schedule",
-      icon: "fa-clock",
-      ...CARD_THEMES.orange,
-      showAtHome: false,
-      content: <DailySchedule />,
-    },
-    {
-      id: "extracurricular",
-      title: "Extra-Curriculars",
-      icon: "fa-palette",
-      ...CARD_THEMES.pink,
-      showAtHome: false,
-      content: <ExtraCurriculars />,
-    },
-    {
-      id: "sports",
-      title: "Sports & Agility",
-      icon: "fa-futbol",
-      ...CARD_THEMES.brand,
-      showAtHome: false,
-      content: <SportsAndAgility />,
-    },
-
-    // ── Group entry-point cards ───────────────────────────────────────────
-    {
-      id: "__about__jzv",
-      title: "About Us",
-      icon: "fa-compass",
-      ...CARD_THEMES.pink,
-      isGroupEntry: true,
-      groupName: "about-us",
-    },
-    {
-      id: "__entry__academic",
-      title: "Academics",
-      icon: "fa-graduation-cap",
-      ...CARD_THEMES.brand,
-      isGroupEntry: true,
-      groupName: "academic",
-    },
-    {
-      id: "__campus__life",
-      title: "Life at JZV",
-      icon: "fa-school-flag",
-      ...CARD_THEMES.green,
-      isGroupEntry: true,
-      groupName: "campus-life",
-    },
-    {
-      id: "__entry__policy",
-      title: "Policies",
-      icon: "fa-scale-balanced",
-      ...CARD_THEMES.dark,
-      isGroupEntry: true,
-      groupName: "policy",
-    },
-    {
-      id: "__entry__admission",
-      title: "Admissions",
-      icon: "fa-user-graduate",
-      ...CARD_THEMES.brand,
-      isGroupEntry: true,
-      groupName: "admission",
-    },
-    {
-      id: "gallery",
-      title: "Campus Gallery",
-      icon: "fa-images",
-      ...CARD_THEMES.pink,
-      showAtHome: true,
-      content: (
-        <CampusGallery
-          galleryIndex={galleryIndex}
-          galleryTitle={galleryTitle}
-          setGalleryIndex={setGalleryIndex}
-          setGalleryTitle={setGalleryTitle}
-        />
-      ),
-    },
-
-    // ── Grouped detail cards ───────────────────────────────────────────────
-    {
-      id: "courses",
-      title: "Courses (PCC & GCC)",
-      icon: "fa-graduation-cap",
-      ...CARD_THEMES.brand,
-      content: (
-        <Courses courseView={courseView} setCourseView={setCourseView} />
-      ),
-    },
-    {
-      id: "streams",
-      title: "Aalimiyat Streams",
-      icon: "fa-code-branch",
-      ...CARD_THEMES.blue,
-      content: (
-        <AlimiatStreams streamView={streamView} setStreamView={setStreamView} />
-      ),
-    },
-    {
-      id: "nios",
-      title: "NIOS (10th & 12th)",
-      icon: "fa-certificate",
-      ...CARD_THEMES.red,
-      content: <NIOS niosTab={niosTab} setNiosTab={setNiosTab} />,
-    },
-    {
-      id: "policies",
-      title: "Institution Policies",
-      icon: "fa-file-contract",
-      ...CARD_THEMES.dark,
-      content: <Policies />,
-    },
-    {
-      id: "fees",
-      title: "Fee Structure",
-      icon: "fa-indian-rupee-sign",
-      ...CARD_THEMES.tealDark,
-      content: <FeeStructure />,
-    },
-    {
-      id: "admission-process",
-      title: "Admission Process",
-      icon: "fa-clipboard-list",
-      ...CARD_THEMES.blueDark,
-      content: <AdmissionProcess />,
-    },
-    {
-      id: "new-admission",
-      title: "Admission Enquiry",
-      icon: "fa-pen-to-square",
-      ...CARD_THEMES.darkCharcoal,
-      content: <NewAdmission inModal={true} />,
-    },
-    {
-      id: "check-admission-status",
-      title: "Check Admission Status",
-      icon: "fa-search",
-      ...CARD_THEMES.orange,
-      content: <CheckApplicationStatus inModal={true} />,
-    },
-    // ── New dynamic form cards ─────────────────────────────────────────────
-    {
-      id: "complaint-register",
-      title: "Complaint Register",
-      icon: "fa-clipboard-list",
-      ...CARD_THEMES.brand,
-      showAtHome: true,
-      content: <DynamicForm uuid="complaint" textColor="text-brand-bright" />,
-    },
-    {
-      id: "career",
-      title: "Career",
-      icon: "fa-briefcase",
-      ...CARD_THEMES.blueDark,
-      showAtHome: true,
-      content: <DynamicForm uuid="career" />,
-    },
-  ];
+  const cards = getCards({
+    courseView,
+    setCourseView,
+    streamView,
+    setStreamView,
+    niosTab,
+    setNiosTab,
+    galleryIndex,
+    galleryTitle,
+    setGalleryIndex,
+    setGalleryTitle,
+    visionLang,
+    setVisionLang,
+  });
 
   const getCard = (id) => cards.find((c) => c.id === id);
 
   // ─── Open modal ─────────────────────────────────────────────────────────────
   const openModal = (id) => {
+    if (id === "my-portal") {
+      if (userRoles.length > 1) {
+        navigate("/portal");
+      } else if (userRoles.length === 1) {
+        navigate(`/portal/${userRoles[0]}`);
+      }
+      return;
+    }
+
     const card = getCard(id);
     if (!card) return;
     if (card.external) {
@@ -355,216 +225,106 @@ const App = () => {
   const activeCard = isTabbed ? getCard(activeTab) : getCard(activeModal);
 
   const gridCards = cards.filter(
-    (c) => c.showAtHome === true || c.isGroupEntry === true,
+    (c) => c.showAtHome === true || c.isGroupEntry === true || (user && c.id === "my-portal"),
   );
 
   return (
     <div id="dashboard-section" className="min-h-screen pb-16">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="bg-light-white shadow-sm sticky top-0 z-40 border-b border-light-border">
-        <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3">
-          {/* Logo & tagline */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 flex-1 min-w-0">
-            <img
-              src="../src/media/jzv-rectangle-tranparent.png"
-              alt="JZV Logo"
-              className="h-14 sm:h-16 shrink-0"
-            />
-            <div className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
-              <p className="text-teal-dark">
-                a modern madrasa system integrated with 21st-century
-                competencies
-              </p>
-              <p className="text-blue-dark">
-                preparing your child to succeed in this Life and the Hereafter.
-              </p>
-            </div>
-          </div>
+      <Header
+        user={user}
+        userRoles={userRoles}
+        fullName={fullName}
+        onLogout={handleLogout}
+        onLoginClick={() => setShowLoginPortal(true)}
+        onLogoClick={() => {
+          navigate("/");
+          setAdminSubView(null);
+        }}
+      />
 
-          {/* Right side: Google Translate + Login button */}
-          <div className="flex items-center gap-3">
-            {/* Google Translate container */}
-            <div
-              id="google_translate_element"
-              className="translate-selector [&_.goog-te-combo]:border [&_.goog-te-combo]:border-light-border [&_.goog-te-combo]:rounded-lg [&_.goog-te-combo]:px-2 [&_.goog-te-combo]:py-1 [&_.goog-te-combo]:text-sm"
-            ></div>
+      {/* ── Dynamic View Content ────────────────────────────────────────────── */}
+      <main className="relative">
+        <Routes>
+          <Route path="/" element={
+            <HomeGrid gridCards={gridCards} openModal={openModal} />
+          } />
 
-            <button
-              onClick={() => setShowLoginPortal(!showLoginPortal)}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-3 bg-orange-primary hover:bg-orange-600 text-white font-bold rounded-lg transition-all duration-200 ease-out active:scale-95 min-h-[44px]"
-              title="Portal Login"
-            >
-              <i className="fas fa-sign-in-alt text-lg"></i>
-              <span className="hidden sm:inline text-sm sm:text-base">
-                Portal Login
-              </span>
-            </button>
-          </div>
-        </div>
-      </header>
+          <Route path="/portal" element={
+            user && userRoles.length > 1 ? (
+              <RoleSelectionDashboard
+                userRoles={userRoles}
+                onSelectView={(view) => navigate(`/portal/${view}`)}
+              />
+            ) : <Navigate to="/" replace />
+          } />
 
-      {/* ── Card grid ──────────────────────────────────────────────────────── */}
-      <main className="w-screen mt-8 sm:mt-12 min-h-[70vh] bg-cover bg-no-repeat bg-center bg-[url('../src/media/jzv-building01.png')]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-4 pb-6 sm:pb-8">
-          <div
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6"
-            id="card-container"
-          >
-            {gridCards.map((card) => (
-              <div
-                key={card.id}
-                tabIndex={0}
-                className="bg-light-white bg-opacity-90 rounded-2xl shadow-sm border border-light-border p-5 sm:p-6 lg:p-8 cursor-pointer transition-all duration-200 ease-out group overflow-hidden relative select-none flex flex-col items-center justify-center text-center h-full min-h-[160px] hover:bg-olive-500"
-                onClick={() => openModal(card.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openModal(card.id);
-                  }
+          <Route path="/portal/admin" element={
+            user && userRoles.includes("admin") ? (
+              <AdminView
+                currentView="admin"
+                subView={adminSubView}
+                onSetSubView={setAdminSubView}
+                onGoHome={() => {
+                  navigate("/");
+                  setAdminSubView(null);
                 }}
-              >
-                <div
-                  className={`absolute top-0 left-0 right-0 h-2 ${card.color}`}
-                />
-                <div
-                  className={`text-3xl sm:text-4xl mb-3 sm:mb-4 mt-2 group-hover:scale-110 transition-transform origin-center ${card.textColor} group-hover:text-pine-900 duration-200 ease-out`}
-                >
-                  <i className={`fas ${card.icon}`} />
+              />
+            ) : <Navigate to="/" replace />
+          } />
+
+          {["teacher", "parent", "management"].map(role => (
+            <Route key={role} path={`/portal/${role}`} element={
+              user && userRoles.includes(role) ? (
+                <div className="max-w-6xl mx-auto px-6 py-20 text-center">
+                  <div className="w-24 h-24 bg-orange-50 text-orange-primary rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl">
+                    <i className={`fas ${
+                      role === 'teacher' ? 'fa-chalkboard-user' : 
+                      role === 'parent' ? 'fa-home' : 'fa-users-gear'
+                    }`}></i>
+                  </div>
+                  <h2 className="text-3xl font-bold text-dark-deepblue mb-4 capitalize">
+                    {role} Portal
+                  </h2>
+                  <p className="text-dark-muted text-lg mb-10 max-w-xl mx-auto">
+                    Welcome to the {role} portal. This section is currently being prepared.
+                  </p>
+                  <button
+                    onClick={() => navigate("/")}
+                    className="px-8 py-3 bg-orange-primary text-white font-bold rounded-xl hover:bg-orange-600 transition-all shadow-lg"
+                  >
+                    Go Back Home
+                  </button>
                 </div>
-                <h3 className="font-bold text-dark-deepblue leading-tight group-hover:text-light-white transition-colors duration-200">
-                  {card.title}
-                </h3>
-              </div>
-            ))}
-          </div>
-        </div>
+              ) : <Navigate to="/" replace />
+            } />
+          ))}
+        </Routes>
       </main>
 
-      {/* ── Modal ──────────────────────────────────────────────────────────── */}
-      {activeModal && activeCard && (
-        <div
-          id="modal-overlay"
-          className="fixed inset-0 bg-dark-almostblack sm:bg-opacity-80 sm:backdrop-blur-sm z-50 flex items-center justify-center sm:p-4 transition-opacity duration-200"
-        >
-          <div className="bg-light-soft w-full h-full sm:w-[95vw] sm:h-[90vh] lg:h-auto lg:max-w-[calc(95vh*16/9)] lg:aspect-video flex flex-col relative sm:border sm:border-light-border overflow-hidden rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl">
-            {/* ── Modal header ─────────────────────────────────────────────── */}
-            <div
-              className={`flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-light-border shrink-0 gap-3 ${activeCard.bgcontent}`}
-            >
-              {isTabbed ? (
-                /* ── TABBED header ─────────────────────────────────────────── */
-                <div className="flex flex-col w-full">
-                  <div className="flex flex-col sm:flex-row w-full gap-2 sm:gap-0">
-                    {activeGroup.ids.map((tabId) => {
-                      const tabCard = getCard(tabId);
-                      const isActive = activeTab === tabId;
-                      if (!tabCard) return null;
-
-                      return (
-                        <div key={tabId} className="w-full sm:flex-1 sm:px-0.5">
-                          <button
-                            key={tabId}
-                            onClick={() => setActiveTab(tabId)}
-                            className={`
-                            flex w-full items-center gap-2
-                            px-3 sm:px-4 
-                            font-semibold text-xs sm:text-sm
-                            select-none transition-all duration-150 ease-out
-                            focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1
-                            whitespace-nowrap
-                            text-white
-                            ${
-                              isActive
-                                ? `${tabCard.color}
-                                 shadow-[inset_2px_2px_6px_rgba(0,0,0,0.35),inset_-1px_-1px_3px_rgba(255,255,255,0.1)]
-                                  ring-1 ring-black/10 py-3 sm:py-4 rounded-b-lg`
-                                : `${tabCard.color}/50
-                                 shadow-[2px_2px_5px_rgba(0,0,0,0.18),-1px_-1px_3px_rgba(255,255,255,0.85)]
-                                 hover:shadow-[3px_3px_7px_rgba(0,0,0,0.22),-1px_-1px_4px_rgba(255,255,255,0.9)]
-                                 py-2 sm:py-3
-                                 `
-                            }
-                          `}
-                          >
-                            <span
-                              className={`
-                              w-6 h-6 sm:w-7 sm:h-7 rounded-lg
-                              flex items-center justify-center shrink-0
-                              transition-colors duration-150
-                              ${
-                                isActive
-                                  ? "bg-white/20 text-white"
-                                  : `bg-light-soft ${tabCard.textColor}`
-                              }
-                            `}
-                            >
-                              <i className={`fas ${tabCard.icon} text-xs`} />
-                            </span>
-                            <span>{tabCard.title}</span>
-                          </button>
-                        </div>
-                      );
-                    })}
-                    <button
-                      onClick={closeModal}
-                      className="hidden sm:flex w-12 h-12 rounded-full bg-light-ui hover:bg-light-muted active:scale-[0.95] text-dark-primary hover:text-red-primary transition-all duration-200 ease-out items-center justify-center shrink-0 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-primary shadow-[2px_2px_5px_rgba(0,0,0,0.18),-1px_-1px_3px_rgba(255,255,255,0.85)]"
-                    >
-                      <i className="fas fa-times" />
-                    </button>
-                  </div>
-
-                  <div className="sm:hidden w-full mt-3">
-                    <button
-                      onClick={closeModal}
-                      className={`flex items-center gap-2 text-sm font-semibold hover:text-olive-700 transition-colors ${activeCard.textColor}`}
-                    >
-                      <i className="fas fa-arrow-left text-xs" />
-                      <span>back to home</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* ── SOLO header ───────────────────────────────────────────── */
-                <>
-                  <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                    <div
-                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white shadow-inner shrink-0 ${activeCard.color}`}
-                    >
-                      <i className={`fas ${activeCard.icon}`} />
-                    </div>
-                    <h3 className="lg:text-xl font-bold text-dark-deepblue tracking-tight leading-tight">
-                      {activeCard.title}
-                    </h3>
-                  </div>
-                  <button
-                    onClick={closeModal}
-                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-light-ui hover:bg-light-muted active:scale-[0.95] text-dark-primary hover:text-red-primary transition-all duration-200 ease-out flex items-center justify-center shrink-0 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-primary"
-                  >
-                    <i className="fas fa-times" />
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* ── Modal content ────────────────────────────────────────────── */}
-            <div
-              className={`p-2 sm:p-4 lg:p-6 overflow-y-auto flex-1 text-dark-charcoal leading-relaxed lg:text-sm ${activeCard.bgcontent}`}
-            >
-              {activeCard.content}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Login portal ───────────────────────────────────────────────────── */}
+      {/* ── Modals (Login & Static Content) ─────────────────────────────────── */}
       {showLoginPortal && (
         <LoginPortal
           isOpen={showLoginPortal}
           onClose={() => setShowLoginPortal(false)}
           selectedLoginType={selectedLoginType}
           setSelectedLoginType={setSelectedLoginType}
+          user={user}
+          userRoles={userRoles}
+          rolesLoading={rolesLoading}
         />
       )}
+
+      <ModalContainer
+        activeModal={activeModal}
+        activeCard={activeCard}
+        activeGroup={activeGroup}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isTabbed={isTabbed}
+        getCard={getCard}
+        closeModal={closeModal}
+      />
     </div>
   );
 };

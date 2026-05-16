@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
+import {
+  ChevronDown,
+  Square,
+  SquareCheckBig,
+  Check,
+  Circle,
+  CircleCheckBig,
+} from "lucide-react";
 
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwS2bblVpkeTGWnSV-_lPopLrZaKtzx3snoUz0KriiURqJfXet9wHcR6qQF9ywZ7sq_/exec";
+  "https://script.google.com/macros/s/AKfycbxEmk8cvXoSwo-3XgYy0p7O-DG_79COuIknsTc15ad0npo5Qw3fmrqCmivYatVXY33h/exec";
 
 // Helper: parse "Required" column
 const isRequired = (value) => {
@@ -11,33 +19,76 @@ const isRequired = (value) => {
 };
 
 // Helper: evaluate conditional criteria
-// Format: "fieldName = value" or "fieldName != value"
 const evaluateCriteria = (criteria, formData) => {
   if (!criteria || typeof criteria !== "string") return true;
+
   const trimmed = criteria.trim();
-  let operator = "=";
-  let parts;
-  if (trimmed.includes("!=")) {
-    operator = "!=";
-    parts = trimmed.split("!=");
-  } else if (trimmed.includes("=")) {
-    operator = "=";
-    parts = trimmed.split("=");
-  } else {
-    return true; // invalid criteria, show field
+
+  const operators = ["!~", "!=", "~", "=", ">", "<", "^"];
+
+  let operator = null;
+
+  for (const op of operators) {
+    if (trimmed.includes(op)) {
+      operator = op;
+      break;
+    }
   }
+
+  if (!operator) return true;
+
+  const parts = trimmed.split(operator);
+
   if (parts.length !== 2) return true;
+
   const fieldName = parts[0].trim();
   const expectedValue = parts[1].trim();
   const actualValue = formData[fieldName];
-  if (operator === "=") {
-    return String(actualValue) === expectedValue;
-  } else {
-    return String(actualValue) !== expectedValue;
+
+  const actualString = String(actualValue ?? "").toLowerCase();
+  const expectedString = String(expectedValue ?? "").toLowerCase();
+
+  switch (operator) {
+    case "=":
+      return actualString === expectedString;
+
+    case "!=":
+      return actualString !== expectedString;
+
+    case "~":
+      return actualString.includes(expectedString);
+
+    case "!~":
+      return !actualString.includes(expectedString);
+
+    case ">":
+      return Number(actualValue) > Number(expectedString);
+
+    case "<":
+      return Number(actualValue) < Number(expectedString);
+
+    case "^":
+      try {
+        // Example: role^[admin,teacher]
+        const values = expectedString
+          .replace(/[\[\]]/g, "")
+          .split(",")
+          .map((v) => v.trim());
+
+        return values.includes(actualString);
+      } catch {
+        return false;
+      }
+
+    default:
+      return true;
   }
 };
 
-// FloatingLabelField (removed mb-4 for grid compatibility)
+// =========================
+// MODERN FLOATING FIELD
+// =========================
+
 const FloatingLabelField = ({
   label,
   type,
@@ -46,123 +97,179 @@ const FloatingLabelField = ({
   listValues = [],
   required = false,
   error = "",
-  textColor = "text-blue-600",
+  textColor = "text-gray-800",
 }) => {
   const [isFocused, setIsFocused] = useState(false);
+
   const hasValue = value !== undefined && value !== null && value !== "";
+
   const isActive = isFocused || hasValue;
+  const isDate = type === "date";
 
-  const labelBase =
-    "absolute left-3 cursor-text transition-all duration-200 pointer-events-none select-none";
-  const labelActive = `top-1 text-xs ${textColor}`;
-  const labelInactive = "top-3 text-base text-gray-400";
+  const baseInput = `
+  w-full rounded-2xl border
+  bg-white/90 backdrop-blur-sm
 
-  const inputClasses = `
-    w-full pt-6 pb-2 px-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-sm bg-white placeholder-transparent
-    ${error ? "border-red-500 focus:ring-red-400" : "border-gray-300"}
+  px-6 sm:px-8
+
+  ${isDate ? "pt-7 pb-2" : "pt-5 sm:pt-6 pb-2.5 sm:pb-3"}
+
+  text-sm text-gray-800
+  shadow-sm
+  transition-all duration-300
+  focus:outline-none
+  focus:ring-4
+`;
+
+  const normalStyle = `
+    border-gray-200
+    focus:border-blue-500
+    focus:ring-blue-100
+    hover:border-blue-300
   `;
 
-  const renderLabel = () => (
-    <label className={`${labelBase} ${isActive ? labelActive : labelInactive}`}>
-      {label}
-      {required && <span className="text-red-500 ml-1">*</span>}
-    </label>
-  );
+  const errorStyle = `
+    border-red-400
+    focus:ring-red-100
+  `;
+
+  const labelClass = `
+  absolute
+  left-6 sm:left-8
+  transition-all duration-200
+  pointer-events-none
+  z-10
+
+  ${
+    isActive || isDate
+      ? `top-1.5 sm:top-2 text-[10px] sm:text-[11px] font-semibold ${textColor}`
+      : "top-3.5 sm:top-4 text-sm text-gray-400"
+  }
+`;
+
+  const wrapperClass = "relative group";
 
   if (type === "textarea") {
     return (
-      <div className="relative">
+      <div className={`${wrapperClass} md:col-span-2`}>
         <textarea
-          rows={4}
+          rows={5}
           placeholder=" "
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className={`${inputClasses} resize-none`}
+          className={`${baseInput} resize-none ${
+            error ? errorStyle : normalStyle
+          }`}
         />
-        {renderLabel()}
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+
+        {error && <p className="text-red-500 text-xs mt-2 ml-2">{error}</p>}
       </div>
     );
   }
 
-  if (type === "select" || type === "dropdown") {
+  if (type === "select") {
     return (
-      <div className="relative">
+      <div className={wrapperClass}>
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className={`${inputClasses} appearance-none`}
+          className={`${baseInput} appearance-none ${
+            error ? errorStyle : normalStyle
+          }`}
         >
-          <option value="" disabled hidden></option>
+          <option value=""></option>
+
           {listValues.map((val) => (
             <option key={val} value={val}>
               {val}
             </option>
           ))}
         </select>
-        {renderLabel()}
-        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+        <ChevronDown
+          size={18}
+          className="absolute right-4 top-5 text-gray-400 pointer-events-none"
+        />
+
+        <label className={labelClass}>
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+
+        {error && <p className="text-red-500 text-xs mt-2 ml-2">{error}</p>}
       </div>
     );
   }
 
   return (
-    <div className="relative">
+    <div className={wrapperClass}>
       <input
         type={type}
-        placeholder=" "
+        placeholder={isDate ? undefined : " "}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
-        className={inputClasses}
+        className={`${baseInput} ${error ? errorStyle : normalStyle}`}
       />
-      {renderLabel()}
-      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+      <label className={labelClass}>
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+
+      {error && <p className="text-red-500 text-xs mt-2 ml-2">{error}</p>}
     </div>
   );
 };
 
-// Simple Modal component
+// =========================
+// SUCCESS MODAL
+// =========================
+
 const SuccessModal = ({ message, onClose }) => {
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === "Escape") onClose();
     };
+
     document.addEventListener("keydown", handleEsc);
+
     return () => document.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm transition-all">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-in fade-in zoom-in duration-200">
         <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-            <svg
-              className="h-6 w-6 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-5">
+            <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Success!</h3>
-          <p className="text-gray-600 mb-6">{message}</p>
+
+          <h3 className="text-2xl font-bold text-gray-900 mb-2">Success!</h3>
+
+          <p className="text-gray-600 mb-6 leading-relaxed">{message}</p>
+
           <button
             onClick={onClose}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200"
+            className="
+              w-full rounded-2xl
+              bg-blue-600 hover:bg-blue-700
+              text-white font-semibold
+              py-3 transition-all duration-200
+              shadow-lg hover:shadow-xl
+            "
           >
-            OK
+            Continue
           </button>
         </div>
       </div>
@@ -170,8 +277,11 @@ const SuccessModal = ({ message, onClose }) => {
   );
 };
 
-// Main DynamicForm Component
-const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
+// =========================
+// MAIN FORM
+// =========================
+
+const DynamicForm = ({ uuid, textColor }) => {
   const [fields, setFields] = useState([]);
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -181,9 +291,6 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
   const [successMessage, setSuccessMessage] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Helper: convert array to comma string for storage
-  const arrayToString = (arr) => (Array.isArray(arr) ? arr.join(",") : arr);
-  // Helper: convert comma string to array for editing
   const stringToArray = (str) => {
     if (Array.isArray(str)) return str;
     if (!str || str === "") return [];
@@ -194,10 +301,12 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
     const fetchConfig = async () => {
       setLoading(true);
       setError("");
+
       try {
         const url = `${APPS_SCRIPT_URL}?action=config&uuid=${encodeURIComponent(
           uuid,
         )}`;
+
         const res = await fetch(url);
         const result = await res.json();
 
@@ -206,14 +315,19 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
         }
 
         let fieldsArray = result.data || [];
+
         fieldsArray = fieldsArray.filter((f) => f["Field Name"]?.trim());
+
         setFields(fieldsArray);
 
         const defaults = {};
+
         fieldsArray.forEach((field) => {
           const key = field["Field Name"].trim();
           const type = field["Field Type"]?.trim().toLowerCase();
+
           let defaultVal = field["Default Value"]?.toString() || "";
+
           if (type === "checkbox") {
             defaults[key] = defaultVal === "true";
           } else if (type === "multi-checkbox") {
@@ -222,6 +336,7 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
             defaults[key] = defaultVal;
           }
         });
+
         setFormData(defaults);
         setValidationErrors({});
       } catch (err) {
@@ -237,72 +352,98 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
 
   const validateField = (field, value) => {
     const required = isRequired(field["Required"]);
+
     if (required) {
       if (value === undefined || value === null || value === "") {
         return `${field["Label"] || field["Field Name"]} is required.`;
       }
+
       const type = field["Field Type"]?.toLowerCase();
+
       if (type === "checkbox" && !value) {
         return `${field["Label"] || field["Field Name"]} must be checked.`;
       }
+
       if (
         type === "multi-checkbox" &&
         (!Array.isArray(value) || value.length === 0)
       ) {
-        return `${field["Label"] || field["Field Name"]} must select at least one option.`;
+        return `${
+          field["Label"] || field["Field Name"]
+        } must select at least one option.`;
       }
     }
+
     return "";
   };
 
   const validateAllFields = () => {
     const errors = {};
+
     fields.forEach((field) => {
       const key = field["Field Name"].trim();
-      // Only validate visible fields
+
       if (isFieldVisible(field, formData)) {
         const value = formData[key];
         const errMsg = validateField(field, value);
+
         if (errMsg) errors[key] = errMsg;
       }
     });
+
     setValidationErrors(errors);
+
     return Object.keys(errors).length === 0;
   };
 
   const handleChange = (key, value) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
     if (validationErrors[key]) {
-      setValidationErrors((prev) => ({ ...prev, [key]: "" }));
+      setValidationErrors((prev) => ({
+        ...prev,
+        [key]: "",
+      }));
     }
   };
 
-  // Toggle value in multi-checkbox array
   const handleMultiCheckboxChange = (key, option, checked) => {
     setFormData((prev) => {
       const current = Array.isArray(prev[key]) ? prev[key] : [];
+
       let newArray;
+
       if (checked) {
         newArray = [...current, option];
       } else {
         newArray = current.filter((v) => v !== option);
       }
+
       return { ...prev, [key]: newArray };
     });
+
     if (validationErrors[key]) {
-      setValidationErrors((prev) => ({ ...prev, [key]: "" }));
+      setValidationErrors((prev) => ({
+        ...prev,
+        [key]: "",
+      }));
     }
   };
 
-  // Determine if a field should be displayed based on "Criteria" column
   const isFieldVisible = (field, data) => {
     const criteria = field["Criteria"];
+
     if (!criteria) return true;
+
     return evaluateCriteria(criteria, data);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     setError("");
     setSuccessMessage("");
     setShowSuccessModal(false);
@@ -311,11 +452,13 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
       return;
     }
 
-    // Prepare data for submission: convert any array to comma-separated string
     const submitData = {};
+
     Object.keys(formData).forEach((key) => {
       const fieldConfig = fields.find((f) => f["Field Name"]?.trim() === key);
+
       const type = fieldConfig?.["Field Type"]?.toLowerCase();
+
       if (type === "multi-checkbox" && Array.isArray(formData[key])) {
         submitData[key] = formData[key].join(",");
       } else {
@@ -324,17 +467,23 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
     });
 
     setSubmitting(true);
+
     try {
       const body = {
         uuid: uuid,
         data: submitData,
       };
+
       const url = `${APPS_SCRIPT_URL}?action=submit`;
+
       const res = await fetch(url, {
         method: "POST",
         body: JSON.stringify(body),
-        headers: { "Content-Type": "text/plain" },
+        headers: {
+          "Content-Type": "text/plain",
+        },
       });
+
       const result = await res.json();
 
       if (!result.success) {
@@ -342,7 +491,9 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
       }
 
       const submittedId = result.data?.id ?? "";
+
       const msg = `${uuid} form submitted successfully! Your tracking ID: ${submittedId}`;
+
       setSuccessMessage(msg);
       setShowSuccessModal(true);
     } catch (err) {
@@ -352,23 +503,33 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
     }
   };
 
+  // =========================
+  // RENDER FIELD
+  // =========================
+
   const renderField = (field) => {
     const key = field["Field Name"]?.trim();
+
     if (!key) return null;
 
     const label = field["Label"] || key;
+
     const type = field["Field Type"]?.trim().toLowerCase();
+
     const listValues = field["List"]
       ?.split(",")
       .map((v) => v.trim())
       .filter((v) => v);
+
     const required = isRequired(field["Required"]);
+
     const error = validationErrors[key] || "";
 
     switch (type) {
       case "text":
       case "email":
       case "number":
+      case "phone":
       case "date":
       case "textarea":
       case "dropdown":
@@ -387,77 +548,177 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
           />
         );
 
+      // =========================
+      // MULTI CHECKBOX
+      // =========================
+
       case "multi-select":
       case "multi-checkbox":
         return (
-          <fieldset key={key} className="">
-            <legend className="text-sm font-semibold text-gray-700 mb-1">
+          <fieldset
+            key={key}
+            className="
+              rounded-3xl border border-gray-200
+              bg-white p-5 shadow-sm
+              md:col-span-2
+            "
+          >
+            <legend
+              className={`pt-6 sm:pt-8 text-[10px] sm:text-[11px] font-semibold ${textColor}`}
+            >
               {label}
+
               {required && <span className="text-red-500 ml-1">*</span>}
             </legend>
-            <div className="flex flex-wrap gap-4">
-              {listValues.map((option) => (
-                <label key={option} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    value={option}
-                    checked={
-                      Array.isArray(formData[key]) &&
-                      formData[key].includes(option)
+
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+              {listValues.map((option) => {
+                const checked =
+                  Array.isArray(formData[key]) &&
+                  formData[key].includes(option);
+
+                return (
+                  <button
+                    type="button"
+                    key={option}
+                    onClick={() =>
+                      handleMultiCheckboxChange(key, option, !checked)
                     }
-                    onChange={(e) =>
-                      handleMultiCheckboxChange(key, option, e.target.checked)
-                    }
-                    className="accent-blue-600 h-4 w-4"
-                  />
-                  {option}
-                </label>
-              ))}
+                    className={`
+                      px-4 py-3 rounded-2xl text-sm font-medium
+                      border transition-all duration-200
+                      flex items-center gap-3
+
+                      ${
+                        checked
+                          ? `${textColor.replace("text-", "bg-")} text-white border-blue-600 shadow-md`
+                          : "bg-gray-50 border-gray-300 hover:border-blue-400"
+                      }
+                    `}
+                  >
+                    {checked ? (
+                      <SquareCheckBig
+                        className="w-5 h-5 shrink-0"
+                        strokeWidth={2.4}
+                      />
+                    ) : (
+                      <Square className="w-5 h-5 shrink-0" strokeWidth={2.2} />
+                    )}
+
+                    <span className="text-left">{option}</span>
+                  </button>
+                );
+              })}
             </div>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+            {error && <p className="text-red-500 text-xs mt-3">{error}</p>}
           </fieldset>
         );
+
+      // =========================
+      // RADIO
+      // =========================
 
       case "radio":
         return (
-          <fieldset key={key} className="">
-            <legend className="text-sm font-semibold text-gray-700 mb-1">
+          <fieldset
+            key={key}
+            className="
+        rounded-3xl border border-gray-200
+        bg-white p-5 shadow-sm
+        md:col-span-2
+      "
+          >
+            <legend
+              className={`pt-6 sm:pt-8 text-[10px] sm:text-[11px] font-semibold ${textColor}`}
+            >
               {label}
+
               {required && <span className="text-red-500 ml-1">*</span>}
             </legend>
-            <div className="flex flex-wrap gap-4">
-              {listValues.map((val) => (
-                <label key={val} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name={key}
-                    value={val}
-                    checked={formData[key] === val}
-                    onChange={(e) => handleChange(key, e.target.value)}
-                    className="accent-blue-600"
-                  />
-                  {val}
-                </label>
-              ))}
+
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+              {listValues.map((val) => {
+                const active = formData[key] === val;
+
+                const borderColor = textColor.replace("text-", "border-");
+
+                const bgColor = textColor.replace("text-", "bg-");
+
+                return (
+                  <button
+                    type="button"
+                    key={val}
+                    onClick={() => handleChange(key, val)}
+                    className={`
+                flex items-center gap-3
+                rounded-2xl border p-4
+                text-sm font-medium text-left
+                transition-all duration-200
+                ${
+                  active
+                    ? `${borderColor} ${bgColor}/10 text-gray-800 shadow-md`
+                    : "border-gray-200 bg-white hover:border-blue-300"
+                }
+              `}
+                  >
+                    <div
+                      className={`
+                  transition-all duration-200
+                  ${active ? textColor : "text-gray-400"}
+                `}
+                    >
+                      {active ? (
+                        <CircleCheckBig
+                          size={16}
+                          className="sm:w-5 sm:h-5 shrink-0"
+                        />
+                      ) : (
+                        <Circle size={16} className="sm:w-5 sm:h-5 shrink-0" />
+                      )}
+                    </div>
+
+                    <span>{val}</span>
+                  </button>
+                );
+              })}
             </div>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+            {error && <p className="text-red-500 text-xs mt-3">{error}</p>}
           </fieldset>
         );
+      // =========================
+      // SINGLE CHECKBOX
+      // =========================
 
       case "checkbox":
         return (
-          <div key={key} className="">
-            <label className="flex items-center gap-3 text-sm font-semibold text-gray-700">
-              <input
-                type="checkbox"
-                checked={!!formData[key]}
-                onChange={(e) => handleChange(key, e.target.checked)}
-                className="accent-blue-600 h-4 w-4"
-              />
-              {label}
+          <div
+            key={key}
+            className="
+              flex items-start gap-4
+              rounded-3xl border border-gray-200
+              bg-white p-5 shadow-sm
+              md:col-span-2
+            "
+          >
+            <input
+              type="checkbox"
+              checked={!!formData[key]}
+              onChange={(e) => handleChange(key, e.target.checked)}
+              className="
+                mt-1 h-5 w-5 rounded
+                accent-blue-600
+              "
+            />
+
+            <div>
+              <label className="font-medium text-gray-800">{label}</label>
+
               {required && <span className="text-red-500 ml-1">*</span>}
-            </label>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+
+              {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
+            </div>
           </div>
         );
 
@@ -477,41 +738,67 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
     }
   };
 
-  // Filter visible fields before rendering grid
   const visibleFields = fields.filter((field) =>
     isFieldVisible(field, formData),
   );
 
+  // =========================
+  // LOADING
+  // =========================
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex justify-center items-center py-16">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
+  // =========================
+  // MAIN UI
+  // =========================
+
   return (
-    <div className="w-full max-w-6xl mx-auto px-4">
+    <div className="w-full max-w-6xl mx-auto px-4 py-6 text-gray-800">
       {error && (
-        <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 text-sm font-medium">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl mb-6 text-sm font-medium">
           {error}
         </div>
       )}
 
       {visibleFields.length > 0 && (
-        <form onSubmit={handleSubmit}>
-          {/* Two-column grid on medium screens and up */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-            {visibleFields.map(renderField)}
-          </div>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:opacity-50"
-          >
-            {submitting ? "Submitting..." : "Submit"}
-          </button>
-        </form>
+        <div
+          className={`
+            rounded-[32px]
+           bg-white
+          border ${textColor.replace("text-", "border-")}/50 bg-white p-6 shadow-md
+          ${textColor}
+            shadow-2xl
+            p-6 md:p-8
+          `}
+        >
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {visibleFields.map(renderField)}
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className={`
+                mt-8 w-full
+                rounded-2xl
+                ${textColor.replace("text-", "bg-")} hover:bg-blue-700
+                text-white font-semibold
+                py-4
+                transition-all duration-300
+                shadow-lg hover:shadow-xl
+                disabled:opacity-50`}
+            >
+              {submitting ? "Submitting..." : "Submit Form"}
+            </button>
+          </form>
+        </div>
       )}
 
       {!loading && visibleFields.length === 0 && !error && (
@@ -520,7 +807,6 @@ const DynamicForm = ({ uuid, textColor = "text-blue-600" }) => {
         </p>
       )}
 
-      {/* Success Modal */}
       {showSuccessModal && (
         <SuccessModal
           message={successMessage}

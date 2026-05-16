@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { supabase } from "../../../../src/utils/supabase";
+import { supabase } from "../../../utils/supabase";
 
 export default function CheckApplicationStatus({ inModal = false }) {
   const [searchType, setSearchType] = useState("id"); // 'id', 'name', 'mobile'
