@@ -16,7 +16,7 @@ const Header = ({
           onClick={onLogoClick}
         >
           <img
-            src="../src/media/jzv-rectangle-tranparent.png"
+            src="/media/jzv-rectangle-tranparent.png"
             alt="JZV Logo"
             className="h-14 sm:h-16 shrink-0 group-hover:opacity-80 transition-opacity"
           />

@@ -2,7 +2,7 @@ import React from "react";
 
 const HomeGrid = ({ gridCards, openModal }) => {
   return (
-    <main className="w-screen mt-8 sm:mt-12 min-h-[70vh] bg-cover bg-no-repeat bg-center bg-[url('../src/media/jzv-building01.png')]">
+    <main className="w-screen mt-8 sm:mt-12 min-h-[70vh] bg-cover bg-no-repeat bg-center bg-[url('/media/jzv-building01.png')]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 sm:pt-4 pb-6 sm:pb-8">
         <div
           className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6"
