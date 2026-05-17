@@ -80,10 +80,80 @@ h5 {
   line-height: 1.8; /* Better spacing for Nastaleeq */
   font-weight: normal;
 }
-.goog-logo-link {
-  display: none !important;
-}
 .goog-te-gadget {
   font-family: inherit !important;
-  font-size: 0.9rem !important;
+  font-size: 0.75rem !important;
+  visibility: hidden; /* Hide the raw text */
+}
+.goog-te-gadget .goog-te-combo {
+  visibility: visible; /* Show the dropdown */
+  margin: 0 !important;
+  padding: 4px 8px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+.goog-te-gadget .goog-te-combo:hover {
+  border-color: #fb923c !important; /* hover border color matching brand orange */
+  background-color: #fffaf8 !important;
+}
+.goog-te-banner-frame.skiptranslate,
+.goog-te-banner-frame,
+iframe.skiptranslate {
+  display: none !important;
+}
+body {
+  top: 0px !important;
+}
+
+/* Global Urdu font rule when translated via Google Translate */
+html[lang="ur"],
+html[lang="ur"] body,
+html[lang="ur"] div,
+html[lang="ur"] p,
+html[lang="ur"] span,
+html[lang="ur"] h1,
+html[lang="ur"] h2,
+html[lang="ur"] h3,
+html[lang="ur"] h4,
+html[lang="ur"] h5,
+html[lang="ur"] h6,
+html[lang="ur"] a,
+html[lang="ur"] button,
+html[lang="ur"] li,
+html[lang="ur"] input,
+html[lang="ur"] label,
+html[lang="ur"] select,
+html[lang="ur"] textarea {
+  font-family: "Jameel Noori Nastaleeq", "Jameel Noori Nastaleeq Regular", "Noto Nastaliq Urdu", "Alvi Nastaleeq", "Arial", sans-serif !important;
+  line-height: 1.8 !important;
+}
+
+/* Global Arabic font rule when translated via Google Translate */
+html[lang="ar"],
+html[lang="ar"] body,
+html[lang="ar"] div,
+html[lang="ar"] p,
+html[lang="ar"] span,
+html[lang="ar"] h1,
+html[lang="ar"] h2,
+html[lang="ar"] h3,
+html[lang="ar"] h4,
+html[lang="ar"] h5,
+html[lang="ar"] h6,
+html[lang="ar"] a,
+html[lang="ar"] button,
+html[lang="ar"] li,
+html[lang="ar"] input,
+html[lang="ar"] label,
+html[lang="ar"] select,
+html[lang="ar"] textarea {
+  font-family: "Alyamama", "Arial", sans-serif !important;
 }

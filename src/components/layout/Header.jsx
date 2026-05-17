@@ -31,14 +31,8 @@ const Header = ({
             </div>
         </div>
 
-        {/* Right side: Google Translate + Auth */}
-        <div className="flex items-center gap-3">
-          {/* Google Translate container */}
-          <div
-            id="google_translate_element"
-            className="translate-selector [&_.goog-te-combo]:border [&_.goog-te-combo]:border-light-border [&_.goog-te-combo]:rounded-lg [&_.goog-te-combo]:px-2 [&_.goog-te-combo]:py-1 [&_.goog-te-combo]:text-sm"
-          ></div>
-
+        {/* Right side: Auth & Google Translate (Vertical Stack) */}
+        <div className="flex flex-col items-end gap-2 shrink-0">
           {user ? (
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col items-end">
@@ -73,6 +67,12 @@ const Header = ({
               </span>
             </button>
           )}
+
+          {/* Google Translate dropdown positioned below */}
+          <div
+            id="google_translate_element"
+            className="translate-selector h-px w-[70px]"
+          ></div>
         </div>
       </div>
     </header>
