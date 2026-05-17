@@ -20,15 +20,14 @@ const Header = ({
             alt="JZV Logo"
             className="h-14 sm:h-16 shrink-0 group-hover:opacity-80 transition-opacity"
           />
-           <div className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
-              <p className="text-teal-dark">
-                a modern madrasa system integrated with 21st-century
-                competencies
-              </p>
-              <p className="text-blue-dark">
-                preparing your child to succeed in this Life and the Hereafter.
-              </p>
-            </div>
+          <div className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
+            <p className="text-teal-dark">
+              a modern madrasa system integrated with 21st-century competencies
+            </p>
+            <p className="text-blue-dark">
+              preparing your child to succeed in this Life and the Hereafter.
+            </p>
+          </div>
         </div>
 
         {/* Right side: Auth & Google Translate (Vertical Stack) */}
@@ -71,7 +70,9 @@ const Header = ({
           {/* Google Translate dropdown positioned below */}
           <div
             id="google_translate_element"
-            className="translate-selector h-px w-[70px]"
+            className="translate-selector relative h-10 w-[70px] overflow-hidden 
+             [&_.goog-te-gadget]:text-[0px] 
+             [&_.goog-te-combo]:w-[70px] [&_.goog-te-combo]:max-w-[70px] [&_.goog-te-combo]:m-0 [&_.goog-te-combo]:text-sm"
           ></div>
         </div>
       </div>
