@@ -5,8 +5,6 @@ import { supabase } from "../utils/supabase";
 const LoginPortal = ({
   isOpen,
   onClose,
-  selectedLoginType,
-  setSelectedLoginType,
   user,
   userRoles,
   rolesLoading,
@@ -92,7 +90,6 @@ const LoginPortal = ({
   ];
 
   const handleClose = () => {
-    setSelectedLoginType(null);
     onClose();
   };
 
@@ -407,7 +404,6 @@ const LoginPortal = ({
                         <button
                           key={login.type}
                           onClick={() => {
-                            setSelectedLoginType(login.type);
                             navigate(`/portal/${login.type}`);
                             handleClose();
                           }}

@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+  Navigate,
+} from "react-router-dom";
 import AOS from "aos";
 import "aos/dist/aos.css";
 import { supabase } from "./utils/supabase";
 import useGoogleTranslate from "./hooks/useGoogleTranslate";
 import LoginPortal from "./components/LoginPortal";
-import _4Ts from "./components/homepage/about-us/4Ts";
-import { getCards, TAB_GROUPS, GROUPED_IDS, getGroupByName, getGroupById, HOME_CARD_SEQUENCE } from "./components/homepage/CardsData";
+import { getCards, getGroupByName, HOME_CARD_SEQUENCE } from "./components/homepage/CardsData";
 import Header from "./components/layout/Header";
 import ModalContainer from "./components/layout/ModalContainer";
 import HomeGrid from "./components/layout/HomeGrid";
 import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
 import AdminPortal from "./components/portals/AdminPortal";
 import RolePortal from "./components/portals/RolePortal";
-import DynamicForm from "./components/DynamicForm";
-import { CARD_THEMES } from "./utils/cardTheme";
-
-
 
 const App = () => {
   useGoogleTranslate();
@@ -24,13 +25,12 @@ const App = () => {
   const [activeModal, setActiveModal] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
   const [showLoginPortal, setShowLoginPortal] = useState(false);
-  const [selectedLoginType, setSelectedLoginType] = useState(null);
   const [user, setUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
   const [fullName, setFullName] = useState("");
   const [studentIds, setStudentIds] = useState("");
   const [rolesLoading, setRolesLoading] = useState(false);
-  
+
   // Navigation State
   const navigate = useNavigate();
   const location = useLocation();
@@ -69,7 +69,6 @@ const App = () => {
             .map((code) => roleMap[code.trim().toUpperCase()])
             .filter(Boolean);
           setUserRoles(roles);
-
         } else {
           setUserRoles([]);
         }
@@ -97,7 +96,6 @@ const App = () => {
         setUserRoles([]);
         setFullName("");
         setStudentIds("");
-        setSelectedLoginType(null);
         // Navigation handles views now
         setAdminSubView(null);
       }
@@ -241,52 +239,70 @@ const App = () => {
       {/* ── Dynamic View Content ────────────────────────────────────────────── */}
       <main className="relative">
         <Routes>
-          <Route path="/" element={
-            <HomeGrid gridCards={gridCards} openModal={openModal} />
-          } />
+          <Route
+            path="/"
+            element={<HomeGrid gridCards={gridCards} openModal={openModal} />}
+          />
 
-          <Route path="/portal" element={
-            user && userRoles.length > 1 ? (
-              <RoleSelectionDashboard
-                userRoles={userRoles}
-                onSelectView={(view) => navigate(`/portal/${view}`)}
-              />
-            ) : <Navigate to="/" replace />
-          } />
+          <Route
+            path="/portal"
+            element={
+              user && userRoles.length > 1 ? (
+                <RoleSelectionDashboard
+                  userRoles={userRoles}
+                  onSelectView={(view) => navigate(`/portal/${view}`)}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
 
-          <Route path="/portal/admin" element={
-            user && userRoles.includes("admin") ? (
-              <AdminPortal
-                userRoles={userRoles}
-                subView={adminSubView}
-                onSetSubView={setAdminSubView}
-              />
-            ) : <Navigate to="/" replace />
-          } />
+          <Route
+            path="/portal/admin"
+            element={
+              user && userRoles.includes("admin") ? (
+                <AdminPortal
+                  userRoles={userRoles}
+                  subView={adminSubView}
+                  onSetSubView={setAdminSubView}
+                />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
 
-          {["teacher", "parent", "management"].map(role => {
+          {["teacher", "parent", "management"].map((role) => {
             const tiles = [
               {
                 id: "complaint-register",
                 title: "Complaint Register",
-                description: "Submit and track your requests or complaints directly with the administration.",
+                description:
+                  "Submit and track your requests or complaints directly with the administration.",
                 icon: "fa-clipboard-list",
                 buttonColor: "bg-orange-primary text-white",
-                onClick: () => openModal("complaint-register")
-              }
+                onClick: () => openModal("complaint-register"),
+              },
             ];
-            
+
             return (
-              <Route key={role} path={`/portal/${role}`} element={
-                user && userRoles.includes(role) ? (
-                  <RolePortal 
-                    userRoles={userRoles}
-                    role={role}
-                    tiles={tiles}
-                    openModal={openModal}
-                  />
-                ) : <Navigate to="/" replace />
-              } />
+              <Route
+                key={role}
+                path={`/portal/${role}`}
+                element={
+                  user && userRoles.includes(role) ? (
+                    <RolePortal
+                      userRoles={userRoles}
+                      role={role}
+                      tiles={tiles}
+                      openModal={openModal}
+                    />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
             );
           })}
         </Routes>
@@ -297,8 +313,6 @@ const App = () => {
         <LoginPortal
           isOpen={showLoginPortal}
           onClose={() => setShowLoginPortal(false)}
-          selectedLoginType={selectedLoginType}
-          setSelectedLoginType={setSelectedLoginType}
           user={user}
           userRoles={userRoles}
           rolesLoading={rolesLoading}
