@@ -11,13 +11,19 @@ import "aos/dist/aos.css";
 import { supabase } from "./utils/supabase";
 import useGoogleTranslate from "./hooks/useGoogleTranslate";
 import LoginPortal from "./components/LoginPortal";
-import { getCards, getGroupByName, HOME_CARD_SEQUENCE } from "./components/homepage/CardsData";
+import {
+  getCards,
+  getGroupByName,
+  HOME_CARD_SEQUENCE,
+} from "./components/homepage/CardsData";
 import Header from "./components/layout/Header";
 import ModalContainer from "./components/layout/ModalContainer";
 import HomeGrid from "./components/layout/HomeGrid";
 import RoleSelectionDashboard from "./components/RoleSelectionDashboard";
 import AdminPortal from "./components/portals/AdminPortal";
 import RolePortal from "./components/portals/RolePortal";
+import DynamicForm from "./components/DynamicForm";
+import { CARD_THEMES } from "./utils/cardTheme";
 
 const App = () => {
   useGoogleTranslate();
@@ -305,6 +311,21 @@ const App = () => {
               />
             );
           })}
+
+          <Route
+            path="/career"
+            element={
+              <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+                <div className="w-full max-w-2xl">
+                  <h1 className="text-white text-2xl">Career Opportunities</h1>
+                  <DynamicForm
+                    uuid="career"
+                    textColor={CARD_THEMES.blueDark.textColor}
+                  />
+                </div>
+              </div>
+            }
+          />
         </Routes>
       </main>
 
@@ -328,6 +349,7 @@ const App = () => {
         isTabbed={isTabbed}
         getCard={getCard}
         closeModal={closeModal}
+        currentUser={user}
       />
     </div>
   );

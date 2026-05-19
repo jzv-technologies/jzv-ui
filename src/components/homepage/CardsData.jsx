@@ -16,6 +16,7 @@ import CheckApplicationStatus from "./admission/CheckApplicationStatus";
 import CampusGallery from "./CampusGallery";
 import ContactUs from "./ContactUs";
 import DynamicForm from "../DynamicForm";
+import OpeningsModal from "./Openings";
 import { CARD_THEMES } from "../../utils/cardTheme";
 
 // ─── Tab groups ────────────────────────────────────────────────────────────────
@@ -25,15 +26,22 @@ export const TAB_GROUPS = [
   { name: "campus-life", ids: ["schedule", "extracurricular", "sports"] },
   {
     name: "admission",
-    ids: ["admission-process", "new-admission", "check-admission-status", "fees"],
+    ids: [
+      "admission-process",
+      "new-admission",
+      "check-admission-status",
+      "fees",
+    ],
   },
+  { name: "careers", ids: ["openings", "career"] },
 ];
 
 export const GROUPED_IDS = new Set(TAB_GROUPS.flatMap((g) => g.ids));
 
 export const getGroupByName = (name) =>
   TAB_GROUPS.find((g) => g.name === name) ?? null;
-export const getGroupById = (id) => TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
+export const getGroupById = (id) =>
+  TAB_GROUPS.find((g) => g.ids.includes(id)) ?? null;
 
 // ─── Home card sequence ────────────────────────────────────────────────────────
 // Use this array to easily reorder the cards on the main home page.
@@ -45,7 +53,7 @@ export const HOME_CARD_SEQUENCE = [
   "policies",
   "__entry__admission",
   "gallery",
-  "career",
+  "careers",
   "my-portal",
   "complaint-register",
   "contact-us",
@@ -130,7 +138,7 @@ export const getCards = ({
   {
     id: "__about__jzv",
     title: "About Us",
-    icon: "fa-compass", 
+    icon: "fa-compass",
     ...CARD_THEMES.pink,
     isGroupEntry: true,
     groupName: "about-us",
@@ -151,7 +159,7 @@ export const getCards = ({
     isGroupEntry: true,
     groupName: "campus-life",
   },
-  
+
   {
     id: "__entry__admission",
     title: "Admissions",
@@ -244,22 +252,38 @@ export const getCards = ({
     ...CARD_THEMES.orange,
     showAtHome: false,
     content: (
-      <DynamicForm 
-        uuid="complaint" 
-        textColor={CARD_THEMES.orange.textColor} 
+      <DynamicForm
+        uuid="complaint"
+        textColor={CARD_THEMES.orange.textColor}
         additionalData={{ email: currentUser?.email }}
       />
     ),
   },
   {
+    id: "__career__openings",
+    title: "Career Openings",
+    icon: "fa-briefcase",
+    ...CARD_THEMES.brand,
+    isGroupEntry: true,
+    groupName: "careers",
+  },
+
+  {
     id: "career",
     title: "Career",
     icon: "fa-briefcase",
     ...CARD_THEMES.blueDark,
-    showAtHome: true,
+    showAtHome: false,
     content: (
       <DynamicForm uuid="career" textColor={CARD_THEMES.blueDark.textColor} />
     ),
+  },
+  {
+    id: "openings",
+    title: "Openings",
+    icon: "fa-briefcase",
+    ...CARD_THEMES.tealDark,
+    content: <OpeningsModal inModal={true} />,
   },
   {
     id: "contact-us",
@@ -269,7 +293,7 @@ export const getCards = ({
     showAtHome: true,
     content: <ContactUs />,
   },
-    {
+  {
     id: "my-portal",
     title: "My Portal",
     icon: "fa-user-circle",

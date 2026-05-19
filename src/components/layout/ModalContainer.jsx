@@ -9,6 +9,7 @@ const ModalContainer = ({
   isTabbed,
   getCard,
   closeModal,
+  currentUser,
 }) => {
   // 1. EARLY RETURN: If there's no modal or card, don't even try to render the HTML.
   // This prevents the "cannot read bgcontent of undefined" error.
@@ -37,7 +38,11 @@ const ModalContainer = ({
             <div className="flex flex-col w-full">
               <div className="flex flex-col sm:flex-row w-full gap-2 sm:gap-0">
                 {/* 2. OPTIONAL CHAINING: Added ?. to prevent crashes if activeGroup is missing */}
-                {activeGroup?.ids?.map((tabId) => {
+                {activeGroup?.ids?.filter((tabId) => {
+                  // Hide the Fee Structure tab for unauthenticated users
+                  if (tabId === "fees" && !currentUser) return false;
+                  return true;
+                }).map((tabId) => {
                   const tabCard = getCard(tabId);
                   const isActive = activeTab === tabId;
                   if (!tabCard) return null;
