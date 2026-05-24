@@ -13,8 +13,8 @@ const PortalLayout = ({ children, userRoles, roleName, subView, onSetSubView }) 
   };
 
   const Breadcrumbs = () => (
-    <div className="w-full bg-gradient-to-r from-orange-100/80 via-white to-green-100/80 border-b border-light-border px-6 py-4 flex items-center text-sm text-dark-muted shadow-md">
-      <div className="max-w-7xl mx-auto w-full flex items-center gap-2">
+    <div className="w-full bg-gradient-to-r from-orange-100/80 via-white to-green-100/80 border-b border-light-border px-6 py-4 flex items-center text-sm text-dark-muted shadow-md sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95">
+      <div className={isFullWidth ? "w-full flex items-center gap-2" : "max-w-7xl mx-auto w-full flex items-center gap-2"}>
         <button onClick={handleGoHome} className="hover:text-orange-primary flex items-center gap-1 transition-colors font-semibold">
           <i className="fas fa-home"></i> Home
         </button>
@@ -37,10 +37,12 @@ const PortalLayout = ({ children, userRoles, roleName, subView, onSetSubView }) 
     </div>
   );
 
+  const isFullWidth = roleName === "management" && !!subView;
+
   return (
     <div className="min-h-screen flex flex-col bg-transparent">
       <Breadcrumbs />
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-12">
+      <main className={isFullWidth ? "flex-1 w-full max-w-none p-0 m-0" : "flex-1 w-full max-w-7xl mx-auto px-6 py-12"}>
         {children}
       </main>
     </div>

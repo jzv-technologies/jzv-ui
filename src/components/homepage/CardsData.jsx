@@ -47,6 +47,7 @@ export const getGroupById = (id) =>
 // Use this array to easily reorder the cards on the main home page.
 // The IDs must exactly match the `id` property of the cards defined below.
 export const HOME_CARD_SEQUENCE = [
+  "my-portal",
   "__about__jzv",
   "__entry__academic",
   "__campus__life",
@@ -54,7 +55,6 @@ export const HOME_CARD_SEQUENCE = [
   "__entry__admission",
   "gallery",
   "careers",
-  "my-portal",
   "complaint-register",
   "contact-us",
 ];
@@ -164,7 +164,7 @@ export const getCards = ({
     id: "__entry__admission",
     title: "Admissions",
     icon: "fa-user-graduate",
-    ...CARD_THEMES.brand,
+    ...CARD_THEMES.blueDark,
     isGroupEntry: true,
     groupName: "admission",
   },
@@ -172,7 +172,7 @@ export const getCards = ({
     id: "gallery",
     title: "Campus Gallery",
     icon: "fa-images",
-    ...CARD_THEMES.pink,
+    ...CARD_THEMES.red,
     showAtHome: true,
     content: (
       <CampusGallery
@@ -261,16 +261,16 @@ export const getCards = ({
   },
   {
     id: "__career__openings",
-    title: "Career Openings",
+    title: "Job Openings",
     icon: "fa-briefcase",
-    ...CARD_THEMES.brand,
+    ...CARD_THEMES.tealDark,
     isGroupEntry: true,
     groupName: "careers",
   },
 
   {
     id: "career",
-    title: "Career",
+    title: "Apply Online",
     icon: "fa-briefcase",
     ...CARD_THEMES.blueDark,
     showAtHome: false,
@@ -280,7 +280,7 @@ export const getCards = ({
   },
   {
     id: "openings",
-    title: "Openings",
+    title: "Current Openings",
     icon: "fa-briefcase",
     ...CARD_THEMES.tealDark,
     content: <OpeningsModal inModal={true} />,
@@ -289,7 +289,7 @@ export const getCards = ({
     id: "contact-us",
     title: "Contact Us",
     icon: "fa-phone-alt",
-    ...CARD_THEMES.teal,
+    ...CARD_THEMES.blue,
     showAtHome: true,
     content: <ContactUs />,
   },
@@ -297,7 +297,7 @@ export const getCards = ({
     id: "my-portal",
     title: "My Portal",
     icon: "fa-user-circle",
-    ...CARD_THEMES.brand,
+    ...CARD_THEMES.pinkDeep,
     showAtHome: false, // We dynamically enable this in App.jsx when logged in
   },
 ];

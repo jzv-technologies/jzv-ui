@@ -8,7 +8,9 @@ import {
   CircleCheckBig,
 } from "lucide-react";
 import { CARD_THEMES } from "../utils/cardTheme";
+import { supabase } from "../utils/supabase";
 
+const SUPABASE_FORM_CONFIG_TABLE = "dynamic_form_configs";
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
 // Helper: parse "Required" column
@@ -305,21 +307,119 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
       setLoading(true);
       setError("");
 
+      const CACHE_KEY = `form_config_${uuid}`;
+      const CACHE_TIME_KEY = `form_config_${uuid}_time`;
+      const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache expiry
+
+      // Check localStorage cache first
       try {
-        const url = `${APPS_SCRIPT_URL}?action=config&uuid=${encodeURIComponent(
-          uuid,
-        )}`;
+        const cachedData = localStorage.getItem(CACHE_KEY);
+        const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+        const now = Date.now();
 
-        const res = await fetch(url);
-        const result = await res.json();
+        if (cachedData && cachedTime && (now - Number(cachedTime) < CACHE_DURATION)) {
+          const parsed = JSON.parse(cachedData);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log(`[DynamicForm] Loaded config for ${uuid} from localStorage cache`);
+            setFields(parsed);
 
-        if (!result.success) {
-          throw new Error(result.error || "Failed to load form");
+            const defaults = {};
+            parsed.forEach((field) => {
+              const key = field["Field Name"].trim();
+              const type = field["Field Type"]?.trim().toLowerCase();
+              let defaultVal = field["Default Value"]?.toString() || "";
+
+              if (type === "checkbox") {
+                defaults[key] = defaultVal === "true";
+              } else if (type === "multi-checkbox") {
+                defaults[key] = stringToArray(defaultVal);
+              } else {
+                defaults[key] = defaultVal;
+              }
+            });
+
+            setFormData(defaults);
+            setValidationErrors({});
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (cacheErr) {
+        console.warn("Failed to retrieve or parse form config cache:", cacheErr);
+      }
+
+      try {
+        const fetchFromSupabase = async () => {
+          const queryPromise = supabase
+            .from(SUPABASE_FORM_CONFIG_TABLE)
+            .select("*")
+            .eq("uuid", uuid);
+
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Supabase query timeout")), 3000)
+          );
+
+          const { data, error: supabaseError } = await Promise.race([
+            queryPromise,
+            timeoutPromise,
+          ]);
+
+          if (supabaseError) throw supabaseError;
+
+          if (!data || data.length === 0) {
+            throw new Error("No Supabase form config record found");
+          }
+          const configField = data[0].fields || data[0].config;
+          let fieldsFromSupabase = [];
+          if (configField) {
+            fieldsFromSupabase = typeof configField === "string" ? JSON.parse(configField) : configField;
+          }
+
+          if (!fieldsFromSupabase || !fieldsFromSupabase.length) {
+            throw new Error("No Supabase form config fields found");
+          }
+
+          return fieldsFromSupabase;
+        };
+
+        const fetchFromAppScript = async () => {
+          const url = `${APPS_SCRIPT_URL}?action=config&uuid=${encodeURIComponent(
+            uuid,
+          )}`;
+
+          const res = await fetch(url);
+          const result = await res.json();
+
+          if (!result.success) {
+            throw new Error(result.error || "Failed to load form");
+          }
+
+          return result.data || [];
+        };
+
+        let fieldsArray;
+
+        try {
+          fieldsArray = await fetchFromSupabase();
+          console.log(`[DynamicForm] Loaded form config for ${uuid} from Supabase`);
+        } catch (supabaseErr) {
+          console.warn(
+            "Supabase form config failed, falling back to App Script:",
+            supabaseErr,
+          );
+          fieldsArray = await fetchFromAppScript();
+          console.log(`[DynamicForm] Loaded form config for ${uuid} from Apps Script`);
         }
 
-        let fieldsArray = result.data || [];
-
         fieldsArray = fieldsArray.filter((f) => f["Field Name"]?.trim());
+
+        // Cache the retrieved config
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify(fieldsArray));
+          localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+        } catch (cacheWriteErr) {
+          console.warn("Failed to write form config to cache:", cacheWriteErr);
+        }
 
         setFields(fieldsArray);
 
@@ -354,6 +454,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
   }, [uuid]);
 
   const validateField = (field, value) => {
+    const type = field["Field Type"]?.trim().toLowerCase();
+    if (type === "button" || type === "link") return "";
+
     const required = isRequired(field["Required"]);
 
     if (required) {
@@ -719,6 +822,93 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
           </div>
         );
 
+      // =========================
+      // BUTTON & LINK (PREMIUM CARDS)
+      // =========================
+      case "button":
+      case "link":
+        let linkUrl = field.Link || field.link || field["Link"];
+        if (!linkUrl || linkUrl === "#") {
+          if (uuid === "online-teacher-test") {
+            linkUrl = "https://forms.gle/ATKnvGZhtkaANDsk7";
+          } else {
+            linkUrl = "#";
+          }
+        }
+        
+        let icon = "fa-external-link-alt";
+        let cardGradient = "from-teal-600 to-emerald-600 hover:shadow-teal-100/50";
+        let iconBg = "bg-white/20 text-white";
+        let titleColor = "text-white";
+        let subtitleColor = "text-white/80";
+        let arrowColor = "text-white bg-white/10 hover:bg-white/20";
+        let badgeText = "Evaluation Test";
+        let badgeBg = "bg-white/10 text-white";
+        
+        const lowerLabel = label.toLowerCase();
+        if (lowerLabel.includes("english")) {
+          icon = "fa-language";
+          cardGradient = "from-indigo-600 to-blue-500 hover:shadow-indigo-200/50";
+          badgeText = "Language Test";
+        } else if (lowerLabel.includes("tamil")) {
+          icon = "fa-font";
+          cardGradient = "from-amber-500 to-orange-600 hover:shadow-amber-200/50";
+          badgeText = "Regional Language Test";
+        } else if (lowerLabel.includes("arabic")) {
+          icon = "fa-feather-alt";
+          cardGradient = "from-emerald-600 to-teal-500 hover:shadow-emerald-200/50";
+          badgeText = "Classical Language Test";
+        } else if (lowerLabel.includes("urdu")) {
+          icon = "fa-pen-nib";
+          cardGradient = "from-purple-600 to-violet-500 hover:shadow-purple-200/50";
+          badgeText = "Literary Language Test";
+        }
+
+        return (
+          <div key={key} className="md:col-span-1 my-3">
+            <a
+              href={linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`
+                relative overflow-hidden group block p-6 rounded-[2rem] border-0
+                bg-gradient-to-br ${cardGradient}
+                shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 cursor-pointer
+              `}
+            >
+              {/* Decorative background blur shape */}
+              <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-white/5 rounded-full blur-xl transition-all duration-500 group-hover:scale-125"></div>
+              
+              <div className="flex flex-col gap-4">
+                {/* Top bar with Badge and Arrow */}
+                <div className="flex justify-between items-center">
+                  <span className={`text-[10px] uppercase tracking-wider font-extrabold px-3 py-1 rounded-full backdrop-blur-sm ${badgeBg}`}>
+                    {badgeText}
+                  </span>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 group-hover:translate-x-1 ${arrowColor}`}>
+                    <i className="fas fa-arrow-right text-xs"></i>
+                  </div>
+                </div>
+
+                {/* Main details with Icon and Title */}
+                <div className="flex items-center gap-4 mt-2">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-md ${iconBg} transition-transform duration-300 group-hover:rotate-6 group-hover:scale-105 shrink-0`}>
+                    <i className={`fas ${icon}`}></i>
+                  </div>
+                  <div>
+                    <h4 className={`font-extrabold text-xl sm:text-2xl tracking-tight leading-tight ${titleColor}`}>
+                      {label} Test
+                    </h4>
+                    <p className={`text-xs mt-1 font-medium ${subtitleColor}`}>
+                      Click to begin your assessment in {label}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </a>
+          </div>
+        );
+
       default:
         return (
           <FloatingLabelField
@@ -737,6 +927,10 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
 
   const visibleFields = fields.filter((field) =>
     isFieldVisible(field, formData),
+  );
+
+  const hasSubmitButton = !visibleFields.every((field) =>
+    ["button", "link"].includes(field["Field Type"]?.trim().toLowerCase()),
   );
 
   // =========================
@@ -779,21 +973,23 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
               {visibleFields.map(renderField)}
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`
-                mt-8 w-full
-                rounded-2xl
-                ${textColor.replace("text-", "bg-")} hover:bg-blue-700
-                text-white font-semibold
-                py-4
-                transition-all duration-300
-                shadow-lg hover:shadow-xl
-                disabled:opacity-50`}
-            >
-              {submitting ? "Submitting..." : "Submit Form"}
-            </button>
+            {hasSubmitButton && (
+              <button
+                type="submit"
+                disabled={submitting}
+                className={`
+                  mt-8 w-full
+                  rounded-2xl
+                  ${textColor.replace("text-", "bg-")} hover:bg-blue-700
+                  text-white font-semibold
+                  py-4
+                  transition-all duration-300
+                  shadow-lg hover:shadow-xl
+                  disabled:opacity-50`}
+              >
+                {submitting ? "Submitting..." : "Submit Form"}
+              </button>
+            )}
           </form>
         </div>
       )}

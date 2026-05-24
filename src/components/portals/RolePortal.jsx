@@ -2,6 +2,8 @@ import React from "react";
 import PortalLayout from "../layout/PortalLayout";
 
 const RolePortal = ({ userRoles, role, tiles = [], children, subView, onSetSubView }) => {
+  const isFullWidth = role === "management" && !!subView;
+
   return (
     <PortalLayout 
       userRoles={userRoles} 
@@ -10,9 +12,9 @@ const RolePortal = ({ userRoles, role, tiles = [], children, subView, onSetSubVi
       onSetSubView={onSetSubView}
     >
       <div className="w-full">
-        <div className="max-w-5xl mx-auto">
+        <div className={isFullWidth ? "w-full max-w-none" : "max-w-5xl mx-auto"}>
           {/* Status Messages / SubView Content / Children */}
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">
             {children}
           </div>
 
