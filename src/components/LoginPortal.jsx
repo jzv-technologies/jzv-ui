@@ -34,19 +34,24 @@ const LoginPortal = ({
     }
   }, [isOpen]);
 
-  // Handle mode transition when user logs in (e.g. via Social redirect)
+  // Handle mode transition when user logs in
   useEffect(() => {
-    if (user && isOpen && authMode !== "selection" && authMode !== "pending") {
+    if (user && isOpen) {
       if (userRoles.length === 1) {
         navigate(`/portal/${userRoles[0]}`);
         handleClose();
       } else if (userRoles.length > 1) {
-        setAuthMode("selection");
-      } else if (!rolesLoading) {
-        setAuthMode("pending");
+        if (authMode !== "selection") {
+          setAuthMode("selection");
+        }
+      } else {
+        // userRoles.length === 0 (pending approval or loading)
+        if (authMode !== "pending") {
+          setAuthMode("pending");
+        }
       }
     }
-  }, [user, userRoles, rolesLoading, isOpen, authMode, navigate]);
+  }, [user, userRoles, isOpen, authMode, navigate]);
 
   if (!isOpen) return null;
 

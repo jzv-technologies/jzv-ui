@@ -26,6 +26,41 @@ import ManagementPortal from "./components/portals/ManagementPortal";
 import DynamicForm from "./components/DynamicForm";
 import { CARD_THEMES } from "./utils/cardTheme";
 
+// Cookie helper functions for roles and permissions persistence (SWR pattern)
+const getCookie = (name) => {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+};
+
+const setCookie = (name, value, days = 7) => {
+  const expires = new Date(Date.now() + days * 86400000).toUTCString();
+  document.cookie = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax; Secure`;
+};
+
+const deleteCookie = (name) => {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+};
+
+const getUserDataCookie = (userId) => {
+  try {
+    const raw = getCookie(`jzv_user_data_${userId}`);
+    return raw ? JSON.parse(decodeURIComponent(raw)) : null;
+  } catch (e) {
+    console.error("[Cookie] Error parsing user data cookie:", e);
+    return null;
+  }
+};
+
+const setUserDataCookie = (userId, data, days = 7) => {
+  setCookie(`jzv_user_data_${userId}`, encodeURIComponent(JSON.stringify(data)), days);
+};
+
+const clearUserDataCookie = (userId) => {
+  deleteCookie(`jzv_user_data_${userId}`);
+};
+
 const App = () => {
   useGoogleTranslate();
 
@@ -35,10 +70,15 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
   const userRolesRef = useRef([]);
+  const showLoginPortalRef = useRef(false);
 
   useEffect(() => {
     userRolesRef.current = userRoles;
   }, [userRoles]);
+
+  useEffect(() => {
+    showLoginPortalRef.current = showLoginPortal;
+  }, [showLoginPortal]);
 
   const [fullName, setFullName] = useState("");
   const [studentIds, setStudentIds] = useState("");
@@ -65,10 +105,9 @@ const App = () => {
 
       if (fetchId !== fetchCountRef.current) {
         console.log(`[fetchRoles] Fetch ${fetchId} cancelled before query (newer fetch active)`);
-        return false;
+        return { success: false, cancelled: true };
       }
 
-      // 4 seconds timeout for the database query to prevent hanging
       // Query admin_users_view directly to bypass RLS limitations and speed up page load
       const queryPromise = supabase
         .from("admin_users_view")
@@ -76,15 +115,16 @@ const App = () => {
         .eq("user_id", userId)
         .single();
 
+      // Increased timeout to 15 seconds to prevent cold start query failures
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Database query timeout")), 4000)
+        setTimeout(() => reject(new Error("Database query timeout")), 15000)
       );
 
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
       if (fetchId !== fetchCountRef.current) {
         console.log(`[fetchRoles] Fetch ${fetchId} ignored (newer fetch active)`);
-        return false;
+        return { success: false, cancelled: true };
       }
 
       if (error) {
@@ -92,14 +132,18 @@ const App = () => {
           console.log("[fetchRoles] No roles record found in admin_users_view (PGRST116)");
           setUserRoles([]);
           setStudentIds("");
-          return true;
+          clearUserDataCookie(userId);
+          return { success: true, roles: [], studentIds: "" };
         }
         throw error;
       }
 
+      let roles = [];
+      let studentIdsValue = "";
       if (data) {
         console.log("[fetchRoles] Roles data retrieved:", data);
-        setStudentIds(data.student_ids || "");
+        studentIdsValue = data.student_ids || "";
+        setStudentIds(studentIdsValue);
 
         if (data.role_ids) {
           const roleMap = {
@@ -108,7 +152,7 @@ const App = () => {
             T: "teacher",
             P: "parent",
           };
-          const roles = data.role_ids
+          roles = data.role_ids
             .split(",")
             .map((code) => roleMap[code.trim().toUpperCase()])
             .filter(Boolean);
@@ -117,14 +161,20 @@ const App = () => {
         } else {
           setUserRoles([]);
         }
+        
+        // Save to cookie for fast subsequent loads
+        setUserDataCookie(userId, { roles, studentIds: studentIdsValue });
       }
-      return true;
+      return { success: true, roles, studentIds: studentIdsValue };
     } catch (err) {
       console.error("[fetchRoles] Error fetching roles:", err);
-      if (fetchId === fetchCountRef.current) {
+      // If we already have roles from the cache, keep them to avoid a broken UI state
+      const cached = getUserDataCookie(userId);
+      if (!cached && fetchId === fetchCountRef.current) {
         setUserRoles([]);
+        setStudentIds("");
       }
-      return fetchId === fetchCountRef.current;
+      return { success: false, error: err };
     } finally {
       if (fetchId === fetchCountRef.current) {
         setRolesLoading(false);
@@ -137,6 +187,7 @@ const App = () => {
 
     let isMounted = true;
     let rolesFetched = false;
+    let justSignedIn = false;
 
     // Safety timeout to ensure the loading screen is always dismissed
     const safetyTimeout = setTimeout(() => {
@@ -152,6 +203,10 @@ const App = () => {
       if (!isMounted) return;
       console.log(`[Auth Event] ${event}`, session?.user?.email);
 
+      if (event === "SIGNED_IN") {
+        justSignedIn = true;
+      }
+
       const currentUser = session?.user ?? null;
       setUser(currentUser);
 
@@ -160,16 +215,44 @@ const App = () => {
       if (currentUser) {
         setFullName(currentUser.user_metadata?.full_name || "");
         
-        // Fetch roles if not already fetched for this session.
-        // If rolesFetched is true but we haven't loaded any roles yet (e.g. because the first query
-        // failed or was unauthenticated), we retry on the SIGNED_IN event.
+        // Stale-While-Revalidate: load roles and student ids from cookie cache immediately
+        const cached = getUserDataCookie(currentUser.id);
+        if (cached) {
+          console.log("[Auth] Loaded roles and student IDs from cookie cache:", cached);
+          setUserRoles(cached.roles || []);
+          setStudentIds(cached.studentIds || "");
+          fetchSuccess = true; // Dismiss authLoading spinner immediately since we have cached roles
+        } else {
+          fetchSuccess = false; // Need to wait for background fetch on initial load
+        }
+
+        // Fetch roles if not already fetched for this session, or retry on SIGNED_IN
         if (!rolesFetched || (userRolesRef.current.length === 0 && event === "SIGNED_IN")) {
-          rolesFetched = true;
-          try {
-            fetchSuccess = await fetchRoles(currentUser.id, event);
-          } catch (err) {
-            console.error("[Auth] Error in auth role fetch:", err);
+          const res = await fetchRoles(currentUser.id, event);
+          if (res.success) {
+            rolesFetched = true;
             fetchSuccess = true;
+
+            // If the user just completed a login, redirect them to the appropriate portal
+            if (justSignedIn) {
+              justSignedIn = false; // Reset the redirect flag
+              if (res.roles && res.roles.length > 0) {
+                if (window.location.pathname === "/" || showLoginPortalRef.current) {
+                  setShowLoginPortal(false);
+                  if (res.roles.length === 1) {
+                    navigate(`/portal/${res.roles[0]}`);
+                  } else {
+                    navigate("/portal");
+                  }
+                }
+              }
+            }
+          } else if (res.cancelled) {
+            // Cancelled by a newer fetch, do not override fetchSuccess if it was set by cookie
+          } else {
+            // Failed: do not prevent future retries (rolesFetched = false)
+            rolesFetched = false;
+            fetchSuccess = true; // Still allow app loading to finish
           }
         }
       } else {
@@ -194,6 +277,9 @@ const App = () => {
   }, []);
 
   const handleLogout = async () => {
+    if (user) {
+      clearUserDataCookie(user.id);
+    }
     await supabase.auth.signOut();
   };
 
@@ -249,16 +335,28 @@ const App = () => {
   const getCard = (id) => cards.find((c) => c.id === id);
 
   // ─── Open modal ─────────────────────────────────────────────────────────────
-  const openModal = (id) => {
+  const openModal = async (id) => {
     if (id === "my-portal") {
       if (userRoles.length > 1) {
         navigate("/portal");
       } else if (userRoles.length === 1) {
         navigate(`/portal/${userRoles[0]}`);
       } else {
-        // If logged in but no roles are assigned or they are still loading,
-        // open the login portal to show the status ("Access Pending" or spinner).
+        // If logged in but no roles are assigned or loaded, open the login portal
         setShowLoginPortal(true);
+        // Retry/force-fetch roles in the background in case previous fetch timed out/failed
+        if (user) {
+          const res = await fetchRoles(user.id, "MY_PORTAL_CLICK");
+          if (res && res.success && res.roles && res.roles.length > 0) {
+            if (res.roles.length === 1) {
+              navigate(`/portal/${res.roles[0]}`);
+              setShowLoginPortal(false);
+            } else if (res.roles.length > 1) {
+              navigate("/portal");
+              setShowLoginPortal(false);
+            }
+          }
+        }
       }
       return;
     }
