@@ -1,0 +1,518 @@
+{
+  "en": {
+    "header": {
+      "portal_login": "Portal Login",
+      "logout": "Logout",
+      "tagline_line1": "a modern madrasa system integrated with 21st-century competencies",
+      "tagline_line2": "preparing your child to succeed in this Life and the Hereafter."
+    },
+    "home": {
+      "loading_session": "Loading session...",
+      "career": {
+        "title": "Career Opportunities"
+      },
+      "campus_gallery": {
+        "campus_zones": "Campus Zones",
+        "classrooms": "Classrooms",
+        "dining_hall": "Dining Hall",
+        "sports_ground": "Sports Ground",
+        "hifz_class_room": "Hifz Class Room",
+        "sleep_area": "Sleep Area",
+        "namaz_hall": "Namaz Hall",
+        "washrooms_ablutions": "Washrooms & Ablutions",
+        "hadith_lab": "Hadith Lab",
+        "language_lab": "Language Lab"
+      }
+    },
+    "login": {
+      "main": {
+        "welcome_heading": "Welcome to JZV Portal",
+        "welcome_description": "Please login or create an account to continue.",
+        "continue_with_google": "Continue with Google",
+        "or_use_email": "OR USE EMAIL",
+        "login_with_email": "Login with Email",
+        "new_user_register": "New User? Register"
+      },
+      "header": {
+        "create_account": "Create Account",
+        "select_portal": "Select Portal",
+        "access_pending": "Access Pending",
+        "portal_access": "Portal Access"
+      },
+      "form": {
+        "back": "Back",
+        "login_title": "Login",
+        "register_title": "Register",
+        "login_description": "Enter your credentials to access the portal",
+        "register_description": "Create an account. Roles will be assigned by admin.",
+        "processing": "Processing...",
+        "sign_in": "Sign In",
+        "create_account_button": "Create Account",
+        "full_name_placeholder": "John Doe",
+        "email_address_placeholder": "your@email.com",
+        "password_placeholder": "••••••••",
+        "confirm_password_placeholder": "••••••••",
+        "full_name": "Full Name",
+        "email_address": "Email Address",
+        "password": "Password",
+        "confirm_password": "Confirm Password"
+      },
+      "selection": {
+        "loading_portals": "Loading your portals...",
+        "choose_portal": "You have access to multiple portals. Select one to enter:"
+      },
+      "pending": {
+        "title": "Access Pending",
+        "message": "Your account has been created successfully, but you don't have any roles assigned yet. Please wait for an administrator to assign your role (Parent, Teacher, etc.).",
+        "got_it": "Got it",
+        "verifying_permissions": "Verifying permissions..."
+      },
+      "portal": {
+        "parent": {
+          "title": "Parent Portal",
+          "description": "Access your child's progress and updates"
+        },
+        "teacher": {
+          "title": "Teacher Portal",
+          "description": "Manage classes and student records"
+        },
+        "management": {
+          "title": "Management Portal",
+          "description": "Institute management and operations"
+        },
+        "admin": {
+          "title": "Admin Portal",
+          "description": "Manage institute administration"
+        }
+      }
+    },
+    "role_selection": {
+      "enter_portal": "Enter Portal"
+    },
+    "role_portal": {
+      "complaint_register": {
+        "title": "Complaint Register",
+        "description": "Submit and track your requests or complaints directly with the administration."
+      }
+    },
+    "portal_layout": {
+      "home": "Home"
+    },
+    "cards": {
+      "why_jzv": "Why JZV",
+      "vision_mission": "Vision & Mission",
+      "system_4t": "4Ts Pedagogy",
+      "tahfeezulquran": "Tahfeez ul Quran",
+      "daily_schedule": "Daily Schedule",
+      "extra_curriculars": "Extra-Curriculars",
+      "sports_agility": "Sports & Agility",
+      "about_us": "About Us",
+      "academics": "Academics",
+      "campus_life": "Life at JZV",
+      "admissions": "Admissions",
+      "campus_gallery": "Campus Gallery",
+      "courses": "Courses (PCC & GCC)",
+      "alimiat_streams": "Aalimiyat Streams",
+      "nios": "NIOS (10th & 12th)",
+      "policies": "Institution Policies",
+      "fees": "Fee Structure",
+      "admission_process": "Admission Process",
+      "new_admission": "Admission Request",
+      "check_admission_status": "Check Admission Status",
+      "complaint_register": "Complaint Register",
+      "job_openings": "Job Openings",
+      "apply_online": "Apply Online",
+      "current_openings": "Current Openings",
+      "contact_us": "Contact Us",
+      "my_portal": "My Portal"
+    },
+    "shared": {}
+  },
+  "ur": {
+    "header": {
+      "portal_login": "پورٹل لاگ ان",
+      "logout": "لاگ آؤٹ",
+      "tagline_line1": "21ویں صدی کے ساتھ جدید مدرسہ نظام",
+      "tagline_line2": "آپ کے بچے کو اس زندگی اور آخرت دونوں میں کامیاب ہونے کے لیے تیار کرنا۔"
+    },
+    "home": {
+      "loading_session": "سیشن لوڈ ہو رہا ہے...",
+      "career": {
+        "title": "ملازمت کے مواقع"
+      },
+      "campus_gallery": {
+        "campus_zones": "کیمپس زونز",
+        "classrooms": "کلاس رومز",
+        "dining_hall": "ڈائننگ ہال",
+        "sports_ground": "کھیل کا میدان",
+        "hifz_class_room": "حفظ کلاس روم",
+        "sleep_area": "آرام گاہ",
+        "namaz_hall": "نماز ہال",
+        "washrooms_ablutions": "وضو خانہ اور بیت الخلا",
+        "hadith_lab": "حدیث لیب",
+        "language_lab": "لینگویج لیب"
+      }
+    },
+    "login": {
+      "main": {
+        "welcome_heading": "JZV پورٹل میں خوش آمدید",
+        "welcome_description": "براہ کرم آگے بڑھنے کے لئے لاگ ان کریں یا اکاؤنٹ بنائیں۔",
+        "continue_with_google": "گوگل کے ساتھ جاری رکھیں",
+        "or_use_email": "یا ای میل استعمال کریں",
+        "login_with_email": "ای میل کے ذریعے لاگ ان کریں",
+        "new_user_register": "نیا صارف؟ رجسٹر کریں"
+      },
+      "header": {
+        "create_account": "اکاؤنٹ بنائیں",
+        "select_portal": "پورٹل منتخب کریں",
+        "access_pending": "رسائی زیر التوا",
+        "portal_access": "پورٹل تک رسائی"
+      },
+      "form": {
+        "back": "واپس",
+        "login_title": "لاگ ان",
+        "register_title": "رجسٹر",
+        "login_description": "پورٹل تک رسائی کے لیے اپنی اسناد درج کریں",
+        "register_description": "ایک اکاؤنٹ بنائیں۔ رولز ایڈمن کی طرف سے تفویض کیے جائیں گے۔",
+        "processing": "عمل جاری ہے...",
+        "sign_in": "سائن ان کریں",
+        "create_account_button": "اکاؤنٹ بنائیں",
+        "full_name_placeholder": "John Doe",
+        "email_address_placeholder": "your@email.com",
+        "password_placeholder": "••••••••",
+        "confirm_password_placeholder": "••••••••",
+        "full_name": "پورا نام",
+        "email_address": "ای میل پتہ",
+        "password": "پاس ورڈ",
+        "confirm_password": "پاس ورڈ کی تصدیق"
+      },
+      "selection": {
+        "loading_portals": "آپ کے پورٹلز لوڈ ہو رہے ہیں...",
+        "choose_portal": "آپ کو متعدد پورٹلز تک رسائی ہے۔ داخل ہونے کے لیے ایک منتخب کریں:"
+      },
+      "pending": {
+        "title": "رسائی زیر التوا ہے",
+        "message": "آپ کا اکاؤنٹ کامیابی سے بنایا گیا ہے، لیکن ابھی تک کوئی رول تفویض نہیں کیا گیا ہے۔ براہ کرم منتظر رہیں جب تک کہ منتظم آپ کا رول تفویض نہ کرے۔",
+        "got_it": "سمجھ گیا",
+        "verifying_permissions": "درستگی کی تصدیق ہو رہی ہے..."
+      },
+      "portal": {
+        "parent": {
+          "title": "والدین پورٹل",
+          "description": "اپنے بچے کی پیشرفت اور اپ ڈیٹس تک رسائی حاصل کریں"
+        },
+        "teacher": {
+          "title": "اساتذہ پورٹل",
+          "description": "کلاس ریکارڈ اور طلباء کے انتظام تک رسائی حاصل کریں"
+        },
+        "management": {
+          "title": "انتظامی پورٹل",
+          "description": "ادارے کے انتظام اور آپریشنز"
+        },
+        "admin": {
+          "title": "ایڈمن پورٹل",
+          "description": "ادارہ جاتی انتظامیہ کا نظم کریں"
+        }
+      }
+    },
+    "role_selection": {
+      "enter_portal": "پورٹل میں داخل ہوں"
+    },
+    "role_portal": {
+      "complaint_register": {
+        "title": "شکایت رجسٹر",
+        "description": "اپنی درخواستیں یا شکایات براہِ راست انتظامیہ کے ساتھ جمع کریں اور ٹریک کریں۔"
+      }
+    },
+    "portal_layout": {
+      "home": "ہوم"
+    },
+    "cards": {
+      "why_jzv": "کیوں JZV؟",
+      "vision_mission": "ویژن اور مشن",
+      "system_4t": "4Ts پیڈاگوگی",
+      "tahfeezulquran": "تحفظ القرآن",
+      "daily_schedule": "روزانہ کا شیڈول",
+      "extra_curriculars": "غیر نصابی سرگرمیاں",
+      "sports_agility": "کھیل اور پھرتی",
+      "about_us": "ہمارے بارے میں",
+      "academics": "تعلیمات",
+      "campus_life": "JZV میں زندگی",
+      "admissions": "داخلہ",
+      "campus_gallery": "کیمپس گیلری",
+      "courses": "کورسز (PCC & GCC)",
+      "alimiat_streams": "علمیاتی سلسلے",
+      "nios": "NIOS (10ویں اور 12ویں)",
+      "policies": "ادارتی پالیسیز",
+      "fees": "فیس کا ڈھانچہ",
+      "admission_process": "داخلہ کا عمل",
+      "new_admission": "داخلہ درخواست",
+      "check_admission_status": "داخلہ کی حیثیت چیک کریں",
+      "complaint_register": "شکایت رجسٹر",
+      "job_openings": "ملازمت کی خالی اسامیاں",
+      "apply_online": "آن لائن درخواست دیں",
+      "current_openings": "موجودہ خالی اسامیاں",
+      "contact_us": "ہم سے رابطہ کریں",
+      "my_portal": "میرا پورٹل"
+    },
+    "shared": {}
+  },
+  "ta": {
+    "header": {
+      "portal_login": "போர்டல் உள்நுழைவு",
+      "logout": "வெளியேறு",
+      "tagline_line1": "21ஆம் நூற்றாண்டு திறன்களுடன் கூடிய நவீன மதரஸா அமைப்பு",
+      "tagline_line2": "இந்த உலகிலும் பிற உலகிலும் உங்கள் குழந்தையை வெற்றியடையச் செய்கிறது."
+    },
+    "home": {
+      "loading_session": "அமேல் சார்பு நடைபெற்று உள்ளது...",
+      "career": {
+        "title": "தொழில் வாய்ப்புகள்"
+      },
+      "campus_gallery": {
+        "campus_zones": "கேம்பஸ் மண்டலங்கள்",
+        "classrooms": "வகுப்பறைகள்",
+        "dining_hall": "உணவக கூடம்",
+        "sports_ground": "விளையாட்டு மைதാനം",
+        "hifz_class_room": "ஹிஃப்ஸ் வகுப்பறை",
+        "sleep_area": "ஓய்விட பகுதி",
+        "namaz_hall": "தியான கூடம்",
+        "washrooms_ablutions": "கழிப்பறை மற்றும் அழகு அறை",
+        "hadith_lab": "ஹதீஸ் ஆய்வகம",
+        "language_lab": "மொழி ஆய்வகம"
+      }
+    },
+    "login": {
+      "main": {
+        "welcome_heading": "JZV போர்டலுக்கு வரவேற்கிறோம்",
+        "welcome_description": "தொடர்வதற்கு தயவுசெய்து உள்நுழையவும் அல்லது கணக்கை உருவாக்கவும்.",
+        "continue_with_google": "Google மூலம் தொடருங்கள்",
+        "or_use_email": "அல்லது மின்னஞ்சல் பயன்படுத்தவும்",
+        "login_with_email": "மின்னஞ்சல் மூலம் உள்நுழையவும்",
+        "new_user_register": "புதிய பயனர்? பதிவு செய்யவும்"
+      },
+      "header": {
+        "create_account": "கணக்கை உருவாக்கவும்",
+        "select_portal": "போர்டலைத் தேர்ந்தெடுக்கவும்",
+        "access_pending": "அணுகல் நிலுவையில் உள்ளது",
+        "portal_access": "போர்டல் அணுகல்"
+      },
+      "form": {
+        "back": "மீண்டும்",
+        "login_title": "உள்நுழைவு",
+        "register_title": "பதிவு",
+        "login_description": "போர்டலுக்கு அணுக உங்கள் விவரங்களை உள்ளிடவும்",
+        "register_description": "கணக்கை உருவாக்கவும். நிர்வாகி பங்குகளை ஒதுப்பார்.",
+        "processing": "செயலாக்கப்படுகிறது...",
+        "sign_in": "உள்நுழையவும்",
+        "create_account_button": "கணக்கை உருவாக்கவும்",
+        "full_name_placeholder": "John Doe",
+        "email_address_placeholder": "your@email.com",
+        "password_placeholder": "••••••••",
+        "confirm_password_placeholder": "••••••••",
+        "full_name": "முழுப் பெயர்",
+        "email_address": "மின்னஞ்சல் முகவரி",
+        "password": "கடவுச்சொல்",
+        "confirm_password": "கடவுச்சொல்லை உறுதிசெய்க"
+      },
+      "selection": {
+        "loading_portals": "உங்கள் போர்டல்கள் படிக்கப்படுகின்றன...",
+        "choose_portal": "உங்களுக்கு பல போர்டல்களுக்கு அணுகல் உள்ளது. ஒன்றைத் தேர்ந்தெடுக்கவும்:"
+      },
+      "pending": {
+        "title": "அணுகல் நிலுவையில் உள்ளது",
+        "message": "உங்கள் கணக்கு வெற்றிகரமாக உருவாக்கப்பட்டுள்ளது, ஆனால் இன்னும் எதுவும் வழங்கப்படவில்லை. நிர்வாகி உங்கள் பங்குகளை ஒதுக்கும் வரை காத்திருக்கவும்.",
+        "got_it": "புரிந்தது",
+        "verifying_permissions": "உரிமைகள் சரிபார்க்கப்படுகின்றன..."
+      },
+      "portal": {
+        "parent": {
+          "title": "பெற்றோர் போர்டல்",
+          "description": "உங்கள் குழந்தையின் முன்னேற்றம் மற்றும் புதுப்பிப்புகளை அணுகவும்"
+        },
+        "teacher": {
+          "title": "ஆசிரியர் போர்டல்",
+          "description": "வகுப்பு பதிவுகள் மற்றும் மாணவர் மேலாண்மையை நிர்வகிக்கவும்"
+        },
+        "management": {
+          "title": "மேலாண்மை போர்டல்",
+          "description": "நிறுவன மேலாண்மை மற்றும் செயல்பாடுகள்"
+        },
+        "admin": {
+          "title": "நிர்வாகி போர்டல்",
+          "description": "நிர்வாக அமைப்பு நிர்வகிக்கவும்"
+        }
+      }
+    },
+    "role_selection": {
+      "enter_portal": "போர்டல்லுக்குச் செல்லவும்"
+    },
+    "role_portal": {
+      "complaint_register": {
+        "title": "புகார் பதிவு",
+        "description": "உங்கள் கோரிக்கைகளை அல்லது புகார்களை நேரடியாக நிர்வாகத்துடன் சமர்ப்பிக்கவும் மற்றும் பின்தொடரவும்."
+      }
+    },
+    "portal_layout": {
+      "home": "முகப்பு"
+    },
+    "cards": {
+      "why_jzv": "ஏன் JZV",
+      "vision_mission": "காட்சி மற்றும் இலக்கு",
+      "system_4t": "4Ts பாடத்திட்டம்",
+      "tahfeezulquran": "தஹ்ஃபீஸ் உல்குர்ஆன்",
+      "daily_schedule": "தினசரி திட்டம்",
+      "extra_curriculars": "தொகுப்பு நடவடிக்கைகள்",
+      "sports_agility": "விளையாட்டு மற்றும் திறமை",
+      "about_us": "எங்களைப் பற்றி",
+      "academics": "அக்கடமிக்ஸ்",
+      "campus_life": "JZV வாழ்கை",
+      "admissions": "அட்மிஷன்கள்",
+      "campus_gallery": "கேம்பஸ் காட்சிப் புத்தகம்",
+      "courses": "பாடங்கள் (PCC & GCC)",
+      "alimiat_streams": "அலிமியத் நதி",
+      "nios": "NIOS (10ஆம் & 12ஆம்)",
+      "policies": "நிறுவனக் கொள்கைகள்",
+      "fees": "கட்டண அமைப்பு",
+      "admission_process": "அட்மிஷன் செயல்முறை",
+      "new_admission": "புதிய அட்மிஷன்",
+      "check_admission_status": "அட்மிஷன் நிலையை சரிபார்",
+      "complaint_register": "புகார் பதிவு",
+      "job_openings": "வேலை வாய்ப்புகள்",
+      "apply_online": "ஆன்லைனில் விண்ணப்பிக்கவும்",
+      "current_openings": "தற்போதைய காலிப்பணியியல்",
+      "contact_us": "எங்களைத் தொடர்பு கொள்ளவும்",
+      "my_portal": "என் போர்டல்"
+    },
+    "shared": {}
+  },
+  "ar": {
+    "header": {
+      "portal_login": "تسجيل الدخول إلى البوابة",
+      "logout": "تسجيل الخروج",
+      "tagline_line1": "نظام مدرسة حديث مدمج مع مهارات القرن الحادي والعشرين",
+      "tagline_line2": "تحضير طفلك للنجاح في هذه الدنيا والآخرة."
+    },
+    "home": {
+      "loading_session": "جارٍ تحميل الجلسة...",
+      "career": {
+        "title": "فرص وظيفية"
+      },
+      "campus_gallery": {
+        "campus_zones": "مناطق الحرم الجامعي",
+        "classrooms": "الفصول الدراسية",
+        "dining_hall": "قاعة الطعام",
+        "sports_ground": "الملعب الرياضي",
+        "hifz_class_room": "غرفة تحفيظ القرآن",
+        "sleep_area": "منطقة النوم",
+        "namaz_hall": "مصلى",
+        "washrooms_ablutions": "المغاسل ودورات المياه",
+        "hadith_lab": "مختبر الحديث الشريف",
+        "language_lab": "مختبر اللغة"
+      }
+    },
+    "login": {
+      "main": {
+        "welcome_heading": "مرحباً بك في بوابة JZV",
+        "welcome_description": "يرجى تسجيل الدخول أو إنشاء حساب للمتابعة.",
+        "continue_with_google": "المتابعة مع Google",
+        "or_use_email": "أو استخدم البريد الإلكتروني",
+        "login_with_email": "تسجيل الدخول عبر البريد الإلكتروني",
+        "new_user_register": "مستخدم جديد؟ سجل"
+      },
+      "header": {
+        "create_account": "إنشاء حساب",
+        "select_portal": "اختر البوابة",
+        "access_pending": "الوصول معلق",
+        "portal_access": "الوصول إلى البوابة"
+      },
+      "form": {
+        "back": "عودة",
+        "login_title": "تسجيل الدخول",
+        "register_title": "التسجيل",
+        "login_description": "أدخل بياناتك للوصول إلى البوابة",
+        "register_description": "أنشئ حساباً. سيتم تعيين الأدوار بواسطة المسؤول.",
+        "processing": "جارٍ المعالجة...",
+        "sign_in": "تسجيل الدخول",
+        "create_account_button": "إنشاء حساب",
+        "full_name_placeholder": "John Doe",
+        "email_address_placeholder": "your@email.com",
+        "password_placeholder": "••••••••",
+        "confirm_password_placeholder": "••••••••",
+        "full_name": "الاسم الكامل",
+        "email_address": "عنوان البريد الإلكتروني",
+        "password": "كلمة المرور",
+        "confirm_password": "تأكيد كلمة المرور"
+      },
+      "selection": {
+        "loading_portals": "جارٍ تحميل بواباتك...",
+        "choose_portal": "لديك حق الوصول إلى عدة بوابات. اختر واحدة للدخول:"
+      },
+      "pending": {
+        "title": "الوصول معلق",
+        "message": "تم إنشاء حسابك بنجاح، لكن لم يتم تعيين أي دور لك بعد. يرجى الانتظار حتى يقوم المسؤول بتعيين دورك.",
+        "got_it": "حسنًا",
+        "verifying_permissions": "جارٍ التحقق من الصلاحيات..."
+      },
+      "portal": {
+        "parent": {
+          "title": "بوابة ولي الأمر",
+          "description": "الوصول إلى تقدم طفلك والتحديثات"
+        },
+        "teacher": {
+          "title": "بوابة المعلم",
+          "description": "إدارة سجلات الفصل والطلاب"
+        },
+        "management": {
+          "title": "بوابة الإدارة",
+          "description": "إدارة المؤسسة والعمليات"
+        },
+        "admin": {
+          "title": "بوابة المسؤول",
+          "description": "إدارة نظام المؤسسة"
+        }
+      }
+    },
+    "role_selection": {
+      "enter_portal": "ادخل البوابة"
+    },
+    "role_portal": {
+      "complaint_register": {
+        "title": "سجل الشكاوى",
+        "description": "قدّم وتتبع طلباتك أو شكاواك مباشرةً مع الإدارة."
+      }
+    },
+    "portal_layout": {
+      "home": "الرئيسية"
+    },
+    "cards": {
+      "why_jzv": "لماذا JZV",
+      "vision_mission": "الرؤية والرسالة",
+      "system_4t": "منهجية 4T",
+      "tahfeezulquran": "تحفيظ القرآن",
+      "daily_schedule": "الجدول اليومي",
+      "extra_curriculars": "الأنشطة اللامنهجية",
+      "sports_agility": "الرياضة والرشاقة",
+      "about_us": "من نحن",
+      "academics": "الأكاديميات",
+      "campus_life": "الحياة في JZV",
+      "admissions": "القبول",
+      "campus_gallery": "معرض الحرم الجامعي",
+      "courses": "الدورات (PCC & GCC)",
+      "alimiat_streams": "مسارات علمية",
+      "nios": "NIOS (10 و 12)",
+      "policies": "سياسات المؤسسة",
+      "fees": "هيكل الرسوم",
+      "admission_process": "عملية القبول",
+      "new_admission": "طلب قبول",
+      "check_admission_status": "التحقق من حالة القبول",
+      "complaint_register": "سجل الشكاوى",
+      "job_openings": "فرص العمل",
+      "apply_online": "التقديم عبر الإنترنت",
+      "current_openings": "الوظائف الحالية",
+      "contact_us": "اتصل بنا",
+      "my_portal": "بوابتي"
+    },
+    "shared": {}
+  }
+}

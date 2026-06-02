@@ -151,3 +151,88 @@ console.log("Total applications:", data);
 - The `updated_at` field is automatically updated whenever a record is modified (requires trigger setup)
 - All timestamps are stored in UTC timezone
 - The mobile number field accepts strings to handle international formats
+
+## 9. Create the Dynamic Form Configs Table
+
+Run the following SQL query in your Supabase SQL editor to create the `dynamic_form_configs` table, enable Row Level Security, and set up access control:
+
+```sql
+-- Create the dynamic_form_configs table
+CREATE TABLE dynamic_form_configs (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  uuid VARCHAR(255) UNIQUE NOT NULL,
+  fields JSONB NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS (Row Level Security)
+ALTER TABLE dynamic_form_configs ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access (so forms can load dynamically for anonymous/non-admin users)
+CREATE POLICY "Enable public read access for dynamic_form_configs"
+  ON dynamic_form_configs
+  FOR SELECT
+  USING (true);
+
+-- Allow all operations for authenticated admin users
+-- Note: Adjust this policy if your authentication/role schema uses custom claims
+CREATE POLICY "Enable write access for authenticated admin users"
+  ON dynamic_form_configs
+  FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+## 10. Create the User Roles Table and Admin Users View
+
+Run the following SQL commands in your Supabase SQL editor to create the `user_roles` table, enable Row Level Security, create RLS policies for role-based reading/writing, and build the `admin_users_view` view:
+
+```sql
+-- Create the user_roles table if it does not exist
+CREATE TABLE IF NOT EXISTS user_roles (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role_ids VARCHAR(255) DEFAULT '',
+  student_ids VARCHAR(255) DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS (Row Level Security) on the user_roles table
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for user_roles
+
+-- 1. Allow authenticated users to read their own roles (required for app boot up)
+CREATE POLICY "Allow users to read their own roles"
+  ON user_roles
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- 2. Allow admin users to perform all operations on user_roles
+CREATE POLICY "Allow admin users to manage all roles"
+  ON user_roles
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.user_roles
+      WHERE user_id = auth.uid() AND role_ids ILIKE '%A%'
+    )
+  );
+
+-- Create the admin_users_view (used by the Admin Portal to fetch users and join metadata)
+CREATE OR REPLACE VIEW admin_users_view AS
+SELECT 
+  u.id AS user_id,
+  u.email,
+  COALESCE(u.raw_user_meta_data->>'full_name', '') AS full_name,
+  r.role_ids,
+  r.student_ids,
+  r.created_at,
+  r.updated_at
+FROM auth.users u
+LEFT JOIN public.user_roles r ON u.id = r.user_id;
+```
+```

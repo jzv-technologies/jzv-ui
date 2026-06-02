@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { supabase } from "../../../../src/utils/supabase";
 
 export default function NewAdmission({ inModal = false }) {
@@ -18,6 +18,7 @@ export default function NewAdmission({ inModal = false }) {
     fathersOccupation: "",
   });
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
   const [message, setMessage] = useState("");
   const [successData, setSuccessData] = useState(null);
   const [showOverlay, setShowOverlay] = useState(false);
@@ -46,6 +47,8 @@ export default function NewAdmission({ inModal = false }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     setMessage("");
     try {
@@ -95,6 +98,7 @@ export default function NewAdmission({ inModal = false }) {
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   };

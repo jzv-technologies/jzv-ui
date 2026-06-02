@@ -9,7 +9,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "migrate-i18n": "node scripts/migrate-i18n.js",
+    "test-i18n": "node scripts/test-i18n.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",

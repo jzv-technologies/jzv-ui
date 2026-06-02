@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronDown,
   Square,
@@ -292,6 +292,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -550,6 +551,8 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (submittingRef.current) return;
+
     setError("");
     setSuccessMessage("");
     setShowSuccessModal(false);
@@ -572,6 +575,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
       }
     });
 
+    submittingRef.current = true;
     setSubmitting(true);
 
     try {
@@ -608,6 +612,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {} }) => {
     } catch (err) {
       setError(err.message);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

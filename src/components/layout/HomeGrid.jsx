@@ -1,4 +1,5 @@
 import React from "react";
+import Translate from "../Translate";
 
 const HomeGrid = ({ gridCards, openModal }) => {
   return (
@@ -30,7 +31,7 @@ const HomeGrid = ({ gridCards, openModal }) => {
                 <i className={`fas ${card.icon}`} />
               </div>
               <h3 className="font-bold text-dark-deepblue leading-tight group-hover:text-light-white transition-colors duration-200">
-                {card.title}
+                <Translate id={card.titleKey}>{card.title}</Translate>
               </h3>
             </div>
           ))}

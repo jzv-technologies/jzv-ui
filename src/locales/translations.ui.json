@@ -1,0 +1,558 @@
+{
+  "header": {
+    "portal_login": {
+      "en": "Portal Login",
+      "ur": "پورٹل لاگ ان",
+      "ta": "போர்டல் உள்நுழைவு",
+      "ar": "تسجيل الدخول إلى البوابة"
+    },
+    "logout": {
+      "en": "Logout",
+      "ur": "لاگ آؤٹ",
+      "ta": "வெளியேறு",
+      "ar": "تسجيل الخروج"
+    },
+    "tagline_line1": {
+      "en": "a modern madrasa system integrated with 21st-century competencies",
+      "ur": "21ویں صدی کے ساتھ جدید مدرسہ نظام",
+      "ta": "21ஆம் நூற்றாண்டு திறன்களுடன் கூடிய நவீன மதரஸா அமைப்பு",
+      "ar": "نظام مدرسة حديث مدمج مع مهارات القرن الحادي والعشرين"
+    },
+    "tagline_line2": {
+      "en": "preparing your child to succeed in this Life and the Hereafter.",
+      "ur": "آپ کے بچے کو اس زندگی اور آخرت دونوں میں کامیاب ہونے کے لیے تیار کرنا۔",
+      "ta": "இம்மை மற்றும் மறுமையில் வெற்றியடைய உங்கள் குழந்தையை உருவாக்குகிறோம்.",
+      "ar": "تحضير طفلك للنجاح في هذه الدنيا والآخرة."
+    }
+  },
+  "home": {
+    "loading_session": {
+      "en": "Loading session...",
+      "ur": "سیشن لوڈ ہو رہا ہے...",
+      "ta": "அமர்வு ஏற்றப்படுகிறது...",
+      "ar": "جارٍ تحميل الجلسة..."
+    },
+    "career": {
+      "title": {
+        "en": "Career Opportunities",
+        "ur": "ملازمت کے مواقع",
+        "ta": "தொழில் வாய்ப்புகள்",
+        "ar": "فرص وظيفية"
+      }
+    },
+    "campus_gallery": {
+      "campus_zones": {
+        "en": "Campus Zones",
+        "ur": "کیمپس زونز",
+        "ta": "கேம்பஸ் மண்டலங்கள்",
+        "ar": "مناطق الحرم الجامعي"
+      },
+      "classrooms": {
+        "en": "Classrooms",
+        "ur": "کلاس رومز",
+        "ta": "வகுப்பறைகள்",
+        "ar": "الفصول الدراسية"
+      },
+      "dining_hall": {
+        "en": "Dining Hall",
+        "ur": "ڈائننگ ہال",
+        "ta": "சாப்பாட்டு கூடம்",
+        "ar": "قاعة الطعام"
+      },
+      "sports_ground": {
+        "en": "Sports Ground",
+        "ur": "کھیل کا میدان",
+        "ta": "விளையாட்டு மைதானம்",
+        "ar": "الملعب الرياضي"
+      },
+      "hifz_class_room": {
+        "en": "Hifz Class Room",
+        "ur": "حفظ کلاس روم",
+        "ta": "ஹிஃப்ஸ் வகுப்பறை",
+        "ar": "غرفة تحفيظ القرآن"
+      },
+      "sleep_area": {
+        "en": "Sleep Area",
+        "ur": "آرام گاہ",
+        "ta": "தூக்கப் பகுதி",
+        "ar": "منطقة النوم"
+      },
+      "namaz_hall": {
+        "en": "Namaz Hall",
+        "ur": "نماز ہال",
+        "ta": "தொழுகைக் கூடம்",
+        "ar": "مصلى"
+      },
+      "washrooms_ablutions": {
+        "en": "Washrooms & Ablutions",
+        "ur": "وضو خانہ اور بیت الخلا",
+        "ta": "கழிப்பறை மற்றும் உளூ அறை",
+        "ar": "المغاسل ودورات المياه"
+      },
+      "hadith_lab": {
+        "en": "Hadith Lab",
+        "ur": "حدیث لیب",
+        "ta": "ஹதீஸ் ஆய்வகம்",
+        "ar": "مختبر الحديث الشريف"
+      },
+      "language_lab": {
+        "en": "Language Lab",
+        "ur": "لینگویج لیب",
+        "ta": "மொழி ஆய்வகம்",
+        "ar": "مختبر اللغة"
+      }
+    }
+  },
+  "login": {
+    "main": {
+      "welcome_heading": {
+        "en": "Welcome to JZV Portal",
+        "ur": "JZV پورٹل میں خوش آمدید",
+        "ta": "JZV போர்டலுக்கு வரவேற்கிறோம்",
+        "ar": "مرحباً بك في بوابة JZV"
+      },
+      "welcome_description": {
+        "en": "Please login or create an account to continue.",
+        "ur": "براہ کرم آگے بڑھنے کے لئے لاگ ان کریں یا اکاؤنٹ بنائیں۔",
+        "ta": "தொடர்வதற்கு தயவுசெய்து உள்நுழையவும் அல்லது கணக்கை உருவாக்கவும்.",
+        "ar": "يرجى تسجيل الدخول أو إنشاء حساب للمتابعة."
+      },
+      "continue_with_google": {
+        "en": "Continue with Google",
+        "ur": "گوگل کے ساتھ جاری رکھیں",
+        "ta": "Google மூலம் தொடருங்கள்",
+        "ar": "المتابعة مع Google"
+      },
+      "or_use_email": {
+        "en": "OR USE EMAIL",
+        "ur": "یا ای میل استعمال کریں",
+        "ta": "அல்லது மின்னஞ்சல் பயன்படுத்தவும்",
+        "ar": "أو استخدم البريد الإلكتروني"
+      },
+      "login_with_email": {
+        "en": "Login with Email",
+        "ur": "ای میل کے ذریعے لاگ ان کریں",
+        "ta": "மின்னஞ்சல் மூலம் உள்நுழையவும்",
+        "ar": "تسجيل الدخول عبر البريد الإلكتروني"
+      },
+      "new_user_register": {
+        "en": "New User? Register",
+        "ur": "نیا صارف؟ رجسٹر کریں",
+        "ta": "புதிய பயனர்? பதிவு செய்யவும்",
+        "ar": "مستخدم جديد؟ سجل"
+      }
+    },
+    "header": {
+      "create_account": {
+        "en": "Create Account",
+        "ur": "اکاؤنٹ بنائیں",
+        "ta": "கணக்கை உருவாக்கவும்",
+        "ar": "إنشاء حساب"
+      },
+      "select_portal": {
+        "en": "Select Portal",
+        "ur": "پورٹل منتخب کریں",
+        "ta": "போர்டலைத் தேர்ந்தெடுக்கவும்",
+        "ar": "اختر البوابة"
+      },
+      "access_pending": {
+        "en": "Access Pending",
+        "ur": "رسائی زیر التوا",
+        "ta": "அணுகல் நிலுவையில் உள்ளது",
+        "ar": "الوصول معلق"
+      },
+      "portal_access": {
+        "en": "Portal Access",
+        "ur": "پورٹل تک رسائی",
+        "ta": "போர்டல் அணுகல்",
+        "ar": "الوصول إلى البوابة"
+      }
+    },
+    "form": {
+      "back": {
+        "en": "Back",
+        "ur": "واپس",
+        "ta": "மீண்டும்",
+        "ar": "عودة"
+      },
+      "login_title": {
+        "en": "Login",
+        "ur": "لاگ ان",
+        "ta": "உள்நுழைவு",
+        "ar": "تسجيل الدخول"
+      },
+      "register_title": {
+        "en": "Register",
+        "ur": "رجسٹر",
+        "ta": "பதிவு",
+        "ar": "التسجيل"
+      },
+      "login_description": {
+        "en": "Enter your credentials to access the portal",
+        "ur": "پورٹل تک رسائی کے لیے اپنی اسناد درج کریں",
+        "ta": "போர்டலுக்கு அணுக உங்கள் விவரங்களை உள்ளிடவும்",
+        "ar": "أدخل بياناتك للوصول إلى البوابة"
+      },
+      "register_description": {
+        "en": "Create an account. Roles will be assigned by admin.",
+        "ur": "ایک اکاؤنٹ بنائیں۔ رولز ایڈمن کی طرف سے تفویض کیے جائیں گے۔",
+        "ta": "கணக்கை உருவாக்கவும். நிர்வாகி பங்குகளை ஒதுக்குவார்.",
+        "ar": "أنشئ حساباً. سيتم تعيين الأدوار بواسطة المسؤول."
+      },
+      "processing": {
+        "en": "Processing...",
+        "ur": "عمل جاری ہے...",
+        "ta": "செயலாக்கப்படுகிறது...",
+        "ar": "جارٍ المعالجة..."
+      },
+      "sign_in": {
+        "en": "Sign In",
+        "ur": "سائن ان کریں",
+        "ta": "உள்நுழையவும்",
+        "ar": "تسجيل الدخول"
+      },
+      "create_account_button": {
+        "en": "Create Account",
+        "ur": "اکاؤنٹ بنائیں",
+        "ta": "கணக்கை உருவாக்கவும்",
+        "ar": "إنشاء حساب"
+      },
+      "full_name_placeholder": {
+        "en": "John Doe",
+        "ur": "John Doe",
+        "ta": "John Doe",
+        "ar": "John Doe"
+      },
+      "email_address_placeholder": {
+        "en": "your@email.com",
+        "ur": "your@email.com",
+        "ta": "your@email.com",
+        "ar": "your@email.com"
+      },
+      "password_placeholder": {
+        "en": "••••••••",
+        "ur": "••••••••",
+        "ta": "••••••••",
+        "ar": "••••••••"
+      },
+      "confirm_password_placeholder": {
+        "en": "••••••••",
+        "ur": "••••••••",
+        "ta": "••••••••",
+        "ar": "••••••••"
+      },
+      "full_name": {
+        "en": "Full Name",
+        "ur": "پورا نام",
+        "ta": "முழுப் பெயர்",
+        "ar": "الاسم الكامل"
+      },
+      "email_address": {
+        "en": "Email Address",
+        "ur": "ای میل پتہ",
+        "ta": "மின்னஞ்சல் முகவரி",
+        "ar": "عنوان البريد الإلكتروني"
+      },
+      "password": {
+        "en": "Password",
+        "ur": "پاس ورڈ",
+        "ta": "கடவுச்சொல்",
+        "ar": "كلمة المرور"
+      },
+      "confirm_password": {
+        "en": "Confirm Password",
+        "ur": "پاس ورڈ کی تصدیق",
+        "ta": "கடவுச்சொல்லை உறுதிசெய்க",
+        "ar": "تأكيد كلمة المرور"
+      }
+    },
+    "selection": {
+      "loading_portals": {
+        "en": "Loading your portals...",
+        "ur": "آپ کے پورٹلز لوڈ ہو رہے ہیں...",
+        "ta": "உங்கள் போர்டல்கள் படிக்கப்படுகின்றன...",
+        "ar": "جارٍ تحميل بواباتك..."
+      },
+      "choose_portal": {
+        "en": "You have access to multiple portals. Select one to enter:",
+        "ur": "آپ کو متعدد پورٹلز تک رسائی ہے۔ داخل ہونے کے لیے ایک منتخب کریں:",
+        "ta": "உங்களுக்கு பல போர்டல்களுக்கு அணுகல் உள்ளது. ஒன்றைத் தேர்ந்தெடுக்கவும்:",
+        "ar": "لديك حق الوصول إلى عدة بوابات. اختر واحدة للدخول:"
+      }
+    },
+    "pending": {
+      "title": {
+        "en": "Access Pending",
+        "ur": "رسائی زیر التوا ہے",
+        "ta": "அணுகல் நிலுவையில் உள்ளது",
+        "ar": "الوصول معلق"
+      },
+      "message": {
+        "en": "Your account has been created successfully, but you don't have any roles assigned yet. Please wait for an administrator to assign your role (Parent, Teacher, etc.).",
+        "ur": "آپ کا اکاؤنٹ کامیابی سے بنایا گیا ہے، لیکن ابھی تک کوئی رول تفویض نہیں کیا گیا ہے۔ براہ کرم منتظر رہیں جب تک کہ منتظم آپ کا رول تفویض نہ کرے۔",
+        "ta": "உங்கள் கணக்கு வெற்றிகரமாக உருவாக்கப்பட்டுள்ளது, ஆனால் உங்களுக்கு இன்னும் எந்தப் பங்குகளும் ஒதுக்கப்படவில்லை. நிர்வாகி உங்கள் பங்குகளை ஒதுக்கும் வரை காத்திருக்கவும்.",
+        "ar": "تم إنشاء حسابك بنجاح، لكن لم يتم تعيين أي دور لك بعد. يرجى الانتظار حتى يقوم المسؤول بتعيين دورك."
+      },
+      "got_it": {
+        "en": "Got it",
+        "ur": "سمجھ گیا",
+        "ta": "புரிந்தது",
+        "ar": "حسنًا"
+      },
+      "verifying_permissions": {
+        "en": "Verifying permissions...",
+        "ur": "درستگی کی تصدیق ہو رہی ہے...",
+        "ta": "உரிமைகள் சரிபார்க்கப்படுகின்றன...",
+        "ar": "جارٍ التحقق من الصلاحيات..."
+      }
+    },
+    "portal": {
+      "parent": {
+        "title": {
+          "en": "Parent Portal",
+          "ur": "والدین پورٹل",
+          "ta": "பெற்றோர் போர்டல்",
+          "ar": "بوابة ولي الأمر"
+        },
+        "description": {
+          "en": "Access your child's progress and updates",
+          "ur": "اپنے بچے کی پیشرفت اور اپ ڈیٹس تک رسائی حاصل کریں",
+          "ta": "உங்கள் குழந்தையின் முன்னேற்றம் மற்றும் புதுப்பிப்புகளை அணுகவும்",
+          "ar": "الوصول إلى تقدم طفلك والتحديثات"
+        }
+      },
+      "teacher": {
+        "title": {
+          "en": "Teacher Portal",
+          "ur": "اساتذہ پورٹل",
+          "ta": "ஆசிரியர் போர்டல்",
+          "ar": "بوابة المعلم"
+        },
+        "description": {
+          "en": "Manage classes and student records",
+          "ur": "کلاس ریکارڈ اور طلباء کے انتظام تک رسائی حاصل کریں",
+          "ta": "வகுப்பு பதிவுகள் மற்றும் மாணவர் மேலாண்மையை நிர்வகிக்கவும்",
+          "ar": "إدارة سجلات الفصل والطلاب"
+        }
+      },
+      "management": {
+        "title": {
+          "en": "Management Portal",
+          "ur": "انتظامی پورٹل",
+          "ta": "மேலாண்மை போர்டல்",
+          "ar": "بوابة الإدارة"
+        },
+        "description": {
+          "en": "Institute management and operations",
+          "ur": "ادارے کے انتظام اور آپریشنز",
+          "ta": "நிறுவன மேலாண்மை மற்றும் செயல்பாடுகள்",
+          "ar": "إدارة المؤسسة والعمليات"
+        }
+      },
+      "admin": {
+        "title": {
+          "en": "Admin Portal",
+          "ur": "ایڈمن پورٹل",
+          "ta": "நிர்வாகி போர்டல்",
+          "ar": "بوابة المسؤول"
+        },
+        "description": {
+          "en": "Manage institute administration",
+          "ur": "ادارہ جاتی انتظامیہ کا نظم کریں",
+          "ta": "நிறுவன நிர்வாகத்தை நிர்வகிக்கவும்",
+          "ar": "إدارة نظام المؤسسة"
+        }
+      }
+    }
+  },
+  "role_selection": {
+    "enter_portal": {
+      "en": "Enter Portal",
+      "ur": "پورٹل میں داخل ہوں",
+      "ta": "போர்டல்லுக்குச் செல்லவும்",
+      "ar": "ادخل البوابة"
+    }
+  },
+  "role_portal": {
+    "complaint_register": {
+      "title": {
+        "en": "Complaint Register",
+        "ur": "شکایت رجسٹر",
+        "ta": "புகார் பதிவு",
+        "ar": "سجل الشكاوى"
+      },
+      "description": {
+        "en": "Submit and track your requests or complaints directly with the administration.",
+        "ur": "اپنی درخواستیں یا شکایات براہِ راست انتظامیہ کے ساتھ جمع کریں اور ٹریک کریں۔",
+        "ta": "உங்கள் கோரிக்கைகளை அல்லது புகார்களை நேரடியாக நிர்வாகத்துடன் சமர்ப்பிக்கவும் மற்றும் பின்தொடரவும்.",
+        "ar": "قدّم وتتبع طلباتك أو شكاواك مباشرةً مع الإدارة."
+      }
+    }
+  },
+  "portal_layout": {
+    "home": {
+      "en": "Home",
+      "ur": "ہوم",
+      "ta": "முகப்பு",
+      "ar": "الرئيسية"
+    }
+  },
+  "cards": {
+    "why_jzv": {
+      "en": "Why JZV",
+      "ur": "کیوں JZV؟",
+      "ta": "ஏன் JZV",
+      "ar": "لماذا JZV"
+    },
+    "vision_mission": {
+      "en": "Vision & Mission",
+      "ur": "ویژن اور مشن",
+      "ta": "காட்சி மற்றும் இலக்கு",
+      "ar": "الرؤية والرسالة"
+    },
+    "system_4t": {
+      "en": "4Ts Pedagogy",
+      "ur": "4Ts پیڈاگوگی",
+      "ta": "4Ts கற்பித்தல் முறை",
+      "ar": "منهجية 4T"
+    },
+    "tahfeezulquran": {
+      "en": "Tahfeez ul Quran",
+      "ur": "تحفیظ القرآن",
+      "ta": "தஹ்ஃபீஸ் உல்குர்ஆன்",
+      "ar": "تحفيظ القرآن"
+    },
+    "daily_schedule": {
+      "en": "Daily Schedule",
+      "ur": "روزانہ کا شیڈول",
+      "ta": "தினசரி திட்டம்",
+      "ar": "الجدول اليومي"
+    },
+    "extra_curriculars": {
+      "en": "Extra-Curriculars",
+      "ur": "غیر نصابی سرگرمیاں",
+      "ta": "கூடுதல் பாடத்திட்ட செயல்பாடுகள்",
+      "ar": "الأنشطة اللامنهجية"
+    },
+    "sports_agility": {
+      "en": "Sports & Agility",
+      "ur": "کھیل اور پھرتی",
+      "ta": "விளையாட்டு மற்றும் சுறுசுறுப்பு",
+      "ar": "الرياضة والرشاقة"
+    },
+    "about_us": {
+      "en": "About Us",
+      "ur": "ہمارے بارے میں",
+      "ta": "எங்களைப் பற்றி",
+      "ar": "من نحن"
+    },
+    "academics": {
+      "en": "Academics",
+      "ur": "تعلیمات",
+      "ta": "கல்வி",
+      "ar": "الأكاديميات"
+    },
+    "campus_life": {
+      "en": "Life at JZV",
+      "ur": "JZV میں زندگی",
+      "ta": "JZV வாழ்க்கை",
+      "ar": "الحياة في JZV"
+    },
+    "admissions": {
+      "en": "Admissions",
+      "ur": "داخلہ",
+      "ta": "சேர்க்கைகள்",
+      "ar": "القبول"
+    },
+    "campus_gallery": {
+      "en": "Campus Gallery",
+      "ur": "کیمپس گیلری",
+      "ta": "கேம்பஸ் காட்சியகம்",
+      "ar": "معرض الحرم الجامعي"
+    },
+    "courses": {
+      "en": "Courses (PCC & GCC)",
+      "ur": "کورسز (PCC & GCC)",
+      "ta": "படிப்புகள் (PCC & GCC)",
+      "ar": "الدورات (PCC & GCC)"
+    },
+    "alimiat_streams": {
+      "en": "Aalimiyat Streams",
+      "ur": "علمیاتی سلسلے",
+      "ta": "அலிமியத் துறைகள்",
+      "ar": "مسارات علمية"
+    },
+    "nios": {
+      "en": "NIOS (10th & 12th)",
+      "ur": "NIOS (10ویں اور 12ویں)",
+      "ta": "NIOS (10ஆம் & 12ஆம்)",
+      "ar": "NIOS (10 و 12)"
+    },
+    "policies": {
+      "en": "Institution Policies",
+      "ur": "ادارتی پالیسیز",
+      "ta": "நிறுவனக் கொள்கைகள்",
+      "ar": "سياسات المؤسسة"
+    },
+    "fees": {
+      "en": "Fee Structure",
+      "ur": "فیس کا ڈھانچہ",
+      "ta": "கட்டண அமைப்பு",
+      "ar": "هيكل الرسوم"
+    },
+    "admission_process": {
+      "en": "Admission Process",
+      "ur": "داخلہ کا عمل",
+      "ta": "சேர்க்கை செயல்முறை",
+      "ar": "عملية القبول"
+    },
+    "new_admission": {
+      "en": "Admission Request",
+      "ur": "داخلہ درخواست",
+      "ta": "சேர்க்கைக் கோரிக்கை",
+      "ar": "طلب قبول"
+    },
+    "check_admission_status": {
+      "en": "Check Admission Status",
+      "ur": "داخلہ کی حیثیت چیک کریں",
+      "ta": "சேர்க்கை நிலையைச் சரிபார்க்கவும்",
+      "ar": "التحقق من حالة القبول"
+    },
+    "complaint_register": {
+      "en": "Complaint Register",
+      "ur": "شکایت رجسٹر",
+      "ta": "புகார் பதிவு",
+      "ar": "سجل الشكاوى"
+    },
+    "job_openings": {
+      "en": "Job Openings",
+      "ur": "ملازمت کی خالی اسامیاں",
+      "ta": "வேலை வாய்ப்புகள்",
+      "ar": "فرص العمل"
+    },
+    "apply_online": {
+      "en": "Apply Online",
+      "ur": "آن لائن درخواست دیں",
+      "ta": "ஆன்லைனில் விண்ணப்பிக்கவும்",
+      "ar": "التقديم عبر الإنترنت"
+    },
+    "current_openings": {
+      "en": "Current Openings",
+      "ur": "موجودہ خالی اسامیاں",
+      "ta": "தற்போதைய காலி பணியிடங்கள்",
+      "ar": "الوظائف الحالية"
+    },
+    "contact_us": {
+      "en": "Contact Us",
+      "ur": "ہم سے رابطہ کریں",
+      "ta": "எங்களைத் தொடர்பு கொள்ளவும்",
+      "ar": "اتصل بنا"
+    },
+    "my_portal": {
+      "en": "My Portal",
+      "ur": "میرا پورٹل",
+      "ta": "என் போர்டல்",
+      "ar": "بوابتي"
+    }
+  }
+}

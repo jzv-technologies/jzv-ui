@@ -1,4 +1,5 @@
 import React from "react";
+import Translate from "../Translate";
 const Header = ({
   user,
   userRoles,
@@ -22,10 +23,15 @@ const Header = ({
           />
           <div className="border-l-8 border-pink-primary pl-5 sm:pl-6 lg:pl-8 bg-light-white shadow-sm rounded-r-xl py-1 text-sm sm:text-lg leading-relaxed text-dark-charcoal">
             <p className="text-teal-dark">
-              a modern madrasa system integrated with 21st-century competencies
+              <Translate id="header.tagline_line1">
+                a modern madrasa system integrated with 21st-century
+                competencies
+              </Translate>
             </p>
             <p className="text-blue-dark">
-              preparing your child to succeed in this Life and the Hereafter.
+              <Translate id="header.tagline_line2">
+                preparing your child to succeed in this Life and the Hereafter.
+              </Translate>
             </p>
           </div>
         </div>
@@ -50,7 +56,7 @@ const Header = ({
               >
                 <i className="fas fa-sign-out-alt text-lg"></i>
                 <span className="hidden sm:inline text-sm sm:text-base">
-                  Logout
+                  <Translate id="header.logout">Logout</Translate>
                 </span>
               </button>
             </div>
@@ -62,7 +68,7 @@ const Header = ({
             >
               <i className="fas fa-sign-in-alt text-lg"></i>
               <span className="hidden sm:inline text-sm sm:text-base">
-                Portal Login
+                <Translate id="header.portal_login">Portal Login</Translate>
               </span>
             </button>
           )}

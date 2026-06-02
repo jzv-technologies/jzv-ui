@@ -10,6 +10,7 @@ import AOS from "aos";
 import "aos/dist/aos.css";
 import { supabase } from "./utils/supabase";
 import useGoogleTranslate from "./hooks/useGoogleTranslate";
+import Translate from "./components/Translate";
 import LoginPortal from "./components/LoginPortal";
 import {
   getCards,
@@ -54,7 +55,11 @@ const getUserDataCookie = (userId) => {
 };
 
 const setUserDataCookie = (userId, data, days = 7) => {
-  setCookie(`jzv_user_data_${userId}`, encodeURIComponent(JSON.stringify(data)), days);
+  setCookie(
+    `jzv_user_data_${userId}`,
+    encodeURIComponent(JSON.stringify(data)),
+    days,
+  );
 };
 
 const clearUserDataCookie = (userId) => {
@@ -96,7 +101,9 @@ const App = () => {
   const fetchRoles = async (userId, authEvent) => {
     const fetchId = ++fetchCountRef.current;
     setRolesLoading(true);
-    console.log(`[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}, fetchId: ${fetchId}`);
+    console.log(
+      `[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}, fetchId: ${fetchId}`,
+    );
     try {
       // Add a tiny delay if this is the initial session boot or SIGNED_IN event to let Supabase client stabilize
       if (authEvent === "INITIAL_SESSION" || authEvent === "SIGNED_IN") {
@@ -104,7 +111,9 @@ const App = () => {
       }
 
       if (fetchId !== fetchCountRef.current) {
-        console.log(`[fetchRoles] Fetch ${fetchId} cancelled before query (newer fetch active)`);
+        console.log(
+          `[fetchRoles] Fetch ${fetchId} cancelled before query (newer fetch active)`,
+        );
         return { success: false, cancelled: true };
       }
 
@@ -117,19 +126,26 @@ const App = () => {
 
       // Increased timeout to 15 seconds to prevent cold start query failures
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Database query timeout")), 15000)
+        setTimeout(() => reject(new Error("Database query timeout")), 15000),
       );
 
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise,
+      ]);
 
       if (fetchId !== fetchCountRef.current) {
-        console.log(`[fetchRoles] Fetch ${fetchId} ignored (newer fetch active)`);
+        console.log(
+          `[fetchRoles] Fetch ${fetchId} ignored (newer fetch active)`,
+        );
         return { success: false, cancelled: true };
       }
 
       if (error) {
         if (error.code === "PGRST116") {
-          console.log("[fetchRoles] No roles record found in admin_users_view (PGRST116)");
+          console.log(
+            "[fetchRoles] No roles record found in admin_users_view (PGRST116)",
+          );
           setUserRoles([]);
           setStudentIds("");
           clearUserDataCookie(userId);
@@ -161,7 +177,7 @@ const App = () => {
         } else {
           setUserRoles([]);
         }
-        
+
         // Save to cookie for fast subsequent loads
         setUserDataCookie(userId, { roles, studentIds: studentIdsValue });
       }
@@ -192,7 +208,9 @@ const App = () => {
     // Safety timeout to ensure the loading screen is always dismissed
     const safetyTimeout = setTimeout(() => {
       if (isMounted) {
-        console.warn("[Auth] safety timeout triggered. Forcing authLoading to false.");
+        console.warn(
+          "[Auth] safety timeout triggered. Forcing authLoading to false.",
+        );
         setAuthLoading(false);
       }
     }, 5000);
@@ -214,11 +232,14 @@ const App = () => {
 
       if (currentUser) {
         setFullName(currentUser.user_metadata?.full_name || "");
-        
+
         // Stale-While-Revalidate: load roles and student ids from cookie cache immediately
         const cached = getUserDataCookie(currentUser.id);
         if (cached) {
-          console.log("[Auth] Loaded roles and student IDs from cookie cache:", cached);
+          console.log(
+            "[Auth] Loaded roles and student IDs from cookie cache:",
+            cached,
+          );
           setUserRoles(cached.roles || []);
           setStudentIds(cached.studentIds || "");
           fetchSuccess = true; // Dismiss authLoading spinner immediately since we have cached roles
@@ -227,7 +248,10 @@ const App = () => {
         }
 
         // Fetch roles if not already fetched for this session, or retry on SIGNED_IN
-        if (!rolesFetched || (userRolesRef.current.length === 0 && event === "SIGNED_IN")) {
+        if (
+          !rolesFetched ||
+          (userRolesRef.current.length === 0 && event === "SIGNED_IN")
+        ) {
           const res = await fetchRoles(currentUser.id, event);
           if (res.success) {
             rolesFetched = true;
@@ -237,7 +261,10 @@ const App = () => {
             if (justSignedIn) {
               justSignedIn = false; // Reset the redirect flag
               if (res.roles && res.roles.length > 0) {
-                if (window.location.pathname === "/" || showLoginPortalRef.current) {
+                if (
+                  window.location.pathname === "/" ||
+                  showLoginPortalRef.current
+                ) {
                   setShowLoginPortal(false);
                   if (res.roles.length === 1) {
                     navigate(`/portal/${res.roles[0]}`);
@@ -416,7 +443,9 @@ const App = () => {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-white font-medium">Loading session...</p>
+        <p className="text-white font-medium">
+          <Translate id="home.loading_session">Loading session...</Translate>
+        </p>
       </div>
     );
   }
@@ -494,8 +523,10 @@ const App = () => {
               {
                 id: "complaint-register",
                 title: "Complaint Register",
+                titleKey: "role_portal.complaint_register.title",
                 description:
                   "Submit and track your requests or complaints directly with the administration.",
+                descriptionKey: "role_portal.complaint_register.description",
                 icon: "fa-clipboard-list",
                 buttonColor: "bg-orange-primary text-white",
                 onClick: () => openModal("complaint-register"),
@@ -527,7 +558,11 @@ const App = () => {
             element={
               <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
                 <div className="w-full max-w-2xl">
-                  <h1 className="text-white text-2xl">Career Opportunities</h1>
+                  <h1 className="text-white text-2xl">
+                    <Translate id="home.career.title">
+                      Career Opportunities
+                    </Translate>
+                  </h1>
                   <DynamicForm
                     uuid="career"
                     textColor={CARD_THEMES.blueDark.textColor}

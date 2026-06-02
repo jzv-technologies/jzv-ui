@@ -1,14 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import useLanguage from "../hooks/useLanguage";
+import Translate from "./Translate";
 import { supabase } from "../utils/supabase";
 
-const LoginPortal = ({
-  isOpen,
-  onClose,
-  user,
-  userRoles,
-  rolesLoading,
-}) => {
+const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading }) => {
   // authMode: 'main' | 'login' | 'register' | 'selection' | 'pending'
   const [authMode, setAuthMode] = useState("main");
   const [email, setEmail] = useState("");
@@ -20,6 +16,7 @@ const LoginPortal = ({
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!isOpen) {
@@ -59,8 +56,10 @@ const LoginPortal = ({
     {
       type: "parent",
       title: "Parent Portal",
+      titleKey: "login.portal.parent.title",
       icon: "fa-home",
       description: "Access your child's progress and updates",
+      descriptionKey: "login.portal.parent.description",
       color: "bg-blue-50 border-blue-light",
       buttonColor: "bg-blue-primary hover:bg-blue-600",
       textColor: "text-blue-dark",
@@ -68,8 +67,10 @@ const LoginPortal = ({
     {
       type: "teacher",
       title: "Teacher Portal",
+      titleKey: "login.portal.teacher.title",
       icon: "fa-chalkboard-user",
       description: "Manage classes and student records",
+      descriptionKey: "login.portal.teacher.description",
       color: "bg-green-50 border-green-light",
       buttonColor: "bg-green-primary hover:bg-green-600",
       textColor: "text-green-dark",
@@ -77,8 +78,10 @@ const LoginPortal = ({
     {
       type: "management",
       title: "Management Portal",
+      titleKey: "login.portal.management.title",
       icon: "fa-users-gear",
       description: "Institute management and operations",
+      descriptionKey: "login.portal.management.description",
       color: "bg-purple-50 border-purple-light",
       buttonColor: "bg-purple-primary hover:bg-purple-600",
       textColor: "text-purple-dark",
@@ -86,8 +89,10 @@ const LoginPortal = ({
     {
       type: "admin",
       title: "Admin Portal",
+      titleKey: "login.portal.admin.title",
       icon: "fa-shield-alt",
       description: "Manage institute administration",
+      descriptionKey: "login.portal.admin.description",
       color: "bg-red-50 border-red-light",
       buttonColor: "bg-red-primary hover:bg-red-600",
       textColor: "text-red-dark",
@@ -120,19 +125,29 @@ const LoginPortal = ({
     setMessage({ type: "", text: "" });
 
     try {
+      <p className="text-dark-muted font-medium mb-6">
+        {
+          t("login.pending.verifying_permissions", "Verifying permissions...")
+            .text
+        }
+      </p>;
       if (authMode === "register") {
         if (password !== confirmPassword) {
-          throw new Error("Passwords do not match");
+          throw new Error(
+            t("login.form.password_mismatch", "Passwords do not match").text,
+          );
         }
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: name,
+        const { data: authData, error: authError } = await supabase.auth.signUp(
+          {
+            email,
+            password,
+            options: {
+              data: {
+                full_name: name,
+              },
             },
           },
-        });
+        );
         if (authError) throw authError;
 
         if (authData.user) {
@@ -152,7 +167,10 @@ const LoginPortal = ({
         setAuthMode("pending");
         setMessage({
           type: "success",
-          text: "Registration successful! Your account is pending administrator approval for role assignment.",
+          text: t(
+            "login.pending.registration_successful",
+            "Registration successful! Your account is pending administrator approval for role assignment.",
+          ).text,
         });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -178,13 +196,25 @@ const LoginPortal = ({
           ></i>
         </div>
         <h3 className="text-base sm:text-lg lg:text-xl font-bold text-white tracking-tight leading-tight">
-          {authMode === "register"
-            ? "Create Account"
-            : authMode === "selection"
-              ? "Select Portal"
-              : authMode === "pending"
-                ? "Access Pending"
-                : "Portal Access"}
+          <Translate
+            id={
+              authMode === "register"
+                ? "login.header.create_account"
+                : authMode === "selection"
+                  ? "login.header.select_portal"
+                  : authMode === "pending"
+                    ? "login.header.access_pending"
+                    : "login.header.portal_access"
+            }
+          >
+            {authMode === "register"
+              ? "Create Account"
+              : authMode === "selection"
+                ? "Select Portal"
+                : authMode === "pending"
+                  ? "Access Pending"
+                  : "Portal Access"}
+          </Translate>
         </h3>
       </div>
       <button
@@ -214,10 +244,14 @@ const LoginPortal = ({
             <div className="flex flex-col gap-6 py-4">
               <div className="text-center mb-4">
                 <h4 className="text-xl font-bold text-dark-deepblue mb-2">
-                  Welcome to JZV Portal
+                  <Translate id="login.main.welcome_heading">
+                    Welcome to JZV Portal
+                  </Translate>
                 </h4>
                 <p className="text-dark-muted">
-                  Please login or create an account to continue.
+                  <Translate id="login.main.welcome_description">
+                    Please login or create an account to continue.
+                  </Translate>
                 </p>
               </div>
 
@@ -232,13 +266,17 @@ const LoginPortal = ({
                   alt="Google"
                   className="w-6 h-6"
                 />
-                Continue with Google
+                <Translate id="login.main.continue_with_google">
+                  Continue with Google
+                </Translate>
               </button>
 
               <div className="flex items-center gap-4">
                 <div className="h-px bg-light-border flex-1"></div>
                 <span className="text-dark-muted font-medium text-sm">
-                  OR USE EMAIL
+                  <Translate id="login.main.or_use_email">
+                    OR USE EMAIL
+                  </Translate>
                 </span>
                 <div className="h-px bg-light-border flex-1"></div>
               </div>
@@ -247,13 +285,19 @@ const LoginPortal = ({
                 onClick={() => setAuthMode("login")}
                 className="w-full bg-orange-primary hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-orange-200 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg"
               >
-                <i className="fas fa-sign-in-alt"></i> Login with Email
+                <i className="fas fa-sign-in-alt"></i>{" "}
+                <Translate id="login.main.login_with_email">
+                  Login with Email
+                </Translate>
               </button>
               <button
                 onClick={() => setAuthMode("register")}
                 className="w-full bg-white border-2 border-orange-primary text-orange-primary hover:bg-orange-50 font-bold py-4 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-3 text-lg"
               >
-                <i className="fas fa-user-plus"></i> New User? Register
+                <i className="fas fa-user-plus"></i>{" "}
+                <Translate id="login.main.new_user_register">
+                  New User? Register
+                </Translate>
               </button>
             </div>
           )}
@@ -266,15 +310,32 @@ const LoginPortal = ({
                   onClick={() => setAuthMode("main")}
                   className="text-orange-primary hover:text-orange-600 font-bold text-base flex items-center gap-2 mb-6 active:scale-95 transition-all duration-200"
                 >
-                  <i className="fas fa-arrow-left"></i> Back
+                  <i className="fas fa-arrow-left"></i>{" "}
+                  <Translate id="login.form.back">Back</Translate>
                 </button>
                 <h4 className="font-bold text-base sm:text-lg lg:text-xl mb-2">
-                  {authMode === "login" ? "Login" : "Register"}
+                  <Translate
+                    id={
+                      authMode === "login"
+                        ? "login.form.login_title"
+                        : "login.form.register_title"
+                    }
+                  >
+                    {authMode === "login" ? "Login" : "Register"}
+                  </Translate>
                 </h4>
                 <p className="text-sm sm:text-base text-dark-muted">
-                  {authMode === "login"
-                    ? "Enter your credentials to access the portal"
-                    : "Create an account. Roles will be assigned by admin."}
+                  <Translate
+                    id={
+                      authMode === "login"
+                        ? "login.form.login_description"
+                        : "login.form.register_description"
+                    }
+                  >
+                    {authMode === "login"
+                      ? "Enter your credentials to access the portal"
+                      : "Create an account. Roles will be assigned by admin."}
+                  </Translate>
                 </p>
               </div>
 
@@ -294,34 +355,43 @@ const LoginPortal = ({
                 {authMode === "register" && (
                   <div>
                     <label className="block font-bold text-sm sm:text-base text-dark-deepblue mb-2">
-                      Full Name
+                      <Translate id="login.form.full_name">Full Name</Translate>
                     </label>
                     <input
                       type="text"
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="John Doe"
+                      placeholder={
+                        t("login.form.full_name_placeholder", "John Doe").text
+                      }
                       className="w-full px-4 py-2 sm:py-3 border border-light-border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-primary focus:border-transparent text-base sm:text-lg"
                     />
                   </div>
                 )}
                 <div>
                   <label className="block font-bold text-sm sm:text-base text-dark-deepblue mb-2">
-                    Email Address
+                    <Translate id="login.form.email_address">
+                      Email Address
+                    </Translate>
                   </label>
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    placeholder={
+                      t(
+                        "login.form.email_address_placeholder",
+                        "your@email.com",
+                      ).text
+                    }
                     className="w-full px-4 py-2 sm:py-3 border border-light-border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-primary focus:border-transparent text-base sm:text-lg"
                   />
                 </div>
                 <div>
                   <label className="block font-bold text-sm sm:text-base text-dark-deepblue mb-2">
-                    Password
+                    <Translate id="login.form.password">Password</Translate>
                   </label>
                   <div className="relative">
                     <input
@@ -329,7 +399,9 @@ const LoginPortal = ({
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder={
+                        t("login.form.password_placeholder", "••••••••").text
+                      }
                       className="w-full px-4 py-2 sm:py-3 border border-light-border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-primary focus:border-transparent text-base sm:text-lg pr-12"
                     />
                     <button
@@ -347,7 +419,9 @@ const LoginPortal = ({
                 {authMode === "register" && (
                   <div>
                     <label className="block font-bold text-sm sm:text-base text-dark-deepblue mb-2">
-                      Confirm Password
+                      <Translate id="login.form.confirm_password">
+                        Confirm Password
+                      </Translate>
                     </label>
                     <div className="relative">
                       <input
@@ -355,7 +429,12 @@ const LoginPortal = ({
                         required
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder={
+                          t(
+                            "login.form.confirm_password_placeholder",
+                            "••••••••",
+                          ).text
+                        }
                         className="w-full px-4 py-2 sm:py-3 border border-light-border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-primary focus:border-transparent text-base sm:text-lg pr-12"
                       />
                       <button
@@ -377,11 +456,17 @@ const LoginPortal = ({
                   disabled={loading}
                   className="w-full bg-orange-primary hover:bg-orange-600 text-white font-bold py-4 rounded-lg transition-all duration-200 ease-out active:scale-95 min-h-[44px] text-lg disabled:opacity-50 mt-4"
                 >
-                  {loading
-                    ? "Processing..."
-                    : authMode === "login"
-                      ? "Sign In"
-                      : "Create Account"}
+                  {loading ? (
+                    <Translate id="login.form.processing">
+                      Processing...
+                    </Translate>
+                  ) : authMode === "login" ? (
+                    <Translate id="login.form.sign_in">Sign In</Translate>
+                  ) : (
+                    <Translate id="login.form.create_account_button">
+                      Create Account
+                    </Translate>
+                  )}
                 </button>
               </form>
             </>
@@ -394,13 +479,17 @@ const LoginPortal = ({
                 <div className="flex flex-col items-center py-12">
                   <div className="w-12 h-12 border-4 border-orange-primary border-t-transparent rounded-full animate-spin mb-4"></div>
                   <p className="text-dark-muted font-medium">
-                    Loading your portals...
+                    <Translate id="login.selection.loading_portals">
+                      Loading your portals...
+                    </Translate>
                   </p>
                 </div>
               ) : (
                 <>
                   <p className="text-base font-bold text-dark-deepblue">
-                    You have access to multiple portals. Select one to enter:
+                    <Translate id="login.selection.choose_portal">
+                      You have access to multiple portals. Select one to enter:
+                    </Translate>
                   </p>
                   <div className="space-y-4">
                     {loginTypes
@@ -423,10 +512,14 @@ const LoginPortal = ({
                             <h4
                               className={`font-bold text-lg ${login.textColor} group-hover:underline`}
                             >
-                              {login.title}
+                              <Translate id={login.titleKey}>
+                                {login.title}
+                              </Translate>
                             </h4>
                             <p className="text-sm text-dark-charcoal">
-                              {login.description}
+                              <Translate id={login.descriptionKey}>
+                                {login.description}
+                              </Translate>
                             </p>
                           </div>
                           <i
@@ -456,18 +549,22 @@ const LoginPortal = ({
                     <i className="fas fa-clock"></i>
                   </div>
                   <h4 className="text-xl font-bold text-dark-deepblue mb-4">
-                    Access Pending
+                    <Translate id="login.pending.title">
+                      Access Pending
+                    </Translate>
                   </h4>
                   <p className="text-dark-muted mb-8 leading-relaxed">
-                    Your account has been created successfully, but you don't
-                    have any roles assigned yet. Please wait for an
-                    administrator to assign your role (Parent, Teacher, etc.).
+                    <Translate id="login.pending.message">
+                      Your account has been created successfully, but you don't
+                      have any roles assigned yet. Please wait for an
+                      administrator to assign your role (Parent, Teacher, etc.).
+                    </Translate>
                   </p>
                   <button
                     onClick={handleClose}
                     className="px-8 py-3 bg-dark-charcoal text-white font-bold rounded-lg hover:bg-dark-almostblack transition-all"
                   >
-                    Got it
+                    <Translate id="login.pending.got_it">Got it</Translate>
                   </button>
                 </>
               )}
