@@ -104,98 +104,131 @@ const App = () => {
     console.log(
       `[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}, fetchId: ${fetchId}`,
     );
-    try {
-      // Add a tiny delay if this is the initial session boot or SIGNED_IN event to let Supabase client stabilize
-      if (authEvent === "INITIAL_SESSION" || authEvent === "SIGNED_IN") {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
 
-      if (fetchId !== fetchCountRef.current) {
-        console.log(
-          `[fetchRoles] Fetch ${fetchId} cancelled before query (newer fetch active)`,
-        );
-        return { success: false, cancelled: true };
-      }
+    const maxRetries = 3;
+    let lastError = null;
 
-      // Query admin_users_view directly to bypass RLS limitations and speed up page load
-      const queryPromise = supabase
-        .from("admin_users_view")
-        .select("role_ids, student_ids")
-        .eq("user_id", userId)
-        .single();
-
-      // Increased timeout to 15 seconds to prevent cold start query failures
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Database query timeout")), 15000),
-      );
-
-      const { data, error } = await Promise.race([
-        queryPromise,
-        timeoutPromise,
-      ]);
-
-      if (fetchId !== fetchCountRef.current) {
-        console.log(
-          `[fetchRoles] Fetch ${fetchId} ignored (newer fetch active)`,
-        );
-        return { success: false, cancelled: true };
-      }
-
-      if (error) {
-        if (error.code === "PGRST116") {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        // Add a tiny delay if this is the initial session boot or SIGNED_IN event to let Supabase client stabilize
+        if (
+          attempt === 0 &&
+          (authEvent === "INITIAL_SESSION" || authEvent === "SIGNED_IN")
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        } else if (attempt > 0) {
+          // Exponential backoff: 1s, 2s, 4s
+          const backoffMs = Math.pow(2, attempt - 1) * 1000;
           console.log(
-            "[fetchRoles] No roles record found in admin_users_view (PGRST116)",
+            `[fetchRoles] Retry attempt ${attempt + 1}/${maxRetries} after ${backoffMs}ms`,
           );
-          setUserRoles([]);
-          setStudentIds("");
-          clearUserDataCookie(userId);
-          return { success: true, roles: [], studentIds: "" };
-        }
-        throw error;
-      }
-
-      let roles = [];
-      let studentIdsValue = "";
-      if (data) {
-        console.log("[fetchRoles] Roles data retrieved:", data);
-        studentIdsValue = data.student_ids || "";
-        setStudentIds(studentIdsValue);
-
-        if (data.role_ids) {
-          const roleMap = {
-            A: "admin",
-            M: "management",
-            T: "teacher",
-            P: "parent",
-          };
-          roles = data.role_ids
-            .split(",")
-            .map((code) => roleMap[code.trim().toUpperCase()])
-            .filter(Boolean);
-          setUserRoles(roles);
-          console.log("[fetchRoles] Parsed roles:", roles);
-        } else {
-          setUserRoles([]);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
         }
 
-        // Save to cookie for fast subsequent loads
-        setUserDataCookie(userId, { roles, studentIds: studentIdsValue });
-      }
-      return { success: true, roles, studentIds: studentIdsValue };
-    } catch (err) {
-      console.error("[fetchRoles] Error fetching roles:", err);
-      // If we already have roles from the cache, keep them to avoid a broken UI state
-      const cached = getUserDataCookie(userId);
-      if (!cached && fetchId === fetchCountRef.current) {
-        setUserRoles([]);
-        setStudentIds("");
-      }
-      return { success: false, error: err };
-    } finally {
-      if (fetchId === fetchCountRef.current) {
-        setRolesLoading(false);
+        if (fetchId !== fetchCountRef.current) {
+          console.log(
+            `[fetchRoles] Fetch ${fetchId} cancelled before query (newer fetch active)`,
+          );
+          return { success: false, cancelled: true };
+        }
+
+        // Query admin_users_view directly to bypass RLS limitations and speed up page load
+        const queryPromise = supabase
+          .from("admin_users_view")
+          .select("role_ids, student_ids")
+          .eq("user_id", userId)
+          .single();
+
+        // Increased timeout to 30 seconds to handle cold starts and slow connections
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Database query timeout")), 30000),
+        );
+
+        const { data, error } = await Promise.race([
+          queryPromise,
+          timeoutPromise,
+        ]);
+
+        if (fetchId !== fetchCountRef.current) {
+          console.log(
+            `[fetchRoles] Fetch ${fetchId} ignored (newer fetch active)`,
+          );
+          return { success: false, cancelled: true };
+        }
+
+        if (error) {
+          if (error.code === "PGRST116") {
+            console.log(
+              "[fetchRoles] No roles record found in admin_users_view (PGRST116)",
+            );
+            setUserRoles([]);
+            setStudentIds("");
+            clearUserDataCookie(userId);
+            if (fetchId === fetchCountRef.current) {
+              setRolesLoading(false);
+            }
+            return { success: true, roles: [], studentIds: "" };
+          }
+          throw error;
+        }
+
+        let roles = [];
+        let studentIdsValue = "";
+        if (data) {
+          console.log("[fetchRoles] Roles data retrieved:", data);
+          studentIdsValue = data.student_ids || "";
+          setStudentIds(studentIdsValue);
+
+          if (data.role_ids) {
+            const roleMap = {
+              A: "admin",
+              M: "management",
+              T: "teacher",
+              P: "parent",
+            };
+            roles = data.role_ids
+              .split(",")
+              .map((code) => roleMap[code.trim().toUpperCase()])
+              .filter(Boolean);
+            setUserRoles(roles);
+            console.log("[fetchRoles] Parsed roles:", roles);
+          } else {
+            setUserRoles([]);
+          }
+
+          // Save to cookie for fast subsequent loads
+          setUserDataCookie(userId, { roles, studentIds: studentIdsValue });
+        }
+
+        if (fetchId === fetchCountRef.current) {
+          setRolesLoading(false);
+        }
+        return { success: true, roles, studentIds: studentIdsValue };
+      } catch (err) {
+        lastError = err;
+        console.warn(
+          `[fetchRoles] Attempt ${attempt + 1}/${maxRetries} failed:`,
+          err.message,
+        );
+        // Continue to next retry attempt
       }
     }
+
+    // All retries exhausted
+    console.error(
+      "[fetchRoles] Error fetching roles after all retries:",
+      lastError,
+    );
+    // If we already have roles from the cache, keep them to avoid a broken UI state
+    const cached = getUserDataCookie(userId);
+    if (!cached && fetchId === fetchCountRef.current) {
+      setUserRoles([]);
+      setStudentIds("");
+    }
+    if (fetchId === fetchCountRef.current) {
+      setRolesLoading(false);
+    }
+    return { success: false, error: lastError };
   };
 
   useEffect(() => {
@@ -422,6 +455,12 @@ const App = () => {
   const isTabbed = !!activeGroup;
   const activeCard = isTabbed ? getCard(activeTab) : getCard(activeModal);
 
+  const portalRouteFallback = (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
   const gridCards = cards
     .filter(
       (c) =>
@@ -477,11 +516,19 @@ const App = () => {
           <Route
             path="/portal"
             element={
-              user && userRoles.length > 1 ? (
-                <RoleSelectionDashboard
-                  userRoles={userRoles}
-                  onSelectView={(view) => navigate(`/portal/${view}`)}
-                />
+              user ? (
+                rolesLoading ? (
+                  portalRouteFallback
+                ) : userRoles.length > 1 ? (
+                  <RoleSelectionDashboard
+                    userRoles={userRoles}
+                    onSelectView={(view) => navigate(`/portal/${view}`)}
+                  />
+                ) : userRoles.length === 1 ? (
+                  <Navigate to={`/portal/${userRoles[0]}`} replace />
+                ) : (
+                  <Navigate to="/" replace />
+                )
               ) : (
                 <Navigate to="/" replace />
               )
@@ -491,12 +538,18 @@ const App = () => {
           <Route
             path="/portal/admin"
             element={
-              user && userRoles.includes("admin") ? (
-                <AdminPortal
-                  userRoles={userRoles}
-                  subView={adminSubView}
-                  onSetSubView={setAdminSubView}
-                />
+              user ? (
+                rolesLoading ? (
+                  portalRouteFallback
+                ) : userRoles.includes("admin") ? (
+                  <AdminPortal
+                    userRoles={userRoles}
+                    subView={adminSubView}
+                    onSetSubView={setAdminSubView}
+                  />
+                ) : (
+                  <Navigate to="/" replace />
+                )
               ) : (
                 <Navigate to="/" replace />
               )
@@ -506,12 +559,18 @@ const App = () => {
           <Route
             path="/portal/management"
             element={
-              user && userRoles.includes("management") ? (
-                <ManagementPortal
-                  userRoles={userRoles}
-                  subView={managementSubView}
-                  onSetSubView={setManagementSubView}
-                />
+              user ? (
+                rolesLoading ? (
+                  portalRouteFallback
+                ) : userRoles.includes("management") ? (
+                  <ManagementPortal
+                    userRoles={userRoles}
+                    subView={managementSubView}
+                    onSetSubView={setManagementSubView}
+                  />
+                ) : (
+                  <Navigate to="/" replace />
+                )
               ) : (
                 <Navigate to="/" replace />
               )
@@ -538,13 +597,19 @@ const App = () => {
                 key={role}
                 path={`/portal/${role}`}
                 element={
-                  user && userRoles.includes(role) ? (
-                    <RolePortal
-                      userRoles={userRoles}
-                      role={role}
-                      tiles={tiles}
-                      openModal={openModal}
-                    />
+                  user ? (
+                    rolesLoading ? (
+                      portalRouteFallback
+                    ) : userRoles.includes(role) ? (
+                      <RolePortal
+                        userRoles={userRoles}
+                        role={role}
+                        tiles={tiles}
+                        openModal={openModal}
+                      />
+                    ) : (
+                      <Navigate to="/" replace />
+                    )
                   ) : (
                     <Navigate to="/" replace />
                   )

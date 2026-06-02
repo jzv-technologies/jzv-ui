@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import translations from "../locales/translations.json";
+import translations from "../locales/translations.ui.json";
 import { translate } from "./i18n";
 
 const getGoogleTranslateLang = () => {

@@ -19,11 +19,16 @@ const CampusGallery = ({
   setGalleryIndex,
   setGalleryTitle,
 }) => {
-  const currentIndex = galleryItems.findIndex((item) => item.id === galleryIndex);
-  const titleKey = galleryTitle ? galleryTitle.toLowerCase().replace(/ & /g, "_").replace(/ /g, "_") : "";
+  const currentIndex = galleryItems.findIndex(
+    (item) => item.id === galleryIndex,
+  );
+  const titleKey = galleryTitle
+    ? `home.campus_gallery.${galleryTitle.toLowerCase().replace(/ & /g, "_").replace(/ /g, "_")}`
+    : "";
 
   const handlePrev = () => {
-    const prevIndex = (currentIndex - 1 + galleryItems.length) % galleryItems.length;
+    const prevIndex =
+      (currentIndex - 1 + galleryItems.length) % galleryItems.length;
     const prevItem = galleryItems[prevIndex];
     setGalleryIndex(prevItem.id);
     setGalleryTitle(prevItem.label);
@@ -53,7 +58,7 @@ const CampusGallery = ({
         >
           <i className="fas fa-chevron-left text-sm" />
         </button>
-        
+
         <span className="font-bold text-dark-deepblue text-base text-center px-4 flex-1">
           <Translate id={titleKey}>{galleryTitle}</Translate>
         </span>
@@ -71,10 +76,12 @@ const CampusGallery = ({
       {/* Desktop sidebar */}
       <div className="hidden lg:flex lg:flex-col gap-3 overflow-y-auto pb-4 lg:pb-0 scrollbar-hide flex-shrink-0 lg:border-r border-light-border lg:pr-6 lg:w-1/4">
         <h4 className="font-bold text-dark-deepblue mb-2 uppercase tracking-wider">
-          <Translate id="campus_zones">Campus Zones</Translate>
+          <Translate id="home.campus_gallery.campus_zones">
+            Campus Zones
+          </Translate>
         </h4>
         {galleryItems.map((item) => {
-          const key = item.label.toLowerCase().replace(/ & /g, "_").replace(/ /g, "_");
+          const key = `home.campus_gallery.${item.label.toLowerCase().replace(/ & /g, "_").replace(/ /g, "_")}`;
           return (
             <button
               key={item.id}

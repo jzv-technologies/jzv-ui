@@ -414,7 +414,10 @@ function updateFormData(body) {
     const updateData = item.data || {};
     Object.keys(updateData).forEach((key) => {
       const lowerKey = key.toLowerCase();
-      if (lowerKey !== "id" && !headers.some((h) => h.toLowerCase() === lowerKey)) {
+      if (
+        lowerKey !== "id" &&
+        !headers.some((h) => h.toLowerCase() === lowerKey)
+      ) {
         if (!newFields.some((nf) => nf.toLowerCase() === lowerKey)) {
           newFields.push(key);
         }
@@ -425,11 +428,16 @@ function updateFormData(body) {
   if (newFields.length > 0) {
     headers = [...headers, ...newFields];
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    
+
     // Clear and update the cached headers
     const headerKey = `HEADERS_${mapping.dataSheetId}_${mapping.dataSheetName}`;
-    PropertiesService.getScriptProperties().setProperty(headerKey, JSON.stringify(headers));
-    console.log(`Action [update]: Expanded sheet headers: ${newFields.join(", ")}`);
+    PropertiesService.getScriptProperties().setProperty(
+      headerKey,
+      JSON.stringify(headers),
+    );
+    console.log(
+      `Action [update]: Expanded sheet headers: ${newFields.join(", ")}`,
+    );
   }
 
   // Find the index of the user's custom identifier column
@@ -476,9 +484,8 @@ function updateFormData(body) {
 
       // Prevent overwriting the match identifier column itself to safeguard data integrity
       if (colIdx !== -1 && colIdx !== matchColIdx) {
-        sheet
-          .getRange(targetRowIndex, colIdx + 1)
-          .setValue(updateData[columnKey]);
+        const value = String(updateData[columnKey]);
+        sheet.getRange(targetRowIndex, colIdx + 1).setValue(value);
       }
     }
     updateCount++;

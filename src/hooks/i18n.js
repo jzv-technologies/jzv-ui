@@ -26,6 +26,11 @@ const ensureObj = (v) => (v && typeof v === "object" ? v : {});
 
 // translations: either legacy (locale-first) or UI-first
 export function translate(translations, language, key, defaultText) {
+  // Guard against undefined key
+  if (!key || typeof key !== "string") {
+    return { text: defaultText || "", isCustom: false };
+  }
+
   // 1) Legacy lookup: translations[lang] -> resolve dotted path or nested search
   const locale =
     (translations && translations[language]) ||
