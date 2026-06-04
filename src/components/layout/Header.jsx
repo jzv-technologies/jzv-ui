@@ -37,7 +37,7 @@ const Header = ({
         </div>
 
         {/* Right side: Auth & Google Translate (Vertical Stack) */}
-        <div className="flex flex-col items-end gap-2 shrink-0">
+        <div className="flex flex-row items-end gap-2 shrink-0">
           {user ? (
             <div className="flex items-center gap-3">
               <div className="hidden md:flex flex-col items-end">

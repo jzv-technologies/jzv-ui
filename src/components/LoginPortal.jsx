@@ -18,6 +18,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
 
+  // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setAuthMode("main");
@@ -31,24 +32,27 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading }) => {
     }
   }, [isOpen]);
 
-  // Handle mode transition when user logs in
+  // Handle post-login behaviour: redirect or show selection/pending
   useEffect(() => {
-    if (user && isOpen) {
+    // Only act if we have a user, modal is open, and roles are done loading
+    if (user && isOpen && !rolesLoading) {
       if (userRoles.length === 1) {
+        // Single role → go directly to that portal and close modal
         navigate(`/portal/${userRoles[0]}`);
-        handleClose();
+        onClose(); // close modal after navigation
       } else if (userRoles.length > 1) {
+        // Multiple roles → show selection view (if not already on it)
         if (authMode !== "selection") {
           setAuthMode("selection");
         }
-      } else {
-        // userRoles.length === 0 (pending approval or loading)
+      } else if (userRoles.length === 0) {
+        // No roles assigned yet → show pending approval view
         if (authMode !== "pending") {
           setAuthMode("pending");
         }
       }
     }
-  }, [user, userRoles, isOpen, authMode, navigate]);
+  }, [user, userRoles, isOpen, rolesLoading, authMode, navigate, onClose]);
 
   if (!isOpen) return null;
 
@@ -125,12 +129,6 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading }) => {
     setMessage({ type: "", text: "" });
 
     try {
-      <p className="text-dark-muted font-medium mb-6">
-        {
-          t("login.pending.verifying_permissions", "Verifying permissions...")
-            .text
-        }
-      </p>;
       if (authMode === "register") {
         if (password !== confirmPassword) {
           throw new Error(
