@@ -4,6 +4,7 @@ import { supabase } from "../../utils/supabase";
 import RolePortal from "./RolePortal";
 import AdminUsersView from "./admin/AdminUsersView";
 import AdminFormConfigsView from "./admin/AdminFormConfigsView";
+import TimetableManager from "./admin/timetable/TimetableManager";
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -223,6 +224,15 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       shadow: "shadow-green-200",
       onClick: () => onSetSubView("students"),
     },
+    {
+      id: "timetable",
+      title: "Timetable Planner",
+      description: "Manage classes, teachers, subjects, and schedule conflict-free timetables.",
+      icon: "fa-calendar-alt",
+      buttonColor: "bg-emerald-600 text-white",
+      shadow: "shadow-emerald-200",
+      onClick: () => onSetSubView("timetable"),
+    },
   ];
 
   return (
@@ -273,6 +283,11 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
           onDeleteConfig={handleDeleteConfig}
           onBack={() => onSetSubView(null)}
         />
+      )}
+
+      {/* Timetable Planner view */}
+      {subView === "timetable" && (
+        <TimetableManager />
       )}
 
       {/* Placeholder for student database */}

@@ -21,7 +21,7 @@ const RolePortal = ({
     >
       <div className="w-full">
         <div
-          className={isFullWidth ? "w-full max-w-none" : "max-w-5xl mx-auto"}
+          className={isFullWidth ? "w-full max-w-none" : "max-w-full mx-auto"}
         >
           {/* Status Messages / SubView Content / Children */}
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 w-full">

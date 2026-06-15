@@ -24,6 +24,7 @@ const App = () => {
   const [showLoginPortal, setShowLoginPortal] = useState(false);
   const [adminSubView, setAdminSubView] = useState(null);
   const [managementSubView, setManagementSubView] = useState(null);
+  const [teacherSubView, setTeacherSubView] = useState(null);
 
   const {
     cards,
@@ -122,6 +123,7 @@ const App = () => {
           navigate("/");
           setAdminSubView(null);
           setManagementSubView(null);
+          setTeacherSubView(null);
         }}
       />
 
@@ -136,6 +138,8 @@ const App = () => {
           setAdminSubView={setAdminSubView}
           managementSubView={managementSubView}
           setManagementSubView={setManagementSubView}
+          teacherSubView={teacherSubView}
+          setTeacherSubView={setTeacherSubView}
         />
       </main>
 

@@ -6,7 +6,7 @@ const Header = ({ user, fullName, onLogout, onLoginClick, onLogoClick }) => {
     <header className="bg-light-white shadow-sm sticky top-0 z-40 border-b border-light-border">
       <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         {/* Mobile row: Logo + (if logged in) Logout button on the right */}
-        <div className="flex items-center justify-between sm:justify-start sm:gap-4">
+        <div className="flex items-center justify-between sm:justify-start sm:gap-4 sm:hidden">
           <div className="cursor-pointer shrink-0" onClick={onLogoClick}>
             <img
               src="/media/jzv-rectangle-tranparent.png"

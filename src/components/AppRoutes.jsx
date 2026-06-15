@@ -7,6 +7,7 @@ import RolePortal from "./portals/RolePortal";
 import DynamicForm from "./DynamicForm";
 import { CARD_THEMES } from "../utils/cardTheme";
 import Translate from "./Translate";
+import TeacherTimetableViewer from "./portals/teacher/TeacherTimetableViewer";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -24,6 +25,8 @@ export const AppRoutes = ({
   setAdminSubView,
   managementSubView,
   setManagementSubView,
+  teacherSubView,
+  setTeacherSubView,
 }) => {
   const navigate = useNavigate();
   return (
@@ -93,45 +96,88 @@ export const AppRoutes = ({
           )
         }
       />
-      {["teacher", "parent"].map((role) => {
-        const tiles = [
-          {
-            id: "complaint-register",
-            title: "Complaint Register",
-            titleKey: "role_portal.complaint_register.title",
-            description:
-              "Submit and track your requests or complaints directly with the administration.",
-            descriptionKey: "role_portal.complaint_register.description",
-            icon: "fa-clipboard-list",
-            buttonColor: "bg-orange-primary text-white",
-            onClick: () => openModal("complaint-register"),
-          },
-        ];
-        return (
-          <Route
-            key={role}
-            path={`/portal/${role}`}
-            element={
-              user ? (
-                rolesLoading ? (
-                  portalRouteFallback
-                ) : userRoles.includes(role) ? (
-                  <RolePortal
-                    userRoles={userRoles}
-                    role={role}
-                    tiles={tiles}
-                    openModal={openModal}
-                  />
-                ) : (
-                  <Navigate to="/" replace />
-                )
-              ) : (
-                <Navigate to="/" replace />
-              )
-            }
-          />
-        );
-      })}
+      <Route
+        path="/portal/parent"
+        element={
+          user ? (
+            rolesLoading ? (
+              portalRouteFallback
+            ) : userRoles.includes("parent") ? (
+              <RolePortal
+                userRoles={userRoles}
+                role="parent"
+                tiles={[
+                  {
+                    id: "complaint-register",
+                    title: "Complaint Register",
+                    titleKey: "role_portal.complaint_register.title",
+                    description:
+                      "Submit and track your requests or complaints directly with the administration.",
+                    descriptionKey: "role_portal.complaint_register.description",
+                    icon: "fa-clipboard-list",
+                    buttonColor: "bg-orange-primary text-white",
+                    onClick: () => openModal("complaint-register"),
+                  },
+                ]}
+                openModal={openModal}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+      <Route
+        path="/portal/teacher"
+        element={
+          user ? (
+            rolesLoading ? (
+              portalRouteFallback
+            ) : userRoles.includes("teacher") ? (
+              <RolePortal
+                userRoles={userRoles}
+                role="teacher"
+                tiles={[
+                  {
+                    id: "complaint-register",
+                    title: "Complaint Register",
+                    titleKey: "role_portal.complaint_register.title",
+                    description:
+                      "Submit and track your requests or complaints directly with the administration.",
+                    descriptionKey: "role_portal.complaint_register.description",
+                    icon: "fa-clipboard-list",
+                    buttonColor: "bg-orange-primary text-white",
+                    onClick: () => openModal("complaint-register"),
+                  },
+                  {
+                    id: "view-timetable",
+                    title: "View Timetable",
+                    titleKey: "role_portal.view_timetable.title",
+                    description: "View weekly timetables by class or search schedules by teacher.",
+                    icon: "fa-calendar-alt",
+                    buttonColor: "bg-emerald-600 text-white",
+                    shadow: "shadow-emerald-200",
+                    onClick: () => setTeacherSubView("timetable"),
+                  },
+                ]}
+                subView={teacherSubView}
+                onSetSubView={setTeacherSubView}
+                openModal={openModal}
+              >
+                {teacherSubView === "timetable" && (
+                  <TeacherTimetableViewer />
+                )}
+              </RolePortal>
+            ) : (
+              <Navigate to="/" replace />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
       <Route
         path="/career"
         element={
