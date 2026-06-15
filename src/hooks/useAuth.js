@@ -21,13 +21,33 @@ export const useAuth = () => {
   const currentUserIdRef = useRef(null);
   const authListenerRef = useRef(null);
 
+  // Use refs to avoid dependency loops in callbacks
+  const userRolesRef = useRef([]);
+  const studentIdsRef = useRef("");
+
+  const updateRoles = (roles) => {
+    userRolesRef.current = roles || [];
+    setUserRoles(roles || []);
+  };
+
+  const updateStudentIds = (ids) => {
+    studentIdsRef.current = ids || "";
+    setStudentIds(ids || "");
+  };
+
+  const forceLogout = useCallback(async (userId, reason) => {
+    if (userId) clearUserDataCookie(userId);
+    await supabase.auth.signOut();
+    showToast(reason, "error");
+  }, []);
+
   const fetchRoles = useCallback(
     async (userId, authEvent, initialRolesFromCookie = []) => {
       // Prevent concurrent fetches
       if (fetchingRef.current) return { success: false, cancelled: true };
       // Don't fetch if roles already fetched for this user
       if (rolesFetchedRef.current && currentUserIdRef.current === userId) {
-        return { success: true, roles: userRoles, studentIds };
+        return { success: true, roles: userRolesRef.current, studentIds: studentIdsRef.current };
       }
 
       fetchingRef.current = true;
@@ -46,8 +66,8 @@ export const useAuth = () => {
         if (error) {
           if (error.code === "PGRST116") {
             // No roles found
-            setUserRoles([]);
-            setStudentIds("");
+            updateRoles([]);
+            updateStudentIds("");
             clearUserDataCookie(userId);
             setRolesLoading(false);
             rolesFetchedRef.current = true;
@@ -94,8 +114,8 @@ export const useAuth = () => {
           }
         }
 
-        setUserRoles(roles);
-        setStudentIds(studentIdsValue);
+        updateRoles(roles);
+        updateStudentIds(studentIdsValue);
         setRolesLoading(false);
         rolesFetchedRef.current = true;
         currentUserIdRef.current = userId;
@@ -112,25 +132,56 @@ export const useAuth = () => {
         return { success: false, error: err };
       }
     },
-    [userRoles, studentIds],
-  ); // include dependencies for the returned object, though we'll ensure it's stable
-
-  const forceLogout = useCallback(async (userId, reason) => {
-    if (userId) clearUserDataCookie(userId);
-    await supabase.auth.signOut();
-    showToast(reason, "error");
-  }, []);
+    [forceLogout],
+  );
 
   const handleLogout = useCallback(async () => {
-    if (user) clearUserDataCookie(user.id);
+    localStorage.removeItem("jzv_parent_session");
+    if (user && !user.parentMode) clearUserDataCookie(user.id);
     rolesFetchedRef.current = false;
     fetchingRef.current = false;
     currentUserIdRef.current = null;
     await supabase.auth.signOut();
   }, [user]);
 
+  const loginAsParent = useCallback((student) => {
+    const parentSession = {
+      user: {
+        id: "parent-" + student.admission_no,
+        email: student.mobile1 || "parent@jzv.com",
+        full_name: student.father_name || "Parent",
+        parentMode: true,
+        student,
+      },
+      fullName: student.father_name || "Parent",
+      studentIds: student.admission_no,
+    };
+    localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
+    setUser(parentSession.user);
+    updateRoles(["parent"]);
+    updateStudentIds(parentSession.studentIds);
+    setFullName(parentSession.fullName);
+    setAuthLoading(false);
+  }, []);
+
   // Setup auth state listener only once
   useEffect(() => {
+    // Check if there is a local parent session first
+    const savedParent = localStorage.getItem("jzv_parent_session");
+    if (savedParent) {
+      try {
+        const parsed = JSON.parse(savedParent);
+        setUser(parsed.user);
+        updateRoles(["parent"]);
+        updateStudentIds(parsed.studentIds);
+        setFullName(parsed.fullName);
+        setAuthLoading(false);
+        return;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     // Safety timeout to avoid infinite loading
     const safetyTimeout = setTimeout(() => {
       setAuthLoading(false);
@@ -138,6 +189,12 @@ export const useAuth = () => {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // If parent session is active, ignore Supabase session events
+        if (localStorage.getItem("jzv_parent_session")) {
+          setAuthLoading(false);
+          return;
+        }
+
         const currentUser = session?.user ?? null;
 
         // Avoid duplicate processing if user hasn't changed
@@ -160,13 +217,13 @@ export const useAuth = () => {
 
           if (cookieRoles.length > 0) {
             console.log("[Auth] Using cached roles from cookie");
-            setUserRoles(cookieRoles);
-            setStudentIds(cookieStudentIds);
+            updateRoles(cookieRoles);
+            updateStudentIds(cookieStudentIds);
             rolesFetchedRef.current = true;
             currentUserIdRef.current = currentUser.id;
           } else {
-            setUserRoles([]);
-            setStudentIds("");
+            updateRoles([]);
+            updateStudentIds("");
           }
 
           // Hide loading spinner immediately
@@ -181,13 +238,21 @@ export const useAuth = () => {
 
           if (shouldFetch) {
             console.log("[Auth] Fetching fresh roles from DB");
-            await fetchRoles(currentUser.id, event, cookieRoles);
+            const res = await fetchRoles(currentUser.id, event, cookieRoles);
+            
+            // Allow only existing users added by admin (must have roles)
+            if (res && res.success && (!res.roles || res.roles.length === 0)) {
+              await forceLogout(
+                currentUser.id,
+                "Access Denied: Your account has not been registered by an administrator."
+              );
+            }
           }
         } else {
           // No user – reset everything
-          setUserRoles([]);
+          updateRoles([]);
           setFullName("");
-          setStudentIds("");
+          updateStudentIds("");
           setAuthLoading(false);
           rolesFetchedRef.current = false;
           fetchingRef.current = false;
@@ -202,7 +267,7 @@ export const useAuth = () => {
       clearTimeout(safetyTimeout);
       subscription?.subscription.unsubscribe();
     };
-  }, [fetchRoles]); // fetchRoles is now stable due to useCallback
+  }, [fetchRoles, forceLogout]);
 
   return {
     user,
@@ -212,6 +277,9 @@ export const useAuth = () => {
     rolesLoading,
     authLoading,
     handleLogout,
-    fetchRoles, // expose if needed elsewhere
+    fetchRoles,
+    loginAsParent,
   };
 };
+
+

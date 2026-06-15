@@ -18,7 +18,7 @@ const App = () => {
   const navigate = useNavigate();
   const hasRedirectedRef = useRef(false);
 
-  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout } =
+  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent } =
     useAuth();
 
   const [showLoginPortal, setShowLoginPortal] = useState(false);
@@ -161,6 +161,7 @@ const App = () => {
           user={user}
           userRoles={userRoles}
           rolesLoading={rolesLoading}
+          loginAsParent={loginAsParent}
         />
       )}
 
