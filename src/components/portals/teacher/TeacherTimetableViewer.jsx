@@ -26,79 +26,85 @@ const TeacherTimetableViewer = () => {
   const [periods, setPeriods] = useState([]);
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchTimetableData = async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+    try {
+      // Test if supabase tables exist
+      const { data: testClass, error: testErr } = await supabase
+        .from("classes")
+        .select("id")
+        .limit(1);
+
+      if (testErr) {
+        throw new Error("Supabase tables not found. Loading local data.");
+      }
+
+      // Fetch from Supabase
+      const [
+        { data: dbSubjects },
+        { data: dbTeachers },
+        { data: dbTeacherSubjects },
+        { data: dbClasses },
+        { data: dbSlots },
+        { data: dbPeriods }
+      ] = await Promise.all([
+        supabase.from("subjects").select("*"),
+        supabase.from("teachers").select("*"),
+        supabase.from("teacher_subjects").select("*"),
+        supabase.from("classes").select("*"),
+        supabase.from("timetable_slots").select("*"),
+        supabase.from("periods").select("*").order("period_number", { ascending: true })
+      ]);
+
+      const teachersWithSubjects = (dbTeachers || []).map(t => ({
+        ...t,
+        subjects: (dbTeacherSubjects || [])
+          .filter(ts => String(ts.teacher_id) === String(t.id))
+          .map(ts => ts.subject_id)
+      }));
+
+      setSubjects(dbSubjects || []);
+      setTeachers(teachersWithSubjects);
+      setClasses(dbClasses || []);
+      setSlots(dbSlots || []);
+
+      if (dbPeriods && dbPeriods.length > 0) {
+        setPeriods(dbPeriods);
+      } else {
+        setPeriods(DEFAULT_MOCK_PERIODS);
+      }
+
+    } catch (err) {
+      console.warn("Falling back to local storage for teacher view:", err.message);
+      
+      // Load from LocalStorage
+      const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setSubjects(parsed.subjects || []);
+          setTeachers(parsed.teachers || []);
+          setClasses(parsed.classes || []);
+          setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
+          setSlots(parsed.slots || []);
+        } catch (e) {
+          console.error("Failed to parse local storage in teacher view", e);
+        }
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTimetableData = async () => {
-      setLoading(true);
-      try {
-        // Test if supabase tables exist
-        const { data: testClass, error: testErr } = await supabase
-          .from("classes")
-          .select("id")
-          .limit(1);
-
-        if (testErr) {
-          throw new Error("Supabase tables not found. Loading local data.");
-        }
-
-        // Fetch from Supabase
-        const [
-          { data: dbSubjects },
-          { data: dbTeachers },
-          { data: dbTeacherSubjects },
-          { data: dbClasses },
-          { data: dbSlots },
-          { data: dbPeriods }
-        ] = await Promise.all([
-          supabase.from("subjects").select("*"),
-          supabase.from("teachers").select("*"),
-          supabase.from("teacher_subjects").select("*"),
-          supabase.from("classes").select("*"),
-          supabase.from("timetable_slots").select("*"),
-          supabase.from("periods").select("*").order("period_number", { ascending: true })
-        ]);
-
-        const teachersWithSubjects = (dbTeachers || []).map(t => ({
-          ...t,
-          subjects: (dbTeacherSubjects || [])
-            .filter(ts => String(ts.teacher_id) === String(t.id))
-            .map(ts => ts.subject_id)
-        }));
-
-        setSubjects(dbSubjects || []);
-        setTeachers(teachersWithSubjects);
-        setClasses(dbClasses || []);
-        setSlots(dbSlots || []);
-
-        if (dbPeriods && dbPeriods.length > 0) {
-          setPeriods(dbPeriods);
-        } else {
-          setPeriods(DEFAULT_MOCK_PERIODS);
-        }
-
-      } catch (err) {
-        console.warn("Falling back to local storage for teacher view:", err.message);
-        
-        // Load from LocalStorage
-        const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            setSubjects(parsed.subjects || []);
-            setTeachers(parsed.teachers || []);
-            setClasses(parsed.classes || []);
-            setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
-            setSlots(parsed.slots || []);
-          } catch (e) {
-            console.error("Failed to parse local storage in teacher view", e);
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTimetableData();
+    fetchTimetableData(true);
   }, []);
 
   if (loading) {
@@ -116,6 +122,8 @@ const TeacherTimetableViewer = () => {
       subjects={subjects}
       periods={periods}
       slots={slots}
+      onRefresh={() => fetchTimetableData(false)}
+      refreshing={refreshing}
     />
   );
 };

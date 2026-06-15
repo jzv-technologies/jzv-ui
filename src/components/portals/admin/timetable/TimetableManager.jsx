@@ -791,13 +791,13 @@ const TimetableManager = () => {
     <div className="flex flex-col min-h-[500px]">
       
       {/* Top Banner Control Panel */}
-      <div className="bg-light-lbg/60 border border-light-border p-2 sm:p-6 mb-6 flex flex-col gap-2">
+      <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2">
         {/* Title & Actions Row */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
               <i className="fas fa-calendar-alt text-brand-primary"></i>
-              School Timetable Planner
+              Timetable Planner
             <div className="flex items-center gap-2 mt-1">
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
                 isSupabaseMode ? "bg-green-100 text-green-dark" : "bg-orange-100 text-orange-dark"
@@ -840,6 +840,14 @@ const TimetableManager = () => {
             >
               <i className="fas fa-file-upload"></i> Import JSON
             </button>
+            <button
+                onClick={loadData}
+                disabled={loading}
+                className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
+                title="Refresh Timetable Data"
+              >
+                <i className={`fas fa-sync-alt ${loading ? "animate-spin text-brand-primary" : ""}`}></i>
+              </button>
           </div>
         </div>
 
@@ -870,7 +878,7 @@ const TimetableManager = () => {
       </div>
 
       {/* Loading overlay */}
-      {loading ? (
+      {loading && classes.length === 0 ? (
         <div className="flex-1 flex items-center justify-center py-24">
           <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
         </div>
@@ -884,7 +892,7 @@ const TimetableManager = () => {
                 <div className="bg-light-lbg px-4 py-3 rounded-xl border border-light-border text-xs font-bold text-dark-primary uppercase tracking-wider">
                   Select Class
                 </div>
-                <div className="space-y-2 max-h-[300px] lg:max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[500px] lg:max-h-[calc(100vh-100px)] overflow-y-auto pr-1">
                   {classes.length === 0 ? (
                     <p className="text-xs text-dark-muted italic p-2">No classes found. Set up classes first.</p>
                   ) : (
@@ -968,6 +976,8 @@ const TimetableManager = () => {
               subjects={subjects}
               periods={periods}
               slots={slots}
+              onRefresh={loadData}
+              refreshing={loading}
             />
           )}
 

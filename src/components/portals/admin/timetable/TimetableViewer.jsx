@@ -49,6 +49,8 @@ const TimetableViewer = ({
   subjects = [],
   periods = [],
   slots = [],
+  onRefresh,
+  refreshing = false,
 }) => {
   const [viewType, setViewType] = useState("class"); // "class" | "teacher"
   const [selectedId, setSelectedId] = useState("");
@@ -195,6 +197,19 @@ const TimetableViewer = ({
             />
             <span>Show Breaks</span>
           </label>
+
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="bg-light-bg text-dark-primary hover:bg-light-ui border border-light-border px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Refresh Timetable Data"
+            >
+              <i className={`fas fa-sync-alt ${refreshing ? "animate-spin text-brand-primary" : ""}`}></i>
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          )}
 
           {/* Print Button */}
           <button
