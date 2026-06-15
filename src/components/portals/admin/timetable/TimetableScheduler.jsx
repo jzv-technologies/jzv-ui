@@ -15,6 +15,7 @@ const TimetableScheduler = ({
   const [editingSlot, setEditingSlot] = useState(null); // { day, periodId, periodNumber, subjectId, teacherId }
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [selectedDays, setSelectedDays] = useState([]);
   const [showBreaks, setShowBreaks] = useState(true);
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -40,7 +41,10 @@ const TimetableScheduler = ({
   };
 
   const getSubjectName = (subId) => subjects.find((s) => String(s.id) === String(subId))?.name || "Unknown";
-  const getTeacherName = (tId) => teachers.find((t) => String(t.id) === String(tId))?.name || "Unknown";
+  const getTeacherName = (tId) => {
+    if (!tId) return "Not Assigned";
+    return teachers.find((t) => String(t.id) === String(tId))?.name || "Not Assigned";
+  };
   const getClassName = (cId) => classes.find((c) => String(c.id) === String(cId))?.name || "Unknown";
 
   const handleCellClick = (day, period) => {
@@ -54,6 +58,7 @@ const TimetableScheduler = ({
     });
     setSelectedSubjectId(slot?.subject_id || "");
     setSelectedTeacherId(slot?.teacher_id || "");
+    setSelectedDays([day]);
   };
 
   const handleSubjectChange = (subjectId) => {
@@ -64,6 +69,11 @@ const TimetableScheduler = ({
   const handleSaveSlot = () => {
     if (!editingSlot) return;
 
+    if (selectedDays.length === 0) {
+      alert("Please select at least one day to assign.");
+      return;
+    }
+
     // Validate (double check validation in logic)
     if (selectedTeacherId && selectedSubjectId) {
       const teacher = teachers.find((t) => String(t.id) === String(selectedTeacherId));
@@ -72,20 +82,27 @@ const TimetableScheduler = ({
         return;
       }
 
-      // Check conflict: is teacher busy in another class?
-      const conflictingSlot = slots.find(
-        (s) =>
-          String(s.class_id) !== String(classId) &&
-          s.day === editingSlot.day &&
-          String(s.period_id) === String(editingSlot.periodId) &&
-          String(s.teacher_id) === String(selectedTeacherId)
-      );
+      // Check conflicts: is teacher busy in another class on any of the selected days?
+      const conflicts = [];
+      for (const day of selectedDays) {
+        const conflictingSlot = slots.find(
+          (s) =>
+            String(s.class_id) !== String(classId) &&
+            s.day === day &&
+            String(s.period_id) === String(editingSlot.periodId) &&
+            String(s.teacher_id) === String(selectedTeacherId)
+        );
+        if (conflictingSlot) {
+          conflicts.push({ day, className: getClassName(conflictingSlot.class_id) });
+        }
+      }
 
-      if (conflictingSlot) {
+      if (conflicts.length > 0) {
+        const conflictMessages = conflicts
+          .map((c) => `${c.day} (Busy in ${c.className})`)
+          .join("\n");
         alert(
-          `Conflict Detected: Teacher ${teacher.name} is already assigned to ${getClassName(
-            conflictingSlot.class_id
-          )} on ${editingSlot.day} Period ${editingSlot.periodNumber}.`
+          `Conflict Detected: Teacher ${teacher.name} is already assigned on:\n${conflictMessages}`
         );
         return;
       }
@@ -93,7 +110,7 @@ const TimetableScheduler = ({
 
     onUpdateSlot(
       classId,
-      editingSlot.day,
+      selectedDays,
       editingSlot.periodId,
       selectedSubjectId || null,
       selectedTeacherId || null
@@ -103,7 +120,7 @@ const TimetableScheduler = ({
 
   // Helper to determine teacher options & availability
   const getTeacherOptions = () => {
-    if (!selectedSubjectId) return [];
+    if (!selectedSubjectId || !editingSlot) return [];
 
     // 1. Filter teachers who are qualified for this subject
     const qualified = teachers.filter((t) =>
@@ -168,8 +185,15 @@ const TimetableScheduler = ({
           <div className="text-right">
             <span className="text-xs text-dark-soft font-semibold block">Scheduled Periods</span>
             <span className="text-sm font-extrabold text-brand-primary">
-              {slots.filter((s) => String(s.class_id) === String(classId) && s.subject_id).length} /{" "}
-              {days.length * visiblePeriods.length} slots assigned
+              {
+                slots.filter(
+                  (s) =>
+                    String(s.class_id) === String(classId) &&
+                    s.subject_id &&
+                    !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                ).length
+              } /{" "}
+              {days.length * periods.filter((p) => !p.is_break).length} slots assigned
             </span>
           </div>
         </div>
@@ -217,20 +241,37 @@ const TimetableScheduler = ({
                     const slot = getSlotDetails(day, period.id);
                     const isAssigned = slot && slot.subject_id;
                     const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
-                    const teacher = isAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
+                    const isTeacherAssigned = slot && slot.teacher_id;
+                    const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
                     const isFemale = teacher && teacher.is_male === false;
-                    const colorClass = isFemale
-                      ? "bg-purple-100 text-purple-900 border-purple-200"
-                      : getSubjectColor(subjectName);
+                    
+                    let colorClass = "";
+                    if (isAssigned) {
+                      if (!isTeacherAssigned) {
+                        colorClass = getSubjectColor(subjectName);
+                      } else if (isFemale) {
+                        colorClass = "bg-purple-100 text-purple-900 border-purple-200";
+                      } else {
+                        colorClass = "bg-blue-lbg text-blue-dark border-blue-200";
+                      }
+                    }
 
                     if (isBreak) {
+                      const nameLower = (period.name || "Break").toLowerCase();
+                      let breakIcon = "fa-coffee";
+                      if (nameLower.includes("salah") || nameLower.includes("prayer") || nameLower.includes("namaz") || nameLower.includes("zohr") || nameLower.includes("asr")) {
+                        breakIcon = "fa-mosque";
+                      } else if (nameLower.includes("lunch") || nameLower.includes("breakfast") || nameLower.includes("recess") || nameLower.includes("tea") || nameLower.includes("snack") || nameLower.includes("food") || nameLower.includes("tiffin")) {
+                        breakIcon = "fa-utensils";
+                      }
+
                       return (
                         <td
                           key={period.id || period.period_number}
                           className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5 select-none"
                         >
                           <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                            <i className="fas fa-coffee mb-1 text-xs text-brand-soft"></i>
+                            <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
                             {period.name || "Break"}
                           </div>
                         </td>
@@ -250,10 +291,17 @@ const TimetableScheduler = ({
                             <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
                               {subjectName}
                             </span>
-                            <span className="text-[9px] opacity-90 font-bold truncate">
-                              <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
-                              {getTeacherName(slot.teacher_id)}
-                            </span>
+                            {!isTeacherAssigned ? (
+                              <span className="text-[9px] font-bold truncate text-red-primary flex items-center justify-center gap-1">
+                                <i className="fas fa-exclamation-triangle text-[8px] animate-pulse"></i>
+                                Not Assigned
+                              </span>
+                            ) : (
+                              <span className="text-[9px] opacity-90 font-bold truncate">
+                                <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
+                                {getTeacherName(slot.teacher_id)}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="w-full h-full rounded-xl border border-dashed border-light-border group-hover:border-brand-soft group-hover:bg-brand-lbg/10 flex items-center justify-center text-[10px] text-dark-muted font-bold bg-light-bg/10 transition-all">
@@ -308,15 +356,14 @@ const TimetableScheduler = ({
                   <optgroup label="Class Assigned Subjects">
                     {assignments
                       .filter((a) => String(a.class_id) === String(classId))
-                      .map((a) => {
-                        const sub = subjects.find((s) => String(s.id) === String(a.subject_id));
-                        if (!sub) return null;
-                        return (
-                          <option key={sub.id} value={sub.id}>
-                            {sub.name}
-                          </option>
-                        );
-                      })}
+                      .map((a) => subjects.find((s) => String(s.id) === String(a.subject_id)))
+                      .filter(Boolean)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
                   </optgroup>
 
                   {/* Option Group for Other Database Subjects */}
@@ -328,6 +375,7 @@ const TimetableScheduler = ({
                             (a) => String(a.class_id) === String(classId) && String(a.subject_id) === String(sub.id)
                           )
                       )
+                      .sort((a, b) => a.name.localeCompare(b.name))
                       .map((sub) => (
                         <option key={sub.id} value={sub.id}>
                           {sub.name}
@@ -371,18 +419,78 @@ const TimetableScheduler = ({
                   </p>
                 )}
               </div>
+
+              {/* Select Days to Apply */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide">
+                    Apply to Days
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedDays.length === days.length) {
+                        setSelectedDays([editingSlot.day]);
+                      } else {
+                        setSelectedDays([...days]);
+                      }
+                    }}
+                    className="text-[10px] font-extrabold text-brand-primary hover:text-brand-dark transition-all hover:underline uppercase tracking-wide"
+                  >
+                    {selectedDays.length === days.length ? "Reset to single day" : "Select All Days"}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {days.map((d) => {
+                    const isSelected = selectedDays.includes(d);
+                    return (
+                      <button
+                        type="button"
+                        key={d}
+                        onClick={() => {
+                          setSelectedDays(prev =>
+                            prev.includes(d)
+                              ? prev.filter(day => day !== d)
+                              : [...prev, d]
+                          );
+                        }}
+                        className={`px-3 py-2 rounded-xl border text-xs font-bold select-none transition-all ${
+                          isSelected
+                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                            : "bg-white border-light-border text-dark-soft hover:bg-light-bg/40"
+                        }`}
+                      >
+                        {d.substring(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div className="bg-light-lbg/40 px-6 py-4 flex justify-between gap-3 border-t border-light-border">
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedSubjectId("");
-                  setSelectedTeacherId("");
+                  if (selectedDays.length === 0) {
+                    alert("Please select at least one day to clear.");
+                    return;
+                  }
+                  const dayNames = selectedDays.join(", ");
+                  if (confirm(`Are you sure you want to clear assignments for ${dayNames}?`)) {
+                    onUpdateSlot(
+                      classId,
+                      selectedDays,
+                      editingSlot.periodId,
+                      null,
+                      null
+                    );
+                    setEditingSlot(null);
+                  }
                 }}
-                className="text-red-primary hover:text-red-dark hover:bg-red-lbg/50 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                className="text-red-primary hover:text-red-dark hover:bg-red-lbg/50 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-red-soft"
               >
-                Clear Slot
+                Clear Slot(s)
               </button>
 
               <div className="flex gap-2">

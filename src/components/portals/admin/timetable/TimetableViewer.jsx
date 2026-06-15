@@ -80,7 +80,10 @@ const TimetableViewer = ({
 
   // Find entity names using robust String comparisons
   const getSubjectName = (subId) => subjects.find((s) => String(s.id) === String(subId))?.name || "Unknown";
-  const getTeacherName = (tId) => teachers.find((t) => String(t.id) === String(tId))?.name || "Unknown";
+  const getTeacherName = (tId) => {
+    if (!tId) return "Not Assigned";
+    return teachers.find((t) => String(t.id) === String(tId))?.name || "Not Assigned";
+  };
   const getClassName = (cId) => classes.find((c) => String(c.id) === String(cId))?.name || "Unknown";
 
   // Filter slots based on view type and selection
@@ -153,11 +156,13 @@ const TimetableViewer = ({
               {classes.length === 0 ? (
                 <option value="">No Classes</option>
               ) : (
-                classes.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))
+                [...classes]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))
               )}
             </select>
           ) : (
@@ -169,11 +174,13 @@ const TimetableViewer = ({
               {teachers.length === 0 ? (
                 <option value="">No Teachers</option>
               ) : (
-                teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))
+                [...teachers]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))
               )}
             </select>
           )}
@@ -263,20 +270,37 @@ const TimetableViewer = ({
                     const slot = getSlotDetails(day, period.id);
                     const isAssigned = slot && slot.subject_id;
                     const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
-                    const teacher = isAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
+                    const isTeacherAssigned = slot && slot.teacher_id;
+                    const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
                     const isFemale = teacher && teacher.is_male === false;
-                    const colorClass = isFemale
-                      ? "bg-purple-100 text-purple-900 border-purple-200"
-                      : getSubjectColor(subjectName);
+                    
+                    let colorClass = "";
+                    if (isAssigned) {
+                      if (!isTeacherAssigned) {
+                        colorClass = getSubjectColor(subjectName);
+                      } else if (isFemale) {
+                        colorClass = "bg-purple-100 text-purple-900 border-purple-200";
+                      } else {
+                        colorClass = "bg-blue-lbg text-blue-dark border-blue-200";
+                      }
+                    }
 
                     if (isBreak) {
+                      const nameLower = (period.name || "Break").toLowerCase();
+                      let breakIcon = "fa-coffee";
+                      if (nameLower.includes("salah") || nameLower.includes("prayer") || nameLower.includes("namaz") || nameLower.includes("zohr") || nameLower.includes("asr")) {
+                        breakIcon = "fa-mosque";
+                      } else if (nameLower.includes("lunch") || nameLower.includes("breakfast") || nameLower.includes("recess") || nameLower.includes("tea") || nameLower.includes("snack") || nameLower.includes("food") || nameLower.includes("tiffin")) {
+                        breakIcon = "fa-utensils";
+                      }
+
                       return (
                         <td
                           key={period.id || period.period_number}
                           className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
                         >
                           <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                            <i className="fas fa-coffee mb-1 text-xs text-brand-soft"></i>
+                            <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
                             {period.name || "Break"}
                           </div>
                         </td>
@@ -295,19 +319,24 @@ const TimetableViewer = ({
                             <span className="font-extrabold text-xs tracking-wide uppercase truncate">
                               {subjectName}
                             </span>
-                            <span className="text-[10px] opacity-90 font-bold truncate">
-                              {viewType === "class" ? (
-                                <>
+                            {viewType === "class" ? (
+                              !isTeacherAssigned ? (
+                                <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
+                                  <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
+                                  Not Assigned
+                                </span>
+                              ) : (
+                                <span className="text-[10px] opacity-90 font-bold truncate">
                                   <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[9px]`}></i>
                                   {getTeacherName(slot.teacher_id)}
-                                </>
-                              ) : (
-                                <>
-                                  <i className="fas fa-school mr-1 text-[9px]"></i>
-                                  {getClassName(slot.class_id)}
-                                </>
-                              )}
-                            </span>
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] opacity-90 font-bold truncate">
+                                <i className="fas fa-school mr-1 text-[9px]"></i>
+                                {getClassName(slot.class_id)}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="w-full h-full rounded-xl border border-dashed border-light-border flex items-center justify-center text-xs text-dark-muted font-bold bg-light-bg/20">

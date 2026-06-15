@@ -229,8 +229,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       title: "Timetable Planner",
       description: "Manage classes, teachers, subjects, and schedule conflict-free timetables.",
       icon: "fa-calendar-alt",
-      buttonColor: "bg-emerald-600 text-white",
-      shadow: "shadow-emerald-200",
+      buttonColor: "bg-brand-primary text-white",
+      shadow: "shadow-brand-lbg",
       onClick: () => onSetSubView("timetable"),
     },
   ];

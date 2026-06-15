@@ -592,78 +592,83 @@ const TimetableManager = () => {
   };
 
   // SLOT ASSIGNMENT HANDLER (THE CORE SCHEDULING CALCULATION)
-  const handleUpdateSlot = async (classId, day, periodId, subjectId, teacherId) => {
-    const existingIndex = slots.findIndex(
-      s => String(s.class_id) === String(classId) && s.day === day && String(s.period_id) === String(periodId)
-    );
-
+  const handleUpdateSlot = async (classId, dayOrDays, periodId, subjectId, teacherId) => {
+    const targetDays = Array.isArray(dayOrDays) ? dayOrDays : [dayOrDays];
     let updatedSlots = [...slots];
-    const newSlotVal = {
-      class_id: classId,
-      day,
-      period_id: periodId,
-      subject_id: subjectId,
-      teacher_id: teacherId
-    };
 
-    if (existingIndex > -1) {
+    // Local state updates first
+    for (const day of targetDays) {
+      const existingIndex = updatedSlots.findIndex(
+        s => String(s.class_id) === String(classId) && s.day === day && String(s.period_id) === String(periodId)
+      );
+
       if (subjectId === null && teacherId === null) {
-        // Remove empty slots to save space
-        const slotId = slots[existingIndex].id;
-        updatedSlots.splice(existingIndex, 1);
-
-        if (isSupabaseMode && slotId && !slotId.toString().startsWith("local-")) {
-          try {
-            await supabase.from("timetable_slots").delete().eq("id", slotId);
-          } catch (err) {
-            console.error(err);
-          }
+        // Clear slot
+        if (existingIndex > -1) {
+          updatedSlots.splice(existingIndex, 1);
         }
       } else {
-        // Update slot
-        const slotId = slots[existingIndex].id;
-        updatedSlots[existingIndex] = { ...slots[existingIndex], ...newSlotVal };
-
-        if (isSupabaseMode && slotId && !slotId.toString().startsWith("local-")) {
-          try {
-            const { error } = await supabase
-              .from("timetable_slots")
-              .update({ subject_id: subjectId, teacher_id: teacherId })
-              .eq("id", slotId);
-            if (error) throw error;
-          } catch (err) {
-            alert("DB Error: " + err.message);
-            return;
-          }
+        // Assign slot
+        const newSlotVal = {
+          class_id: classId,
+          day,
+          period_id: periodId,
+          subject_id: subjectId,
+          teacher_id: teacherId
+        };
+        if (existingIndex > -1) {
+          updatedSlots[existingIndex] = { ...updatedSlots[existingIndex], ...newSlotVal };
+        } else {
+          updatedSlots.push({ id: generateLocalId(), ...newSlotVal });
         }
       }
-    } else {
-      if (subjectId !== null || teacherId !== null) {
-        // Insert new slot
-        const newLocalId = generateLocalId();
-        const slotObj = { id: newLocalId, ...newSlotVal };
-        updatedSlots.push(slotObj);
+    }
 
-        if (isSupabaseMode && !classId.toString().startsWith("local-")) {
-          try {
-            const { data, error } = await supabase
-              .from("timetable_slots")
-              .insert([{
-                class_id: classId,
-                day,
-                period_id: periodId,
-                subject_id: subjectId,
-                teacher_id: teacherId
-              }])
-              .select();
-            if (error) throw error;
-            // replace last element
-            updatedSlots[updatedSlots.length - 1] = data[0];
-          } catch (err) {
-            alert("DB Error: " + err.message);
-            return;
+    // Supabase DB Sync
+    if (isSupabaseMode && !String(classId).startsWith("local-")) {
+      try {
+        if (subjectId === null && teacherId === null) {
+          // Batch delete from db
+          const { error } = await supabase
+            .from("timetable_slots")
+            .delete()
+            .eq("class_id", classId)
+            .eq("period_id", periodId)
+            .in("day", targetDays);
+          if (error) throw error;
+        } else {
+          // Batch upsert to db
+          const upsertPayload = targetDays.map(day => ({
+            class_id: classId,
+            day,
+            period_id: periodId,
+            subject_id: subjectId,
+            teacher_id: teacherId
+          }));
+
+          const { data, error } = await supabase
+            .from("timetable_slots")
+            .upsert(upsertPayload, { onConflict: "class_id,day,period_id" })
+            .select();
+          if (error) throw error;
+
+          // Replace local slots with returned DB slots to have real IDs
+          if (data && data.length > 0) {
+            data.forEach(dbSlot => {
+              const idx = updatedSlots.findIndex(
+                s => String(s.class_id) === String(dbSlot.class_id) && s.day === dbSlot.day && String(s.period_id) === String(dbSlot.period_id)
+              );
+              if (idx > -1) {
+                updatedSlots[idx] = dbSlot;
+              } else {
+                updatedSlots.push(dbSlot);
+              }
+            });
           }
         }
+      } catch (err) {
+        alert("DB Error: " + err.message);
+        return;
       }
     }
 
@@ -772,9 +777,13 @@ const TimetableManager = () => {
   };
 
   const getCompletionPercentage = (classId) => {
-    const totalSlots = 6 * periods.length;
+    const nonBreakPeriods = periods.filter(p => !p.is_break);
+    const totalSlots = 6 * nonBreakPeriods.length;
     if (totalSlots === 0) return 0;
-    const assignedSlots = slots.filter(s => s.class_id === classId && s.subject_id).length;
+    const nonBreakPeriodIds = nonBreakPeriods.map(p => String(p.id));
+    const assignedSlots = slots.filter(
+      s => String(s.class_id) === String(classId) && s.subject_id && nonBreakPeriodIds.includes(String(s.period_id))
+    ).length;
     return Math.round((assignedSlots / totalSlots) * 100);
   };
 
@@ -782,79 +791,82 @@ const TimetableManager = () => {
     <div className="flex flex-col min-h-[500px]">
       
       {/* Top Banner Control Panel */}
-      <div className="bg-light-lbg/60 border border-light-border p-4 sm:p-6 rounded-3xl mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
-            <i className="fas fa-calendar-alt text-brand-primary"></i>
-            School Timetable Planner
-          </h2>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              isSupabaseMode ? "bg-green-100 text-green-dark" : "bg-orange-100 text-orange-dark"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseMode ? "bg-green-bright" : "bg-orange-primary"}`}></span>
-              {isSupabaseMode ? "Supabase Connected" : "Local Offline Mode (LocalStorage)"}
-            </span>
+      <div className="bg-light-lbg/60 border border-light-border p-2 sm:p-6 mb-6 flex flex-col gap-2">
+        {/* Title & Actions Row */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
+              <i className="fas fa-calendar-alt text-brand-primary"></i>
+              School Timetable Planner
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                isSupabaseMode ? "bg-green-100 text-green-dark" : "bg-orange-100 text-orange-dark"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseMode ? "bg-green-bright" : "bg-orange-primary"}`}></span>
+                {isSupabaseMode ? "Supabase Connected" : "Local Offline Mode (LocalStorage)"}
+              </span>
+              <button
+                onClick={() => setActiveTab("sync")}
+                className="text-[10px] text-brand-primary font-bold hover:underline"
+              >
+                Configure Database
+              </button>
+            </div>
+            </h2>
+          </div>
+
+          {/* Export / Import backup */}
+          <div className="flex items-center gap-2 w-full md:w-auto">
             <button
-              onClick={() => setActiveTab("sync")}
-              className="text-[10px] text-brand-primary font-bold hover:underline"
+              onClick={handleExportJson}
+              className="flex-1 md:flex-none bg-brand-primary hover:bg-brand-dark text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
+              title="Download full timetable configuration in JSON format"
             >
-              Configure Database
+              <i className="fas fa-file-download"></i> Finalize & Export JSON
+            </button>
+            
+            <input
+              type="file"
+              accept=".json"
+              ref={fileInputRef}
+              onChange={handleImportJson}
+              className="hidden"
+            />
+            
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 md:flex-none bg-white hover:bg-light-ui border border-light-border text-dark-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
+              title="Upload/restore timetable config from a JSON file"
+            >
+              <i className="fas fa-file-upload"></i> Import JSON
             </button>
           </div>
         </div>
 
-        {/* Export / Import backup */}
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <button
-            onClick={handleExportJson}
-            className="flex-1 md:flex-none bg-brand-primary hover:bg-brand-dark text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
-            title="Download full timetable configuration in JSON format"
-          >
-            <i className="fas fa-file-download"></i> Finalize & Export JSON
-          </button>
-          
-          <input
-            type="file"
-            accept=".json"
-            ref={fileInputRef}
-            onChange={handleImportJson}
-            className="hidden"
-          />
-          
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex-1 md:flex-none bg-light-bg hover:bg-light-ui border border-light-border text-dark-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
-            title="Upload/restore timetable config from a JSON file"
-          >
-            <i className="fas fa-file-upload"></i> Import JSON
-          </button>
+        {/* Workspace Tabs (Inside the Top Banner Card) */}
+        <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1 pt-2">
+          {[
+            { id: "grid", label: "Scheduler Grid", icon: "fa-th-large" },
+            { id: "view", label: "Preview & Print", icon: "fa-eye" },
+            { id: "classes", label: "Classes Setup", icon: "fa-school" },
+            { id: "teachers", label: "Teachers Setup", icon: "fa-chalkboard-teacher" },
+            { id: "subjects", label: "Subjects Setup", icon: "fa-book" },
+            { id: "periods", label: "Periods Setup", icon: "fa-clock" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap pb-3 -mb-[2px] ${
+                activeTab === tab.id
+                  ? "border-brand-primary text-brand-primary"
+                  : "border-transparent text-white-50 hover:text-dark-primary hover:border-light-border"
+              }`}
+            >
+              <i className={`fas ${tab.icon}`}></i>
+              {tab.label}
+            </button>
+          ))}
         </div>
-      </div>
-
-      {/* Workspace Tabs */}
-      <div className="flex border-b border-light-border mb-6 overflow-x-auto scrollbar-hide gap-1">
-        {[
-          { id: "grid", label: "Scheduler Grid", icon: "fa-th-large" },
-          { id: "view", label: "Preview & Print", icon: "fa-eye" },
-          { id: "classes", label: "Classes Setup", icon: "fa-school" },
-          { id: "teachers", label: "Teachers Setup", icon: "fa-chalkboard-teacher" },
-          { id: "subjects", label: "Subjects Setup", icon: "fa-book" },
-          { id: "periods", label: "Periods Setup", icon: "fa-clock" },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === tab.id
-                ? "border-brand-primary text-brand-primary"
-                : "border-transparent text-dark-soft hover:text-dark-primary hover:border-light-border"
-            }`}
-          >
-            <i className={`fas ${tab.icon}`}></i>
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Loading overlay */}

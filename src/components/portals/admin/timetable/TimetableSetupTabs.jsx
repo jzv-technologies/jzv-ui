@@ -84,7 +84,9 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
                 </td>
               </tr>
             ) : (
-              subjects.map((sub) => (
+              [...subjects]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((sub) => (
                 <tr key={sub.id} className="hover:bg-light-bg/20 transition-colors">
                   <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
                     {editingId === sub.id ? (
@@ -216,6 +218,7 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
     return subjectIds
       .map(id => subjects.find(s => String(s.id) === String(id))?.name)
       .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
       .join(", ");
   };
 
@@ -256,7 +259,7 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                 <p className="text-xs text-dark-muted italic">Please add subjects first.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {subjects.map(sub => (
+                  {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
                     <label key={sub.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-light-border hover:bg-light-bg/20 transition-all cursor-pointer">
                       <input
                         type="checkbox"
@@ -313,7 +316,7 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
             <div>
               <p className="text-xs font-bold text-dark-soft mb-2">Update Qualified Subjects:</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {subjects.map(sub => (
+                {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
                   <label key={sub.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-light-border hover:bg-light-bg/20 transition-all cursor-pointer">
                     <input
                       type="checkbox"
@@ -349,7 +352,9 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                 </td>
               </tr>
             ) : (
-              teachers.map((teacher) => (
+              [...teachers]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((teacher) => (
                 <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
                   <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
                     {teacher.name}
@@ -467,7 +472,9 @@ export const ClassesSetup = ({
   // Filter teachers based on chosen subject
   const getQualifiedTeachers = (subjectId) => {
     if (!subjectId) return [];
-    return teachers.filter(t => t.subjects && t.subjects.some(sid => String(sid) === String(subjectId)));
+    return teachers
+      .filter(t => t.subjects && t.subjects.some(sid => String(sid) === String(subjectId)))
+      .sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const handleAddAssignment = (e) => {
@@ -627,7 +634,7 @@ export const ClassesSetup = ({
                     required
                   >
                     <option value="">-- Choose Subject --</option>
-                    {subjects.map(s => (
+                    {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
