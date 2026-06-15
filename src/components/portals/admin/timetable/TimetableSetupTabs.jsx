@@ -152,17 +152,20 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
 export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeacher, onDeleteTeacher, slots, assignments }) => {
   const [name, setName] = useState("");
   const [selectedSubjects, setSelectedSubjects] = useState([]);
+  const [isMale, setIsMale] = useState(true);
   
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [editName, setEditName] = useState("");
   const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
+  const [editIsMale, setEditIsMale] = useState(true);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAddTeacher(name.trim(), selectedSubjects);
+    onAddTeacher(name.trim(), selectedSubjects, isMale);
     setName("");
     setSelectedSubjects([]);
+    setIsMale(true);
   };
 
   const handleSubjectToggle = (subId, isEdit = false) => {
@@ -185,11 +188,12 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
     setEditingTeacher(teacher);
     setEditName(teacher.name);
     setEditSelectedSubjects(teacher.subjects || []);
+    setEditIsMale(teacher.is_male !== false);
   };
 
   const handleSaveEdit = () => {
     if (!editName.trim()) return;
-    onUpdateTeacher(editingTeacher.id, editName.trim(), editSelectedSubjects);
+    onUpdateTeacher(editingTeacher.id, editName.trim(), editSelectedSubjects, editIsMale);
     setEditingTeacher(null);
   };
 
@@ -230,6 +234,14 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                 onChange={(e) => setName(e.target.value)}
                 className="flex-1 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
               />
+              <select
+                value={isMale ? "male" : "female"}
+                onChange={(e) => setIsMale(e.target.value === "male")}
+                className="bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft min-w-[120px]"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
               <button
                 type="submit"
                 className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 transition-all md:w-auto w-full justify-center"
@@ -274,6 +286,14 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                 onChange={(e) => setEditName(e.target.value)}
                 className="flex-1 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
               />
+              <select
+                value={editIsMale ? "male" : "female"}
+                onChange={(e) => setEditIsMale(e.target.value === "male")}
+                className="bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft min-w-[120px]"
+              >
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveEdit}
@@ -316,6 +336,7 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
           <thead>
             <tr className="bg-light-lbg border-b border-light-border">
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Teacher Name</th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Gender</th>
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Qualified Subjects</th>
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">Actions</th>
             </tr>
@@ -323,7 +344,7 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
           <tbody className="divide-y divide-light-border">
             {teachers.length === 0 ? (
               <tr>
-                <td colSpan="3" className="py-8 text-center text-dark-muted text-sm">
+                <td colSpan="4" className="py-8 text-center text-dark-muted text-sm">
                   No teachers configured. Add one above!
                 </td>
               </tr>
@@ -332,6 +353,17 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                 <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
                   <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
                     {teacher.name}
+                  </td>
+                  <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
+                    {teacher.is_male !== false ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                        <i className="fas fa-mars text-[10px]"></i> Male
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
+                        <i className="fas fa-venus text-[10px]"></i> Female
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-xs font-semibold text-dark-soft max-w-md">
                     {getSubjectNamesStr(teacher.subjects)}

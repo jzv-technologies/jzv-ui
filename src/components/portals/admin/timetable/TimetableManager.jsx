@@ -28,12 +28,12 @@ const DEFAULT_MOCK_SUBJECTS = [
 ];
 
 const DEFAULT_MOCK_TEACHERS = [
-  { id: "t-1", name: "Maulana Abdur Rahman", subjects: ["sub-4", "sub-5", "sub-6"] },
-  { id: "t-2", name: "Ms. Ayesha Siddiqua", subjects: ["sub-2", "sub-6"] },
-  { id: "t-3", name: "Mr. Mohammed Khan", subjects: ["sub-1", "sub-7"] },
-  { id: "t-4", name: "Dr. Sarah Fatima", subjects: ["sub-3", "sub-1"] },
-  { id: "t-5", name: "Maulana Bilal Ahmed", subjects: ["sub-5", "sub-4"] },
-  { id: "t-6", name: "Mrs. Zainab Patel", subjects: ["sub-2", "sub-3"] },
+  { id: "t-1", name: "Maulana Abdur Rahman", subjects: ["sub-4", "sub-5", "sub-6"], is_male: true },
+  { id: "t-2", name: "Ms. Ayesha Siddiqua", subjects: ["sub-2", "sub-6"], is_male: false },
+  { id: "t-3", name: "Mr. Mohammed Khan", subjects: ["sub-1", "sub-7"], is_male: true },
+  { id: "t-4", name: "Dr. Sarah Fatima", subjects: ["sub-3", "sub-1"], is_male: false },
+  { id: "t-5", name: "Maulana Bilal Ahmed", subjects: ["sub-5", "sub-4"], is_male: true },
+  { id: "t-6", name: "Mrs. Zainab Patel", subjects: ["sub-2", "sub-3"], is_male: false },
 ];
 
 const DEFAULT_MOCK_CLASSES = [
@@ -320,8 +320,8 @@ const TimetableManager = () => {
   };
 
   // TEACHER ACTION HANDLERS
-  const handleAddTeacher = async (name, qualifiedSubjects) => {
-    const newTeacher = { id: generateLocalId(), name, subjects: qualifiedSubjects };
+  const handleAddTeacher = async (name, qualifiedSubjects, isMale = true) => {
+    const newTeacher = { id: generateLocalId(), name, subjects: qualifiedSubjects, is_male: isMale };
     let updatedTeachers = [...teachers, newTeacher];
 
     if (isSupabaseMode) {
@@ -329,7 +329,7 @@ const TimetableManager = () => {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
           .from("teachers")
-          .insert([{ name }])
+          .insert([{ name, is_male: isMale }])
           .select();
         
         if (teacherErr) throw teacherErr;
@@ -356,8 +356,8 @@ const TimetableManager = () => {
     saveState({ teachers: updatedTeachers });
   };
 
-  const handleUpdateTeacher = async (id, name, qualifiedSubjects) => {
-    const updatedTeachers = teachers.map(t => String(t.id) === String(id) ? { ...t, name, subjects: qualifiedSubjects } : t);
+  const handleUpdateTeacher = async (id, name, qualifiedSubjects, isMale = true) => {
+    const updatedTeachers = teachers.map(t => String(t.id) === String(id) ? { ...t, name, subjects: qualifiedSubjects, is_male: isMale } : t);
 
     // Also verify currently assigned classes/slots for this teacher
     // If a subject is removed from the teacher's qualifications, clear those assignments/slots
@@ -380,7 +380,7 @@ const TimetableManager = () => {
         // 1. Update teachers table
         const { error: teacherErr } = await supabase
           .from("teachers")
-          .update({ name })
+          .update({ name, is_male: isMale })
           .eq("id", id);
         if (teacherErr) throw teacherErr;
 

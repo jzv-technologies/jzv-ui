@@ -217,7 +217,11 @@ const TimetableScheduler = ({
                     const slot = getSlotDetails(day, period.id);
                     const isAssigned = slot && slot.subject_id;
                     const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
-                    const colorClass = getSubjectColor(subjectName);
+                    const teacher = isAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
+                    const isFemale = teacher && teacher.is_male === false;
+                    const colorClass = isFemale
+                      ? "bg-purple-100 text-purple-900 border-purple-200"
+                      : getSubjectColor(subjectName);
 
                     if (isBreak) {
                       return (
@@ -247,7 +251,7 @@ const TimetableScheduler = ({
                               {subjectName}
                             </span>
                             <span className="text-[9px] opacity-90 font-bold truncate">
-                              <i className="fas fa-chalkboard-teacher mr-1 text-[8px]"></i>
+                              <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
                               {getTeacherName(slot.teacher_id)}
                             </span>
                           </div>
