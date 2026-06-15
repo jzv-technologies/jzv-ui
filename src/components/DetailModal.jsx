@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 const DetailModal = ({
   record,
@@ -16,6 +16,16 @@ const DetailModal = ({
   editableFields = {},
   renderField = null,
 }) => {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   if (!record) return null;
 
   return (

@@ -8,6 +8,7 @@ import DynamicForm from "./DynamicForm";
 import { CARD_THEMES } from "../utils/cardTheme";
 import Translate from "./Translate";
 import TeacherTimetableViewer from "./portals/teacher/TeacherTimetableViewer";
+import TeacherStudentsViewer from "./portals/teacher/TeacherStudentsViewer";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -161,6 +162,15 @@ export const AppRoutes = ({
                     shadow: "shadow-emerald-200",
                     onClick: () => setTeacherSubView("timetable"),
                   },
+                  {
+                    id: "students",
+                    title: "Student Records",
+                    description: "Browse student list and search details.",
+                    icon: "fa-user-graduate",
+                    buttonColor: "bg-brand-primary text-white",
+                    shadow: "shadow-brand-lbg",
+                    onClick: () => setTeacherSubView("students"),
+                  },
                 ]}
                 subView={teacherSubView}
                 onSetSubView={setTeacherSubView}
@@ -168,6 +178,9 @@ export const AppRoutes = ({
               >
                 {teacherSubView === "timetable" && (
                   <TeacherTimetableViewer />
+                )}
+                {teacherSubView === "students" && (
+                  <TeacherStudentsViewer />
                 )}
               </RolePortal>
             ) : (

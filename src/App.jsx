@@ -10,7 +10,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useModal } from "./hooks/useModal";
 import { AppRoutes } from "./components/AppRoutes";
 import { LoadingFallback } from "./components/LoadingFallback";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const App = () => {
   useGoogleTranslate();
@@ -76,6 +76,17 @@ const App = () => {
       hasRedirectedRef.current = false;
     }
   }, [user]);
+
+  const location = useLocation();
+
+  // Reset portal subview states when navigating to main selection portal or homepage
+  useEffect(() => {
+    if (location.pathname === "/portal" || location.pathname === "/") {
+      setAdminSubView(null);
+      setManagementSubView(null);
+      setTeacherSubView(null);
+    }
+  }, [location.pathname]);
 
   // Custom handler for card clicks (fixes "My Portal" navigation)
   const handleCardClick = (id) => {

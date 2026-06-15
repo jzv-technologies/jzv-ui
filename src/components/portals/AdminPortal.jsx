@@ -5,6 +5,7 @@ import RolePortal from "./RolePortal";
 import AdminUsersView from "./admin/AdminUsersView";
 import AdminFormConfigsView from "./admin/AdminFormConfigsView";
 import TimetableManager from "./admin/timetable/TimetableManager";
+import AdminStudentsView from "./admin/AdminStudentsView";
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -290,25 +291,9 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
         <TimetableManager />
       )}
 
-      {/* Placeholder for student database */}
+      {/* Student Database view */}
       {subView === "students" && (
-        <div className="bg-white p-20 rounded-3xl border border-light-border text-center">
-          <div className="w-20 h-20 bg-green-50 text-green-primary rounded-full flex items-center justify-center mx-auto mb-6 text-3xl">
-            <i className="fas fa-graduation-cap"></i>
-          </div>
-          <h3 className="text-2xl font-bold text-dark-deepblue mb-2">
-            Student Database
-          </h3>
-          <p className="text-dark-muted">
-            Student management module is coming soon.
-          </p>
-          <button
-            onClick={() => onSetSubView(null)}
-            className="mt-8 text-orange-primary font-bold hover:underline"
-          >
-            Go Back
-          </button>
-        </div>
+        <AdminStudentsView />
       )}
     </RolePortal>
   );
