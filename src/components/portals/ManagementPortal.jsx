@@ -5,6 +5,15 @@ import DataGrid from "../DataGrid";
 import DetailModal from "../DetailModal";
 import { supabase } from "../../utils/supabase";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../data/mockStudents";
+import TimetableAdminView from "./admin/timetable/TimetableAdminView";
+import {
+  TIMETABLE_STORAGE_KEY,
+  MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
+  MOCK_TEACHERS as DEFAULT_MOCK_TEACHERS,
+  MOCK_CLASSES as DEFAULT_MOCK_CLASSES,
+  MOCK_PERIODS as DEFAULT_MOCK_PERIODS,
+  MOCK_SLOTS as DEFAULT_MOCK_SLOTS,
+} from "../../data/mockTimetable";
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -19,10 +28,94 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
   const [editResolution, setEditResolution] = useState("");
   const [savingRecord, setSavingRecord] = useState(false);
 
+  // Timetable state (read-only for management)
+  const [ttSubjects, setTtSubjects] = useState([]);
+  const [ttTeachers, setTtTeachers] = useState([]);
+  const [ttClasses, setTtClasses] = useState([]);
+  const [ttPeriods, setTtPeriods] = useState([]);
+  const [ttAssignments, setTtAssignments] = useState([]);
+  const [ttSlots, setTtSlots] = useState([]);
+  const [ttLoading, setTtLoading] = useState(false);
+
   // UUID mapping
   const uuidMap = {
     resumes: "career",
     complaints: "complaint",
+  };
+
+  // ── Timetable data fetch (read-only) ─────────────────────────────────────
+  const fetchTimetableData = async () => {
+    setTtLoading(true);
+    try {
+      const { data: testClass, error: testErr } = await supabase
+        .from('classes')
+        .select('id')
+        .limit(1);
+
+      if (testErr) throw new Error('Supabase not available');
+
+      const [
+        { data: dbSubjects },
+        { data: dbTeachers },
+        { data: dbTeacherSubjects },
+        { data: dbClasses },
+        { data: dbAssignments },
+        { data: dbSlots },
+        { data: dbPeriods },
+      ] = await Promise.all([
+        supabase.from('subjects').select('*'),
+        supabase.from('teachers').select('*'),
+        supabase.from('teacher_subjects').select('*'),
+        supabase.from('classes').select('*'),
+        supabase.from('class_assignments').select('*'),
+        supabase.from('timetable_slots').select('*'),
+        supabase.from('periods').select('*').order('period_number', { ascending: true }),
+      ]);
+
+      const teachersWithSubjects = (dbTeachers || []).map((t) => ({
+        ...t,
+        subjects: (dbTeacherSubjects || [])
+          .filter((ts) => String(ts.teacher_id) === String(t.id))
+          .map((ts) => ts.subject_id),
+      }));
+
+      setTtSubjects(dbSubjects || []);
+      setTtTeachers(teachersWithSubjects);
+      setTtClasses(dbClasses || []);
+      setTtAssignments(dbAssignments || []);
+      setTtSlots(dbSlots || []);
+      setTtPeriods(dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS);
+    } catch (err) {
+      // Fallback to localStorage / mock data
+      const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setTtSubjects(parsed.subjects || DEFAULT_MOCK_SUBJECTS);
+          setTtTeachers(parsed.teachers || DEFAULT_MOCK_TEACHERS);
+          setTtClasses(parsed.classes || DEFAULT_MOCK_CLASSES);
+          setTtPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
+          setTtAssignments(parsed.assignments || []);
+          setTtSlots(parsed.slots || DEFAULT_MOCK_SLOTS);
+        } catch (e) {
+          setTtSubjects(DEFAULT_MOCK_SUBJECTS);
+          setTtTeachers(DEFAULT_MOCK_TEACHERS);
+          setTtClasses(DEFAULT_MOCK_CLASSES);
+          setTtPeriods(DEFAULT_MOCK_PERIODS);
+          setTtAssignments([]);
+          setTtSlots(DEFAULT_MOCK_SLOTS);
+        }
+      } else {
+        setTtSubjects(DEFAULT_MOCK_SUBJECTS);
+        setTtTeachers(DEFAULT_MOCK_TEACHERS);
+        setTtClasses(DEFAULT_MOCK_CLASSES);
+        setTtPeriods(DEFAULT_MOCK_PERIODS);
+        setTtAssignments([]);
+        setTtSlots(DEFAULT_MOCK_SLOTS);
+      }
+    } finally {
+      setTtLoading(false);
+    }
   };
 
   const fetchStudents = async () => {
@@ -149,6 +242,8 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       fetchSubmissions(uuidMap[subView]);
     } else if (subView === "students") {
       fetchStudents();
+    } else if (subView === "timetable") {
+      fetchTimetableData();
     }
   }, [subView]);
 
@@ -179,6 +274,15 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       buttonColor: "bg-emerald-600 text-white",
       shadow: "shadow-emerald-200",
       onClick: () => onSetSubView("students"),
+    },
+    {
+      id: "timetable",
+      title: "Timetable Viewer",
+      description: "View all class and teacher schedules across the school.",
+      icon: "fa-calendar-alt",
+      buttonColor: "bg-brand-primary text-white",
+      shadow: "shadow-brand-lbg",
+      onClick: () => onSetSubView("timetable"),
     },
     {
       id: "take-test",
@@ -381,6 +485,25 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
         ? renderTableView()
         : null}
       {subView === "take-test" ? renderTakeTestView() : null}
+      {subView === "timetable" && (
+        ttLoading ? (
+          <div className="flex items-center justify-center py-24">
+            <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <TimetableAdminView
+            classes={ttClasses}
+            teachers={ttTeachers}
+            subjects={ttSubjects}
+            periods={ttPeriods}
+            slots={ttSlots}
+            assignments={ttAssignments}
+            onRefresh={fetchTimetableData}
+            refreshing={ttLoading}
+            // no onUpdateSlot = read-only
+          />
+        )
+      )}
     </RolePortal>
   );
 };

@@ -1,6 +1,6 @@
 // src/components/portals/admin/timetable/TimetableScheduler.jsx
 import React, { useState } from "react";
-import { getSubjectColor } from "./TimetableViewer";
+import { getSubjectColor } from "./TimetableAdminView";
 
 const TimetableScheduler = ({
   classId,

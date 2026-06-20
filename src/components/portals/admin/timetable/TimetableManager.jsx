@@ -1,30 +1,30 @@
 // src/components/portals/admin/timetable/TimetableManager.jsx
-import React, { useState, useEffect } from "react";
-import { supabase } from "../../../../utils/supabase";
-import TimetableScheduler from "./TimetableScheduler";
-import TimetableViewer from "./TimetableViewer";
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../../../utils/supabase';
+import TimetableScheduler from './TimetableScheduler';
+import TimetableAdminView from './TimetableAdminView';
 import {
   SubjectsSetup,
   TeachersSetup,
   ClassesSetup,
   PeriodsSetup,
-  generateLocalId
-} from "./TimetableSetupTabs";
+  generateLocalId,
+} from './TimetableSetupTabs';
 import {
   TIMETABLE_STORAGE_KEY,
-  MOCK_SUBJECTS     as DEFAULT_MOCK_SUBJECTS,
-  MOCK_TEACHERS     as DEFAULT_MOCK_TEACHERS,
-  MOCK_CLASSES      as DEFAULT_MOCK_CLASSES,
-  MOCK_PERIODS      as DEFAULT_MOCK_PERIODS,
-  MOCK_ASSIGNMENTS  as DEFAULT_MOCK_ASSIGNMENTS,
-  MOCK_SLOTS        as DEFAULT_MOCK_SLOTS,
+  MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
+  MOCK_TEACHERS as DEFAULT_MOCK_TEACHERS,
+  MOCK_CLASSES as DEFAULT_MOCK_CLASSES,
+  MOCK_PERIODS as DEFAULT_MOCK_PERIODS,
+  MOCK_ASSIGNMENTS as DEFAULT_MOCK_ASSIGNMENTS,
+  MOCK_SLOTS as DEFAULT_MOCK_SLOTS,
   MOCK_TIMETABLE_STATE,
-} from "../../../../data/mockTimetable";
+} from '../../../../data/mockTimetable';
 
 const TimetableManager = () => {
-  const [activeTab, setActiveTab] = useState("grid"); // "grid" | "view" | "subjects" | "teachers" | "classes" | "periods" | "sync"
-  const [selectedClassId, setSelectedClassId] = useState("");
-  
+  const [activeTab, setActiveTab] = useState('grid'); // "grid" | "unassigned_classes" | "free_teachers" | "assigned_teachers" | "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
+  const [selectedClassId, setSelectedClassId] = useState('');
+
   // Timetable State
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
@@ -36,7 +36,7 @@ const TimetableManager = () => {
   // Connection State
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [dbSetupInstructionOpen, setDbSetupInstructionOpen] = useState(false);
 
   // JSON Import trigger
@@ -45,16 +45,16 @@ const TimetableManager = () => {
   // Load Initial Data
   const loadData = async () => {
     setLoading(true);
-    setError("");
+    setError('');
     try {
       // Test if supabase tables are accessible
       const { data: testClass, error: testErr } = await supabase
-        .from("classes")
-        .select("id")
+        .from('classes')
+        .select('id')
         .limit(1);
 
       if (testErr) {
-        throw new Error("Supabase tables not found. Falling back to local offline mode.");
+        throw new Error('Supabase tables not found. Falling back to local offline mode.');
       }
 
       // Fetch from Supabase
@@ -65,22 +65,22 @@ const TimetableManager = () => {
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
-        { data: dbPeriods }
+        { data: dbPeriods },
       ] = await Promise.all([
-        supabase.from("subjects").select("*"),
-        supabase.from("teachers").select("*"),
-        supabase.from("teacher_subjects").select("*"),
-        supabase.from("classes").select("*"),
-        supabase.from("class_assignments").select("*"),
-        supabase.from("timetable_slots").select("*"),
-        supabase.from("periods").select("*").order("period_number", { ascending: true })
+        supabase.from('subjects').select('*'),
+        supabase.from('teachers').select('*'),
+        supabase.from('teacher_subjects').select('*'),
+        supabase.from('classes').select('*'),
+        supabase.from('class_assignments').select('*'),
+        supabase.from('timetable_slots').select('*'),
+        supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
 
-      const teachersWithSubjects = (dbTeachers || []).map(t => ({
+      const teachersWithSubjects = (dbTeachers || []).map((t) => ({
         ...t,
         subjects: (dbTeacherSubjects || [])
-          .filter(ts => String(ts.teacher_id) === String(t.id))
-          .map(ts => ts.subject_id)
+          .filter((ts) => String(ts.teacher_id) === String(t.id))
+          .map((ts) => ts.subject_id),
       }));
 
       setSubjects(dbSubjects || []);
@@ -94,25 +94,25 @@ const TimetableManager = () => {
       } else {
         // If Supabase mode is true and dbPeriods is empty, insert default periods
         try {
-          const insertPayload = DEFAULT_MOCK_PERIODS.map(p => ({
+          const insertPayload = DEFAULT_MOCK_PERIODS.map((p) => ({
             period_number: p.period_number,
             name: p.name,
             start_time: p.start_time,
             end_time: p.end_time,
-            is_break: p.is_break
+            is_break: p.is_break,
           }));
           const { data: insertedPeriods } = await supabase
-            .from("periods")
+            .from('periods')
             .insert(insertPayload)
             .select()
-            .order("period_number", { ascending: true });
+            .order('period_number', { ascending: true });
           if (insertedPeriods && insertedPeriods.length > 0) {
             setPeriods(insertedPeriods);
           } else {
             setPeriods(DEFAULT_MOCK_PERIODS);
           }
         } catch (insertErr) {
-          console.warn("Failed to auto-populate default periods:", insertErr.message);
+          console.warn('Failed to auto-populate default periods:', insertErr.message);
           setPeriods(DEFAULT_MOCK_PERIODS);
         }
       }
@@ -123,7 +123,7 @@ const TimetableManager = () => {
 
       setIsSupabaseMode(true);
     } catch (err) {
-      console.warn("Supabase mode not active, loading from LocalStorage:", err.message);
+      console.warn('Supabase mode not active, loading from LocalStorage:', err.message);
       setIsSupabaseMode(false);
       loadLocalData();
     } finally {
@@ -146,7 +146,7 @@ const TimetableManager = () => {
           setSelectedClassId(parsed.classes[0].id);
         }
       } catch (e) {
-        console.error("Failed to parse local timetable data", e);
+        console.error('Failed to parse local timetable data', e);
         initializeMockData();
       }
     } else {
@@ -162,7 +162,7 @@ const TimetableManager = () => {
     setAssignments(DEFAULT_MOCK_ASSIGNMENTS);
     setSlots(DEFAULT_MOCK_SLOTS);
     setSelectedClassId(DEFAULT_MOCK_CLASSES[0].id);
-    
+
     // Save to local storage
     const state = {
       subjects: DEFAULT_MOCK_SUBJECTS,
@@ -195,7 +195,7 @@ const TimetableManager = () => {
       classes: nextClasses,
       periods: nextPeriods,
       assignments: nextAssignments,
-      slots: nextSlots
+      slots: nextSlots,
     };
     localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(localState));
 
@@ -221,11 +221,11 @@ const TimetableManager = () => {
 
     if (isSupabaseMode) {
       try {
-        const { data, error } = await supabase.from("subjects").insert([{ name }]).select();
+        const { data, error } = await supabase.from('subjects').insert([{ name }]).select();
         if (error) throw error;
         updatedSubjects = [...subjects, data[0]];
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -233,14 +233,14 @@ const TimetableManager = () => {
   };
 
   const handleUpdateSubject = async (id, name) => {
-    const updatedSubjects = subjects.map(s => String(s.id) === String(id) ? { ...s, name } : s);
+    const updatedSubjects = subjects.map((s) => (String(s.id) === String(id) ? { ...s, name } : s));
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        const { error } = await supabase.from("subjects").update({ name }).eq("id", id);
+        const { error } = await supabase.from('subjects').update({ name }).eq('id', id);
         if (error) throw error;
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -248,13 +248,13 @@ const TimetableManager = () => {
   };
 
   const handleDeleteSubject = async (id) => {
-    const updatedSubjects = subjects.filter(s => String(s.id) !== String(id));
-    const updatedAssignments = assignments.filter(a => String(a.subject_id) !== String(id));
-    const updatedSlots = slots.filter(s => String(s.subject_id) !== String(id));
+    const updatedSubjects = subjects.filter((s) => String(s.id) !== String(id));
+    const updatedAssignments = assignments.filter((a) => String(a.subject_id) !== String(id));
+    const updatedSlots = slots.filter((s) => String(s.subject_id) !== String(id));
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        await supabase.from("subjects").delete().eq("id", id);
+        await supabase.from('subjects').delete().eq('id', id);
       } catch (err) {
         console.error(err);
       }
@@ -262,41 +262,44 @@ const TimetableManager = () => {
     saveState({
       subjects: updatedSubjects,
       assignments: updatedAssignments,
-      slots: updatedSlots
+      slots: updatedSlots,
     });
   };
 
   // TEACHER ACTION HANDLERS
   const handleAddTeacher = async (name, qualifiedSubjects, isMale = true) => {
-    const newTeacher = { id: generateLocalId(), name, subjects: qualifiedSubjects, is_male: isMale };
+    const newTeacher = {
+      id: generateLocalId(),
+      name,
+      subjects: qualifiedSubjects,
+      is_male: isMale,
+    };
     let updatedTeachers = [...teachers, newTeacher];
 
     if (isSupabaseMode) {
       try {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
-          .from("teachers")
+          .from('teachers')
           .insert([{ name, is_male: isMale }])
           .select();
-        
+
         if (teacherErr) throw teacherErr;
         const insertedTeacher = teacherData[0];
 
         // 2. Insert qualified subjects into teacher_subjects
         if (qualifiedSubjects.length > 0) {
-          const relationPayload = qualifiedSubjects.map(subId => ({
+          const relationPayload = qualifiedSubjects.map((subId) => ({
             teacher_id: insertedTeacher.id,
-            subject_id: subId
+            subject_id: subId,
           }));
-          const { error: relErr } = await supabase
-            .from("teacher_subjects")
-            .insert(relationPayload);
+          const { error: relErr } = await supabase.from('teacher_subjects').insert(relationPayload);
           if (relErr) throw relErr;
         }
 
         updatedTeachers = [...teachers, { ...insertedTeacher, subjects: qualifiedSubjects }];
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -304,71 +307,78 @@ const TimetableManager = () => {
   };
 
   const handleUpdateTeacher = async (id, name, qualifiedSubjects, isMale = true) => {
-    const updatedTeachers = teachers.map(t => String(t.id) === String(id) ? { ...t, name, subjects: qualifiedSubjects, is_male: isMale } : t);
+    const updatedTeachers = teachers.map((t) =>
+      String(t.id) === String(id) ? { ...t, name, subjects: qualifiedSubjects, is_male: isMale } : t
+    );
 
     // Also verify currently assigned classes/slots for this teacher
     // If a subject is removed from the teacher's qualifications, clear those assignments/slots
-    const updatedAssignments = assignments.filter(a => {
-      if (String(a.teacher_id) === String(id) && !qualifiedSubjects.some(sid => String(sid) === String(a.subject_id))) {
+    const updatedAssignments = assignments.filter((a) => {
+      if (
+        String(a.teacher_id) === String(id) &&
+        !qualifiedSubjects.some((sid) => String(sid) === String(a.subject_id))
+      ) {
         return false;
       }
       return true;
     });
 
-    const updatedSlots = slots.map(s => {
-      if (String(s.teacher_id) === String(id) && s.subject_id && !qualifiedSubjects.some(sid => String(sid) === String(s.subject_id))) {
+    const updatedSlots = slots.map((s) => {
+      if (
+        String(s.teacher_id) === String(id) &&
+        s.subject_id &&
+        !qualifiedSubjects.some((sid) => String(sid) === String(s.subject_id))
+      ) {
         return { ...s, subject_id: null, teacher_id: null };
       }
       return s;
     });
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
         // 1. Update teachers table
         const { error: teacherErr } = await supabase
-          .from("teachers")
+          .from('teachers')
           .update({ name, is_male: isMale })
-          .eq("id", id);
+          .eq('id', id);
         if (teacherErr) throw teacherErr;
 
         // 2. Delete existing relations
         const { error: delErr } = await supabase
-          .from("teacher_subjects")
+          .from('teacher_subjects')
           .delete()
-          .eq("teacher_id", id);
+          .eq('teacher_id', id);
         if (delErr) throw delErr;
 
         // 3. Insert new relations
         if (qualifiedSubjects.length > 0) {
-          const relationPayload = qualifiedSubjects.map(subId => ({
+          const relationPayload = qualifiedSubjects.map((subId) => ({
             teacher_id: id,
-            subject_id: subId
+            subject_id: subId,
           }));
-          const { error: insErr } = await supabase
-            .from("teacher_subjects")
-            .insert(relationPayload);
+          const { error: insErr } = await supabase.from('teacher_subjects').insert(relationPayload);
           if (insErr) throw insErr;
         }
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
     saveState({
       teachers: updatedTeachers,
       assignments: updatedAssignments,
-      slots: updatedSlots
+      slots: updatedSlots,
     });
   };
 
   const handleDeleteTeacher = async (id) => {
-    const updatedTeachers = teachers.filter(t => String(t.id) !== String(id));
-    const updatedAssignments = assignments.filter(a => String(a.teacher_id) !== String(id));
-    const updatedSlots = slots.filter(s => String(s.teacher_id) !== String(id));
+    const updatedTeachers = teachers.filter((t) => String(t.id) !== String(id));
+    const updatedAssignments = assignments.filter((a) => String(a.teacher_id) !== String(id));
+    const updatedSlots = slots.filter((s) => String(s.teacher_id) !== String(id));
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        await supabase.from("teachers").delete().eq("id", id);
+        await supabase.from('teachers').delete().eq('id', id);
       } catch (err) {
         console.error(err);
       }
@@ -376,7 +386,7 @@ const TimetableManager = () => {
     saveState({
       teachers: updatedTeachers,
       assignments: updatedAssignments,
-      slots: updatedSlots
+      slots: updatedSlots,
     });
   };
 
@@ -387,11 +397,11 @@ const TimetableManager = () => {
 
     if (isSupabaseMode) {
       try {
-        const { data, error } = await supabase.from("classes").insert([{ name }]).select();
+        const { data, error } = await supabase.from('classes').insert([{ name }]).select();
         if (error) throw error;
         updatedClasses = [...classes, data[0]];
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -400,14 +410,14 @@ const TimetableManager = () => {
   };
 
   const handleUpdateClass = async (id, name) => {
-    const updatedClasses = classes.map(c => String(c.id) === String(id) ? { ...c, name } : c);
+    const updatedClasses = classes.map((c) => (String(c.id) === String(id) ? { ...c, name } : c));
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        const { error } = await supabase.from("classes").update({ name }).eq("id", id);
+        const { error } = await supabase.from('classes').update({ name }).eq('id', id);
         if (error) throw error;
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -415,13 +425,13 @@ const TimetableManager = () => {
   };
 
   const handleDeleteClass = async (id) => {
-    const updatedClasses = classes.filter(c => String(c.id) !== String(id));
-    const updatedAssignments = assignments.filter(a => String(a.class_id) !== String(id));
-    const updatedSlots = slots.filter(s => String(s.class_id) !== String(id));
+    const updatedClasses = classes.filter((c) => String(c.id) !== String(id));
+    const updatedAssignments = assignments.filter((a) => String(a.class_id) !== String(id));
+    const updatedSlots = slots.filter((s) => String(s.class_id) !== String(id));
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        await supabase.from("classes").delete().eq("id", id);
+        await supabase.from('classes').delete().eq('id', id);
       } catch (err) {
         console.error(err);
       }
@@ -429,7 +439,7 @@ const TimetableManager = () => {
     saveState({
       classes: updatedClasses,
       assignments: updatedAssignments,
-      slots: updatedSlots
+      slots: updatedSlots,
     });
   };
 
@@ -437,23 +447,36 @@ const TimetableManager = () => {
   const handleAddAssignment = async (classId, teacherId, subjectId) => {
     // Check if assignment already exists
     const exists = assignments.some(
-      a => String(a.class_id) === String(classId) && String(a.teacher_id) === String(teacherId) && String(a.subject_id) === String(subjectId)
+      (a) =>
+        String(a.class_id) === String(classId) &&
+        String(a.teacher_id) === String(teacherId) &&
+        String(a.subject_id) === String(subjectId)
     );
     if (exists) return;
 
-    const newAss = { id: generateLocalId(), class_id: classId, teacher_id: teacherId, subject_id: subjectId };
+    const newAss = {
+      id: generateLocalId(),
+      class_id: classId,
+      teacher_id: teacherId,
+      subject_id: subjectId,
+    };
     let updatedAssignments = [...assignments, newAss];
 
-    if (isSupabaseMode && !classId.toString().startsWith("local-") && !teacherId.toString().startsWith("local-") && !subjectId.toString().startsWith("local-")) {
+    if (
+      isSupabaseMode &&
+      !classId.toString().startsWith('local-') &&
+      !teacherId.toString().startsWith('local-') &&
+      !subjectId.toString().startsWith('local-')
+    ) {
       try {
         const { data, error } = await supabase
-          .from("class_assignments")
+          .from('class_assignments')
           .insert([{ class_id: classId, teacher_id: teacherId, subject_id: subjectId }])
           .select();
         if (error) throw error;
         updatedAssignments = [...assignments, data[0]];
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -461,21 +484,25 @@ const TimetableManager = () => {
   };
 
   const handleRemoveAssignment = async (id) => {
-    const ass = assignments.find(a => String(a.id) === String(id));
+    const ass = assignments.find((a) => String(a.id) === String(id));
     if (!ass) return;
 
-    const updatedAssignments = assignments.filter(a => String(a.id) !== String(id));
+    const updatedAssignments = assignments.filter((a) => String(a.id) !== String(id));
     // Set scheduled slots with this mapping to Free Period
-    const updatedSlots = slots.map(s => {
-      if (String(s.class_id) === String(ass.class_id) && String(s.subject_id) === String(ass.subject_id) && String(s.teacher_id) === String(ass.teacher_id)) {
+    const updatedSlots = slots.map((s) => {
+      if (
+        String(s.class_id) === String(ass.class_id) &&
+        String(s.subject_id) === String(ass.subject_id) &&
+        String(s.teacher_id) === String(ass.teacher_id)
+      ) {
         return { ...s, subject_id: null, teacher_id: null };
       }
       return s;
     });
 
-    if (isSupabaseMode && !id.toString().startsWith("local-")) {
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        await supabase.from("class_assignments").delete().eq("id", id);
+        await supabase.from('class_assignments').delete().eq('id', id);
       } catch (err) {
         console.error(err);
       }
@@ -492,48 +519,53 @@ const TimetableManager = () => {
     if (isSupabaseMode) {
       try {
         // 1. Fetch current database periods
-        const { data: existingPeriods } = await supabase.from("periods").select("*");
+        const { data: existingPeriods } = await supabase.from('periods').select('*');
 
         // 2. Delete periods exceeding the new count
-        await supabase.from("periods").delete().gt("period_number", maxPeriod);
+        await supabase.from('periods').delete().gt('period_number', maxPeriod);
 
         // 3. Upsert/update the remaining periods
         for (const period of finalPeriods) {
-          const exists = existingPeriods?.find(p => p.period_number === period.period_number);
+          const exists = existingPeriods?.find((p) => p.period_number === period.period_number);
           if (exists) {
-            await supabase.from("periods").update({
-              name: period.name || `Period ${period.period_number}`,
-              start_time: period.start_time || null,
-              end_time: period.end_time || null,
-              is_break: period.is_break || false
-            }).eq("id", exists.id);
+            await supabase
+              .from('periods')
+              .update({
+                name: period.name || `Period ${period.period_number}`,
+                start_time: period.start_time || null,
+                end_time: period.end_time || null,
+                is_break: period.is_break || false,
+              })
+              .eq('id', exists.id);
           } else {
-            await supabase.from("periods").insert([{
-              period_number: period.period_number,
-              name: period.name || `Period ${period.period_number}`,
-              start_time: period.start_time || null,
-              end_time: period.end_time || null,
-              is_break: period.is_break || false
-            }]);
+            await supabase.from('periods').insert([
+              {
+                period_number: period.period_number,
+                name: period.name || `Period ${period.period_number}`,
+                start_time: period.start_time || null,
+                end_time: period.end_time || null,
+                is_break: period.is_break || false,
+              },
+            ]);
           }
         }
 
         // 4. Reload periods from database to get correct IDs
         const { data: updatedDbPeriods } = await supabase
-          .from("periods")
-          .select("*")
-          .order("period_number", { ascending: true });
-        
+          .from('periods')
+          .select('*')
+          .order('period_number', { ascending: true });
+
         finalPeriods = updatedDbPeriods || [];
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
 
     // Filter local slots to only keep ones belonging to remaining periods
-    const remainingIds = finalPeriods.map(p => p.id);
-    updatedSlots = updatedSlots.filter(s => remainingIds.includes(s.period_id));
+    const remainingIds = finalPeriods.map((p) => p.id);
+    updatedSlots = updatedSlots.filter((s) => remainingIds.includes(s.period_id));
 
     saveState({ periods: finalPeriods, slots: updatedSlots });
   };
@@ -546,7 +578,10 @@ const TimetableManager = () => {
     // Local state updates first
     for (const day of targetDays) {
       const existingIndex = updatedSlots.findIndex(
-        s => String(s.class_id) === String(classId) && s.day === day && String(s.period_id) === String(periodId)
+        (s) =>
+          String(s.class_id) === String(classId) &&
+          s.day === day &&
+          String(s.period_id) === String(periodId)
       );
 
       if (subjectId === null && teacherId === null) {
@@ -561,7 +596,7 @@ const TimetableManager = () => {
           day,
           period_id: periodId,
           subject_id: subjectId,
-          teacher_id: teacherId
+          teacher_id: teacherId,
         };
         if (existingIndex > -1) {
           updatedSlots[existingIndex] = { ...updatedSlots[existingIndex], ...newSlotVal };
@@ -572,38 +607,41 @@ const TimetableManager = () => {
     }
 
     // Supabase DB Sync
-    if (isSupabaseMode && !String(classId).startsWith("local-")) {
+    if (isSupabaseMode && !String(classId).startsWith('local-')) {
       try {
         if (subjectId === null && teacherId === null) {
           // Batch delete from db
           const { error } = await supabase
-            .from("timetable_slots")
+            .from('timetable_slots')
             .delete()
-            .eq("class_id", classId)
-            .eq("period_id", periodId)
-            .in("day", targetDays);
+            .eq('class_id', classId)
+            .eq('period_id', periodId)
+            .in('day', targetDays);
           if (error) throw error;
         } else {
           // Batch upsert to db
-          const upsertPayload = targetDays.map(day => ({
+          const upsertPayload = targetDays.map((day) => ({
             class_id: classId,
             day,
             period_id: periodId,
             subject_id: subjectId,
-            teacher_id: teacherId
+            teacher_id: teacherId,
           }));
 
           const { data, error } = await supabase
-            .from("timetable_slots")
-            .upsert(upsertPayload, { onConflict: "class_id,day,period_id" })
+            .from('timetable_slots')
+            .upsert(upsertPayload, { onConflict: 'class_id,day,period_id' })
             .select();
           if (error) throw error;
 
           // Replace local slots with returned DB slots to have real IDs
           if (data && data.length > 0) {
-            data.forEach(dbSlot => {
+            data.forEach((dbSlot) => {
               const idx = updatedSlots.findIndex(
-                s => String(s.class_id) === String(dbSlot.class_id) && s.day === dbSlot.day && String(s.period_id) === String(dbSlot.period_id)
+                (s) =>
+                  String(s.class_id) === String(dbSlot.class_id) &&
+                  s.day === dbSlot.day &&
+                  String(s.period_id) === String(dbSlot.period_id)
               );
               if (idx > -1) {
                 updatedSlots[idx] = dbSlot;
@@ -614,7 +652,7 @@ const TimetableManager = () => {
           }
         }
       } catch (err) {
-        alert("DB Error: " + err.message);
+        alert('DB Error: ' + err.message);
         return;
       }
     }
@@ -625,24 +663,24 @@ const TimetableManager = () => {
   // JSON EXPORT HANDLER
   const handleExportJson = () => {
     const backupData = {
-      version: "2.0",
-      school: "Jamia Zaytoonah Vellore",
+      version: '2.0',
+      school: 'Jamia Zaytoonah Vellore',
       exportedAt: new Date().toISOString(),
       subjects,
       teachers,
       classes,
       periods,
       assignments,
-      slots
+      slots,
     };
 
     const str = JSON.stringify(backupData, null, 2);
-    const blob = new Blob([str], { type: "application/json" });
+    const blob = new Blob([str], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement("a");
+
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `jzv-timetable-finalized-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `jzv-timetable-finalized-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -658,7 +696,7 @@ const TimetableManager = () => {
     reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target.result);
-        
+
         // Simple schema validation
         if (
           !Array.isArray(parsed.classes) ||
@@ -668,24 +706,27 @@ const TimetableManager = () => {
           !Array.isArray(parsed.assignments) ||
           !Array.isArray(parsed.slots)
         ) {
-          throw new Error("Invalid file format. Missing core timetable arrays.");
+          throw new Error('Invalid file format. Missing core timetable arrays.');
         }
 
-        if (window.confirm("Importing this file will overwrite your current timetable configuration. Proceed?")) {
-          
+        if (
+          window.confirm(
+            'Importing this file will overwrite your current timetable configuration. Proceed?'
+          )
+        ) {
           if (isSupabaseMode) {
             // Overwrite database
             setLoading(true);
             try {
               // Delete everything
               await Promise.all([
-                supabase.from("timetable_slots").delete().gt("id", 0),
-                supabase.from("class_assignments").delete().gt("id", 0),
-                supabase.from("teacher_subjects").delete().gt("id", 0),
-                supabase.from("teachers").delete().gt("id", 0),
-                supabase.from("classes").delete().gt("id", 0),
-                supabase.from("subjects").delete().gt("id", 0),
-                supabase.from("periods").delete().gt("id", 0),
+                supabase.from('timetable_slots').delete().gt('id', 0),
+                supabase.from('class_assignments').delete().gt('id', 0),
+                supabase.from('teacher_subjects').delete().gt('id', 0),
+                supabase.from('teachers').delete().gt('id', 0),
+                supabase.from('classes').delete().gt('id', 0),
+                supabase.from('subjects').delete().gt('id', 0),
+                supabase.from('periods').delete().gt('id', 0),
               ]);
 
               // Write imported data
@@ -693,7 +734,7 @@ const TimetableManager = () => {
               // for best reliability we import it as the local state and sync it.
               // Note: If they import, it updates their local storage immediately and populates state.
             } catch (err) {
-              console.warn("DB reset failed during import: ", err.message);
+              console.warn('DB reset failed during import: ', err.message);
             } finally {
               setLoading(false);
             }
@@ -705,38 +746,40 @@ const TimetableManager = () => {
             classes: parsed.classes,
             periods: parsed.periods,
             assignments: parsed.assignments,
-            slots: parsed.slots
+            slots: parsed.slots,
           });
 
           if (parsed.classes.length > 0) {
             setSelectedClassId(parsed.classes[0].id);
           }
 
-          alert("Timetable imported successfully!");
+          alert('Timetable imported successfully!');
         }
       } catch (err) {
-        alert("Failed to parse JSON file: " + err.message);
+        alert('Failed to parse JSON file: ' + err.message);
       }
     };
     reader.readAsText(file);
     // Clear input
-    e.target.value = "";
+    e.target.value = '';
   };
 
   const getCompletionPercentage = (classId) => {
-    const nonBreakPeriods = periods.filter(p => !p.is_break);
+    const nonBreakPeriods = periods.filter((p) => !p.is_break);
     const totalSlots = 6 * nonBreakPeriods.length;
     if (totalSlots === 0) return 0;
-    const nonBreakPeriodIds = nonBreakPeriods.map(p => String(p.id));
+    const nonBreakPeriodIds = nonBreakPeriods.map((p) => String(p.id));
     const assignedSlots = slots.filter(
-      s => String(s.class_id) === String(classId) && s.subject_id && nonBreakPeriodIds.includes(String(s.period_id))
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.subject_id &&
+        nonBreakPeriodIds.includes(String(s.period_id))
     ).length;
     return Math.round((assignedSlots / totalSlots) * 100);
   };
 
   return (
     <div className="flex flex-col min-h-[500px]">
-      
       {/* Top Banner Control Panel */}
       <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2">
         {/* Title & Actions Row */}
@@ -745,20 +788,26 @@ const TimetableManager = () => {
             <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
               <i className="fas fa-calendar-alt text-brand-primary"></i>
               Timetable Planner
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                isSupabaseMode ? "bg-green-100 text-green-dark" : "bg-orange-100 text-orange-dark"
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isSupabaseMode ? "bg-green-bright" : "bg-orange-primary"}`}></span>
-                {isSupabaseMode ? "Supabase Connected" : "Local Offline Mode (LocalStorage)"}
-              </span>
-              <button
-                onClick={() => setActiveTab("sync")}
-                className="text-[10px] text-brand-primary font-bold hover:underline"
-              >
-                Configure Database
-              </button>
-            </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    isSupabaseMode
+                      ? 'bg-green-100 text-green-dark'
+                      : 'bg-orange-100 text-orange-dark'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${isSupabaseMode ? 'bg-green-bright' : 'bg-orange-primary'}`}
+                  ></span>
+                  {isSupabaseMode ? 'Supabase Connected' : 'Local Offline Mode (LocalStorage)'}
+                </span>
+                <button
+                  onClick={() => setActiveTab('sync')}
+                  className="text-[10px] text-brand-primary font-bold hover:underline"
+                >
+                  Configure Database
+                </button>
+              </div>
             </h2>
           </div>
 
@@ -771,7 +820,7 @@ const TimetableManager = () => {
             >
               <i className="fas fa-file-download"></i> Finalize & Export JSON
             </button>
-            
+
             <input
               type="file"
               accept=".json"
@@ -779,7 +828,7 @@ const TimetableManager = () => {
               onChange={handleImportJson}
               className="hidden"
             />
-            
+
             <button
               onClick={() => fileInputRef.current?.click()}
               className="flex-1 md:flex-none bg-white hover:bg-light-ui border border-light-border text-dark-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
@@ -788,33 +837,35 @@ const TimetableManager = () => {
               <i className="fas fa-file-upload"></i> Import JSON
             </button>
             <button
-                onClick={loadData}
-                disabled={loading}
-                className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
-                title="Refresh Timetable Data"
-              >
-                <i className={`fas fa-sync-alt ${loading ? "animate-spin text-brand-primary" : ""}`}></i>
-              </button>
+              onClick={loadData}
+              disabled={loading}
+              className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Refresh Timetable Data"
+            >
+              <i
+                className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
+              ></i>
+            </button>
           </div>
         </div>
 
         {/* Workspace Tabs (Inside the Top Banner Card) */}
         <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1 pt-2">
           {[
-            { id: "grid", label: "Scheduler Grid", icon: "fa-th-large" },
-            { id: "view", label: "Preview & Print", icon: "fa-eye" },
-            { id: "classes", label: "Classes Setup", icon: "fa-school" },
-            { id: "teachers", label: "Teachers Setup", icon: "fa-chalkboard-teacher" },
-            { id: "subjects", label: "Subjects Setup", icon: "fa-book" },
-            { id: "periods", label: "Periods Setup", icon: "fa-clock" },
+            { id: 'grid', label: 'Scheduler Grid', icon: 'fa-th-large' },
+            { id: 'view', label: 'Admin View', icon: 'fa-eye' },
+            { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
+            { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
+            { id: 'subjects', label: 'Subjects Setup', icon: 'fa-book' },
+            { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap pb-3 -mb-[2px] ${
                 activeTab === tab.id
-                  ? "border-brand-primary text-brand-primary"
-                  : "border-transparent text-white-50 hover:text-dark-primary hover:border-light-border"
+                  ? 'border-brand-primary text-brand-primary'
+                  : 'border-transparent text-white-50 hover:text-dark-primary hover:border-light-border'
               }`}
             >
               <i className={`fas ${tab.icon}`}></i>
@@ -831,9 +882,8 @@ const TimetableManager = () => {
         </div>
       ) : (
         <div className="flex-1">
-          {activeTab === "grid" && (
+          {activeTab === 'grid' && (
             <div className="flex flex-col lg:flex-row gap-6">
-              
               {/* Classes Sidebar */}
               <div className="w-full lg:w-60 lg:shrink-0 space-y-3">
                 <div className="bg-light-lbg px-4 py-3 rounded-xl border border-light-border text-xs font-bold text-dark-primary uppercase tracking-wider">
@@ -841,7 +891,9 @@ const TimetableManager = () => {
                 </div>
                 <div className="space-y-2 max-h-[500px] lg:max-h-[calc(100vh-100px)] overflow-y-auto pr-1">
                   {classes.length === 0 ? (
-                    <p className="text-xs text-dark-muted italic p-2">No classes found. Set up classes first.</p>
+                    <p className="text-xs text-dark-muted italic p-2">
+                      No classes found. Set up classes first.
+                    </p>
                   ) : (
                     classes.map((cls) => {
                       const pct = getCompletionPercentage(cls.id);
@@ -851,15 +903,17 @@ const TimetableManager = () => {
                           onClick={() => setSelectedClassId(cls.id)}
                           className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between group ${
                             selectedClassId === cls.id
-                              ? "bg-brand-primary border-brand-primary text-white shadow-md shadow-brand-lbg"
-                              : "bg-white border-light-border hover:border-brand-soft text-dark-primary hover:bg-light-bg/30"
+                              ? 'bg-brand-primary border-brand-primary text-white shadow-md shadow-brand-lbg'
+                              : 'bg-white border-light-border hover:border-brand-soft text-dark-primary hover:bg-light-bg/30'
                           }`}
                         >
                           <div className="truncate">
                             <span className="font-extrabold text-sm block">{cls.name}</span>
-                            <span className={`text-[10px] block mt-0.5 font-semibold ${
-                              selectedClassId === cls.id ? "text-brand-lbg" : "text-dark-soft"
-                            }`}>
+                            <span
+                              className={`text-[10px] block mt-0.5 font-semibold ${
+                                selectedClassId === cls.id ? 'text-brand-lbg' : 'text-dark-soft'
+                              }`}
+                            >
                               Schedule completed
                             </span>
                           </div>
@@ -876,7 +930,12 @@ const TimetableManager = () => {
                                   className="stroke-current"
                                   strokeWidth="3"
                                   fill="transparent"
-                                  style={{ color: selectedClassId === cls.id ? "rgba(255,255,255,0.2)" : "#EAEAEA" }}
+                                  style={{
+                                    color:
+                                      selectedClassId === cls.id
+                                        ? 'rgba(255,255,255,0.2)'
+                                        : '#EAEAEA',
+                                  }}
                                 />
                                 <circle
                                   cx="16"
@@ -887,7 +946,9 @@ const TimetableManager = () => {
                                   fill="transparent"
                                   strokeDasharray={2 * Math.PI * 12}
                                   strokeDashoffset={2 * Math.PI * 12 * (1 - pct / 100)}
-                                  style={{ color: selectedClassId === cls.id ? "#FFFFFF" : "#6C3483" }}
+                                  style={{
+                                    color: selectedClassId === cls.id ? '#FFFFFF' : '#6C3483',
+                                  }}
                                 />
                               </svg>
                               <span className="absolute text-[8px] font-extrabold">{pct}%</span>
@@ -916,19 +977,21 @@ const TimetableManager = () => {
             </div>
           )}
 
-          {activeTab === "view" && (
-            <TimetableViewer
+          {activeTab === 'view' && (
+            <TimetableAdminView
               classes={classes}
               teachers={teachers}
               subjects={subjects}
               periods={periods}
               slots={slots}
+              assignments={assignments}
               onRefresh={loadData}
               refreshing={loading}
+              onUpdateSlot={handleUpdateSlot}
             />
           )}
 
-          {activeTab === "subjects" && (
+          {activeTab === 'subjects' && (
             <SubjectsSetup
               subjects={subjects}
               onAddSubject={handleAddSubject}
@@ -939,7 +1002,7 @@ const TimetableManager = () => {
             />
           )}
 
-          {activeTab === "teachers" && (
+          {activeTab === 'teachers' && (
             <TeachersSetup
               teachers={teachers}
               subjects={subjects}
@@ -951,7 +1014,7 @@ const TimetableManager = () => {
             />
           )}
 
-          {activeTab === "classes" && (
+          {activeTab === 'classes' && (
             <ClassesSetup
               classes={classes}
               teachers={teachers}
@@ -966,34 +1029,37 @@ const TimetableManager = () => {
             />
           )}
 
-          {activeTab === "periods" && (
-            <PeriodsSetup
-              periods={periods}
-              onSavePeriods={handleSavePeriods}
-              slots={slots}
-            />
+          {activeTab === 'periods' && (
+            <PeriodsSetup periods={periods} onSavePeriods={handleSavePeriods} slots={slots} />
           )}
 
-          {activeTab === "sync" && (
+          {activeTab === 'sync' && (
             <div className="bg-white border border-light-border p-6 sm:p-8 rounded-3xl space-y-6">
               <div>
                 <h3 className="text-lg font-bold text-dark-deepblue mb-1">
                   Database Integration Settings
                 </h3>
                 <p className="text-xs text-dark-soft">
-                  Enable cloud database synchronization via Supabase for multi-user access and secure backups.
+                  Enable cloud database synchronization via Supabase for multi-user access and
+                  secure backups.
                 </p>
               </div>
 
               <div className="border border-light-border p-5 rounded-2xl bg-light-lbg/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className={`w-4 h-4 rounded-full animate-pulse ${
-                    isSupabaseMode ? "bg-green-bright" : "bg-orange-primary"
-                  }`} />
+                  <div
+                    className={`w-4 h-4 rounded-full animate-pulse ${
+                      isSupabaseMode ? 'bg-green-bright' : 'bg-orange-primary'
+                    }`}
+                  />
                   <div>
-                    <span className="text-xs text-dark-soft font-bold block">Current Sync Mode</span>
+                    <span className="text-xs text-dark-soft font-bold block">
+                      Current Sync Mode
+                    </span>
                     <span className="text-sm font-extrabold text-dark-deepblue">
-                      {isSupabaseMode ? "Supabase Live Database" : "Offline (Local Browser Storage)"}
+                      {isSupabaseMode
+                        ? 'Supabase Live Database'
+                        : 'Offline (Local Browser Storage)'}
                     </span>
                   </div>
                 </div>
@@ -1012,9 +1078,11 @@ const TimetableManager = () => {
                     <i className="fas fa-info-circle"></i> Supabase Setup Instructions
                   </h4>
                   <p className="text-xs text-dark-soft leading-relaxed mb-3">
-                    If you haven't set up the timetable tables in Supabase yet, please run the following SQL commands in your Supabase SQL editor. Once the tables are successfully created, reload this page to connect.
+                    If you haven't set up the timetable tables in Supabase yet, please run the
+                    following SQL commands in your Supabase SQL editor. Once the tables are
+                    successfully created, reload this page to connect.
                   </p>
-                  
+
                   <details className="cursor-pointer group">
                     <summary className="text-xs font-bold text-brand-primary hover:underline outline-none">
                       Show SQL Migration Commands

@@ -1,7 +1,7 @@
 // src/components/portals/teacher/TeacherTimetableViewer.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../utils/supabase';
-import TimetableViewer from '../admin/timetable/TimetableViewer';
+import TimetableAdminView from '../admin/timetable/TimetableAdminView';
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -128,7 +128,7 @@ const TeacherTimetableViewer = () => {
   }
 
   return (
-    <TimetableViewer
+    <TimetableAdminView
       classes={classes}
       teachers={teachers}
       subjects={subjects}
@@ -136,6 +136,7 @@ const TeacherTimetableViewer = () => {
       slots={slots}
       onRefresh={() => fetchTimetableData(false)}
       refreshing={refreshing}
+      allowedViews={['class']}
     />
   );
 };
