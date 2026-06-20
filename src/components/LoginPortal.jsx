@@ -3,62 +3,13 @@ import { useNavigate } from "react-router-dom";
 import useLanguage from "../hooks/useLanguage";
 import Translate from "./Translate";
 import { supabase } from "../utils/supabase";
+import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../data/mockStudents";
 
-const DEFAULT_MOCK_STUDENTS = [
-  {
-    id: 1,
-    admission_no: "101",
-    edsoft_id: "ED-10001",
-    student_name: "Zayd Ahmed",
-    birth_date: "2015-05-12",
-    age: 11,
-    gender: "Male",
-    father_name: "Abdur Rahman",
-    class_id: "c-1",
-    mobile1: "9876543210",
-    mobile2: "9876543220",
-    enrollment: "Active",
-    hostel: "Yes",
-    transport_point: "Point A",
-  },
-  {
-    id: 2,
-    admission_no: "102",
-    edsoft_id: "ED-10002",
-    student_name: "Fatima Patel",
-    birth_date: "2016-08-20",
-    age: 9,
-    gender: "Female",
-    father_name: "Imran Patel",
-    class_id: "c-2",
-    mobile1: "9876543211",
-    mobile2: "",
-    enrollment: "Active",
-    hostel: "No",
-    transport_point: "Point B",
-  },
-  {
-    id: 3,
-    admission_no: "103",
-    edsoft_id: "ED-10003",
-    student_name: "Mohammed Siddique",
-    birth_date: "2015-11-05",
-    age: 10,
-    gender: "Male",
-    father_name: "Yusuf Siddique",
-    class_id: "c-3",
-    mobile1: "9876543212",
-    mobile2: "",
-    enrollment: "Active",
-    hostel: "No",
-    transport_point: "",
-  },
-];
+
 
 const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsParent }) => {
   // authMode: 'main' | 'parent-login' | 'selection' | 'pending'
   const [authMode, setAuthMode] = useState("main");
-  const [admissionNo, setAdmissionNo] = useState("");
   const [mobileNo, setMobileNo] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
@@ -69,7 +20,6 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
   useEffect(() => {
     if (!isOpen) {
       setAuthMode("main");
-      setAdmissionNo("");
       setMobileNo("");
       setMessage({ type: "", text: "" });
     }
@@ -164,8 +114,8 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
 
   const handleParentLoginSubmit = async (e) => {
     e.preventDefault();
-    if (!admissionNo.trim() || !mobileNo.trim()) {
-      setMessage({ type: "error", text: "Please enter both fields." });
+    if (!mobileNo.trim()) {
+      setMessage({ type: "error", text: "Please enter your mobile number." });
       return;
     }
 
@@ -173,84 +123,75 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
     setMessage({ type: "", text: "" });
 
     try {
-      let student = null;
+      const cleanInputMobile = mobileNo.replace(/\D/g, "");
+      let matchedStudents = [];
 
-      // 1. Try calling the secure verify_parent_login RPC function (Option B)
+      // 1. Try calling the verify_parent_login_by_mobile RPC function (Option B - SECURE BYPASS OF RLS)
       try {
-        const { data, error } = await supabase.rpc("verify_parent_login", {
-          p_admission_no: admissionNo.trim(),
+        const { data, error } = await supabase.rpc("verify_parent_login_by_mobile", {
           p_mobile: mobileNo.trim()
         });
 
         if (!error && data && data.length > 0) {
-          student = data[0];
+          matchedStudents = data;
         } else if (error) {
-          console.warn("verify_parent_login RPC failed, trying Option A fallback:", error);
+          console.warn("verify_parent_login_by_mobile RPC failed, trying Option A fallback:", error);
         }
       } catch (err) {
-        console.warn("verify_parent_login RPC exception, trying Option A fallback:", err);
+        console.warn("verify_parent_login_by_mobile RPC exception, trying Option A fallback:", err);
       }
 
-      // 2. Fallback: Try Option A direct table select
-      if (!student) {
+      // 2. Option A Fallback: Try querying Supabase students table directly by mobile number
+      if (matchedStudents.length === 0) {
         try {
           const { data, error } = await supabase
             .from("students")
             .select("*")
-            .ilike("admission_no", admissionNo.trim())
-            .limit(1);
+            .or(`mobile1.eq.${cleanInputMobile},mobile2.eq.${cleanInputMobile}`);
 
           if (!error && data && data.length > 0) {
-            const potentialStudent = data[0];
-            // Validate mobile since option A select returns student data without filtering by mobile on DB
-            const cleanInputMobile = mobileNo.replace(/\D/g, "");
-            const cleanDbMobile1 = (potentialStudent.mobile1 || "").replace(/\D/g, "");
-            const cleanDbMobile2 = (potentialStudent.mobile2 || "").replace(/\D/g, "");
-            if (cleanInputMobile === cleanDbMobile1 || cleanInputMobile === cleanDbMobile2) {
-              student = potentialStudent;
-            }
+            matchedStudents = data;
           }
         } catch (err) {
-          console.warn("Direct Supabase query failed:", err);
+          console.warn("Direct query by mobile failed, trying fallback:", err);
         }
       }
 
-      // 3. Fallback to LocalStorage
-      if (!student) {
+      // 2. Fallback: Try LocalStorage
+      if (matchedStudents.length === 0) {
         let raw = localStorage.getItem("jzv_students_local_data");
-        if (!raw) {
+        const hasInMock = DEFAULT_MOCK_STUDENTS.some((s) => {
+          const cleanM1 = (s.mobile1 || "").replace(/\D/g, "");
+          const cleanM2 = (s.mobile2 || "").replace(/\D/g, "");
+          return cleanInputMobile === cleanM1 || cleanInputMobile === cleanM2;
+        });
+        if (hasInMock) {
+          localStorage.setItem("jzv_students_local_data", JSON.stringify(DEFAULT_MOCK_STUDENTS));
+          raw = JSON.stringify(DEFAULT_MOCK_STUDENTS);
+        } else if (!raw) {
           localStorage.setItem("jzv_students_local_data", JSON.stringify(DEFAULT_MOCK_STUDENTS));
           raw = JSON.stringify(DEFAULT_MOCK_STUDENTS);
         }
         if (raw) {
           try {
             const parsed = JSON.parse(raw) || [];
-            student = parsed.find(
-              (s) => String(s.admission_no).trim().toLowerCase() === admissionNo.trim().toLowerCase()
-            );
+            matchedStudents = parsed.filter((s) => {
+              const cleanDbMobile1 = (s.mobile1 || "").replace(/\D/g, "");
+              const cleanDbMobile2 = (s.mobile2 || "").replace(/\D/g, "");
+              return cleanInputMobile === cleanDbMobile1 || cleanInputMobile === cleanDbMobile2;
+            });
           } catch (e) {
             console.error(e);
           }
         }
-
-        if (student) {
-          // Check if mobile1 or mobile2 matches for local storage fallback
-          const cleanInputMobile = mobileNo.replace(/\D/g, "");
-          const cleanDbMobile1 = (student.mobile1 || "").replace(/\D/g, "");
-          const cleanDbMobile2 = (student.mobile2 || "").replace(/\D/g, "");
-
-          if (cleanInputMobile !== cleanDbMobile1 && cleanInputMobile !== cleanDbMobile2) {
-            throw new Error("Invalid Admission Number or Mobile Number.");
-          }
-        }
       }
 
-      if (!student) {
-        throw new Error("Invalid Admission Number or Mobile Number.");
+      if (matchedStudents.length === 0) {
+        throw new Error("No students found registered with this Mobile Number.");
       }
 
       // Success! Log in parent session
-      loginAsParent(student);
+      loginAsParent(matchedStudents[0], matchedStudents);
       navigate("/portal/parent");
       onClose();
     } catch (err) {
@@ -355,7 +296,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
                   Parent Login
                 </h4>
                 <p className="text-xs text-dark-soft">
-                  Verify Admission Number and registered parent Mobile Number.
+                  Verify registered parent Mobile Number.
                 </p>
               </div>
 
@@ -373,19 +314,6 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
               )}
 
               <form onSubmit={handleParentLoginSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                    Admission Number *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 2022/0051"
-                    value={admissionNo}
-                    onChange={(e) => setAdmissionNo(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-orange-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all text-sm font-semibold text-dark-primary"
-                  />
-                </div>
                 <div>
                   <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
                     Parent Mobile Number *

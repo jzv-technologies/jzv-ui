@@ -18,13 +18,14 @@ const App = () => {
   const navigate = useNavigate();
   const hasRedirectedRef = useRef(false);
 
-  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent } =
+  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent, switchParentStudent } =
     useAuth();
 
   const [showLoginPortal, setShowLoginPortal] = useState(false);
   const [adminSubView, setAdminSubView] = useState(null);
   const [managementSubView, setManagementSubView] = useState(null);
   const [teacherSubView, setTeacherSubView] = useState(null);
+  const [parentSubView, setParentSubView] = useState(null);
 
   const {
     cards,
@@ -85,6 +86,7 @@ const App = () => {
       setAdminSubView(null);
       setManagementSubView(null);
       setTeacherSubView(null);
+      setParentSubView(null);
     }
   }, [location.pathname]);
 
@@ -135,7 +137,9 @@ const App = () => {
           setAdminSubView(null);
           setManagementSubView(null);
           setTeacherSubView(null);
+          setParentSubView(null);
         }}
+        switchParentStudent={switchParentStudent}
       />
 
       <main className="relative">
@@ -151,6 +155,8 @@ const App = () => {
           setManagementSubView={setManagementSubView}
           teacherSubView={teacherSubView}
           setTeacherSubView={setTeacherSubView}
+          parentSubView={parentSubView}
+          setParentSubView={setParentSubView}
         />
       </main>
 

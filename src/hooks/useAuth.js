@@ -144,16 +144,17 @@ export const useAuth = () => {
     await supabase.auth.signOut();
   }, [user]);
 
-  const loginAsParent = useCallback((student) => {
+  const loginAsParent = useCallback((student, students = []) => {
     const parentSession = {
       user: {
         id: "parent-" + student.admission_no,
-        email: student.mobile1 || "parent@jzv.com",
-        full_name: student.father_name || "Parent",
+        email: student.student_name + " (" + student.admission_no + ")",
+        full_name: student.student_name,
         parentMode: true,
         student,
+        students: students.length > 0 ? students : [student],
       },
-      fullName: student.father_name || "Parent",
+      fullName: student.student_name,
       studentIds: student.admission_no,
     };
     localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
@@ -163,6 +164,26 @@ export const useAuth = () => {
     setFullName(parentSession.fullName);
     setAuthLoading(false);
   }, []);
+
+  const switchParentStudent = useCallback((student, allStudents) => {
+    const parentSession = {
+      user: {
+        id: "parent-" + student.admission_no,
+        email: student.student_name + " (" + student.admission_no + ")",
+        full_name: student.student_name,
+        parentMode: true,
+        student,
+        students: allStudents || (user && user.students) || [student],
+      },
+      fullName: student.student_name,
+      studentIds: student.admission_no,
+    };
+    localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
+    setUser(parentSession.user);
+    updateRoles(["parent"]);
+    updateStudentIds(parentSession.studentIds);
+    setFullName(parentSession.fullName);
+  }, [user]);
 
   // Setup auth state listener only once
   useEffect(() => {
@@ -279,6 +300,7 @@ export const useAuth = () => {
     handleLogout,
     fetchRoles,
     loginAsParent,
+    switchParentStudent,
   };
 };
 

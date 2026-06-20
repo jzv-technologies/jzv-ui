@@ -51,6 +51,7 @@ const TimetableViewer = ({
   slots = [],
   onRefresh,
   refreshing = false,
+  lockedClassId = "",
 }) => {
   const [viewType, setViewType] = useState("class"); // "class" | "teacher"
   const [selectedId, setSelectedId] = useState("");
@@ -61,6 +62,12 @@ const TimetableViewer = ({
 
   // Handle default selection
   React.useEffect(() => {
+    if (lockedClassId) {
+      setViewType("class");
+      setSelectedId(lockedClassId);
+      return;
+    }
+
     if (viewType === "class") {
       if (classes.length > 0) {
         setSelectedId(classes[0].id);
@@ -74,7 +81,7 @@ const TimetableViewer = ({
         setSelectedId("");
       }
     }
-  }, [viewType, classes, teachers]);
+  }, [viewType, classes, teachers, lockedClassId]);
 
   const handlePrint = () => {
     window.print();
@@ -116,75 +123,79 @@ const TimetableViewer = ({
         <div>
           <h3 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
             <i className="fas fa-calendar-alt text-brand-primary"></i>
-            Timetable Viewer
+            {lockedClassId ? `Class Schedule — ${getClassName(selectedId)}` : "Timetable Viewer"}
           </h3>
           <p className="text-sm text-dark-soft">
-            View schedules dynamically by Class or Teacher.
+            {lockedClassId ? "Weekly class schedule." : "View schedules dynamically by Class or Teacher."}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Toggles */}
-          <div className="bg-light-lbg p-1 rounded-xl flex border border-light-border">
-            <button
-              onClick={() => setViewType("class")}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
-                viewType === "class"
-                  ? "bg-white text-brand-primary shadow-sm"
-                  : "text-dark-soft hover:text-dark-primary"
-              }`}
-            >
-              Class Schedule
-            </button>
-            <button
-              onClick={() => setViewType("teacher")}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
-                viewType === "teacher"
-                  ? "bg-white text-brand-primary shadow-sm"
-                  : "text-dark-soft hover:text-dark-primary"
-              }`}
-            >
-              Teacher Schedule
-            </button>
-          </div>
+          {!lockedClassId && (
+            <>
+              {/* Toggles */}
+              <div className="bg-light-lbg p-1 rounded-xl flex border border-light-border">
+                <button
+                  onClick={() => setViewType("class")}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
+                    viewType === "class"
+                      ? "bg-white text-brand-primary shadow-sm"
+                      : "text-dark-soft hover:text-dark-primary"
+                  }`}
+                >
+                  Class Schedule
+                </button>
+                <button
+                  onClick={() => setViewType("teacher")}
+                  className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 ${
+                    viewType === "teacher"
+                      ? "bg-white text-brand-primary shadow-sm"
+                      : "text-dark-soft hover:text-dark-primary"
+                  }`}
+                >
+                  Teacher Schedule
+                </button>
+              </div>
 
-          {/* Selector */}
-          {viewType === "class" ? (
-            <select
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="bg-white border border-light-border rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[150px]"
-            >
-              {classes.length === 0 ? (
-                <option value="">No Classes</option>
+              {/* Selector */}
+              {viewType === "class" ? (
+                <select
+                  value={selectedId}
+                  onChange={(e) => setSelectedId(e.target.value)}
+                  className="bg-white border border-light-border rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[150px]"
+                >
+                  {classes.length === 0 ? (
+                    <option value="">No Classes</option>
+                  ) : (
+                    [...classes]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.name}
+                        </option>
+                      ))
+                  )}
+                </select>
               ) : (
-                [...classes]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </option>
-                  ))
+                <select
+                  value={selectedId}
+                  onChange={(e) => setSelectedId(e.target.value)}
+                  className="bg-white border border-light-border rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[150px]"
+                >
+                  {teachers.length === 0 ? (
+                    <option value="">No Teachers</option>
+                  ) : (
+                    [...teachers]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))
+                  )}
+                </select>
               )}
-            </select>
-          ) : (
-            <select
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="bg-white border border-light-border rounded-xl px-4 py-2 text-xs sm:text-sm font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[150px]"
-            >
-              {teachers.length === 0 ? (
-                <option value="">No Teachers</option>
-              ) : (
-                [...teachers]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))
-              )}
-            </select>
+            </>
           )}
 
           {/* Show Breaks Toggle (hidden on print) */}

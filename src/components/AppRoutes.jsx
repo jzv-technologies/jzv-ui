@@ -9,6 +9,7 @@ import { CARD_THEMES } from "../utils/cardTheme";
 import Translate from "./Translate";
 import TeacherTimetableViewer from "./portals/teacher/TeacherTimetableViewer";
 import TeacherStudentsViewer from "./portals/teacher/TeacherStudentsViewer";
+import ParentTimetableViewer from "./portals/parent/ParentTimetableViewer";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -28,6 +29,8 @@ export const AppRoutes = ({
   setManagementSubView,
   teacherSubView,
   setTeacherSubView,
+  parentSubView,
+  setParentSubView,
 }) => {
   const navigate = useNavigate();
   return (
@@ -119,9 +122,26 @@ export const AppRoutes = ({
                     buttonColor: "bg-orange-primary text-white",
                     onClick: () => openModal("complaint-register"),
                   },
+                  {
+                    id: "view-timetable",
+                    title: "Class Schedule",
+                    titleKey: "role_portal.class_schedule.title",
+                    description: "View the weekly class schedule/timetable for your child.",
+                    descriptionKey: "role_portal.class_schedule.description",
+                    icon: "fa-calendar-alt",
+                    buttonColor: "bg-emerald-600 text-white",
+                    shadow: "shadow-emerald-200",
+                    onClick: () => setParentSubView("timetable"),
+                  },
                 ]}
+                subView={parentSubView}
+                onSetSubView={setParentSubView}
                 openModal={openModal}
-              />
+              >
+                {parentSubView === "timetable" && (
+                  <ParentTimetableViewer student={user?.student} />
+                )}
+              </RolePortal>
             ) : (
               <Navigate to="/" replace />
             )

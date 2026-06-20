@@ -1,0 +1,56 @@
+// src/data/mockStudents.js
+// ─── Demo/fallback student records ────────────────────────────────────────────
+// These are used whenever Supabase is unavailable or has no matching records.
+// Demo parent login: 7339398700  (returns Zayd Ahmed + Fatima Patel)
+// class_id values ("c-1", "c-2", ...) match the keys in mockTimetable.js
+
+export const MOCK_STUDENTS = [
+  {
+    id: 1,
+    admission_no: '101',
+    edsoft_id: 'ED-10001',
+    student_name: 'Zayd Ahmed',
+    birth_date: '2015-05-12',
+    age: 11,
+    gender: 'Male',
+    father_name: 'Abdur Rahman',
+    class_id: 'c-1',
+    mobile1: '7339398700',
+    mobile2: '9876543220',
+    enrollment: 'Active',
+    hostel: 'Yes',
+    transport_point: 'Point A',
+  },
+  {
+    id: 2,
+    admission_no: '102',
+    edsoft_id: 'ED-10002',
+    student_name: 'Fatima Patel',
+    birth_date: '2016-08-20',
+    age: 9,
+    gender: 'Female',
+    father_name: 'Imran Patel',
+    class_id: 'c-2',
+    mobile1: '7339398700',
+    mobile2: '',
+    enrollment: 'Active',
+    hostel: 'No',
+    transport_point: 'Point B',
+  },
+  {
+    id: 3,
+    admission_no: '103',
+    edsoft_id: 'ED-10003',
+    student_name: 'Mohammed Siddique',
+    birth_date: '2015-11-05',
+    age: 10,
+    gender: 'Male',
+    father_name: 'Yusuf Siddique',
+    class_id: 'c-3',
+    mobile1: '9876543212',
+    mobile2: '',
+    enrollment: 'Active',
+    hostel: 'No',
+    transport_point: '',
+  },
+];
