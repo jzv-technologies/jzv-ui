@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 
 // Helper to generate UUIDs locally when offline
-const generateLocalId = () => {
+export const generateLocalId = () => {
   return "local-" + Math.random().toString(36).substr(2, 9);
 };
 

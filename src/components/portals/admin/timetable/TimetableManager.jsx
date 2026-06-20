@@ -7,7 +7,8 @@ import {
   SubjectsSetup,
   TeachersSetup,
   ClassesSetup,
-  PeriodsSetup
+  PeriodsSetup,
+  generateLocalId
 } from "./TimetableSetupTabs";
 import {
   TIMETABLE_STORAGE_KEY,
