@@ -217,6 +217,8 @@ const AssignPopover = ({
     return (
       <div
         ref={ref}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className="absolute z-50 bg-white border border-light-border rounded-2xl shadow-2xl w-64 overflow-hidden"
         style={{ top: 'calc(100% + 6px)', left: 0 }}
       >
@@ -293,22 +295,24 @@ const AssignPopover = ({
 
     const getEligibleClasses = (subId) => {
       if (!subId) return [];
-      return classes.filter((cls) => {
-        const hasMappedAssignment = assignments.some(
-          (a) =>
-            String(a.class_id) === String(cls.id) &&
-            String(a.subject_id) === String(subId) &&
-            String(a.teacher_id) === String(teacherId)
-        );
-        if (!hasMappedAssignment) return false;
-        const alreadyScheduled = slots.some(
-          (s) =>
-            String(s.class_id) === String(cls.id) &&
-            s.day === day &&
-            String(s.period_id) === String(periodId)
-        );
-        return !alreadyScheduled;
-      });
+      return classes
+        .map((cls) => {
+          const hasMappedAssignment = assignments.some(
+            (a) =>
+              String(a.class_id) === String(cls.id) &&
+              String(a.subject_id) === String(subId) &&
+              String(a.teacher_id) === String(teacherId)
+          );
+          return {
+            ...cls,
+            isMapped: hasMappedAssignment,
+          };
+        })
+        .sort((a, b) => {
+          if (a.isMapped && !b.isMapped) return -1;
+          if (!a.isMapped && b.isMapped) return 1;
+          return a.name.localeCompare(b.name);
+        });
     };
 
     const qualifiedSubjects = subjects.filter((s) =>
@@ -320,6 +324,8 @@ const AssignPopover = ({
     return (
       <div
         ref={ref}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         className="absolute z-50 bg-white border border-light-border rounded-2xl shadow-2xl w-72 overflow-hidden"
         style={{ top: 'calc(100% + 6px)', left: 0 }}
       >
@@ -371,7 +377,14 @@ const AssignPopover = ({
                       }}
                       className="w-full text-left px-3 py-2 rounded-lg border border-light-border hover:bg-brand-lbg/20 hover:border-brand-soft flex items-center justify-between transition-all"
                     >
-                      <span className="text-xs font-bold text-dark-primary">{cls.name}</span>
+                      <span className="text-xs font-bold text-dark-primary flex items-center gap-1.5">
+                        {cls.name}
+                        {cls.isMapped && (
+                          <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
+                            Mapped
+                          </span>
+                        )}
+                      </span>
                       <i className="fas fa-plus text-brand-primary text-[10px]" />
                     </button>
                   ))}
@@ -469,18 +482,26 @@ const TimetableAdminView = ({
 
     if (viewType === 'class') {
       if (classes.length > 0) {
-        setSelectedId(classes[0].id);
+        const isValid = classes.some((c) => String(c.id) === String(selectedId));
+        if (!isValid) {
+          const sortedClasses = [...classes].sort((a, b) => a.name.localeCompare(b.name));
+          setSelectedId(sortedClasses[0].id);
+        }
       } else {
         setSelectedId('');
       }
     } else if (viewType === 'teacher') {
       if (teachers.length > 0) {
-        setSelectedId(teachers[0].id);
+        const isValid = teachers.some((t) => String(t.id) === String(selectedId));
+        if (!isValid) {
+          const sortedTeachers = [...teachers].sort((a, b) => a.name.localeCompare(b.name));
+          setSelectedId(sortedTeachers[0].id);
+        }
       } else {
         setSelectedId('');
       }
     }
-  }, [viewType, classes, teachers, lockedClassId]);
+  }, [viewType, classes, teachers, lockedClassId, selectedId]);
 
   const isGridView = viewType === 'class' || viewType === 'teacher';
   const isOverviewView = !isGridView;
@@ -706,7 +727,7 @@ const TimetableAdminView = ({
                         title={v.label}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
                           viewType === v.id
-                            ? 'bg-white text-brand-primary shadow-sm'
+                            ? 'text-white bg-brand-primary shadow-sm'
                             : 'text-dark-soft hover:text-dark-primary'
                         }`}
                       >
