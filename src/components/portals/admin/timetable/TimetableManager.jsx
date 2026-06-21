@@ -39,8 +39,8 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
         Thursday: 'Weekday',
         Friday: 'Weekday',
         Saturday: 'Working Weekend',
-        Sunday: 'Holiday Weekend'
-      }
+        Sunday: 'Holiday Weekend',
+      },
     },
     winter: {
       id: 'winter',
@@ -54,8 +54,8 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
         Thursday: 'Weekday',
         Friday: 'Weekday',
         Saturday: 'Working Weekend',
-        Sunday: 'Holiday Weekend'
-      }
+        Sunday: 'Holiday Weekend',
+      },
     },
     exam: {
       id: 'exam',
@@ -69,8 +69,8 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
         Thursday: 'Weekday',
         Friday: 'Weekday',
         Saturday: 'Working Weekend',
-        Sunday: 'Holiday Weekend'
-      }
+        Sunday: 'Holiday Weekend',
+      },
     },
     festival: {
       id: 'festival',
@@ -84,10 +84,10 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
         Thursday: 'Weekday',
         Friday: 'Weekday',
         Saturday: 'Working Weekend',
-        Sunday: 'Holiday Weekend'
-      }
-    }
-  }
+        Sunday: 'Holiday Weekend',
+      },
+    },
+  },
 });
 
 const TimetableManager = () => {
@@ -109,7 +109,6 @@ const TimetableManager = () => {
   const [error, setError] = useState('');
   const [dbSetupInstructionOpen, setDbSetupInstructionOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
-
 
   // JSON Import trigger
   const fileInputRef = React.useRef(null);
@@ -198,7 +197,8 @@ const TimetableManager = () => {
           .maybeSingle();
 
         if (settingsData && settingsData.val) {
-          fetchedSeasonsConfig = typeof settingsData.val === 'string' ? JSON.parse(settingsData.val) : settingsData.val;
+          fetchedSeasonsConfig =
+            typeof settingsData.val === 'string' ? JSON.parse(settingsData.val) : settingsData.val;
         }
       } catch (settingsErr) {
         console.warn('Failed to load seasons config from DB:', settingsErr.message);
@@ -227,12 +227,12 @@ const TimetableManager = () => {
       const activeId = fetchedSeasonsConfig.active_season_id || 'summer';
       const activeSeason = fetchedSeasonsConfig.seasons[activeId];
 
-      const mappedPeriods = finalPeriods.map(dbP => {
-        const seasonP = activeSeason?.periods?.find(up => up.period_number === dbP.period_number);
+      const mappedPeriods = finalPeriods.map((dbP) => {
+        const seasonP = activeSeason?.periods?.find((up) => up.period_number === dbP.period_number);
         return {
           ...dbP,
           icon: seasonP ? seasonP.icon : null,
-          applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false
+          applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false,
         };
       });
 
@@ -280,12 +280,14 @@ const TimetableManager = () => {
         const activeId = fetchedSeasonsConfig.active_season_id || 'summer';
         const activeSeason = fetchedSeasonsConfig.seasons[activeId];
 
-        const mappedPeriods = localPeriods.map(dbP => {
-          const seasonP = activeSeason?.periods?.find(up => up.period_number === dbP.period_number);
+        const mappedPeriods = localPeriods.map((dbP) => {
+          const seasonP = activeSeason?.periods?.find(
+            (up) => up.period_number === dbP.period_number
+          );
           return {
             ...dbP,
             icon: seasonP ? seasonP.icon : null,
-            applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false
+            applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false,
           };
         });
 
@@ -311,7 +313,7 @@ const TimetableManager = () => {
     const defaultSeasons = makeDefaultSeasonsConfig(DEFAULT_MOCK_PERIODS, DEFAULT_MOCK_SLOTS);
     setSeasonsConfig(defaultSeasons);
     localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(defaultSeasons));
- 
+
     // Save to local storage
     const state = {
       classifications: DEFAULT_MOCK_CLASSIFICATIONS,
@@ -331,7 +333,8 @@ const TimetableManager = () => {
 
   // Sync state helper
   const saveState = async (updates) => {
-    const nextClassifications = updates.classifications !== undefined ? updates.classifications : classifications;
+    const nextClassifications =
+      updates.classifications !== undefined ? updates.classifications : classifications;
     const nextSubjects = updates.subjects !== undefined ? updates.subjects : subjects;
     const nextTeachers = updates.teachers !== undefined ? updates.teachers : teachers;
     const nextClasses = updates.classes !== undefined ? updates.classes : classes;
@@ -361,21 +364,27 @@ const TimetableManager = () => {
           [activeId]: {
             ...seasonsConfig.seasons[activeId],
             periods: nextPeriods,
-            slots: nextSlots
-          }
-        }
+            slots: nextSlots,
+          },
+        },
       };
       setSeasonsConfig(updatedConfig);
       localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(updatedConfig));
-      
+
       // Sync seasonsConfig with DB in background/async
       if (isSupabaseMode) {
-        supabase.from('timetable_settings').upsert({
-          key: 'timetable_seasons_config',
-          val: updatedConfig
-        }, { onConflict: 'key' }).then(({ error }) => {
-          if (error) console.error('Error saving seasons config to DB:', error);
-        });
+        supabase
+          .from('timetable_settings')
+          .upsert(
+            {
+              key: 'timetable_seasons_config',
+              val: updatedConfig,
+            },
+            { onConflict: 'key' }
+          )
+          .then(({ error }) => {
+            if (error) console.error('Error saving seasons config to DB:', error);
+          });
       }
     }
 
@@ -396,7 +405,10 @@ const TimetableManager = () => {
 
     if (isSupabaseMode) {
       try {
-        const { data, error } = await supabase.from('subjects').insert([{ name, classification_id: classificationId }]).select();
+        const { data, error } = await supabase
+          .from('subjects')
+          .insert([{ name, classification_id: classificationId }])
+          .select();
         if (error) throw error;
         updatedSubjects = [...subjects, data[0]];
       } catch (err) {
@@ -408,11 +420,16 @@ const TimetableManager = () => {
   };
 
   const handleUpdateSubject = async (id, name, classificationId) => {
-    const updatedSubjects = subjects.map((s) => (String(s.id) === String(id) ? { ...s, name, classification_id: classificationId } : s));
+    const updatedSubjects = subjects.map((s) =>
+      String(s.id) === String(id) ? { ...s, name, classification_id: classificationId } : s
+    );
 
     if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        const { error } = await supabase.from('subjects').update({ name, classification_id: classificationId }).eq('id', id);
+        const { error } = await supabase
+          .from('subjects')
+          .update({ name, classification_id: classificationId })
+          .eq('id', id);
         if (error) throw error;
       } catch (err) {
         showToast('DB Error: ' + err.message, 'error');
@@ -426,7 +443,10 @@ const TimetableManager = () => {
     if (isSupabaseMode) {
       try {
         if (deletedId && !deletedId.toString().startsWith('local-')) {
-          const { error } = await supabase.from('subject_classifications').delete().eq('id', deletedId);
+          const { error } = await supabase
+            .from('subject_classifications')
+            .delete()
+            .eq('id', deletedId);
           if (error) throw error;
         }
 
@@ -450,21 +470,21 @@ const TimetableManager = () => {
         });
 
         const nextDbList = await Promise.all(promises);
-        
+
         const { data: refetched } = await supabase
           .from('subject_classifications')
           .select('*')
           .order('name', { ascending: true });
-        
+
         const finalClassifications = refetched || nextDbList;
         saveState({ classifications: finalClassifications });
 
         if (deletedId) {
           const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
           if (refetchedSubjects) {
-            saveState({ 
+            saveState({
               classifications: finalClassifications,
-              subjects: refetchedSubjects 
+              subjects: refetchedSubjects,
             });
           }
         }
@@ -477,11 +497,13 @@ const TimetableManager = () => {
 
     let nextSubjects = subjects;
     if (deletedId) {
-      nextSubjects = subjects.map(s => String(s.classification_id) === String(deletedId) ? { ...s, classification_id: null } : s);
+      nextSubjects = subjects.map((s) =>
+        String(s.classification_id) === String(deletedId) ? { ...s, classification_id: null } : s
+      );
     }
     saveState({
       classifications: updatedList,
-      subjects: nextSubjects
+      subjects: nextSubjects,
     });
   };
 
@@ -494,7 +516,9 @@ const TimetableManager = () => {
             .update({ classification_id: null })
             .eq('classification_id', classificationId);
 
-          const realSubjectIds = selectedSubjectIds.filter(id => !id.toString().startsWith('local-'));
+          const realSubjectIds = selectedSubjectIds.filter(
+            (id) => !id.toString().startsWith('local-')
+          );
           if (realSubjectIds.length > 0) {
             const { error } = await supabase
               .from('subjects')
@@ -503,7 +527,7 @@ const TimetableManager = () => {
             if (error) throw error;
           }
         }
-        
+
         const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
         if (refetchedSubjects) {
           saveState({ subjects: refetchedSubjects });
@@ -515,7 +539,7 @@ const TimetableManager = () => {
       }
     }
 
-    const nextSubjects = subjects.map(s => {
+    const nextSubjects = subjects.map((s) => {
       const isSelected = selectedSubjectIds.includes(s.id);
       const isCurrentlyMappedToThis = String(s.classification_id) === String(classificationId);
 
@@ -963,7 +987,10 @@ const TimetableManager = () => {
 
         // Reload data to refresh UI state
         await loadData();
-        showToast(`Successfully switched to active season: ${targetSeason.name || targetActiveSeasonId}`, 'success');
+        showToast(
+          `Successfully switched to active season: ${targetSeason.name || targetActiveSeasonId}`,
+          'success'
+        );
       } else {
         // Just save config in state and storage
         setSeasonsConfig(finalConfig);
@@ -1050,8 +1077,8 @@ const TimetableManager = () => {
         copyType === 'all'
           ? 'all configurations'
           : copyType === 'periods_only'
-          ? 'periods configuration'
-          : 'slots schedule'
+            ? 'periods configuration'
+            : 'slots schedule'
       } from ${sourceSeason.name} to ${targetSeason.name}`,
       'success'
     );
@@ -1321,10 +1348,11 @@ const TimetableManager = () => {
         }
 
         setConfirmConfig({
-          title: "Import Timetable",
-          message: 'Importing this file will overwrite your current timetable configuration. Proceed?',
-          confirmText: "Import",
-          type: "danger",
+          title: 'Import Timetable',
+          message:
+            'Importing this file will overwrite your current timetable configuration. Proceed?',
+          confirmText: 'Import',
+          type: 'danger',
           onConfirm: async () => {
             setConfirmConfig(null);
             if (isSupabaseMode) {
@@ -1358,7 +1386,7 @@ const TimetableManager = () => {
             });
 
             showToast('Timetable imported successfully!', 'success');
-          }
+          },
         });
       } catch (err) {
         showToast('Failed to parse JSON file: ' + err.message, 'error');
@@ -1401,10 +1429,10 @@ const TimetableManager = () => {
           <div className="flex items-center gap-2 w-full md:w-auto">
             <button
               onClick={handleExportJson}
-              className="flex-1 md:flex-none bg-brand-primary hover:bg-brand-dark text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
+              className="flex-1 md:flex-none bg-blue-dark hover:bg-brand-dark text-white px-2 py-2 rounded-xl text-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
               title="Download full timetable configuration in JSON format"
             >
-              <i className="fas fa-file-download"></i> Finalize & Export JSON
+              <i className="fas fa-file-download"></i>
             </button>
 
             <input
@@ -1417,10 +1445,10 @@ const TimetableManager = () => {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 md:flex-none bg-white hover:bg-light-ui border border-light-border text-dark-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
-              title="Upload/restore timetable config from a JSON file"
+              className="flex-1 md:flex-none bg-dark-primary hover:bg-light-ui border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+              title="Upload and restore timetable config from a JSON file"
             >
-              <i className="fas fa-file-upload"></i> Import JSON
+              <i className="fas fa-file-upload"></i>
             </button>
             <button
               onClick={loadData}
