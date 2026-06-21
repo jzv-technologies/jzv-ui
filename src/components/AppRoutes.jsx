@@ -10,6 +10,7 @@ import Translate from "./Translate";
 import TeacherTimetableViewer from "./portals/teacher/TeacherTimetableViewer";
 import TeacherStudentsViewer from "./portals/teacher/TeacherStudentsViewer";
 import ParentTimetableViewer from "./portals/parent/ParentTimetableViewer";
+import SyllabusManager from "./portals/admin/syllabus/SyllabusManager";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -191,6 +192,15 @@ export const AppRoutes = ({
                     shadow: "shadow-brand-lbg",
                     onClick: () => setTeacherSubView("students"),
                   },
+                  {
+                    id: "syllabus",
+                    title: "Syllabus Manager",
+                    description: "Manage syllabus books, units, chapters, and lessons.",
+                    icon: "fa-book-open",
+                    buttonColor: "bg-emerald-600 text-white",
+                    shadow: "shadow-emerald-200",
+                    onClick: () => setTeacherSubView("syllabus"),
+                  },
                 ]}
                 subView={teacherSubView}
                 onSetSubView={setTeacherSubView}
@@ -201,6 +211,9 @@ export const AppRoutes = ({
                 )}
                 {teacherSubView === "students" && (
                   <TeacherStudentsViewer />
+                )}
+                {teacherSubView === "syllabus" && (
+                  <SyllabusManager role="teacher" />
                 )}
               </RolePortal>
             ) : (

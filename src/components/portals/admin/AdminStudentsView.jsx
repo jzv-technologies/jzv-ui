@@ -1,7 +1,9 @@
 // src/components/portals/admin/AdminStudentsView.jsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../utils/supabase";
+import { showToast } from "../../../utils/toast";
 import DataGrid from "../../DataGrid";
+import ConfirmModal from "../../ConfirmModal";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../../data/mockStudents";
 
 const STUDENTS_STORAGE_KEY = "jzv_students_local_data";
@@ -13,6 +15,7 @@ const AdminStudentsView = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // Form Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -124,7 +127,7 @@ const AdminStudentsView = () => {
   const handleSaveStudent = async (e) => {
     e.preventDefault();
     if (!formData.admission_no.trim() || !formData.student_name.trim()) {
-      alert("Admission Number and Student Name are required.");
+      showToast("Admission Number and Student Name are required.", "error");
       return;
     }
 
@@ -154,7 +157,7 @@ const AdminStudentsView = () => {
         setIsModalOpen(false);
         await loadStudents(classes);
       } catch (err) {
-        alert("DB Error: " + err.message);
+        showToast("DB Error: " + err.message, "error");
       } finally {
         setLoading(false);
       }
@@ -167,7 +170,7 @@ const AdminStudentsView = () => {
           (s) => s.admission_no.toLowerCase() === formData.admission_no.toLowerCase() && s.id !== editingStudent.id
         );
         if (duplicate) {
-          alert("A student with this Admission Number already exists!");
+          showToast("A student with this Admission Number already exists!", "error");
           setLoading(false);
           return;
         }
@@ -181,7 +184,7 @@ const AdminStudentsView = () => {
           (s) => s.admission_no.toLowerCase() === formData.admission_no.toLowerCase()
         );
         if (duplicate) {
-          alert("A student with this Admission Number already exists!");
+          showToast("A student with this Admission Number already exists!", "error");
           setLoading(false);
           return;
         }
@@ -197,31 +200,38 @@ const AdminStudentsView = () => {
     }
   };
 
-  const handleDeleteStudent = async (studentId) => {
-    if (!window.confirm("Are you sure you want to delete this student record?")) return;
-
-    setLoading(true);
-    if (isSupabaseMode) {
-      try {
-        const { error: dbErr } = await supabase
-          .from("students")
-          .delete()
-          .eq("id", studentId);
-        if (dbErr) throw dbErr;
-        setIsModalOpen(false);
-        await loadStudents(classes);
-      } catch (err) {
-        alert("DB Error: " + err.message);
-      } finally {
-        setLoading(false);
+  const handleDeleteStudent = (studentId) => {
+    setConfirmConfig({
+      title: "Delete Student",
+      message: "Are you sure you want to delete this student record?",
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        setLoading(true);
+        if (isSupabaseMode) {
+          try {
+            const { error: dbErr } = await supabase
+              .from("students")
+              .delete()
+              .eq("id", studentId);
+            if (dbErr) throw dbErr;
+            setIsModalOpen(false);
+            await loadStudents(classes);
+          } catch (err) {
+            showToast("DB Error: " + err.message, "error");
+          } finally {
+            setLoading(false);
+          }
+        } else {
+          const updatedStudents = students.filter((s) => s.id !== studentId);
+          setStudents(updatedStudents);
+          localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(updatedStudents));
+          setIsModalOpen(false);
+          setLoading(false);
+        }
       }
-    } else {
-      const updatedStudents = students.filter((s) => s.id !== studentId);
-      setStudents(updatedStudents);
-      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(updatedStudents));
-      setIsModalOpen(false);
-      setLoading(false);
-    }
+    });
   };
 
   const openAddModal = () => {
@@ -575,6 +585,16 @@ const AdminStudentsView = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };

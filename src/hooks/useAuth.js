@@ -35,6 +35,36 @@ export const useAuth = () => {
     setStudentIds(ids || "");
   };
 
+  const fetchTeacherName = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from("teachers")
+        .select("name")
+        .eq("auth_id", userId)
+        .maybeSingle();
+      if (data && data.name) {
+        setFullName(data.name);
+        return data.name;
+      }
+    } catch (err) {
+      console.warn("Could not load teacher name from Supabase, checking LocalStorage fallback:", err);
+      const raw = localStorage.getItem('jzv_timetable_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const t = (parsed.teachers || []).find(t => String(t.auth_id) === String(userId));
+          if (t && t.name) {
+            setFullName(t.name);
+            return t.name;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return null;
+  };
+
   const forceLogout = useCallback(async (userId, reason) => {
     if (userId) clearUserDataCookie(userId);
     await supabase.auth.signOut();
@@ -242,6 +272,9 @@ export const useAuth = () => {
             updateStudentIds(cookieStudentIds);
             rolesFetchedRef.current = true;
             currentUserIdRef.current = currentUser.id;
+            if (cookieRoles.includes("teacher")) {
+              fetchTeacherName(currentUser.id);
+            }
           } else {
             updateRoles([]);
             updateStudentIds("");
@@ -267,6 +300,8 @@ export const useAuth = () => {
                 currentUser.id,
                 "Access Denied: Your account has not been registered by an administrator."
               );
+            } else if (res && res.success && res.roles.includes("teacher")) {
+              fetchTeacherName(currentUser.id);
             }
           }
         } else {

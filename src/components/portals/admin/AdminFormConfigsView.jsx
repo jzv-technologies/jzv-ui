@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import AdminFormConfigList from "./AdminFormConfigList";
 import AdminFormSchemaEditor from "./AdminFormSchemaEditor";
+import ConfirmModal from "../../ConfirmModal";
+
 
 const AdminFormConfigsView = ({
   configs,
@@ -21,6 +23,8 @@ const AdminFormConfigsView = ({
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState("[]");
   const [jsonError, setJsonError] = useState("");
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   const handleEditConfig = async (config) => {
     setIsNewForm(false);
@@ -45,11 +49,17 @@ const AdminFormConfigsView = ({
     setIsEditing(true);
   };
 
-  const handleImport = async (config) => {
-    // Similar to original – we can invoke a prop
-    if (window.confirm(`Import ${config.uuid} from Google Sheets?`)) {
-      // onImport callback
-    }
+  const handleImport = (config) => {
+    setConfirmConfig({
+      title: "Import Schema",
+      message: `Import ${config.uuid} from Google Sheets?`,
+      type: "info",
+      confirmText: "Import",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        // onImport callback
+      }
+    });
   };
 
   const handleSave = async () => {
@@ -128,26 +138,37 @@ const AdminFormConfigsView = ({
   }
 
   return (
-    <AdminFormConfigList
-      configs={configs}
-      loading={loading}
-      dbTableMissing={dbTableMissing}
-      appsScriptError={appsScriptError}
-      onRefresh={onRefresh}
-      onEdit={handleEditConfig}
-      onDelete={onDeleteConfig}
-      onImport={handleImport}
-      onCreateNew={() => {
-        setIsNewForm(true);
-        setEditorUuid("");
-        setEditorFields([]);
-        setJsonText("[]");
-        setJsonError("");
-        setJsonMode(false);
-        setIsEditing(true);
-      }}
-      onBack={onBack}
-    />
+    <>
+      <AdminFormConfigList
+        configs={configs}
+        loading={loading}
+        dbTableMissing={dbTableMissing}
+        appsScriptError={appsScriptError}
+        onRefresh={onRefresh}
+        onEdit={handleEditConfig}
+        onDelete={onDeleteConfig}
+        onImport={handleImport}
+        onCreateNew={() => {
+          setIsNewForm(true);
+          setEditorUuid("");
+          setEditorFields([]);
+          setJsonText("[]");
+          setJsonError("");
+          setJsonMode(false);
+          setIsEditing(true);
+        }}
+        onBack={onBack}
+      />
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
+    </>
   );
 };
 

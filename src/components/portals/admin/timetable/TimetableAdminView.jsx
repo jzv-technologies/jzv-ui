@@ -1,6 +1,7 @@
 // src/components/portals/admin/timetable/TimetableAdminView.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import TimetableOverview from './TimetableOverview';
+import TimetableScheduler from './TimetableScheduler';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -47,6 +48,75 @@ export const getSubjectColor = (subjectName) => {
     'bg-emerald-50 text-emerald-900 border-emerald-200',
   ];
   return colors[Math.abs(hash) % colors.length];
+};
+
+// ─── Reusable single-select dropdown ─────────────────────────────────────────
+const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selectedOption = options.find((opt) => String(opt.value) === String(selected));
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all bg-white border-light-border text-dark-primary hover:border-brand-soft hover:bg-light-lbg min-w-[150px] shadow-sm"
+      >
+        <span className="truncate">
+          {selectedOption ? selectedOption.label : label}
+        </span>
+        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-2 text-dark-soft`} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 z-50 bg-white border border-light-border rounded-2xl shadow-xl overflow-hidden divide-y divide-light-border"
+          style={{ minWidth: 220 }}
+        >
+          <div className="max-h-60 overflow-y-auto">
+            {options.length === 0 && (
+              <div className="px-3 py-4 text-xs text-dark-muted text-center font-semibold">
+                No options
+              </div>
+            )}
+            {options.map((opt) => {
+              const isSelected = String(opt.value) === String(selected);
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 transition-all flex flex-col justify-center gap-0.5 border-none outline-none ${
+                    isSelected
+                      ? 'bg-brand-lbg/30 text-brand-primary font-bold'
+                      : 'text-dark-primary hover:bg-light-lbg/60'
+                  }`}
+                >
+                  <span className="text-xs font-extrabold">{opt.label}</span>
+                  {opt.subLabel && (
+                    <span className="text-[10px] text-dark-muted font-semibold">
+                      {opt.subLabel}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ─── Reusable multi-select dropdown ──────────────────────────────────────────
@@ -409,7 +479,27 @@ const AssignPopover = ({
 };
 
 // ─── Main TimetableAdminView ──────────────────────────────────────────────────
-const ALL_VIEWS = ['class', 'teacher', 'unassigned_classes', 'free_teachers', 'assigned_teachers'];
+const ALL_VIEWS = [
+  'scheduler',
+  'class',
+  'teacher',
+  'unassigned_classes',
+  'free_teachers',
+  'assigned_teachers',
+];
+
+const viewOptionsMap = {
+  scheduler: { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
+  class: { id: 'class', label: 'Class Schedule', icon: 'fa-building' },
+  teacher: { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
+  unassigned_classes: { id: 'unassigned_classes', label: 'Unassigned Classes', icon: 'fa-school' },
+  free_teachers: { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+  assigned_teachers: {
+    id: 'assigned_teachers',
+    label: 'Assigned Teachers',
+    icon: 'fa-chalkboard-teacher',
+  },
+};
 
 const TimetableAdminView = ({
   classes = [],
@@ -424,12 +514,12 @@ const TimetableAdminView = ({
   onUpdateSlot = null, // if provided, viewer becomes interactive
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
 }) => {
-  const defaultView = allowedViews[0] || 'class';
+  const filteredViews = allowedViews.filter(
+    (v) => v !== 'scheduler' || typeof onUpdateSlot === 'function'
+  );
+  const defaultView = filteredViews[0] || 'class';
   const [viewType, setViewType] = useState(defaultView);
-  const [viewObj, setViewObj] = useState({
-    icon: 'fa-school',
-    label: 'Class Schedule',
-  });
+  const viewObj = viewOptionsMap[viewType] || viewOptionsMap['class'];
 
   const [selectedId, setSelectedId] = useState('');
   const [showBreaks, setShowBreaks] = useState(true);
@@ -444,7 +534,7 @@ const TimetableAdminView = ({
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
   const isInteractive = typeof onUpdateSlot === 'function';
-  const showTabSwitcher = !lockedClassId && allowedViews.length > 1;
+  const showTabSwitcher = !lockedClassId && filteredViews.length > 1;
 
   // ── Filter option lists ──
   const classOptions = [...classes]
@@ -472,15 +562,11 @@ const TimetableAdminView = ({
   React.useEffect(() => {
     if (lockedClassId) {
       setViewType('class');
-      setViewObj({
-        icon: 'fa-school',
-        label: 'Class Schedule',
-      });
       setSelectedId(lockedClassId);
       return;
     }
 
-    if (viewType === 'class') {
+    if (viewType === 'scheduler' || viewType === 'class') {
       if (classes.length > 0) {
         const isValid = classes.some((c) => String(c.id) === String(selectedId));
         if (!isValid) {
@@ -503,8 +589,9 @@ const TimetableAdminView = ({
     }
   }, [viewType, classes, teachers, lockedClassId, selectedId]);
 
+  const isSchedulerView = viewType === 'scheduler';
   const isGridView = viewType === 'class' || viewType === 'teacher';
-  const isOverviewView = !isGridView;
+  const isOverviewView = !isGridView && !isSchedulerView;
 
   // Close popover on Escape
   useEffect(() => {
@@ -525,6 +612,20 @@ const TimetableAdminView = ({
   };
   const getClassName = (cId) =>
     classes.find((c) => String(c.id) === String(cId))?.name || 'Unknown';
+
+  const getCompletionPercentage = (classId) => {
+    const nonBreakPeriods = periods.filter((p) => !p.is_break);
+    const totalSlots = 6 * nonBreakPeriods.length;
+    if (totalSlots === 0) return 0;
+    const nonBreakPeriodIds = nonBreakPeriods.map((p) => String(p.id));
+    const assignedSlots = slots.filter(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.subject_id &&
+        nonBreakPeriodIds.includes(String(s.period_id))
+    ).length;
+    return Math.round((assignedSlots / totalSlots) * 100);
+  };
 
   const getSlotDetails = (day, periodId) => {
     if (!selectedId) return null;
@@ -596,7 +697,7 @@ const TimetableAdminView = ({
     selAssignedClasses.length > 0;
 
   return (
-    <div className="w-full bg-white border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none">
+    <div className="w-full bg-light-lbg/50 border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none">
       {/* ── Header ── */}
       <div className="pb-2 border-b border-light-border mb-4 print:hidden">
         {/* Row 1: Title + Action Buttons */}
@@ -608,12 +709,21 @@ const TimetableAdminView = ({
                 ? `Class Schedule — ${getClassName(selectedId)}`
                 : `${viewObj.label} View`}
             </h3>
-            <p className="text-sm  mt-0.5">
+            <p className="text-sm mt-0.5 text-dark-soft">
               {lockedClassId
                 ? 'Weekly class schedule.'
-                : isInteractive
-                  ? `Admin view to manage timetable quickly`
-                  : 'View schedules dynamically by Class or Teacher.'}
+                : viewType === 'scheduler'
+                  ? `Schedule completed: ${getCompletionPercentage(selectedId)}% (${
+                      slots.filter(
+                        (s) =>
+                          String(s.class_id) === String(selectedId) &&
+                          s.subject_id &&
+                          !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                      ).length
+                    } / ${days.length * periods.filter((p) => !p.is_break).length} slots assigned)`
+                  : isInteractive
+                    ? `Admin view to manage timetable quickly`
+                    : 'View schedules dynamically by Class or Teacher.'}
             </p>
           </div>
 
@@ -658,43 +768,42 @@ const TimetableAdminView = ({
           {!lockedClassId && (
             <div className="flex flex-wrap items-center gap-2">
               {/* Entity selector — only for grid views */}
-              {viewType === 'class' && (
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  className="bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[140px]"
-                >
-                  {classes.length === 0 ? (
-                    <option value="">No Classes</option>
-                  ) : (
-                    [...classes]
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.name}
-                        </option>
-                      ))
-                  )}
-                </select>
+              {(viewType === 'class' || viewType === 'scheduler') && (
+                <SingleSelectDropdown
+                  label="Select Class"
+                  selected={selectedId}
+                  onChange={setSelectedId}
+                  options={[...classes]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((cls) => {
+                      const pct = getCompletionPercentage(cls.id);
+                      const assigned = slots.filter(
+                        (s) =>
+                          String(s.class_id) === String(cls.id) &&
+                          s.subject_id &&
+                          !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                      ).length;
+                      const total = days.length * periods.filter((p) => !p.is_break).length;
+                      return {
+                        value: String(cls.id),
+                        label: cls.name,
+                        subLabel: viewType === 'scheduler' ? `${pct}% completed - ${assigned} of ${total}` : null,
+                      };
+                    })}
+                />
               )}
               {viewType === 'teacher' && (
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  className="bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none min-w-[140px]"
-                >
-                  {teachers.length === 0 ? (
-                    <option value="">No Teachers</option>
-                  ) : (
-                    [...teachers]
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))
-                  )}
-                </select>
+                <SingleSelectDropdown
+                  label="Select Teacher"
+                  selected={selectedId}
+                  onChange={setSelectedId}
+                  options={[...teachers]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((t) => ({
+                      value: String(t.id),
+                      label: t.name,
+                    }))}
+                />
               )}
             </div>
           )}
@@ -702,10 +811,11 @@ const TimetableAdminView = ({
           {/* Row 3: Tab switcher + entity selector */}
           {!lockedClassId && (
             <div className="flex flex-wrap items-center gap-2">
-              {/* 5-mode view switcher */}
+              {/* 6-mode view switcher */}
               {showTabSwitcher && (
                 <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
                   {[
+                    { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
                     { id: 'class', label: 'Class Schedule', icon: 'fa-building' },
                     { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
                     { id: 'unassigned_classes', label: 'Unassigned Classes', icon: 'fa-school' },
@@ -716,13 +826,12 @@ const TimetableAdminView = ({
                       icon: 'fa-chalkboard-teacher',
                     },
                   ]
-                    .filter((v) => allowedViews.includes(v.id))
+                    .filter((v) => filteredViews.includes(v.id))
                     .map((v) => (
                       <button
                         key={v.id}
                         onClick={() => {
                           setViewType(v.id);
-                          setViewObj(v);
                         }}
                         title={v.label}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
@@ -993,6 +1102,23 @@ const TimetableAdminView = ({
           </table>
         </div>
       ) : null}
+
+      {/* ── Scheduler Grid View ── */}
+      {viewType === 'scheduler' && (
+        <div className="w-full">
+          <TimetableScheduler
+            classId={selectedId}
+            classes={classes}
+            teachers={teachers}
+            subjects={subjects}
+            periods={periods}
+            slots={slots}
+            assignments={assignments}
+            onUpdateSlot={onUpdateSlot}
+            showBreaks={showBreaks}
+          />
+        </div>
+      )}
     </div>
   );
 };

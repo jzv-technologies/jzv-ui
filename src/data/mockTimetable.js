@@ -5,14 +5,29 @@
 
 export const TIMETABLE_STORAGE_KEY = 'jzv_timetable_local_data';
 
+export const MOCK_CLASSIFICATIONS = [
+  { id: 'cls-1', name: 'English Literacy' },
+  { id: 'cls-2', name: 'Arabic Literacy' },
+  { id: 'cls-3', name: 'Tamil Literacy' },
+  { id: 'cls-4', name: 'Urdu Literacy' },
+  { id: 'cls-5', name: 'Hadees' },
+  { id: 'cls-6', name: 'Tafseer' },
+  { id: 'cls-7', name: 'Fiqh' },
+  { id: 'cls-8', name: '10th Board' },
+  { id: 'cls-9', name: '12th Board' },
+  { id: 'cls-10', name: 'Modern Education' },
+  { id: 'cls-11', name: 'Critical Thinking' },
+  { id: 'cls-12', name: 'Personality Development' }
+];
+
 export const MOCK_SUBJECTS = [
-  { id: 'sub-1', name: 'Mathematics' },
-  { id: 'sub-2', name: 'English Language' },
-  { id: 'sub-3', name: 'Science' },
-  { id: 'sub-4', name: 'Arabic Language' },
-  { id: 'sub-5', name: 'Holy Quran' },
-  { id: 'sub-6', name: 'Islamic Studies' },
-  { id: 'sub-7', name: 'Computer Science' },
+  { id: 'sub-1', name: 'Mathematics', classification_id: 'cls-10' },
+  { id: 'sub-2', name: 'English Language', classification_id: 'cls-1' },
+  { id: 'sub-3', name: 'Science', classification_id: 'cls-10' },
+  { id: 'sub-4', name: 'Arabic Language', classification_id: 'cls-2' },
+  { id: 'sub-5', name: 'Holy Quran', classification_id: 'cls-6' },
+  { id: 'sub-6', name: 'Islamic Studies', classification_id: 'cls-7' },
+  { id: 'sub-7', name: 'Computer Science', classification_id: 'cls-10' },
 ];
 
 export const MOCK_TEACHERS = [
@@ -103,6 +118,7 @@ export const MOCK_SLOTS = [
 // ─── Pre-built snapshot for localStorage seeding ─────────────────────────────
 // Used by TimetableManager.loadData() when Supabase is unavailable.
 export const MOCK_TIMETABLE_STATE = {
+  classifications: MOCK_CLASSIFICATIONS,
   subjects:    MOCK_SUBJECTS,
   teachers:    MOCK_TEACHERS,
   classes:     MOCK_CLASSES,

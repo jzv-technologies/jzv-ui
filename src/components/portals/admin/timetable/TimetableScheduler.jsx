@@ -1,6 +1,9 @@
 // src/components/portals/admin/timetable/TimetableScheduler.jsx
 import React, { useState } from "react";
+import { showToast } from "../../../../utils/toast";
+import ConfirmModal from "../../../ConfirmModal";
 import { getSubjectColor } from "./TimetableAdminView";
+
 
 const TimetableScheduler = ({
   classId,
@@ -11,12 +14,14 @@ const TimetableScheduler = ({
   slots = [],
   assignments = [],
   onUpdateSlot,
+  showBreaks = true,
 }) => {
   const [editingSlot, setEditingSlot] = useState(null); // { day, periodId, periodNumber, subjectId, teacherId }
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [selectedDays, setSelectedDays] = useState([]);
-  const [showBreaks, setShowBreaks] = useState(true);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const currentClass = classes.find((c) => String(c.id) === String(classId));
@@ -70,7 +75,7 @@ const TimetableScheduler = ({
     if (!editingSlot) return;
 
     if (selectedDays.length === 0) {
-      alert("Please select at least one day to assign.");
+      showToast("Please select at least one day to assign.", "error");
       return;
     }
 
@@ -78,7 +83,7 @@ const TimetableScheduler = ({
     if (selectedTeacherId && selectedSubjectId) {
       const teacher = teachers.find((t) => String(t.id) === String(selectedTeacherId));
       if (!teacher || !teacher.subjects.some(sid => String(sid) === String(selectedSubjectId))) {
-        alert("Selected teacher is not qualified to teach this subject.");
+        showToast("Selected teacher is not qualified to teach this subject.", "error");
         return;
       }
 
@@ -101,8 +106,9 @@ const TimetableScheduler = ({
         const conflictMessages = conflicts
           .map((c) => `${c.day} (Busy in ${c.className})`)
           .join("\n");
-        alert(
-          `Conflict Detected: Teacher ${teacher.name} is already assigned on:\n${conflictMessages}`
+        showToast(
+          `Conflict Detected: Teacher ${teacher.name} is already assigned on:\n${conflictMessages}`,
+          "error"
         );
         return;
       }
@@ -166,38 +172,6 @@ const TimetableScheduler = ({
 
   return (
     <div className="space-y-4">
-      {/* Header stats */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-light-lbg/30 border border-light-border px-5 py-3 rounded-2xl gap-3">
-        <div>
-          <span className="text-xs font-bold text-dark-soft uppercase">Active Timetable</span>
-          <h3 className="text-lg font-bold text-dark-deepblue">{currentClass.name}</h3>
-        </div>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer bg-white border border-light-border px-3 py-1.5 rounded-xl hover:bg-light-bg/30 transition-all select-none">
-            <input
-              type="checkbox"
-              checked={showBreaks}
-              onChange={(e) => setShowBreaks(e.target.checked)}
-              className="rounded text-brand-primary focus:ring-brand-soft w-4 h-4"
-            />
-            <span className="text-xs font-bold text-dark-primary">Show Breaks</span>
-          </label>
-          <div className="text-right">
-            <span className="text-xs text-dark-soft font-semibold block">Scheduled Periods</span>
-            <span className="text-sm font-extrabold text-brand-primary">
-              {
-                slots.filter(
-                  (s) =>
-                    String(s.class_id) === String(classId) &&
-                    s.subject_id &&
-                    !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
-                ).length
-              } /{" "}
-              {days.length * periods.filter((p) => !p.is_break).length} slots assigned
-            </span>
-          </div>
-        </div>
-      </div>
 
       {/* Grid view */}
       {visiblePeriods.length === 0 ? (
@@ -473,20 +447,27 @@ const TimetableScheduler = ({
                 type="button"
                 onClick={() => {
                   if (selectedDays.length === 0) {
-                    alert("Please select at least one day to clear.");
+                    showToast("Please select at least one day to clear.", "error");
                     return;
                   }
                   const dayNames = selectedDays.join(", ");
-                  if (confirm(`Are you sure you want to clear assignments for ${dayNames}?`)) {
-                    onUpdateSlot(
-                      classId,
-                      selectedDays,
-                      editingSlot.periodId,
-                      null,
-                      null
-                    );
-                    setEditingSlot(null);
-                  }
+                  setConfirmConfig({
+                    title: "Clear Slots",
+                    message: `Are you sure you want to clear assignments for ${dayNames}?`,
+                    confirmText: "Clear",
+                    type: "danger",
+                    onConfirm: () => {
+                      setConfirmConfig(null);
+                      onUpdateSlot(
+                        classId,
+                        selectedDays,
+                        editingSlot.periodId,
+                        null,
+                        null
+                      );
+                      setEditingSlot(null);
+                    }
+                  });
                 }}
                 className="text-red-primary hover:text-red-dark hover:bg-red-lbg/50 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-red-soft"
               >
@@ -513,6 +494,16 @@ const TimetableScheduler = ({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };

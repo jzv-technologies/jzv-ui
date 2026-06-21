@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import RolePortal from "./RolePortal";
+import { showToast } from "../../utils/toast";
 import DynamicForm from "../DynamicForm";
 import DataGrid from "../DataGrid";
 import DetailModal from "../DetailModal";
@@ -334,13 +335,14 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
 
   const handleUpdateRecord = async () => {
     if (!selectedRecord.id) {
-      alert(
+      showToast(
         "Error: Record does not have an 'id' field, unable to update database.",
+        "error"
       );
       return;
     }
     if (editStatus === "Resolved" && !editResolution.trim()) {
-      alert("Resolution is required when status is marked as Resolved.");
+      showToast("Resolution is required when status is marked as Resolved.", "error");
       return;
     }
 
@@ -371,14 +373,14 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       const result = await res.json();
       if (result.success) {
         setSelectedRecord(null);
-        alert("Record updated successfully!");
+        showToast("Record updated successfully!", "success");
         fetchSubmissions(uuidMap[subView]);
       } else {
         throw new Error(result.error || "Update failed");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to update record: " + err.message);
+      showToast("Failed to update record: " + err.message, "error");
     } finally {
       setSavingRecord(false);
     }

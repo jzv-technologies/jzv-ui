@@ -1,8 +1,10 @@
 // src/components/portals/admin/timetable/TimetableManager.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../../utils/supabase';
-import TimetableScheduler from './TimetableScheduler';
+import { showToast } from '../../../../utils/toast';
 import TimetableAdminView from './TimetableAdminView';
+import ConfirmModal from '../../../ConfirmModal';
+
 import {
   SubjectsSetup,
   TeachersSetup,
@@ -19,13 +21,14 @@ import {
   MOCK_ASSIGNMENTS as DEFAULT_MOCK_ASSIGNMENTS,
   MOCK_SLOTS as DEFAULT_MOCK_SLOTS,
   MOCK_TIMETABLE_STATE,
+  MOCK_CLASSIFICATIONS as DEFAULT_MOCK_CLASSIFICATIONS,
 } from '../../../../data/mockTimetable';
 
 const TimetableManager = () => {
-  const [activeTab, setActiveTab] = useState('grid'); // "grid" | "unassigned_classes" | "free_teachers" | "assigned_teachers" | "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
-  const [selectedClassId, setSelectedClassId] = useState('');
+  const [activeTab, setActiveTab] = useState('view'); // "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
 
   // Timetable State
+  const [classifications, setClassifications] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -38,6 +41,8 @@ const TimetableManager = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [dbSetupInstructionOpen, setDbSetupInstructionOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   // JSON Import trigger
   const fileInputRef = React.useRef(null);
@@ -59,6 +64,7 @@ const TimetableManager = () => {
 
       // Fetch from Supabase
       const [
+        { data: dbClassifications },
         { data: dbSubjects },
         { data: dbTeachers },
         { data: dbTeacherSubjects },
@@ -67,6 +73,7 @@ const TimetableManager = () => {
         { data: dbSlots },
         { data: dbPeriods },
       ] = await Promise.all([
+        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('subjects').select('*'),
         supabase.from('teachers').select('*'),
         supabase.from('teacher_subjects').select('*'),
@@ -83,6 +90,7 @@ const TimetableManager = () => {
           .map((ts) => ts.subject_id),
       }));
 
+      setClassifications(dbClassifications || []);
       setSubjects(dbSubjects || []);
       setTeachers(teachersWithSubjects);
       setClasses(dbClasses || []);
@@ -117,10 +125,6 @@ const TimetableManager = () => {
         }
       }
 
-      if (dbClasses && dbClasses.length > 0) {
-        setSelectedClassId(dbClasses[0].id);
-      }
-
       setIsSupabaseMode(true);
     } catch (err) {
       console.warn('Supabase mode not active, loading from LocalStorage:', err.message);
@@ -136,15 +140,13 @@ const TimetableManager = () => {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
+        setClassifications(parsed.classifications || DEFAULT_MOCK_CLASSIFICATIONS);
         setSubjects(parsed.subjects || []);
         setTeachers(parsed.teachers || []);
         setClasses(parsed.classes || []);
         setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
         setAssignments(parsed.assignments || []);
         setSlots(parsed.slots || []);
-        if (parsed.classes && parsed.classes.length > 0) {
-          setSelectedClassId(parsed.classes[0].id);
-        }
       } catch (e) {
         console.error('Failed to parse local timetable data', e);
         initializeMockData();
@@ -155,16 +157,17 @@ const TimetableManager = () => {
   };
 
   const initializeMockData = () => {
+    setClassifications(DEFAULT_MOCK_CLASSIFICATIONS);
     setSubjects(DEFAULT_MOCK_SUBJECTS);
     setTeachers(DEFAULT_MOCK_TEACHERS);
     setClasses(DEFAULT_MOCK_CLASSES);
     setPeriods(DEFAULT_MOCK_PERIODS);
     setAssignments(DEFAULT_MOCK_ASSIGNMENTS);
     setSlots(DEFAULT_MOCK_SLOTS);
-    setSelectedClassId(DEFAULT_MOCK_CLASSES[0].id);
-
+ 
     // Save to local storage
     const state = {
+      classifications: DEFAULT_MOCK_CLASSIFICATIONS,
       subjects: DEFAULT_MOCK_SUBJECTS,
       teachers: DEFAULT_MOCK_TEACHERS,
       classes: DEFAULT_MOCK_CLASSES,
@@ -181,15 +184,17 @@ const TimetableManager = () => {
 
   // Sync state helper
   const saveState = async (updates) => {
+    const nextClassifications = updates.classifications !== undefined ? updates.classifications : classifications;
     const nextSubjects = updates.subjects !== undefined ? updates.subjects : subjects;
     const nextTeachers = updates.teachers !== undefined ? updates.teachers : teachers;
     const nextClasses = updates.classes !== undefined ? updates.classes : classes;
     const nextPeriods = updates.periods !== undefined ? updates.periods : periods;
     const nextAssignments = updates.assignments !== undefined ? updates.assignments : assignments;
     const nextSlots = updates.slots !== undefined ? updates.slots : slots;
-
+ 
     // Local Storage sync (always update local storage as redundant copy)
     const localState = {
+      classifications: nextClassifications,
       subjects: nextSubjects,
       teachers: nextTeachers,
       classes: nextClasses,
@@ -199,13 +204,8 @@ const TimetableManager = () => {
     };
     localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(localState));
 
-    // Supabase sync if enabled
-    if (isSupabaseMode) {
-      // In a real database environment, database operations are performed.
-      // For safety, let's also let the state updates be synchronous on UI first.
-    }
-
     // Update React State
+    if (updates.classifications !== undefined) setClassifications(updates.classifications);
     if (updates.subjects !== undefined) setSubjects(updates.subjects);
     if (updates.teachers !== undefined) setTeachers(updates.teachers);
     if (updates.classes !== undefined) setClasses(updates.classes);
@@ -215,36 +215,144 @@ const TimetableManager = () => {
   };
 
   // SUBJECT ACTION HANDLERS
-  const handleAddSubject = async (name) => {
-    const newSub = { id: generateLocalId(), name };
+  const handleAddSubject = async (name, classificationId) => {
+    const newSub = { id: generateLocalId(), name, classification_id: classificationId };
     let updatedSubjects = [...subjects, newSub];
 
     if (isSupabaseMode) {
       try {
-        const { data, error } = await supabase.from('subjects').insert([{ name }]).select();
+        const { data, error } = await supabase.from('subjects').insert([{ name, classification_id: classificationId }]).select();
         if (error) throw error;
         updatedSubjects = [...subjects, data[0]];
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
     saveState({ subjects: updatedSubjects });
   };
 
-  const handleUpdateSubject = async (id, name) => {
-    const updatedSubjects = subjects.map((s) => (String(s.id) === String(id) ? { ...s, name } : s));
+  const handleUpdateSubject = async (id, name, classificationId) => {
+    const updatedSubjects = subjects.map((s) => (String(s.id) === String(id) ? { ...s, name, classification_id: classificationId } : s));
 
     if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        const { error } = await supabase.from('subjects').update({ name }).eq('id', id);
+        const { error } = await supabase.from('subjects').update({ name, classification_id: classificationId }).eq('id', id);
         if (error) throw error;
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
     saveState({ subjects: updatedSubjects });
+  };
+
+  const handleSaveClassifications = async (updatedList, deletedId = null) => {
+    if (isSupabaseMode) {
+      try {
+        if (deletedId && !deletedId.toString().startsWith('local-')) {
+          const { error } = await supabase.from('subject_classifications').delete().eq('id', deletedId);
+          if (error) throw error;
+        }
+
+        const promises = updatedList.map(async (cls) => {
+          const isLocal = cls.id.toString().startsWith('local-');
+          if (isLocal) {
+            const { data, error } = await supabase
+              .from('subject_classifications')
+              .insert([{ name: cls.name }])
+              .select();
+            if (error) throw error;
+            return data[0];
+          } else {
+            const { error } = await supabase
+              .from('subject_classifications')
+              .update({ name: cls.name })
+              .eq('id', cls.id);
+            if (error) throw error;
+            return cls;
+          }
+        });
+
+        const nextDbList = await Promise.all(promises);
+        
+        const { data: refetched } = await supabase
+          .from('subject_classifications')
+          .select('*')
+          .order('name', { ascending: true });
+        
+        const finalClassifications = refetched || nextDbList;
+        saveState({ classifications: finalClassifications });
+
+        if (deletedId) {
+          const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
+          if (refetchedSubjects) {
+            saveState({ 
+              classifications: finalClassifications,
+              subjects: refetchedSubjects 
+            });
+          }
+        }
+        return;
+      } catch (err) {
+        showToast('Database Sync Error: ' + err.message, 'error');
+        return;
+      }
+    }
+
+    let nextSubjects = subjects;
+    if (deletedId) {
+      nextSubjects = subjects.map(s => String(s.classification_id) === String(deletedId) ? { ...s, classification_id: null } : s);
+    }
+    saveState({
+      classifications: updatedList,
+      subjects: nextSubjects
+    });
+  };
+
+  const handleBulkMapSubjects = async (classificationId, selectedSubjectIds) => {
+    if (isSupabaseMode) {
+      try {
+        if (!classificationId.toString().startsWith('local-')) {
+          await supabase
+            .from('subjects')
+            .update({ classification_id: null })
+            .eq('classification_id', classificationId);
+
+          const realSubjectIds = selectedSubjectIds.filter(id => !id.toString().startsWith('local-'));
+          if (realSubjectIds.length > 0) {
+            const { error } = await supabase
+              .from('subjects')
+              .update({ classification_id: classificationId })
+              .in('id', realSubjectIds);
+            if (error) throw error;
+          }
+        }
+        
+        const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
+        if (refetchedSubjects) {
+          saveState({ subjects: refetchedSubjects });
+        }
+        return;
+      } catch (err) {
+        showToast('Database Sync Error: ' + err.message, 'error');
+        return;
+      }
+    }
+
+    const nextSubjects = subjects.map(s => {
+      const isSelected = selectedSubjectIds.includes(s.id);
+      const isCurrentlyMappedToThis = String(s.classification_id) === String(classificationId);
+
+      if (isSelected) {
+        return { ...s, classification_id: classificationId };
+      } else if (isCurrentlyMappedToThis) {
+        return { ...s, classification_id: null };
+      }
+      return s;
+    });
+
+    saveState({ subjects: nextSubjects });
   };
 
   const handleDeleteSubject = async (id) => {
@@ -299,7 +407,7 @@ const TimetableManager = () => {
 
         updatedTeachers = [...teachers, { ...insertedTeacher, subjects: qualifiedSubjects }];
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -360,7 +468,7 @@ const TimetableManager = () => {
           if (insErr) throw insErr;
         }
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -401,12 +509,11 @@ const TimetableManager = () => {
         if (error) throw error;
         updatedClasses = [...classes, data[0]];
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
     saveState({ classes: updatedClasses });
-    setSelectedClassId(newClass.id);
   };
 
   const handleUpdateClass = async (id, name) => {
@@ -417,7 +524,7 @@ const TimetableManager = () => {
         const { error } = await supabase.from('classes').update({ name }).eq('id', id);
         if (error) throw error;
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -476,7 +583,7 @@ const TimetableManager = () => {
         if (error) throw error;
         updatedAssignments = [...assignments, data[0]];
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -558,7 +665,7 @@ const TimetableManager = () => {
 
         finalPeriods = updatedDbPeriods || [];
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -652,7 +759,7 @@ const TimetableManager = () => {
           }
         }
       } catch (err) {
-        alert('DB Error: ' + err.message);
+        showToast('DB Error: ' + err.message, 'error');
         return;
       }
     }
@@ -709,54 +816,48 @@ const TimetableManager = () => {
           throw new Error('Invalid file format. Missing core timetable arrays.');
         }
 
-        if (
-          window.confirm(
-            'Importing this file will overwrite your current timetable configuration. Proceed?'
-          )
-        ) {
-          if (isSupabaseMode) {
-            // Overwrite database
-            setLoading(true);
-            try {
-              // Delete everything
-              await Promise.all([
-                supabase.from('timetable_slots').delete().gt('id', 0),
-                supabase.from('class_assignments').delete().gt('id', 0),
-                supabase.from('teacher_subjects').delete().gt('id', 0),
-                supabase.from('teachers').delete().gt('id', 0),
-                supabase.from('classes').delete().gt('id', 0),
-                supabase.from('subjects').delete().gt('id', 0),
-                supabase.from('periods').delete().gt('id', 0),
-              ]);
-
-              // Write imported data
-              // We'll write to state and let the user do updates. Because write all could trigger RLS/foreign key conflicts depending on ids,
-              // for best reliability we import it as the local state and sync it.
-              // Note: If they import, it updates their local storage immediately and populates state.
-            } catch (err) {
-              console.warn('DB reset failed during import: ', err.message);
-            } finally {
-              setLoading(false);
+        setConfirmConfig({
+          title: "Import Timetable",
+          message: 'Importing this file will overwrite your current timetable configuration. Proceed?',
+          confirmText: "Import",
+          type: "danger",
+          onConfirm: async () => {
+            setConfirmConfig(null);
+            if (isSupabaseMode) {
+              // Overwrite database
+              setLoading(true);
+              try {
+                // Delete everything
+                await Promise.all([
+                  supabase.from('timetable_slots').delete().gt('id', 0),
+                  supabase.from('class_assignments').delete().gt('id', 0),
+                  supabase.from('teacher_subjects').delete().gt('id', 0),
+                  supabase.from('teachers').delete().gt('id', 0),
+                  supabase.from('classes').delete().gt('id', 0),
+                  supabase.from('subjects').delete().gt('id', 0),
+                  supabase.from('periods').delete().gt('id', 0),
+                ]);
+              } catch (err) {
+                console.warn('DB reset failed during import: ', err.message);
+              } finally {
+                setLoading(false);
+              }
             }
+
+            saveState({
+              subjects: parsed.subjects,
+              teachers: parsed.teachers,
+              classes: parsed.classes,
+              periods: parsed.periods,
+              assignments: parsed.assignments,
+              slots: parsed.slots,
+            });
+
+            showToast('Timetable imported successfully!', 'success');
           }
-
-          saveState({
-            subjects: parsed.subjects,
-            teachers: parsed.teachers,
-            classes: parsed.classes,
-            periods: parsed.periods,
-            assignments: parsed.assignments,
-            slots: parsed.slots,
-          });
-
-          if (parsed.classes.length > 0) {
-            setSelectedClassId(parsed.classes[0].id);
-          }
-
-          alert('Timetable imported successfully!');
-        }
+        });
       } catch (err) {
-        alert('Failed to parse JSON file: ' + err.message);
+        showToast('Failed to parse JSON file: ' + err.message, 'error');
       }
     };
     reader.readAsText(file);
@@ -764,24 +865,10 @@ const TimetableManager = () => {
     e.target.value = '';
   };
 
-  const getCompletionPercentage = (classId) => {
-    const nonBreakPeriods = periods.filter((p) => !p.is_break);
-    const totalSlots = 6 * nonBreakPeriods.length;
-    if (totalSlots === 0) return 0;
-    const nonBreakPeriodIds = nonBreakPeriods.map((p) => String(p.id));
-    const assignedSlots = slots.filter(
-      (s) =>
-        String(s.class_id) === String(classId) &&
-        s.subject_id &&
-        nonBreakPeriodIds.includes(String(s.period_id))
-    ).length;
-    return Math.round((assignedSlots / totalSlots) * 100);
-  };
-
   return (
     <div className="flex flex-col min-h-[500px]">
       {/* Top Banner Control Panel */}
-      <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2">
+      <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2">
         {/* Title & Actions Row */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
           <div>
@@ -790,22 +877,17 @@ const TimetableManager = () => {
               Timetable Planner
               <div className="flex items-center gap-2 mt-1">
                 <span
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    isSupabaseMode
-                      ? 'bg-green-100 text-green-dark'
-                      : 'bg-orange-100 text-orange-dark'
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xl font-bold ${
+                    isSupabaseMode ? 'text-green-dark' : 'text-orange-dark'
                   }`}
                 >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${isSupabaseMode ? 'bg-green-bright' : 'bg-orange-primary'}`}
-                  ></span>
-                  {isSupabaseMode ? 'Supabase Connected' : 'Local Offline Mode (LocalStorage)'}
+                  <i className="fas fa-lightbulb "></i>
                 </span>
                 <button
                   onClick={() => setActiveTab('sync')}
-                  className="text-[10px] text-brand-primary font-bold hover:underline"
+                  className="text-xl text-brand-primary font-bold hover:underline"
                 >
-                  Configure Database
+                  <i className="fas fa-cog text-brand-primary"></i>
                 </button>
               </div>
             </h2>
@@ -850,9 +932,8 @@ const TimetableManager = () => {
         </div>
 
         {/* Workspace Tabs (Inside the Top Banner Card) */}
-        <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1 pt-2">
+        <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1">
           {[
-            { id: 'grid', label: 'Scheduler Grid', icon: 'fa-th-large' },
             { id: 'view', label: 'Admin View', icon: 'fa-eye' },
             { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
             { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
@@ -882,101 +963,6 @@ const TimetableManager = () => {
         </div>
       ) : (
         <div className="flex-1">
-          {activeTab === 'grid' && (
-            <div className="flex flex-col lg:flex-row gap-6">
-              {/* Classes Sidebar */}
-              <div className="w-full lg:w-60 lg:shrink-0 space-y-3">
-                <div className="bg-light-lbg px-4 py-3 rounded-xl border border-light-border text-xs font-bold text-dark-primary uppercase tracking-wider">
-                  Select Class
-                </div>
-                <div className="space-y-2 max-h-[500px] lg:max-h-[calc(100vh-100px)] overflow-y-auto pr-1">
-                  {classes.length === 0 ? (
-                    <p className="text-xs text-dark-muted italic p-2">
-                      No classes found. Set up classes first.
-                    </p>
-                  ) : (
-                    classes.map((cls) => {
-                      const pct = getCompletionPercentage(cls.id);
-                      return (
-                        <button
-                          key={cls.id}
-                          onClick={() => setSelectedClassId(cls.id)}
-                          className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between group ${
-                            selectedClassId === cls.id
-                              ? 'bg-brand-primary border-brand-primary text-white shadow-md shadow-brand-lbg'
-                              : 'bg-white border-light-border hover:border-brand-soft text-dark-primary hover:bg-light-bg/30'
-                          }`}
-                        >
-                          <div className="truncate">
-                            <span className="font-extrabold text-sm block">{cls.name}</span>
-                            <span
-                              className={`text-[10px] block mt-0.5 font-semibold ${
-                                selectedClassId === cls.id ? 'text-brand-lbg' : 'text-dark-soft'
-                              }`}
-                            >
-                              Schedule completed
-                            </span>
-                          </div>
-
-                          {/* Completion Badge */}
-                          <div className="flex items-center gap-2">
-                            <div className="relative w-8 h-8 flex items-center justify-center">
-                              {/* Simple CSS Circular Progress */}
-                              <svg className="w-8 h-8 transform -rotate-90">
-                                <circle
-                                  cx="16"
-                                  cy="16"
-                                  r="12"
-                                  className="stroke-current"
-                                  strokeWidth="3"
-                                  fill="transparent"
-                                  style={{
-                                    color:
-                                      selectedClassId === cls.id
-                                        ? 'rgba(255,255,255,0.2)'
-                                        : '#EAEAEA',
-                                  }}
-                                />
-                                <circle
-                                  cx="16"
-                                  cy="16"
-                                  r="12"
-                                  className="stroke-current transition-all duration-500"
-                                  strokeWidth="3"
-                                  fill="transparent"
-                                  strokeDasharray={2 * Math.PI * 12}
-                                  strokeDashoffset={2 * Math.PI * 12 * (1 - pct / 100)}
-                                  style={{
-                                    color: selectedClassId === cls.id ? '#FFFFFF' : '#6C3483',
-                                  }}
-                                />
-                              </svg>
-                              <span className="absolute text-[8px] font-extrabold">{pct}%</span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {/* Main Scheduler Board */}
-              <div className="flex-1 min-w-0">
-                <TimetableScheduler
-                  classId={selectedClassId}
-                  classes={classes}
-                  teachers={teachers}
-                  subjects={subjects}
-                  periods={periods}
-                  slots={slots}
-                  assignments={assignments}
-                  onUpdateSlot={handleUpdateSlot}
-                />
-              </div>
-            </div>
-          )}
-
           {activeTab === 'view' && (
             <TimetableAdminView
               classes={classes}
@@ -994,9 +980,12 @@ const TimetableManager = () => {
           {activeTab === 'subjects' && (
             <SubjectsSetup
               subjects={subjects}
+              classifications={classifications}
               onAddSubject={handleAddSubject}
               onUpdateSubject={handleUpdateSubject}
               onDeleteSubject={handleDeleteSubject}
+              onSaveClassifications={handleSaveClassifications}
+              onBulkMapSubjects={handleBulkMapSubjects}
               slots={slots}
               assignments={assignments}
             />
@@ -1161,6 +1150,15 @@ CREATE UNIQUE INDEX unique_teacher_period ON public.timetable_slots (day, period
           )}
         </div>
       )}
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };

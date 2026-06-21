@@ -1,5 +1,8 @@
 // src/components/portals/admin/timetable/TimetableSetupTabs.jsx
 import React, { useState } from "react";
+import ClassificationsModal from "./ClassificationsModal";
+import ConfirmModal from "../../../ConfirmModal";
+
 
 // Helper to generate UUIDs locally when offline
 export const generateLocalId = () => {
@@ -9,31 +12,47 @@ export const generateLocalId = () => {
 // ==========================================
 // 1. SUBJECTS SETUP
 // ==========================================
-export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDeleteSubject, slots, assignments }) => {
+export const SubjectsSetup = ({
+  subjects,
+  classifications = [],
+  onAddSubject,
+  onUpdateSubject,
+  onDeleteSubject,
+  onSaveClassifications,
+  onBulkMapSubjects,
+  slots,
+  assignments
+}) => {
   const [name, setName] = useState("");
+  const [classificationId, setClassificationId] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
+  const [editClassificationId, setEditClassificationId] = useState("");
+  const [isClassificationsModalOpen, setIsClassificationsModalOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAddSubject(name.trim());
+    onAddSubject(name.trim(), classificationId || null);
     setName("");
+    setClassificationId("");
   };
 
   const handleStartEdit = (sub) => {
     setEditingId(sub.id);
     setEditName(sub.name);
+    setEditClassificationId(sub.classification_id || "");
   };
 
   const handleSaveEdit = (id) => {
     if (!editName.trim()) return;
-    onUpdateSubject(id, editName.trim());
+    onUpdateSubject(id, editName.trim(), editClassificationId || null);
     setEditingId(null);
   };
 
   const handleDelete = (subId, name) => {
-    // Check usage using String comparisons for robustness
     const isUsedInSlots = slots.some((s) => String(s.subject_id) === String(subId));
     const isUsedInAssignments = assignments.some((a) => String(a.subject_id) === String(subId));
 
@@ -42,26 +61,58 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
       warning += `\n\nWARNING: This subject is currently assigned to classes or scheduled in the timetable. Deleting it will clear those assignments/slots!`;
     }
 
-    if (window.confirm(warning)) {
-      onDeleteSubject(subId);
-    }
+    setConfirmConfig({
+      title: "Delete Subject",
+      message: warning,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onDeleteSubject(subId);
+      }
+    });
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl">
-        <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-3">Add New Subject</h4>
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          <input
-            type="text"
-            placeholder="e.g. Mathematics, Islamic Studies, English"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="flex-1 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-          />
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide">Add New Subject</h4>
+          <button
+            type="button"
+            onClick={() => setIsClassificationsModalOpen(true)}
+            className="text-brand-primary hover:text-brand-dark hover:bg-brand-lbg/20 text-xs font-bold px-3 py-1.5 rounded-lg border border-brand-soft/20 flex items-center gap-1.5 transition-all outline-none"
+          >
+            <i className="fas fa-sliders-h"></i> Manage Classifications
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div>
+            <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">Subject Name</label>
+            <input
+              type="text"
+              placeholder="e.g. Mathematics, Islamic Studies, English"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">Classification</label>
+            <select
+              value={classificationId}
+              onChange={(e) => setClassificationId(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-xl px-3 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+            >
+              <option value="">-- Choose Classification --</option>
+              {classifications.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
-            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 transition-all"
+            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center justify-center gap-2 transition-all h-[46px]"
           >
             <i className="fas fa-plus"></i> Add Subject
           </button>
@@ -73,13 +124,14 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
           <thead>
             <tr className="bg-light-lbg border-b border-light-border">
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Subject Name</th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Classification</th>
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-light-border">
             {subjects.length === 0 ? (
               <tr>
-                <td colSpan="2" className="py-8 text-center text-dark-muted text-sm">
+                <td colSpan="3" className="py-8 text-center text-dark-muted text-sm">
                   No subjects configured. Add one above!
                 </td>
               </tr>
@@ -94,10 +146,26 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="bg-white border border-light-border rounded-lg px-3 py-1.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft w-full max-w-xs"
+                        className="bg-white border border-light-border rounded-lg px-3 py-1.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft w-full"
                       />
                     ) : (
                       sub.name
+                    )}
+                  </td>
+                  <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
+                    {editingId === sub.id ? (
+                      <select
+                        value={editClassificationId}
+                        onChange={(e) => setEditClassificationId(e.target.value)}
+                        className="bg-white border border-light-border rounded-lg px-3 py-1.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft w-full"
+                      >
+                        <option value="">No Classification</option>
+                        {classifications.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      classifications.find(c => String(c.id) === String(sub.classification_id))?.name || <span className="text-dark-muted italic">Unclassified</span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-right">
@@ -143,6 +211,26 @@ export const SubjectsSetup = ({ subjects, onAddSubject, onUpdateSubject, onDelet
           </tbody>
         </table>
       </div>
+
+      {/* Classifications Management Modal */}
+      <ClassificationsModal
+        isOpen={isClassificationsModalOpen}
+        onClose={() => setIsClassificationsModalOpen(false)}
+        classifications={classifications}
+        subjects={subjects}
+        onSaveClassifications={onSaveClassifications}
+        onBulkMapSubjects={onBulkMapSubjects}
+      />
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };
@@ -160,6 +248,8 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
   const [editName, setEditName] = useState("");
   const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
   const [editIsMale, setEditIsMale] = useState(true);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -208,9 +298,16 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
       warning += `\n\nWARNING: This teacher is currently assigned to classes or scheduled in the timetable. Deleting will clear those schedules!`;
     }
 
-    if (window.confirm(warning)) {
-      onDeleteTeacher(teacherId);
-    }
+    setConfirmConfig({
+      title: "Delete Teacher",
+      message: warning,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onDeleteTeacher(teacherId);
+      }
+    });
   };
 
   const getSubjectNamesStr = (subjectIds = []) => {
@@ -399,6 +496,16 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
           </tbody>
         </table>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };
@@ -427,6 +534,8 @@ export const ClassesSetup = ({
   // Assignment states
   const [newSubId, setNewSubId] = useState("");
   const [newTeacherId, setNewTeacherId] = useState("");
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
 
   React.useEffect(() => {
     if (classes.length > 0 && !selectedClassId) {
@@ -461,12 +570,19 @@ export const ClassesSetup = ({
       warning += `\n\nWARNING: This class has mappings or scheduled periods. Deleting it will clear everything associated with this class!`;
     }
 
-    if (window.confirm(warning)) {
-      onDeleteClass(clsId);
-      if (String(selectedClassId) === String(clsId)) {
-        setSelectedClassId(classes.find((c) => String(c.id) !== String(clsId))?.id || "");
+    setConfirmConfig({
+      title: "Delete Class",
+      message: warning,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onDeleteClass(clsId);
+        if (String(selectedClassId) === String(clsId)) {
+          setSelectedClassId(classes.find((c) => String(c.id) !== String(clsId))?.id || "");
+        }
       }
-    }
+    });
   };
 
   // Filter teachers based on chosen subject
@@ -499,9 +615,16 @@ export const ClassesSetup = ({
       warning += `\n\nWARNING: This assignment is scheduled in the weekly timetable! Removing it will set those timetable slots to "Free Period".`;
     }
 
-    if (window.confirm(warning)) {
-      onRemoveAssignment(assId);
-    }
+    setConfirmConfig({
+      title: "Remove Assignment",
+      message: warning,
+      confirmText: "Remove",
+      type: "danger",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onRemoveAssignment(assId);
+      }
+    });
   };
 
   const activeClass = classes.find(c => String(c.id) === String(selectedClassId));
@@ -718,6 +841,16 @@ export const ClassesSetup = ({
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };
@@ -729,6 +862,7 @@ export const ClassesSetup = ({
 export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
   const [periodCount, setPeriodCount] = useState(periods.length || 11);
   const [periodList, setPeriodList] = useState(periods);
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   React.useEffect(() => {
     setPeriodCount(periods.length);
@@ -778,9 +912,16 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
       warning += `\n\nWARNING: You are reducing the number of periods! Doing so will PERMANENTLY DELETE ${truncatedSlots.length} scheduled slots from the timetable!`;
     }
 
-    if (window.confirm(warning)) {
-      onSavePeriods(periodList);
-    }
+    setConfirmConfig({
+      title: "Save Periods",
+      message: warning,
+      confirmText: "Save",
+      type: truncatedSlots.length > 0 ? "danger" : "warning",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onSavePeriods(periodList);
+      }
+    });
   };
 
   return (
@@ -845,6 +986,16 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
           ))}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };

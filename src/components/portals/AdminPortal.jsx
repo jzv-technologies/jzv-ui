@@ -6,6 +6,8 @@ import AdminUsersView from "./admin/AdminUsersView";
 import AdminFormConfigsView from "./admin/AdminFormConfigsView";
 import TimetableManager from "./admin/timetable/TimetableManager";
 import AdminStudentsView from "./admin/AdminStudentsView";
+import SyllabusManager from "./admin/syllabus/SyllabusManager";
+import ConfirmModal from "../ConfirmModal";
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -14,6 +16,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  const [teachers, setTeachers] = useState([]);
 
   // Form configs state
   const [configs, setConfigs] = useState([]);
@@ -23,8 +26,28 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
 
   const fetchingRef = useRef(false);
   const lastSubViewRef = useRef(null);
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // ----- User Management -----
+  const fetchTeachers = async () => {
+    try {
+      const { data, error } = await supabase.from("teachers").select("*");
+      if (error) throw error;
+      setTeachers(data || []);
+    } catch (err) {
+      console.warn("Error fetching teachers from Supabase, loading from LocalStorage:", err.message);
+      const raw = localStorage.getItem('jzv_timetable_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          setTeachers(parsed.teachers || []);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  };
+
   const fetchAllUsers = async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -44,11 +67,12 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     }
   };
 
-  const handleUpdateUser = async (userId, roleIds, studentIds) => {
+  const handleUpdateUser = async (userId, roleIds, studentIds, teacherId) => {
     setSaving(true);
     setMessage({ type: "", text: "" });
     try {
-      const { error } = await supabase.from("user_roles").upsert(
+      // 1. Upsert roles and students
+      const { error: roleErr } = await supabase.from("user_roles").upsert(
         {
           user_id: userId,
           role_ids: roleIds,
@@ -56,9 +80,48 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
         },
         { onConflict: "user_id" },
       );
-      if (error) throw error;
+      if (roleErr) throw roleErr;
+
+      // 2. Map teacher auth_id
+      // Clear previous mapping for this user
+      await supabase
+        .from("teachers")
+        .update({ auth_id: null })
+        .eq("auth_id", userId);
+
+      // Link new mapping if selected
+      if (teacherId) {
+        const { error: teachErr } = await supabase
+          .from("teachers")
+          .update({ auth_id: userId })
+          .eq("id", teacherId);
+        if (teachErr) throw teachErr;
+      }
+
+      // 3. Fallback/Local storage sync
+      const raw = localStorage.getItem('jzv_timetable_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const nextTeachers = (parsed.teachers || []).map(t => {
+            if (String(t.auth_id) === String(userId)) {
+              return { ...t, auth_id: null };
+            }
+            if (teacherId && String(t.id) === String(teacherId)) {
+              return { ...t, auth_id: userId };
+            }
+            return t;
+          });
+          parsed.teachers = nextTeachers;
+          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
       setMessage({ type: "success", text: "User updated successfully!" });
       fetchAllUsers(); // refresh
+      fetchTeachers(); // refresh mapping state
     } catch (err) {
       setMessage({ type: "error", text: err.message });
     } finally {
@@ -163,25 +226,33 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     }
   };
 
-  const handleDeleteConfig = async (config) => {
-    if (!window.confirm(`Delete "${config.uuid}" from database?`)) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from("dynamic_form_configs")
-        .delete()
-        .eq("uuid", config.uuid);
-      if (error) throw error;
-      setMessage({
-        type: "success",
-        text: `Form schema "${config.uuid}" removed.`,
-      });
-      fetchConfigs();
-    } catch (err) {
-      setMessage({ type: "error", text: "Failed to delete: " + err.message });
-    } finally {
-      setSaving(false);
-    }
+  const handleDeleteConfig = (config) => {
+    setConfirmConfig({
+      title: "Delete Configuration",
+      message: `Delete "${config.uuid}" from database?`,
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        setSaving(true);
+        try {
+          const { error } = await supabase
+            .from("dynamic_form_configs")
+            .delete()
+            .eq("uuid", config.uuid);
+          if (error) throw error;
+          setMessage({
+            type: "success",
+            text: `Form schema "${config.uuid}" removed.`,
+          });
+          fetchConfigs();
+        } catch (err) {
+          setMessage({ type: "error", text: "Failed to delete: " + err.message });
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   // ----- View switching -----
@@ -190,6 +261,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     lastSubViewRef.current = subView;
     if (subView === "users") {
       fetchAllUsers();
+      fetchTeachers();
     } else if (subView === "configs") {
       fetchConfigs();
     }
@@ -234,6 +306,15 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       shadow: "shadow-brand-lbg",
       onClick: () => onSetSubView("timetable"),
     },
+    {
+      id: "syllabus",
+      title: "Syllabus Manager",
+      description: "Manage curriculum nodes, subjects, books, units, chapters, and lessons.",
+      icon: "fa-book-open",
+      buttonColor: "bg-emerald-600 text-white",
+      shadow: "shadow-emerald-200",
+      onClick: () => onSetSubView("syllabus"),
+    },
   ];
 
   return (
@@ -269,6 +350,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
           loading={loading}
           onUpdateUser={handleUpdateUser}
           saving={saving}
+          teachers={teachers}
         />
       )}
 
@@ -295,6 +377,21 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       {subView === "students" && (
         <AdminStudentsView />
       )}
+
+      {/* Syllabus Manager view */}
+      {subView === "syllabus" && (
+        <SyllabusManager role="admin" />
+      )}
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </RolePortal>
   );
 };
