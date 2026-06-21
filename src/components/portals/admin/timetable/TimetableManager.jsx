@@ -4,6 +4,7 @@ import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import TimetableAdminView from './TimetableAdminView';
 import ConfirmModal from '../../../ConfirmModal';
+import TimetableCompareModal from './TimetableCompareModal';
 
 import {
   SubjectsSetup,
@@ -102,6 +103,8 @@ const TimetableManager = () => {
   const [assignments, setAssignments] = useState([]);
   const [slots, setSlots] = useState([]);
   const [seasonsConfig, setSeasonsConfig] = useState(null);
+  const [compareData, setCompareData] = useState(null);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
 
   // Connection State
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
@@ -112,6 +115,7 @@ const TimetableManager = () => {
 
   // JSON Import trigger
   const fileInputRef = React.useRef(null);
+  const compareInputRef = React.useRef(null);
 
   // Load Initial Data
   const loadData = async () => {
@@ -1397,6 +1401,39 @@ const TimetableManager = () => {
     e.target.value = '';
   };
 
+  // JSON COMPARE HANDLER
+  const handleCompareJson = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+
+        // Simple schema validation
+        if (
+          !Array.isArray(parsed.classes) ||
+          !Array.isArray(parsed.teachers) ||
+          !Array.isArray(parsed.subjects) ||
+          !Array.isArray(parsed.periods) ||
+          !Array.isArray(parsed.assignments) ||
+          !Array.isArray(parsed.slots)
+        ) {
+          throw new Error('Invalid file format. Missing core timetable arrays.');
+        }
+
+        setCompareData(parsed);
+        setIsCompareOpen(true);
+      } catch (err) {
+        showToast('Failed to parse JSON file for comparison: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+    // Clear input
+    e.target.value = '';
+  };
+
   return (
     <div className="flex flex-col min-h-[500px]">
       {/* Top Banner Control Panel */}
@@ -1425,11 +1462,34 @@ const TimetableManager = () => {
             </h2>
           </div>
 
+          {/* Workspace Tabs (Inside the Top Banner Card) */}
+          <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1">
+            {[
+              { id: 'view', label: 'Admin View', icon: 'fa-eye' },
+              { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
+              { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
+              { id: 'subjects', label: 'Subjects Setup', icon: 'fa-book' },
+              { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap pb-3 -mb-[2px] ${
+                  activeTab === tab.id
+                    ? 'border-brand-primary text-brand-primary'
+                    : 'border-transparent text-white-50 hover:text-dark-primary hover:border-light-border'
+                }`}
+              >
+                <i className={`fas ${tab.icon}`}></i>
+                {tab.label}
+              </button>
+            ))}
+          </div>
           {/* Export / Import backup */}
           <div className="flex items-center gap-2 w-full md:w-auto">
             <button
               onClick={handleExportJson}
-              className="flex-1 md:flex-none bg-blue-dark hover:bg-brand-dark text-white px-2 py-2 rounded-xl text-xl font-bold shadow-sm flex items-center justify-center gap-2 transition-all"
+              className="flex-1 md:flex-none bg-green-500 hover:bg-green-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
               title="Download full timetable configuration in JSON format"
             >
               <i className="fas fa-file-download"></i>
@@ -1445,10 +1505,26 @@ const TimetableManager = () => {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 md:flex-none bg-dark-primary hover:bg-light-ui border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+              className="flex-1 md:flex-none bg-blue-500 hover:bg-blue-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
               title="Upload and restore timetable config from a JSON file"
             >
               <i className="fas fa-file-upload"></i>
+            </button>
+
+            {/* Compare Button */}
+            <input
+              type="file"
+              accept=".json"
+              ref={compareInputRef}
+              onChange={handleCompareJson}
+              className="hidden"
+            />
+            <button
+              onClick={() => compareInputRef.current?.click()}
+              className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+              title="Compare offline JSON with currently active timetable"
+            >
+              <i className="fas fa-balance-scale"></i>
             </button>
             <button
               onClick={loadData}
@@ -1461,30 +1537,6 @@ const TimetableManager = () => {
               ></i>
             </button>
           </div>
-        </div>
-
-        {/* Workspace Tabs (Inside the Top Banner Card) */}
-        <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1">
-          {[
-            { id: 'view', label: 'Admin View', icon: 'fa-eye' },
-            { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
-            { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
-            { id: 'subjects', label: 'Subjects Setup', icon: 'fa-book' },
-            { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap pb-3 -mb-[2px] ${
-                activeTab === tab.id
-                  ? 'border-brand-primary text-brand-primary'
-                  : 'border-transparent text-white-50 hover:text-dark-primary hover:border-light-border'
-              }`}
-            >
-              <i className={`fas ${tab.icon}`}></i>
-              {tab.label}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -1699,6 +1751,12 @@ CREATE UNIQUE INDEX unique_teacher_period ON public.timetable_slots (day, period
         confirmText={confirmConfig?.confirmText}
         onConfirm={confirmConfig?.onConfirm}
         onCancel={() => setConfirmConfig(null)}
+      />
+      <TimetableCompareModal
+        isOpen={isCompareOpen}
+        onClose={() => setIsCompareOpen(false)}
+        currentData={{ classes, teachers, subjects, periods, slots }}
+        importedData={compareData}
       />
     </div>
   );
