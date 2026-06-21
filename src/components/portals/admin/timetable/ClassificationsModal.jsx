@@ -45,6 +45,21 @@ const ClassificationsModal = ({
     }
   }, [activeClsId, subjects]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (confirmConfig) {
+          setConfirmConfig(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, confirmConfig, onClose]);
+
   if (!isOpen) return null;
 
   const activeClassification = classifications.find(

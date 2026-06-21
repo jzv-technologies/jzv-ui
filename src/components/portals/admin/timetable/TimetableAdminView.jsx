@@ -226,7 +226,7 @@ const AssignPopover = ({
   subjects,
   classes,
   slots,
-  days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
   assignments,
   onAssign,
   onClose,
@@ -648,6 +648,7 @@ const TimetableAdminView = ({
   onMoveSlot = null,
   onClearSlots = null,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
+  seasonsConfig = null, // seasons configuration
 }) => {
   const filteredViews = allowedViews.filter(
     (v) => v !== 'scheduler' || typeof onUpdateSlot === 'function'
@@ -667,7 +668,18 @@ const TimetableAdminView = ({
   const [selAssignedTeachers, setSelAssignedTeachers] = useState([]);
   const [selAssignedClasses, setSelAssignedClasses] = useState([]);
 
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
+  const weekdayConfig = seasonsConfig?.seasons?.[activeSeasonId]?.weekday_config || {
+    Monday: 'Weekday',
+    Tuesday: 'Weekday',
+    Wednesday: 'Weekday',
+    Thursday: 'Weekday',
+    Friday: 'Weekday',
+    Saturday: 'Working Weekend',
+    Sunday: 'Holiday Weekend'
+  };
+
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
   const isInteractive = typeof onUpdateSlot === 'function';
   const showTabSwitcher = !lockedClassId && filteredViews.length > 1;
@@ -1112,152 +1124,194 @@ const TimetableAdminView = ({
                 </tr>
               </thead>
               <tbody>
-                {days.map((day) => (
-                  <tr key={day} className="border-b border-light-border last:border-b-0 bg-white ">
-                    <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px]">
-                      {day}
-                    </td>
-                    {visiblePeriods.map((period) => {
-                      const isBreak = period.is_break;
-                      const slot = getSlotDetails(day, period.id);
-                      const isAssigned = slot && slot.subject_id;
-                      const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
-                      const isTeacherAssigned = slot && slot.teacher_id;
-                      const teacher = isTeacherAssigned
-                        ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
-                        : null;
-                      const isFemale = teacher && teacher.is_male === false;
+                {days.map((day) => {
+                  const dayType = weekdayConfig[day] || 'Weekday';
+                  const isHoliday = dayType === 'Holiday Weekend';
 
-                      let colorClass = '';
-                      if (isAssigned) {
-                        if (!isTeacherAssigned) {
-                          colorClass = getSubjectColor(subjectName);
-                        } else if (isFemale) {
-                          colorClass = 'bg-purple-100 text-purple-900 border-purple-200';
-                        } else {
-                          colorClass = 'bg-blue-lbg text-blue-dark border-blue-200';
-                        }
-                      }
-
-                      const cellKey = `${day}-${period.id}`;
-                      const isPopoverOpen = popover && popover.cellKey === cellKey;
-                      const isClickable =
-                        isInteractive &&
-                        !isBreak &&
-                        ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
-                          (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
-                          (viewType === 'teacher' && isAssigned));
-
-                      if (isBreak) {
-                        const nameLower = (period.name || 'Break').toLowerCase();
-                        let breakIcon = 'fa-coffee';
-                        if (
-                          nameLower.includes('salah') ||
-                          nameLower.includes('prayer') ||
-                          nameLower.includes('namaz') ||
-                          nameLower.includes('zohr') ||
-                          nameLower.includes('asr')
-                        ) {
-                          breakIcon = 'fa-mosque';
-                        } else if (
-                          nameLower.includes('lunch') ||
-                          nameLower.includes('breakfast') ||
-                          nameLower.includes('recess') ||
-                          nameLower.includes('tea') ||
-                          nameLower.includes('snack') ||
-                          nameLower.includes('food') ||
-                          nameLower.includes('tiffin')
-                        ) {
-                          breakIcon = 'fa-utensils';
-                        }
-
-                        return (
-                          <td
-                            key={period.id || period.period_number}
-                            className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
-                          >
-                            <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                              <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
-                              {period.name || 'Break'}
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      return (
+                  return (
+                    <tr key={day} className="border-b border-light-border last:border-b-0 bg-white ">
+                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px]">
+                        {day}
+                      </td>
+                      {isHoliday ? (
                         <td
-                          key={period.id || period.period_number}
-                          className={`p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] relative ${
-                            isClickable ? 'cursor-pointer hover:bg-light-bg/30' : ''
-                          } ${isPopoverOpen ? 'bg-brand-lbg/10' : ''}`}
-                          onClick={() => isClickable && handleCellClick(day, period, slot)}
+                          colSpan={visiblePeriods.length}
+                          className="p-2 bg-gray-100/50 text-center text-xs font-bold text-dark-soft italic select-none"
                         >
-                          {isAssigned ? (
-                            <div
-                              className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                            >
-                              <span className="font-extrabold text-xs tracking-wide uppercase truncate">
-                                {subjectName}
-                              </span>
-                              {viewType === 'class' ? (
-                                !isTeacherAssigned ? (
-                                  <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
-                                    <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
-                                    {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] opacity-90 font-bold truncate">
-                                    <i
-                                      className={`fas ${isFemale ? 'fa-female' : 'fa-male'} mr-1 text-[9px]`}
-                                    ></i>
-                                    {getTeacherName(slot.teacher_id)}
-                                  </span>
-                                )
-                              ) : (
-                                <span className="text-[10px] opacity-90 font-bold truncate">
-                                  <i className="fas fa-school mr-1 text-[9px]"></i>
-                                  {getClassName(slot.class_id)}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div
-                              className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
-                                isClickable
-                                  ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
-                                  : 'border-light-border text-dark-muted bg-light-bg/20'
-                              } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                            >
-                              {isClickable ? (
-                                <span className="flex items-center gap-1">
-                                  <i className="fas fa-plus text-[9px]" />
-                                  Schedule
-                                </span>
-                              ) : (
-                                'Free'
-                              )}
-                            </div>
-                          )}
-
-                          {/* Inline Popover */}
-                          {isPopoverOpen && (
-                            <AssignPopover
-                              popover={popover}
-                              teachers={teachers}
-                              subjects={subjects}
-                              classes={classes}
-                              slots={slots}
-                              days={days}
-                              assignments={assignments}
-                              onAssign={handleAssign}
-                              onClose={() => setPopover(null)}
-                            />
-                          )}
+                          <div className="w-full py-4 border border-dashed border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center gap-2">
+                            <i className="fas fa-umbrella-beach text-gray-400"></i>
+                            <span>Holiday (Weekend)</span>
+                          </div>
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                      ) : (
+                        visiblePeriods.map((period) => {
+                          const isBreak = period.is_break;
+                          const isWorkingWeekend = dayType === 'Working Weekend';
+                          const isWeekendApplicable = period.applicable_on_weekends;
+                          const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+
+                          if (isPeriodDisabled) {
+                            return (
+                              <td
+                                key={period.id || period.period_number}
+                                className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
+                              >
+                                <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                  <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
+                                  Not Applicable
+                                </div>
+                              </td>
+                            );
+                          }
+
+                          const slot = getSlotDetails(day, period.id);
+                          const isAssigned = slot && slot.subject_id;
+                          const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
+                          const isTeacherAssigned = slot && slot.teacher_id;
+                          const teacher = isTeacherAssigned
+                            ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
+                            : null;
+                          const isFemale = teacher && teacher.is_male === false;
+
+                          let colorClass = '';
+                          if (isAssigned) {
+                            if (!isTeacherAssigned) {
+                              colorClass = getSubjectColor(subjectName);
+                            } else if (isFemale) {
+                              colorClass = 'bg-purple-100 text-purple-900 border-purple-200';
+                            } else {
+                              colorClass = 'bg-blue-lbg text-blue-dark border-blue-200';
+                            }
+                          }
+
+                          const cellKey = `${day}-${period.id}`;
+                          const isPopoverOpen = popover && popover.cellKey === cellKey;
+                          const isClickable =
+                            isInteractive &&
+                            !isBreak &&
+                            ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
+                              (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
+                              (viewType === 'teacher' && isAssigned));
+
+                          if (isBreak) {
+                            const nameLower = (period.name || 'Break').toLowerCase();
+                            const breakIcon = period.icon || (
+                              nameLower.includes('salah') ||
+                              nameLower.includes('prayer') ||
+                              nameLower.includes('namaz') ||
+                              nameLower.includes('zohr') ||
+                              nameLower.includes('asr')
+                                ? 'fa-mosque'
+                                : nameLower.includes('lunch') ||
+                                  nameLower.includes('breakfast') ||
+                                  nameLower.includes('recess') ||
+                                  nameLower.includes('tea') ||
+                                  nameLower.includes('snack') ||
+                                  nameLower.includes('food') ||
+                                  nameLower.includes('tiffin')
+                                ? 'fa-utensils'
+                                : 'fa-coffee'
+                            );
+
+                            return (
+                              <td
+                                key={period.id || period.period_number}
+                                className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
+                              >
+                                <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                  <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
+                                  {period.name || 'Break'}
+                                </div>
+                              </td>
+                            );
+                          }
+
+                          return (
+                            <td
+                              key={period.id || period.period_number}
+                              className={`p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] relative ${
+                                isClickable ? 'cursor-pointer hover:bg-light-bg/30' : ''
+                              } ${isPopoverOpen ? 'bg-brand-lbg/10' : ''}`}
+                              onClick={() => isClickable && handleCellClick(day, period, slot)}
+                            >
+                              {isAssigned ? (
+                                <div
+                                  className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                                >
+                                  <span className="font-extrabold text-xs tracking-wide uppercase truncate">
+                                    {subjectName}
+                                  </span>
+                                  {viewType === 'class' ? (
+                                    !isTeacherAssigned ? (
+                                      <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
+                                        <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
+                                        {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] opacity-90 font-bold truncate">
+                                        <i
+                                          className={`fas ${isFemale ? 'fa-female' : 'fa-male'} mr-1 text-[9px]`}
+                                        ></i>
+                                        {getTeacherName(slot.teacher_id)}
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="text-[10px] opacity-90 font-bold truncate">
+                                      <i className="fas fa-school mr-1 text-[9px]"></i>
+                                      {getClassName(slot.class_id)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div
+                                  className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+                                    isClickable
+                                      ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
+                                      : 'border-light-border text-dark-muted bg-light-bg/20'
+                                  } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                                >
+                                  {isClickable ? (
+                                    <span className="flex items-center gap-1">
+                                      <i className="fas fa-plus text-[9px]" />
+                                      Schedule
+                                    </span>
+                                  ) : (
+                                    'Free'
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Inline Popover */}
+                              {isPopoverOpen && (
+                                <AssignPopover
+                                  popover={popover}
+                                  teachers={teachers}
+                                  subjects={subjects}
+                                  classes={classes}
+                                  slots={slots}
+                                  days={days.filter((d) => {
+                                    const dType = weekdayConfig[d] || 'Weekday';
+                                    if (dType === 'Holiday Weekend') return false;
+                                    if (dType === 'Working Weekend') {
+                                      const currentPeriodObj = periods.find(
+                                        (p) => String(p.id) === String(period.id)
+                                      );
+                                      return currentPeriodObj?.applicable_on_weekends;
+                                    }
+                                    return true;
+                                  })}
+                                  assignments={assignments}
+                                  onAssign={handleAssign}
+                                  onClose={() => setPopover(null)}
+                                />
+                              )}
+                            </td>
+                          );
+                        })
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1291,6 +1345,7 @@ const TimetableAdminView = ({
             onUpdateSlot={onUpdateSlot}
             onMoveSlot={onMoveSlot}
             showBreaks={showBreaks}
+            seasonsConfig={seasonsConfig}
           />
           {selectedId && (
             <div className="print:hidden">
@@ -1534,6 +1589,21 @@ const ClearSlotsModal = ({
       setConfirmConfig(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (confirmConfig) {
+          setConfirmConfig(null);
+        } else {
+          onClose();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, confirmConfig, onClose]);
 
   if (!isOpen) return null;
 

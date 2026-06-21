@@ -859,18 +859,68 @@ export const ClassesSetup = ({
 // ==========================================
 // 4. PERIODS CONFIGURATION
 // ==========================================
-export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
+export const PeriodsSetup = ({
+  periods,
+  onSavePeriods,
+  slots,
+  seasonsConfig,
+  onSaveSeasonsConfig,
+  onCopySeason
+}) => {
   const [periodCount, setPeriodCount] = useState(periods.length || 11);
   const [periodList, setPeriodList] = useState(periods);
   const [confirmConfig, setConfirmConfig] = useState(null);
+
+  // Seasons states
+  const [localSeasonsConfig, setLocalSeasonsConfig] = useState(seasonsConfig);
+  const [copySource, setCopySource] = useState('summer');
+  const [copyTarget, setCopyTarget] = useState('winter');
+  const [copyType, setCopyType] = useState('all');
 
   React.useEffect(() => {
     setPeriodCount(periods.length);
     setPeriodList(periods);
   }, [periods]);
 
+  React.useEffect(() => {
+    setLocalSeasonsConfig(seasonsConfig);
+  }, [seasonsConfig]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setConfirmConfig(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  if (!localSeasonsConfig) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 space-y-3">
+        <div className="w-10 h-10 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-dark-soft font-bold">Loading season configurations...</span>
+      </div>
+    );
+  }
+
+  const activeSeasonId = localSeasonsConfig.active_season_id || 'summer';
+  const activeSeason = localSeasonsConfig.seasons[activeSeasonId];
+  const weekdayConfig = activeSeason?.weekday_config || {
+    Monday: 'Weekday',
+    Tuesday: 'Weekday',
+    Wednesday: 'Weekday',
+    Thursday: 'Weekday',
+    Friday: 'Weekday',
+    Saturday: 'Working Weekend',
+    Sunday: 'Holiday Weekend'
+  };
+
   const handleCountChange = (newCount) => {
-    const count = Math.max(1, Math.min(15, parseInt(newCount) || 1));
+    const count = Math.max(1, Math.min(24, parseInt(newCount) || 1));
     setPeriodCount(count);
 
     // Adjust list size
@@ -884,7 +934,9 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
           name: `Period ${i}`,
           start_time: "08:00",
           end_time: "08:45",
-          is_break: false
+          is_break: false,
+          icon: null,
+          applicable_on_weekends: false
         });
       }
     } else if (count < newList.length) {
@@ -902,12 +954,12 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
     setPeriodList(newList);
   };
 
-  const handleSave = () => {
+  const handleSavePeriodsConfig = () => {
     // Check if slots would be truncated and lost
     const remainingPeriodIds = periodList.map(p => p.id);
     const truncatedSlots = slots.filter(s => !remainingPeriodIds.includes(s.period_id));
     
-    let warning = "Save period configuration changes?";
+    let warning = `Save period configuration changes for the active season (${activeSeason.name})?`;
     if (truncatedSlots.length > 0) {
       warning += `\n\nWARNING: You are reducing the number of periods! Doing so will PERMANENTLY DELETE ${truncatedSlots.length} scheduled slots from the timetable!`;
     }
@@ -924,43 +976,266 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
     });
   };
 
+  const handleRenameSeason = (seasonId, newName) => {
+    const updated = {
+      ...localSeasonsConfig,
+      seasons: {
+        ...localSeasonsConfig.seasons,
+        [seasonId]: {
+          ...localSeasonsConfig.seasons[seasonId],
+          name: newName
+        }
+      }
+    };
+    setLocalSeasonsConfig(updated);
+  };
+
+  const handleSaveSeasonSettings = () => {
+    setConfirmConfig({
+      title: "Save Season Settings",
+      message: "Are you sure you want to save the season names and weekday configuration?",
+      confirmText: "Save Settings",
+      type: "primary",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onSaveSeasonsConfig(localSeasonsConfig);
+      }
+    });
+  };
+
+  const handleSwitchSeason = (seasonId) => {
+    const targetSeasonName = localSeasonsConfig.seasons[seasonId]?.name || seasonId;
+    setConfirmConfig({
+      title: "Switch Active Season",
+      message: `Are you sure you want to switch the active season to "${targetSeasonName}"? The timetable grid will load this season's configuration and scheduled slots.`,
+      confirmText: "Switch Season",
+      type: "warning",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onSaveSeasonsConfig(localSeasonsConfig, seasonId);
+      }
+    });
+  };
+
+  const handleWeekdayChange = (day, type) => {
+    const updated = {
+      ...localSeasonsConfig,
+      seasons: {
+        ...localSeasonsConfig.seasons,
+        [activeSeasonId]: {
+          ...localSeasonsConfig.seasons[activeSeasonId],
+          weekday_config: {
+            ...weekdayConfig,
+            [day]: type
+          }
+        }
+      }
+    };
+    setLocalSeasonsConfig(updated);
+  };
+
+  const handleTriggerCopy = () => {
+    if (copySource === copyTarget) {
+      alert("Source and target seasons must be different.");
+      return;
+    }
+    const srcName = localSeasonsConfig.seasons[copySource]?.name || copySource;
+    const tgtName = localSeasonsConfig.seasons[copyTarget]?.name || copyTarget;
+
+    setConfirmConfig({
+      title: "Copy Season Configuration",
+      message: `WARNING: This will overwrite settings in "${tgtName}" with data from "${srcName}". Are you sure you want to copy?`,
+      confirmText: "Perform Copy",
+      type: "danger",
+      onConfirm: () => {
+        setConfirmConfig(null);
+        onCopySeason(copySource, copyTarget, copyType);
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. Seasons Switcher & Names */}
+      <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
         <div>
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">Set Daily Periods Count</h4>
-          <p className="text-xs text-dark-soft">Configure the number of periods (academic slots) in a school day.</p>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">Season Setup</h4>
+          <p className="text-xs text-dark-soft">Manage 4 different seasonal configurations. Rename seasons or swap active timetables.</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min="1"
-            max="15"
-            value={periodCount}
-            onChange={(e) => handleCountChange(e.target.value)}
-            className="w-20 bg-white border border-light-border rounded-xl px-4 py-2 text-center text-sm font-bold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Object.values(localSeasonsConfig.seasons).map((season) => {
+            const isActive = season.id === activeSeasonId;
+            return (
+              <div
+                key={season.id}
+                className={`bg-white border rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all ${
+                  isActive
+                    ? 'border-brand-primary ring-2 ring-brand-soft/50 shadow-sm'
+                    : 'border-light-border hover:border-dark-soft/50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
+                    isActive ? 'bg-brand-lbg text-brand-primary' : 'bg-light-bg text-dark-soft'
+                  }`}>
+                    {isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <span className="text-[10px] text-dark-soft font-bold">
+                    {(season.periods || []).length} Periods
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-[8px] font-extrabold text-dark-soft uppercase mb-1">Season Label</label>
+                  <input
+                    type="text"
+                    value={season.name}
+                    onChange={(e) => handleRenameSeason(season.id, e.target.value)}
+                    className="w-full bg-light-bg/40 border border-light-border rounded-xl px-3 py-1.5 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                  />
+                </div>
+                <button
+                  onClick={() => handleSwitchSeason(season.id)}
+                  disabled={isActive}
+                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                    isActive
+                      ? 'bg-brand-lbg text-brand-primary cursor-default'
+                      : 'bg-brand-primary text-white hover:bg-brand-dark'
+                  }`}
+                >
+                  {isActive ? 'Currently Active' : 'Switch to Season'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end pt-2">
           <button
-            onClick={handleSave}
-            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2 rounded-xl text-sm font-bold shadow-sm transition-all"
+            onClick={handleSaveSeasonSettings}
+            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
           >
-            Save Settings
+            Save Season Names
           </button>
         </div>
       </div>
 
-      {/* Adjust Individual period times */}
-      <div className="bg-white border border-light-border rounded-2xl p-5">
-        <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-4">Period Labels and Times</h4>
+      {/* 2. Weekday & Day Configuration */}
+      <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
+        <div>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
+            Weekday & Weekend configuration ({activeSeason.name})
+          </h4>
+          <p className="text-xs text-dark-soft">
+            Define working days and holidays. On "Working Weekend" days, only weekend-applicable periods will run.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+            const value = weekdayConfig[day] || 'Weekday';
+            return (
+              <div
+                key={day}
+                className={`border p-3.5 rounded-2xl flex flex-col justify-between gap-3 transition-all ${
+                  value === 'Weekday'
+                    ? 'bg-blue-50/10 border-blue-100/60'
+                    : value === 'Working Weekend'
+                    ? 'bg-orange-50/10 border-orange-100/60'
+                    : 'bg-gray-50/50 border-gray-200'
+                }`}
+              >
+                <div>
+                  <span className="block text-xs font-extrabold text-dark-primary">{day}</span>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider ${
+                    value === 'Weekday'
+                      ? 'text-brand-primary'
+                      : value === 'Working Weekend'
+                      ? 'text-orange-500'
+                      : 'text-dark-soft'
+                  }`}>
+                    {value}
+                  </span>
+                </div>
+                <select
+                  value={value}
+                  onChange={(e) => handleWeekdayChange(day, e.target.value)}
+                  className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-[10px] font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+                >
+                  <option value="Weekday">Weekday</option>
+                  <option value="Working Weekend">Working Weekend</option>
+                  <option value="Holiday Weekend">Holiday Weekend</option>
+                </select>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={handleSaveSeasonSettings}
+            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all"
+          >
+            Save Day Configurations
+          </button>
+        </div>
+      </div>
+
+      {/* 3. Daily Period Labels & Details */}
+      <div className="bg-white border border-light-border rounded-2xl p-5 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
+              Period Labels and Details ({activeSeason.name})
+            </h4>
+            <p className="text-xs text-dark-soft">Configure names, break toggles, weekend availability, and FontAwesome icons for each period.</p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div>
+              <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">Periods Count</label>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={periodCount}
+                onChange={(e) => handleCountChange(e.target.value)}
+                className="w-20 bg-white border border-light-border rounded-xl px-4 py-2 text-center text-sm font-bold text-dark-primary focus:ring-2 focus:ring-brand-soft outline-none"
+              />
+            </div>
+            <button
+              onClick={handleSavePeriodsConfig}
+              className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all mt-3.5"
+            >
+              Save Periods
+            </button>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {periodList.map((period, idx) => (
-            <div key={period.id || period.period_number} className="bg-light-bg/40 border border-light-border p-3.5 rounded-xl flex items-center justify-between gap-3">
-              <div className="bg-brand-lbg text-brand-primary w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm">
-                P{period.period_number}
+            <div
+              key={period.id || period.period_number}
+              className={`bg-light-bg/40 border border-light-border p-4 rounded-2xl flex flex-col gap-3 transition-all ${
+                period.is_break ? 'border-orange-200 bg-orange-50/5' : 'hover:border-brand-soft'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="bg-brand-lbg text-brand-primary w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-sm shrink-0">
+                  P{period.period_number}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={period.name || ""}
+                    placeholder={`Period ${period.period_number}`}
+                    onChange={(e) => handleFieldChange(idx, "name", e.target.value)}
+                    className="w-full bg-white border border-light-border rounded-xl px-3 py-1 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                  />
+                </div>
               </div>
-              
-              <div className="flex-1 flex gap-2">
+
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">Start Time</label>
                   <input
@@ -968,7 +1243,7 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
                     value={period.start_time || ""}
                     placeholder="e.g. 08:30"
                     onChange={(e) => handleFieldChange(idx, "start_time", e.target.value)}
-                    className="w-full bg-white border border-light-border rounded px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
+                    className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
                   />
                 </div>
                 <div>
@@ -978,12 +1253,137 @@ export const PeriodsSetup = ({ periods, onSavePeriods, slots }) => {
                     value={period.end_time || ""}
                     placeholder="e.g. 09:15"
                     onChange={(e) => handleFieldChange(idx, "end_time", e.target.value)}
-                    className="w-full bg-white border border-light-border rounded px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
+                    className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
                   />
+                </div>
+              </div>
+
+              <div className="space-y-2.5 pt-2 border-t border-light-border/60">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-dark-primary flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={period.is_break || false}
+                      onChange={(e) => handleFieldChange(idx, "is_break", e.target.checked)}
+                      className="rounded border-light-border text-brand-primary focus:ring-brand-soft"
+                    />
+                    Is Break
+                  </label>
+                  <label className="text-[10px] font-bold text-dark-primary flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={period.applicable_on_weekends || false}
+                      onChange={(e) => handleFieldChange(idx, "applicable_on_weekends", e.target.checked)}
+                      className="rounded border-light-border text-brand-primary focus:ring-brand-soft"
+                    />
+                    Weekend Applicable
+                  </label>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[8px] font-bold text-dark-soft uppercase">Icon</label>
+                    {period.icon && <i className={`fas ${period.icon} text-brand-primary text-xs`}></i>}
+                  </div>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="text"
+                      placeholder="e.g. fa-coffee"
+                      value={period.icon || ""}
+                      onChange={(e) => handleFieldChange(idx, "icon", e.target.value)}
+                      className="flex-1 bg-white border border-light-border rounded-lg px-2 py-1 text-[10px] font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                    />
+                    <div className="flex gap-1">
+                      {[
+                        { icon: 'fa-coffee', text: '☕' },
+                        { icon: 'fa-mosque', text: '🕌' },
+                        { icon: 'fa-utensils', text: '🍽️' },
+                        { icon: 'fa-book', text: '📖' },
+                        { icon: 'fa-volleyball-ball', text: '⚽' }
+                      ].map((item) => (
+                        <button
+                          key={item.icon}
+                          onClick={() => handleFieldChange(idx, "icon", item.icon)}
+                          title={item.icon}
+                          className={`px-1.5 py-0.5 rounded border text-xs hover:bg-light-ui transition-all ${
+                            period.icon === item.icon ? 'border-brand-primary bg-brand-lbg' : 'border-light-border bg-white'
+                          }`}
+                        >
+                          {item.text}
+                        </button>
+                      ))}
+                      {period.icon && (
+                        <button
+                          onClick={() => handleFieldChange(idx, "icon", null)}
+                          title="Clear icon"
+                          className="px-1.5 py-0.5 rounded border border-light-border bg-white text-red-500 hover:bg-red-50 text-[10px] font-bold"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* 4. Copy Season Panel */}
+      <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
+        <div>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">Copy / Map Season Configurations</h4>
+          <p className="text-xs text-dark-soft">Replicate period setups, daily schedules, or complete structures from one season to another to save configuration time.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+          <div>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Source Season</label>
+            <select
+              value={copySource}
+              onChange={(e) => setCopySource(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+            >
+              {Object.values(localSeasonsConfig.seasons).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Target Season</label>
+            <select
+              value={copyTarget}
+              onChange={(e) => setCopyTarget(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+            >
+              {Object.values(localSeasonsConfig.seasons).map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Configuration to Copy</label>
+            <select
+              value={copyType}
+              onChange={(e) => setCopyType(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+            >
+              <option value="all">All (Periods Config & Schedule Slots)</option>
+              <option value="periods_only">Periods & Day Configurations Only</option>
+              <option value="slots_only">Scheduled Slots Only</option>
+            </select>
+          </div>
+          <button
+            onClick={handleTriggerCopy}
+            disabled={copySource === copyTarget}
+            className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all text-center ${
+              copySource === copyTarget
+                ? 'bg-light-ui text-dark-soft cursor-not-allowed border border-light-border'
+                : 'bg-red-500 hover:bg-red-600 text-white shadow-sm'
+            }`}
+          >
+            <i className="fas fa-copy mr-1.5"></i> Copy Season Data
+          </button>
         </div>
       </div>
 

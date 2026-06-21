@@ -24,6 +24,72 @@ import {
   MOCK_CLASSIFICATIONS as DEFAULT_MOCK_CLASSIFICATIONS,
 } from '../../../../data/mockTimetable';
 
+const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
+  active_season_id: 'summer',
+  seasons: {
+    summer: {
+      id: 'summer',
+      name: 'Summer',
+      periods: initialPeriods || [],
+      slots: initialSlots || [],
+      weekday_config: {
+        Monday: 'Weekday',
+        Tuesday: 'Weekday',
+        Wednesday: 'Weekday',
+        Thursday: 'Weekday',
+        Friday: 'Weekday',
+        Saturday: 'Working Weekend',
+        Sunday: 'Holiday Weekend'
+      }
+    },
+    winter: {
+      id: 'winter',
+      name: 'Winter',
+      periods: initialPeriods || [],
+      slots: [],
+      weekday_config: {
+        Monday: 'Weekday',
+        Tuesday: 'Weekday',
+        Wednesday: 'Weekday',
+        Thursday: 'Weekday',
+        Friday: 'Weekday',
+        Saturday: 'Working Weekend',
+        Sunday: 'Holiday Weekend'
+      }
+    },
+    exam: {
+      id: 'exam',
+      name: 'Exam Season',
+      periods: initialPeriods || [],
+      slots: [],
+      weekday_config: {
+        Monday: 'Weekday',
+        Tuesday: 'Weekday',
+        Wednesday: 'Weekday',
+        Thursday: 'Weekday',
+        Friday: 'Weekday',
+        Saturday: 'Working Weekend',
+        Sunday: 'Holiday Weekend'
+      }
+    },
+    festival: {
+      id: 'festival',
+      name: 'Festival Season',
+      periods: initialPeriods || [],
+      slots: [],
+      weekday_config: {
+        Monday: 'Weekday',
+        Tuesday: 'Weekday',
+        Wednesday: 'Weekday',
+        Thursday: 'Weekday',
+        Friday: 'Weekday',
+        Saturday: 'Working Weekend',
+        Sunday: 'Holiday Weekend'
+      }
+    }
+  }
+});
+
 const TimetableManager = () => {
   const [activeTab, setActiveTab] = useState('view'); // "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
 
@@ -35,6 +101,7 @@ const TimetableManager = () => {
   const [periods, setPeriods] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [slots, setSlots] = useState([]);
+  const [seasonsConfig, setSeasonsConfig] = useState(null);
 
   // Connection State
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
@@ -97,10 +164,10 @@ const TimetableManager = () => {
       setAssignments(dbAssignments || []);
       setSlots(dbSlots || []);
 
+      let finalPeriods = [];
       if (dbPeriods && dbPeriods.length > 0) {
-        setPeriods(dbPeriods);
+        finalPeriods = dbPeriods;
       } else {
-        // If Supabase mode is true and dbPeriods is empty, insert default periods
         try {
           const insertPayload = DEFAULT_MOCK_PERIODS.map((p) => ({
             period_number: p.period_number,
@@ -114,17 +181,62 @@ const TimetableManager = () => {
             .insert(insertPayload)
             .select()
             .order('period_number', { ascending: true });
-          if (insertedPeriods && insertedPeriods.length > 0) {
-            setPeriods(insertedPeriods);
-          } else {
-            setPeriods(DEFAULT_MOCK_PERIODS);
-          }
+          finalPeriods = insertedPeriods || DEFAULT_MOCK_PERIODS;
         } catch (insertErr) {
           console.warn('Failed to auto-populate default periods:', insertErr.message);
-          setPeriods(DEFAULT_MOCK_PERIODS);
+          finalPeriods = DEFAULT_MOCK_PERIODS;
         }
       }
 
+      // 1. Fetch seasons config from Supabase
+      let fetchedSeasonsConfig = null;
+      try {
+        const { data: settingsData } = await supabase
+          .from('timetable_settings')
+          .select('*')
+          .eq('key', 'timetable_seasons_config')
+          .maybeSingle();
+
+        if (settingsData && settingsData.val) {
+          fetchedSeasonsConfig = typeof settingsData.val === 'string' ? JSON.parse(settingsData.val) : settingsData.val;
+        }
+      } catch (settingsErr) {
+        console.warn('Failed to load seasons config from DB:', settingsErr.message);
+      }
+
+      // If not fetched from DB, check LocalStorage
+      if (!fetchedSeasonsConfig) {
+        const localRaw = localStorage.getItem('jzv_timetable_seasons_config');
+        if (localRaw) {
+          try {
+            fetchedSeasonsConfig = JSON.parse(localRaw);
+          } catch (e) {
+            console.error('Failed to parse local seasons config', e);
+          }
+        }
+      }
+
+      // If still not found, construct default seasons config mapping existing DB/mock slots & periods to summer
+      if (!fetchedSeasonsConfig) {
+        fetchedSeasonsConfig = makeDefaultSeasonsConfig(finalPeriods, dbSlots || []);
+      }
+
+      setSeasonsConfig(fetchedSeasonsConfig);
+
+      // Now set the periods and slots based on the active season in the configuration
+      const activeId = fetchedSeasonsConfig.active_season_id || 'summer';
+      const activeSeason = fetchedSeasonsConfig.seasons[activeId];
+
+      const mappedPeriods = finalPeriods.map(dbP => {
+        const seasonP = activeSeason?.periods?.find(up => up.period_number === dbP.period_number);
+        return {
+          ...dbP,
+          icon: seasonP ? seasonP.icon : null,
+          applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false
+        };
+      });
+
+      setPeriods(mappedPeriods);
       setIsSupabaseMode(true);
     } catch (err) {
       console.warn('Supabase mode not active, loading from LocalStorage:', err.message);
@@ -144,9 +256,40 @@ const TimetableManager = () => {
         setSubjects(parsed.subjects || []);
         setTeachers(parsed.teachers || []);
         setClasses(parsed.classes || []);
-        setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
         setAssignments(parsed.assignments || []);
         setSlots(parsed.slots || []);
+
+        const localRaw = localStorage.getItem('jzv_timetable_seasons_config');
+        let fetchedSeasonsConfig = null;
+        if (localRaw) {
+          try {
+            fetchedSeasonsConfig = JSON.parse(localRaw);
+          } catch (e) {
+            console.error('Failed to parse local seasons config', e);
+          }
+        }
+
+        const localPeriods = parsed.periods || DEFAULT_MOCK_PERIODS;
+        const localSlots = parsed.slots || [];
+        if (!fetchedSeasonsConfig) {
+          fetchedSeasonsConfig = makeDefaultSeasonsConfig(localPeriods, localSlots);
+        }
+
+        setSeasonsConfig(fetchedSeasonsConfig);
+
+        const activeId = fetchedSeasonsConfig.active_season_id || 'summer';
+        const activeSeason = fetchedSeasonsConfig.seasons[activeId];
+
+        const mappedPeriods = localPeriods.map(dbP => {
+          const seasonP = activeSeason?.periods?.find(up => up.period_number === dbP.period_number);
+          return {
+            ...dbP,
+            icon: seasonP ? seasonP.icon : null,
+            applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : false
+          };
+        });
+
+        setPeriods(mappedPeriods);
       } catch (e) {
         console.error('Failed to parse local timetable data', e);
         initializeMockData();
@@ -164,6 +307,10 @@ const TimetableManager = () => {
     setPeriods(DEFAULT_MOCK_PERIODS);
     setAssignments(DEFAULT_MOCK_ASSIGNMENTS);
     setSlots(DEFAULT_MOCK_SLOTS);
+
+    const defaultSeasons = makeDefaultSeasonsConfig(DEFAULT_MOCK_PERIODS, DEFAULT_MOCK_SLOTS);
+    setSeasonsConfig(defaultSeasons);
+    localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(defaultSeasons));
  
     // Save to local storage
     const state = {
@@ -191,7 +338,7 @@ const TimetableManager = () => {
     const nextPeriods = updates.periods !== undefined ? updates.periods : periods;
     const nextAssignments = updates.assignments !== undefined ? updates.assignments : assignments;
     const nextSlots = updates.slots !== undefined ? updates.slots : slots;
- 
+
     // Local Storage sync (always update local storage as redundant copy)
     const localState = {
       classifications: nextClassifications,
@@ -203,6 +350,34 @@ const TimetableManager = () => {
       slots: nextSlots,
     };
     localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(localState));
+
+    // Update seasonsConfig state if loaded
+    if (seasonsConfig) {
+      const activeId = seasonsConfig.active_season_id || 'summer';
+      const updatedConfig = {
+        ...seasonsConfig,
+        seasons: {
+          ...seasonsConfig.seasons,
+          [activeId]: {
+            ...seasonsConfig.seasons[activeId],
+            periods: nextPeriods,
+            slots: nextSlots
+          }
+        }
+      };
+      setSeasonsConfig(updatedConfig);
+      localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(updatedConfig));
+      
+      // Sync seasonsConfig with DB in background/async
+      if (isSupabaseMode) {
+        supabase.from('timetable_settings').upsert({
+          key: 'timetable_seasons_config',
+          val: updatedConfig
+        }, { onConflict: 'key' }).then(({ error }) => {
+          if (error) console.error('Error saving seasons config to DB:', error);
+        });
+      }
+    }
 
     // Update React State
     if (updates.classifications !== undefined) setClassifications(updates.classifications);
@@ -663,7 +838,15 @@ const TimetableManager = () => {
           .select('*')
           .order('period_number', { ascending: true });
 
-        finalPeriods = updatedDbPeriods || [];
+        // Map custom attributes (icon, applicable_on_weekends) back to reloaded periods
+        finalPeriods = (updatedDbPeriods || []).map((dbP) => {
+          const origP = configuredPeriods.find((p) => p.period_number === dbP.period_number);
+          return {
+            ...dbP,
+            icon: origP ? origP.icon : null,
+            applicable_on_weekends: origP ? origP.applicable_on_weekends : false,
+          };
+        });
       } catch (err) {
         showToast('DB Error: ' + err.message, 'error');
         return;
@@ -675,6 +858,203 @@ const TimetableManager = () => {
     updatedSlots = updatedSlots.filter((s) => remainingIds.includes(s.period_id));
 
     saveState({ periods: finalPeriods, slots: updatedSlots });
+  };
+
+  // SAVE SEASONS CONFIGURATION & OPTIONALLY SWITCH ACTIVE SEASON
+  const handleSaveSeasonsConfig = async (newConfig, targetActiveSeasonId = null) => {
+    setLoading(true);
+    try {
+      let finalConfig = { ...newConfig };
+
+      if (targetActiveSeasonId) {
+        const currentActiveId = seasonsConfig.active_season_id;
+
+        // 1. Save current memory state (periods & slots) to the config for current active season
+        finalConfig.seasons[currentActiveId] = {
+          ...finalConfig.seasons[currentActiveId],
+          periods: periods,
+          slots: slots,
+        };
+
+        // 2. Set new active season ID
+        finalConfig.active_season_id = targetActiveSeasonId;
+
+        const targetSeason = finalConfig.seasons[targetActiveSeasonId];
+        const targetPeriods = targetSeason.periods || [];
+        const targetSlots = targetSeason.slots || [];
+
+        if (isSupabaseMode) {
+          // Clear all periods (which cascades and deletes all timetable_slots)
+          const { error: delError } = await supabase.from('periods').delete().neq('id', -1);
+          if (delError) throw delError;
+
+          // Insert target season's periods
+          const dbPeriodsToInsert = targetPeriods.map((p) => ({
+            period_number: p.period_number,
+            name: p.name,
+            start_time: p.start_time || null,
+            end_time: p.end_time || null,
+            is_break: p.is_break || false,
+          }));
+
+          if (dbPeriodsToInsert.length > 0) {
+            const { data: insertedPeriods, error: insError } = await supabase
+              .from('periods')
+              .insert(dbPeriodsToInsert)
+              .select();
+            if (insError) throw insError;
+
+            // Map target slots to the new period IDs
+            const periodNumToId = {};
+            insertedPeriods.forEach((p) => {
+              periodNumToId[p.period_number] = p.id;
+            });
+
+            const slotsToInsert = targetSlots
+              .map((s) => {
+                const origPeriod = targetPeriods.find(
+                  (p) => String(p.id) === String(s.period_id) || p.period_number === s.period_number
+                );
+                const periodNum = origPeriod ? origPeriod.period_number : s.period_number;
+                const newPeriodId = periodNumToId[periodNum];
+                if (!newPeriodId) return null;
+                return {
+                  class_id: s.class_id,
+                  day: s.day,
+                  period_id: newPeriodId,
+                  subject_id: s.subject_id,
+                  teacher_id: s.teacher_id,
+                };
+              })
+              .filter(Boolean);
+
+            if (slotsToInsert.length > 0) {
+              const { error: slotsError } = await supabase
+                .from('timetable_slots')
+                .insert(slotsToInsert);
+              if (slotsError) throw slotsError;
+            }
+          }
+
+          // Save settings to database
+          const { error: settingsError } = await supabase.from('timetable_settings').upsert(
+            {
+              key: 'timetable_seasons_config',
+              val: finalConfig,
+            },
+            { onConflict: 'key' }
+          );
+          if (settingsError) throw settingsError;
+        } else {
+          // Local offline mode
+          localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
+
+          const localState = {
+            classifications,
+            subjects,
+            teachers,
+            classes,
+            periods: targetPeriods,
+            assignments,
+            slots: targetSlots,
+          };
+          localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(localState));
+        }
+
+        // Reload data to refresh UI state
+        await loadData();
+        showToast(`Successfully switched to active season: ${targetSeason.name || targetActiveSeasonId}`, 'success');
+      } else {
+        // Just save config in state and storage
+        setSeasonsConfig(finalConfig);
+        localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
+
+        if (isSupabaseMode) {
+          const { error: settingsError } = await supabase.from('timetable_settings').upsert(
+            {
+              key: 'timetable_seasons_config',
+              val: finalConfig,
+            },
+            { onConflict: 'key' }
+          );
+          if (settingsError) throw settingsError;
+        }
+        showToast('Season settings saved successfully.', 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error saving season settings: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // COPY TIMETABLE/PERIODS FROM ONE SEASON TO ANOTHER
+  const handleCopySeason = async (sourceSeasonId, targetSeasonId, copyType) => {
+    if (!seasonsConfig) return;
+
+    const currentActiveId = seasonsConfig.active_season_id;
+    const sourceSeason = { ...seasonsConfig.seasons[sourceSeasonId] };
+
+    // If copying from active, make sure we use current in-memory slots/periods
+    if (sourceSeasonId === currentActiveId) {
+      sourceSeason.periods = periods;
+      sourceSeason.slots = slots;
+    }
+
+    const targetSeason = { ...seasonsConfig.seasons[targetSeasonId] };
+
+    if (copyType === 'all' || copyType === 'periods_only') {
+      targetSeason.periods = sourceSeason.periods.map((p) => ({ ...p }));
+      targetSeason.weekday_config = { ...sourceSeason.weekday_config };
+    }
+
+    if (copyType === 'all' || copyType === 'slots_only') {
+      const sourcePeriods = sourceSeason.periods || [];
+      const targetPeriods = targetSeason.periods || [];
+
+      const mappedSlots = (sourceSeason.slots || [])
+        .map((s) => {
+          const srcP = sourcePeriods.find((p) => String(p.id) === String(s.period_id));
+          if (!srcP) return null;
+
+          const tgtP = targetPeriods.find((p) => p.period_number === srcP.period_number);
+          if (!tgtP) return null;
+
+          return {
+            ...s,
+            id: generateLocalId(),
+            period_id: tgtP.id,
+          };
+        })
+        .filter(Boolean);
+
+      targetSeason.slots = mappedSlots;
+    }
+
+    const updatedConfig = {
+      ...seasonsConfig,
+      seasons: {
+        ...seasonsConfig.seasons,
+        [targetSeasonId]: targetSeason,
+      },
+    };
+
+    if (targetSeasonId === currentActiveId) {
+      await handleSaveSeasonsConfig(updatedConfig, targetSeasonId);
+    } else {
+      await handleSaveSeasonsConfig(updatedConfig);
+    }
+    showToast(
+      `Successfully copied ${
+        copyType === 'all'
+          ? 'all configurations'
+          : copyType === 'periods_only'
+          ? 'periods configuration'
+          : 'slots schedule'
+      } from ${sourceSeason.name} to ${targetSeason.name}`,
+      'success'
+    );
   };
 
   // SLOT ASSIGNMENT HANDLER (THE CORE SCHEDULING CALCULATION)
@@ -1145,7 +1525,14 @@ const TimetableManager = () => {
           )}
 
           {activeTab === 'periods' && (
-            <PeriodsSetup periods={periods} onSavePeriods={handleSavePeriods} slots={slots} />
+            <PeriodsSetup
+              periods={periods}
+              onSavePeriods={handleSavePeriods}
+              slots={slots}
+              seasonsConfig={seasonsConfig}
+              onSaveSeasonsConfig={handleSaveSeasonsConfig}
+              onCopySeason={handleCopySeason}
+            />
           )}
 
           {activeTab === 'sync' && (

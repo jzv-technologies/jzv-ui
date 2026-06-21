@@ -16,6 +16,7 @@ const TimetableScheduler = ({
   onUpdateSlot,
   onMoveSlot,
   showBreaks = true,
+  seasonsConfig = null,
 }) => {
   const [editingSlot, setEditingSlot] = useState(null); // { day, periodId, periodNumber, subjectId, teacherId }
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
@@ -25,7 +26,18 @@ const TimetableScheduler = ({
   const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, subjectId, teacherId }
 
 
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
+  const weekdayConfig = seasonsConfig?.seasons?.[activeSeasonId]?.weekday_config || {
+    Monday: 'Weekday',
+    Tuesday: 'Weekday',
+    Wednesday: 'Weekday',
+    Thursday: 'Weekday',
+    Friday: 'Weekday',
+    Saturday: 'Working Weekend',
+    Sunday: 'Holiday Weekend'
+  };
+
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const currentClass = classes.find((c) => String(c.id) === String(classId));
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
 
@@ -329,122 +341,158 @@ const TimetableScheduler = ({
               </tr>
             </thead>
             <tbody>
-              {days.map((day) => (
-                <tr
-                  key={day}
-                  className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors"
-                >
-                  <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-light-lbg/10 w-[120px]">
-                    {day}
-                  </td>
-                  {visiblePeriods.map((period) => {
-                    const isBreak = period.is_break;
-                    const slot = getSlotDetails(day, period.id);
-                    const isAssigned = slot && slot.subject_id;
-                    const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
-                    const isTeacherAssigned = slot && slot.teacher_id;
-                    const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
-                    const isFemale = teacher && teacher.is_male === false;
-                    
-                    let colorClass = "";
-                    if (isAssigned) {
-                      if (!isTeacherAssigned) {
-                        colorClass = getSubjectColor(subjectName);
-                      } else if (isFemale) {
-                        colorClass = "bg-purple-100 text-purple-900 border-purple-200";
-                      } else {
-                        colorClass = "bg-blue-lbg text-blue-dark border-blue-200";
-                      }
-                    }
+              {days.map((day) => {
+                const dayType = weekdayConfig[day] || 'Weekday';
+                const isHoliday = dayType === 'Holiday Weekend';
 
-                    if (isBreak) {
-                      const nameLower = (period.name || "Break").toLowerCase();
-                      let breakIcon = "fa-coffee";
-                      if (nameLower.includes("salah") || nameLower.includes("prayer") || nameLower.includes("namaz") || nameLower.includes("zohr") || nameLower.includes("asr")) {
-                        breakIcon = "fa-mosque";
-                      } else if (nameLower.includes("lunch") || nameLower.includes("breakfast") || nameLower.includes("recess") || nameLower.includes("tea") || nameLower.includes("snack") || nameLower.includes("food") || nameLower.includes("tiffin")) {
-                        breakIcon = "fa-utensils";
-                      }
-
-                      return (
-                        <td
-                          key={period.id || period.period_number}
-                          className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5 select-none"
-                        >
-                          <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                            <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
-                            {period.name || "Break"}
-                          </div>
-                        </td>
-                      );
-                    }
-
-                    const isSourceCell = movingSlot && movingSlot.day === day && String(movingSlot.periodId) === String(period.id);
-
-                    return (
+                return (
+                  <tr
+                    key={day}
+                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors"
+                  >
+                    <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-light-lbg/10 w-[120px]">
+                      {day}
+                    </td>
+                    {isHoliday ? (
                       <td
-                        key={period.id || period.period_number}
-                        onClick={() => handleCellClick(day, period)}
-                        className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] cursor-pointer group hover:bg-light-bg/40 transition-colors ${
-                          movingSlot ? "hover:bg-brand-lbg/10" : ""
-                        }`}
+                        colSpan={visiblePeriods.length}
+                        className="p-1.5 bg-gray-100/50 text-center text-xs font-bold text-dark-soft italic select-none"
                       >
-                        {isAssigned ? (
-                          <div
-                            className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
-                              isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
-                            } ${!movingSlot ? "group-hover:scale-95" : "group-hover:scale-95 group-hover:border-brand-primary"} relative`}
-                          >
-                            <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
-                              {subjectName}
-                            </span>
-                            {!isTeacherAssigned ? (
-                              <span className="text-[9px] font-bold truncate text-red-primary flex items-center justify-center gap-1">
-                                <i className="fas fa-exclamation-triangle text-[8px] animate-pulse"></i>
-                                Not Assigned
-                              </span>
-                            ) : (
-                              <span className="text-[9px] opacity-90 font-bold truncate">
-                                <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
-                                {getTeacherName(slot.teacher_id)}
-                              </span>
-                            )}
-
-                            {/* Move Button */}
-                            {!movingSlot && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleStartMove(day, period.id, slot);
-                                }}
-                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-white/80 hover:bg-white text-dark-primary hover:text-brand-primary w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
-                                title="Move Slot to another period"
-                              >
-                                <i className="fas fa-arrows-alt text-[10px]"></i>
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
-                            movingSlot
-                              ? "border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer"
-                              : "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
-                          }`}>
-                            {movingSlot ? (
-                              <span className="flex items-center gap-1">
-                                <i className="fas fa-check text-[9px]"></i> Place here
-                              </span>
-                            ) : (
-                              "+ Assign"
-                            )}
-                          </div>
-                        )}
+                        <div className="w-full py-4 border border-dashed border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center gap-2">
+                          <i className="fas fa-umbrella-beach text-gray-400"></i>
+                          <span>Holiday (Weekend)</span>
+                        </div>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                    ) : (
+                      visiblePeriods.map((period) => {
+                        const isBreak = period.is_break;
+                        const isWorkingWeekend = dayType === 'Working Weekend';
+                        const isWeekendApplicable = period.applicable_on_weekends;
+                        const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+
+                        if (isPeriodDisabled) {
+                          return (
+                            <td
+                              key={period.id || period.period_number}
+                              className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
+                            >
+                              <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
+                                Not Applicable
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        const slot = getSlotDetails(day, period.id);
+                        const isAssigned = slot && slot.subject_id;
+                        const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
+                        const isTeacherAssigned = slot && slot.teacher_id;
+                        const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
+                        const isFemale = teacher && teacher.is_male === false;
+                        
+                        let colorClass = "";
+                        if (isAssigned) {
+                          if (!isTeacherAssigned) {
+                            colorClass = getSubjectColor(subjectName);
+                          } else if (isFemale) {
+                            colorClass = "bg-purple-100 text-purple-900 border-purple-200";
+                          } else {
+                            colorClass = "bg-blue-lbg text-blue-dark border-blue-200";
+                          }
+                        }
+
+                        if (isBreak) {
+                          const nameLower = (period.name || "Break").toLowerCase();
+                          const breakIcon = period.icon || (
+                            nameLower.includes("salah") || nameLower.includes("prayer") || nameLower.includes("namaz") || nameLower.includes("zohr") || nameLower.includes("asr")
+                              ? "fa-mosque"
+                              : nameLower.includes("lunch") || nameLower.includes("breakfast") || nameLower.includes("recess") || nameLower.includes("tea") || nameLower.includes("snack") || nameLower.includes("food") || nameLower.includes("tiffin")
+                              ? "fa-utensils"
+                              : "fa-coffee"
+                          );
+
+                          return (
+                            <td
+                              key={period.id || period.period_number}
+                              className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5 select-none"
+                            >
+                              <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
+                                {period.name || "Break"}
+                              </div>
+                            </td>
+                          );
+                        }
+
+                        const isSourceCell = movingSlot && movingSlot.day === day && String(movingSlot.periodId) === String(period.id);
+
+                        return (
+                          <td
+                            key={period.id || period.period_number}
+                            onClick={() => handleCellClick(day, period)}
+                            className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] cursor-pointer group hover:bg-light-bg/40 transition-colors ${
+                              movingSlot ? "hover:bg-brand-lbg/10" : ""
+                            }`}
+                          >
+                            {isAssigned ? (
+                              <div
+                                className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
+                                  isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
+                                } ${!movingSlot ? "group-hover:scale-95" : "group-hover:scale-95 group-hover:border-brand-primary"} relative`}
+                              >
+                                <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
+                                  {subjectName}
+                                </span>
+                                {!isTeacherAssigned ? (
+                                  <span className="text-[9px] font-bold truncate text-red-primary flex items-center justify-center gap-1">
+                                    <i className="fas fa-exclamation-triangle text-[8px] animate-pulse"></i>
+                                    Not Assigned
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] opacity-90 font-bold truncate">
+                                    <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
+                                    {getTeacherName(slot.teacher_id)}
+                                  </span>
+                                )}
+
+                                {/* Move Button */}
+                                {!movingSlot && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartMove(day, period.id, slot);
+                                    }}
+                                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-white/80 hover:bg-white text-dark-primary hover:text-brand-primary w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                                    title="Move Slot to another period"
+                                  >
+                                    <i className="fas fa-arrows-alt text-[10px]"></i>
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
+                                movingSlot
+                                  ? "border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer"
+                                  : "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
+                              }`}>
+                                {movingSlot ? (
+                                  <span className="flex items-center gap-1">
+                                    <i className="fas fa-check text-[9px]"></i> Place here
+                                  </span>
+                                ) : (
+                                  "+ Assign"
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -561,19 +609,47 @@ const TimetableScheduler = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (selectedDays.length === days.length) {
+                      const validDaysForPeriod = days.filter(d => {
+                        const dType = weekdayConfig[d] || 'Weekday';
+                        if (dType === 'Holiday Weekend') return false;
+                        if (dType === 'Working Weekend') {
+                          const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
+                          return currentPeriod?.applicable_on_weekends;
+                        }
+                        return true;
+                      });
+                      if (selectedDays.length === validDaysForPeriod.length) {
                         setSelectedDays([editingSlot.day]);
                       } else {
-                        setSelectedDays([...days]);
+                        setSelectedDays(validDaysForPeriod);
                       }
                     }}
                     className="text-[10px] font-extrabold text-brand-primary hover:text-brand-dark transition-all hover:underline uppercase tracking-wide"
                   >
-                    {selectedDays.length === days.length ? "Reset to single day" : "Select All Days"}
+                    {(() => {
+                      const validDaysForPeriod = days.filter(d => {
+                        const dType = weekdayConfig[d] || 'Weekday';
+                        if (dType === 'Holiday Weekend') return false;
+                        if (dType === 'Working Weekend') {
+                          const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
+                          return currentPeriod?.applicable_on_weekends;
+                        }
+                        return true;
+                      });
+                      return selectedDays.length === validDaysForPeriod.length ? "Reset to single day" : "Select All Days";
+                    })()}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {days.map((d) => {
+                  {days.filter(d => {
+                    const dType = weekdayConfig[d] || 'Weekday';
+                    if (dType === 'Holiday Weekend') return false;
+                    if (dType === 'Working Weekend') {
+                      const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
+                      return currentPeriod?.applicable_on_weekends;
+                    }
+                    return true;
+                  }).map((d) => {
                     const isSelected = selectedDays.includes(d);
                     return (
                       <button
