@@ -14,6 +14,7 @@ const TimetableScheduler = ({
   slots = [],
   assignments = [],
   onUpdateSlot,
+  onMoveSlot,
   showBreaks = true,
 }) => {
   const [editingSlot, setEditingSlot] = useState(null); // { day, periodId, periodNumber, subjectId, teacherId }
@@ -21,6 +22,7 @@ const TimetableScheduler = ({
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [selectedDays, setSelectedDays] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
+  const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, subjectId, teacherId }
 
 
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -52,7 +54,107 @@ const TimetableScheduler = ({
   };
   const getClassName = (cId) => classes.find((c) => String(c.id) === String(cId))?.name || "Unknown";
 
+  const handleStartMove = (day, periodId, slot) => {
+    setMovingSlot({
+      day,
+      periodId,
+      subjectId: slot.subject_id,
+      teacherId: slot.teacher_id,
+    });
+    showToast("Move mode active. Click any target cell in the grid to place the slot.", "info");
+  };
+
+  const handleCompleteMove = (targetDay, targetPeriodId) => {
+    if (!movingSlot) return;
+
+    // Clicked same cell -> cancel
+    if (movingSlot.day === targetDay && String(movingSlot.periodId) === String(targetPeriodId)) {
+      setMovingSlot(null);
+      return;
+    }
+
+    const targetSlot = getSlotDetails(targetDay, targetPeriodId);
+    const hasAssignedSubject = targetSlot && targetSlot.subject_id;
+
+    // Check teacher conflicts
+    let teacherConflicted = false;
+    let conflictClassName = "";
+    if (movingSlot.teacherId) {
+      const conflict = slots.find(
+        (s) =>
+          String(s.class_id) !== String(classId) &&
+          s.day === targetDay &&
+          String(s.period_id) === String(targetPeriodId) &&
+          String(s.teacher_id) === String(movingSlot.teacherId)
+      );
+      if (conflict) {
+        teacherConflicted = true;
+        conflictClassName = getClassName(conflict.class_id);
+      }
+    }
+
+    const executeMove = () => {
+      if (onMoveSlot) {
+        onMoveSlot(
+          classId,
+          movingSlot.day,
+          movingSlot.periodId,
+          targetDay,
+          targetPeriodId
+        );
+      }
+      setMovingSlot(null);
+    };
+
+    const checkTeacherConflictThenProceed = () => {
+      if (teacherConflicted) {
+        const teacherName = getTeacherName(movingSlot.teacherId);
+        setConfirmConfig({
+          title: "Teacher Conflict Warning",
+          message: `Warning: Teacher ${teacherName} is already occupied in ${conflictClassName} on ${targetDay} at this period. Do you want to proceed anyway?`,
+          confirmText: "Proceed",
+          type: "warning",
+          onConfirm: () => {
+            setConfirmConfig(null);
+            executeMove();
+          },
+          onCancel: () => {
+            setConfirmConfig(null);
+            setMovingSlot(null);
+          }
+        });
+      } else {
+        executeMove();
+      }
+    };
+
+    if (hasAssignedSubject) {
+      const targetSubName = getSubjectName(targetSlot.subject_id);
+      setConfirmConfig({
+        title: "Override Target Slot?",
+        message: `The target slot is already assigned to "${targetSubName}". Are you sure you want to override it?`,
+        confirmText: "Override",
+        type: "danger",
+        onConfirm: () => {
+          setConfirmConfig(null);
+          checkTeacherConflictThenProceed();
+        },
+        onCancel: () => {
+          setConfirmConfig(null);
+          setMovingSlot(null);
+        }
+      });
+    } else {
+      checkTeacherConflictThenProceed();
+    }
+  };
+
   const handleCellClick = (day, period) => {
+    if (movingSlot) {
+      handleCompleteMove(day, period.id);
+      return;
+    }
+
     const slot = getSlotDetails(day, period.id);
     setEditingSlot({
       day,
@@ -172,6 +274,31 @@ const TimetableScheduler = ({
 
   return (
     <div className="space-y-4">
+      {/* Move mode banner */}
+      {movingSlot && (
+        <div className="bg-brand-lbg/30 border border-brand-soft rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary shrink-0 animate-bounce">
+              <i className="fas fa-arrows-alt"></i>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-dark-primary">
+                Moving slot: <span className="text-brand-primary uppercase font-extrabold">{getSubjectName(movingSlot.subjectId)}</span> ({getTeacherName(movingSlot.teacherId)})
+              </div>
+              <p className="text-[10px] text-dark-soft font-semibold mt-0.5">
+                From {movingSlot.day}, Period {periods.find(p => String(p.id) === String(movingSlot.periodId))?.name || 'Unknown'}. Click any cell in the grid to place it.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMovingSlot(null)}
+            className="bg-white hover:bg-light-ui border border-light-border px-3 py-1.5 rounded-lg text-xs font-bold text-dark-soft transition-all shrink-0 shadow-sm animate-pulse"
+          >
+            Cancel Move
+          </button>
+        </div>
+      )}
 
       {/* Grid view */}
       {visiblePeriods.length === 0 ? (
@@ -252,15 +379,21 @@ const TimetableScheduler = ({
                       );
                     }
 
+                    const isSourceCell = movingSlot && movingSlot.day === day && String(movingSlot.periodId) === String(period.id);
+
                     return (
                       <td
                         key={period.id || period.period_number}
                         onClick={() => handleCellClick(day, period)}
-                        className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] cursor-pointer group hover:bg-light-bg/40 transition-colors"
+                        className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] cursor-pointer group hover:bg-light-bg/40 transition-colors ${
+                          movingSlot ? "hover:bg-brand-lbg/10" : ""
+                        }`}
                       >
                         {isAssigned ? (
                           <div
-                            className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 group-hover:scale-95 ${colorClass}`}
+                            className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
+                              isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
+                            } ${!movingSlot ? "group-hover:scale-95" : "group-hover:scale-95 group-hover:border-brand-primary"} relative`}
                           >
                             <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
                               {subjectName}
@@ -276,10 +409,35 @@ const TimetableScheduler = ({
                                 {getTeacherName(slot.teacher_id)}
                               </span>
                             )}
+
+                            {/* Move Button */}
+                            {!movingSlot && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartMove(day, period.id, slot);
+                                }}
+                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 bg-white/80 hover:bg-white text-dark-primary hover:text-brand-primary w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                                title="Move Slot to another period"
+                              >
+                                <i className="fas fa-arrows-alt text-[10px]"></i>
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          <div className="w-full h-full rounded-xl border border-dashed border-light-border group-hover:border-brand-soft group-hover:bg-brand-lbg/10 flex items-center justify-center text-[10px] text-dark-muted font-bold bg-light-bg/10 transition-all">
-                            + Assign
+                          <div className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
+                            movingSlot
+                              ? "border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer"
+                              : "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
+                          }`}>
+                            {movingSlot ? (
+                              <span className="flex items-center gap-1">
+                                <i className="fas fa-check text-[9px]"></i> Place here
+                              </span>
+                            ) : (
+                              "+ Assign"
+                            )}
                           </div>
                         )}
                       </td>

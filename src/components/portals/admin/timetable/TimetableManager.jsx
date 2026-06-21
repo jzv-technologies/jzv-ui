@@ -767,6 +767,91 @@ const TimetableManager = () => {
     saveState({ slots: updatedSlots });
   };
 
+  // MOVE SLOT HANDLER (Move slot from source day/period to target day/period)
+  const handleMoveSlot = async (classId, sourceDay, sourcePeriodId, targetDay, targetPeriodId) => {
+    const sourceSlot = slots.find(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.day === sourceDay &&
+        String(s.period_id) === String(sourcePeriodId)
+    );
+    if (!sourceSlot) return;
+
+    const { subject_id: subjectId, teacher_id: teacherId } = sourceSlot;
+    let updatedSlots = [...slots];
+
+    // Remove source slot
+    const srcIndex = updatedSlots.findIndex(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.day === sourceDay &&
+        String(s.period_id) === String(sourcePeriodId)
+    );
+    if (srcIndex > -1) {
+      updatedSlots.splice(srcIndex, 1);
+    }
+
+    // Set target slot
+    const tgtIndex = updatedSlots.findIndex(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.day === targetDay &&
+        String(s.period_id) === String(targetPeriodId)
+    );
+
+    const newSlotVal = {
+      class_id: classId,
+      day: targetDay,
+      period_id: targetPeriodId,
+      subject_id: subjectId,
+      teacher_id: teacherId,
+    };
+
+    if (tgtIndex > -1) {
+      updatedSlots[tgtIndex] = { ...updatedSlots[tgtIndex], ...newSlotVal };
+    } else {
+      updatedSlots.push({ id: generateLocalId(), ...newSlotVal });
+    }
+
+    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+      try {
+        // Delete source
+        await supabase
+          .from('timetable_slots')
+          .delete()
+          .eq('class_id', classId)
+          .eq('day', sourceDay)
+          .eq('period_id', sourcePeriodId);
+
+        // Upsert target
+        const { data, error } = await supabase
+          .from('timetable_slots')
+          .upsert([newSlotVal], { onConflict: 'class_id,day,period_id' })
+          .select();
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const idx = updatedSlots.findIndex(
+            (s) =>
+              String(s.class_id) === String(data[0].class_id) &&
+              s.day === data[0].day &&
+              String(s.period_id) === String(data[0].period_id)
+          );
+          if (idx > -1) {
+            updatedSlots[idx] = data[0];
+          }
+        }
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        await loadData();
+        return;
+      }
+    }
+
+    saveState({ slots: updatedSlots });
+    showToast('Slot moved successfully!', 'success');
+  };
+
   // JSON EXPORT HANDLER
   const handleExportJson = () => {
     const backupData = {
@@ -974,6 +1059,7 @@ const TimetableManager = () => {
               onRefresh={loadData}
               refreshing={loading}
               onUpdateSlot={handleUpdateSlot}
+              onMoveSlot={handleMoveSlot}
             />
           )}
 

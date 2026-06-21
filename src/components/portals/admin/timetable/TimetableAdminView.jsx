@@ -71,9 +71,7 @@ const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
         onClick={() => setOpen((o) => !o)}
         className="flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all bg-white border-light-border text-dark-primary hover:border-brand-soft hover:bg-light-lbg min-w-[150px] shadow-sm"
       >
-        <span className="truncate">
-          {selectedOption ? selectedOption.label : label}
-        </span>
+        <span className="truncate">{selectedOption ? selectedOption.label : label}</span>
         <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-2 text-dark-soft`} />
       </button>
 
@@ -355,6 +353,77 @@ const AssignPopover = ({
     );
   }
 
+  // ── Mode: unassign teacher (teacher schedule — assigned cell click) ──────────
+  if (mode === 'unassign_teacher') {
+    const teacherObj = teachers.find((t) => String(t.id) === String(teacherId));
+    const teacherName = teacherObj?.name || 'Teacher';
+    const className = classes.find((c) => String(c.id) === String(classId))?.name || 'Class';
+    const subjectName = subjects.find((s) => String(s.id) === String(subjectId))?.name || 'Subject';
+
+    const scheduledDays = slots
+      .filter(
+        (s) =>
+          String(s.class_id) === String(classId) &&
+          String(s.period_id) === String(periodId) &&
+          String(s.teacher_id) === String(teacherId)
+      )
+      .map((s) => s.day);
+
+    return (
+      <div
+        ref={ref}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="absolute z-50 bg-white border border-light-border rounded-2xl shadow-2xl w-72 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        style={{ top: 'calc(100% + 6px)', left: 0 }}
+      >
+        <div className="bg-red-600 px-4 py-3 text-white">
+          <div className="text-[9px] uppercase tracking-widest font-bold opacity-75 mb-0.5">
+            Unassign Teacher
+          </div>
+          <div className="text-xs font-extrabold truncate">{teacherName}</div>
+          <div className="text-[10px] opacity-75 mt-0.5 font-semibold">
+            {className} — {subjectName}
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs font-semibold text-dark-soft">
+            Choose whether to unassign this teacher from this slot for <strong>{day}</strong> only,
+            or for <strong>all days</strong> of this weekly period.
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                onAssign(classId, day, periodId, subjectId, null);
+                onClose();
+              }}
+              className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2 rounded-xl text-xs font-bold transition-all"
+            >
+              Unassign for {day} Only
+            </button>
+            <button
+              onClick={() => {
+                onAssign(classId, scheduledDays, periodId, subjectId, null);
+                onClose();
+              }}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-sm"
+            >
+              Unassign for All Days ({scheduledDays.join(', ')})
+            </button>
+          </div>
+        </div>
+        <div className="px-3 py-2 border-t border-light-border">
+          <button
+            onClick={onClose}
+            className="w-full text-xs font-bold text-dark-muted hover:text-dark-primary transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Mode: assign class+subject (teacher schedule — free period cell) ──────────
   if (mode === 'assign_class') {
     const teacherObj = teachers.find((t) => String(t.id) === String(teacherId));
@@ -512,6 +581,7 @@ const TimetableAdminView = ({
   refreshing = false,
   lockedClassId = '',
   onUpdateSlot = null, // if provided, viewer becomes interactive
+  onMoveSlot = null,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
 }) => {
   const filteredViews = allowedViews.filter(
@@ -678,6 +748,16 @@ const TimetableAdminView = ({
           teacherId: selectedId,
           cellKey,
         });
+      } else {
+        setPopover({
+          mode: 'unassign_teacher',
+          day,
+          periodId: period.id,
+          classId: slot.class_id,
+          subjectId: slot.subject_id,
+          teacherId: selectedId,
+          cellKey,
+        });
       }
     }
   };
@@ -787,7 +867,10 @@ const TimetableAdminView = ({
                       return {
                         value: String(cls.id),
                         label: cls.name,
-                        subLabel: viewType === 'scheduler' ? `${pct}% completed - ${assigned} of ${total}` : null,
+                        subLabel:
+                          viewType === 'scheduler'
+                            ? `${pct}% completed - ${assigned} of ${total}`
+                            : null,
                       };
                     })}
                 />
@@ -926,186 +1009,199 @@ const TimetableAdminView = ({
           <p className="text-dark-muted text-sm mt-1">Please set up periods in the setup tabs.</p>
         </div>
       ) : isGridView ? (
-        <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
-          <table className="w-full border-collapse min-w-[900px] print:min-w-full">
-            <thead>
-              <tr className="bg-light-lbg print:bg-gray-100 border-b border-light-border">
-                <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black">
-                  Day
-                </th>
-                {visiblePeriods.map((period) => (
-                  <th
-                    key={period.id || period.period_number}
-                    className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black"
-                  >
-                    <div className="font-extrabold text-sm text-dark-deepblue">
-                      {period.name || `Period ${period.period_number}`}
-                    </div>
-                    {period.start_time && period.end_time && (
-                      <div className="text-[10px] text-dark-soft font-semibold mt-0.5 print:text-gray-500">
-                        {period.start_time} - {period.end_time}
-                      </div>
-                    )}
+        <>
+          <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
+            <table className="w-full border-collapse min-w-[900px] print:min-w-full">
+              <thead>
+                <tr className="bg-light-lbg print:bg-gray-100 border-b border-light-border">
+                  <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black">
+                    Day
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((day) => (
-                <tr
-                  key={day}
-                  className="border-b border-light-border last:border-b-0 hover:bg-light-bg/40 transition-colors"
-                >
-                  <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-light-lbg/30 print:bg-gray-50 print:text-black w-[120px]">
-                    {day}
-                  </td>
-                  {visiblePeriods.map((period) => {
-                    const isBreak = period.is_break;
-                    const slot = getSlotDetails(day, period.id);
-                    const isAssigned = slot && slot.subject_id;
-                    const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
-                    const isTeacherAssigned = slot && slot.teacher_id;
-                    const teacher = isTeacherAssigned
-                      ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
-                      : null;
-                    const isFemale = teacher && teacher.is_male === false;
+                  {visiblePeriods.map((period) => (
+                    <th
+                      key={period.id || period.period_number}
+                      className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black"
+                    >
+                      <div className="font-extrabold text-sm text-dark-deepblue">
+                        {period.name || `Period ${period.period_number}`}
+                      </div>
+                      {period.start_time && period.end_time && (
+                        <div className="text-[10px] text-dark-soft font-semibold mt-0.5 print:text-gray-500">
+                          {period.start_time} - {period.end_time}
+                        </div>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((day) => (
+                  <tr key={day} className="border-b border-light-border last:border-b-0 bg-white ">
+                    <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px]">
+                      {day}
+                    </td>
+                    {visiblePeriods.map((period) => {
+                      const isBreak = period.is_break;
+                      const slot = getSlotDetails(day, period.id);
+                      const isAssigned = slot && slot.subject_id;
+                      const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
+                      const isTeacherAssigned = slot && slot.teacher_id;
+                      const teacher = isTeacherAssigned
+                        ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
+                        : null;
+                      const isFemale = teacher && teacher.is_male === false;
 
-                    let colorClass = '';
-                    if (isAssigned) {
-                      if (!isTeacherAssigned) {
-                        colorClass = getSubjectColor(subjectName);
-                      } else if (isFemale) {
-                        colorClass = 'bg-purple-100 text-purple-900 border-purple-200';
-                      } else {
-                        colorClass = 'bg-blue-lbg text-blue-dark border-blue-200';
+                      let colorClass = '';
+                      if (isAssigned) {
+                        if (!isTeacherAssigned) {
+                          colorClass = getSubjectColor(subjectName);
+                        } else if (isFemale) {
+                          colorClass = 'bg-purple-100 text-purple-900 border-purple-200';
+                        } else {
+                          colorClass = 'bg-blue-lbg text-blue-dark border-blue-200';
+                        }
                       }
-                    }
 
-                    const cellKey = `${day}-${period.id}`;
-                    const isPopoverOpen = popover && popover.cellKey === cellKey;
-                    const isClickable =
-                      isInteractive &&
-                      !isBreak &&
-                      ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
-                        (viewType === 'teacher' && (!slot || !slot.subject_id)));
+                      const cellKey = `${day}-${period.id}`;
+                      const isPopoverOpen = popover && popover.cellKey === cellKey;
+                      const isClickable =
+                        isInteractive &&
+                        !isBreak &&
+                        ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
+                          (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
+                          (viewType === 'teacher' && isAssigned));
 
-                    if (isBreak) {
-                      const nameLower = (period.name || 'Break').toLowerCase();
-                      let breakIcon = 'fa-coffee';
-                      if (
-                        nameLower.includes('salah') ||
-                        nameLower.includes('prayer') ||
-                        nameLower.includes('namaz') ||
-                        nameLower.includes('zohr') ||
-                        nameLower.includes('asr')
-                      ) {
-                        breakIcon = 'fa-mosque';
-                      } else if (
-                        nameLower.includes('lunch') ||
-                        nameLower.includes('breakfast') ||
-                        nameLower.includes('recess') ||
-                        nameLower.includes('tea') ||
-                        nameLower.includes('snack') ||
-                        nameLower.includes('food') ||
-                        nameLower.includes('tiffin')
-                      ) {
-                        breakIcon = 'fa-utensils';
+                      if (isBreak) {
+                        const nameLower = (period.name || 'Break').toLowerCase();
+                        let breakIcon = 'fa-coffee';
+                        if (
+                          nameLower.includes('salah') ||
+                          nameLower.includes('prayer') ||
+                          nameLower.includes('namaz') ||
+                          nameLower.includes('zohr') ||
+                          nameLower.includes('asr')
+                        ) {
+                          breakIcon = 'fa-mosque';
+                        } else if (
+                          nameLower.includes('lunch') ||
+                          nameLower.includes('breakfast') ||
+                          nameLower.includes('recess') ||
+                          nameLower.includes('tea') ||
+                          nameLower.includes('snack') ||
+                          nameLower.includes('food') ||
+                          nameLower.includes('tiffin')
+                        ) {
+                          breakIcon = 'fa-utensils';
+                        }
+
+                        return (
+                          <td
+                            key={period.id || period.period_number}
+                            className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
+                          >
+                            <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                              <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
+                              {period.name || 'Break'}
+                            </div>
+                          </td>
+                        );
                       }
 
                       return (
                         <td
                           key={period.id || period.period_number}
-                          className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
+                          className={`p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] relative ${
+                            isClickable ? 'cursor-pointer hover:bg-light-bg/30' : ''
+                          } ${isPopoverOpen ? 'bg-brand-lbg/10' : ''}`}
+                          onClick={() => isClickable && handleCellClick(day, period, slot)}
                         >
-                          <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                            <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
-                            {period.name || 'Break'}
-                          </div>
-                        </td>
-                      );
-                    }
-
-                    return (
-                      <td
-                        key={period.id || period.period_number}
-                        className={`p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] relative ${
-                          isClickable ? 'cursor-pointer hover:bg-light-bg/30' : ''
-                        } ${isPopoverOpen ? 'bg-brand-lbg/10' : ''}`}
-                        onClick={() => isClickable && handleCellClick(day, period, slot)}
-                      >
-                        {isAssigned ? (
-                          <div
-                            className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                          >
-                            <span className="font-extrabold text-xs tracking-wide uppercase truncate">
-                              {subjectName}
-                            </span>
-                            {viewType === 'class' ? (
-                              !isTeacherAssigned ? (
-                                <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
-                                  <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
-                                  {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
-                                </span>
+                          {isAssigned ? (
+                            <div
+                              className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                            >
+                              <span className="font-extrabold text-xs tracking-wide uppercase truncate">
+                                {subjectName}
+                              </span>
+                              {viewType === 'class' ? (
+                                !isTeacherAssigned ? (
+                                  <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
+                                    <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
+                                    {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] opacity-90 font-bold truncate">
+                                    <i
+                                      className={`fas ${isFemale ? 'fa-female' : 'fa-male'} mr-1 text-[9px]`}
+                                    ></i>
+                                    {getTeacherName(slot.teacher_id)}
+                                  </span>
+                                )
                               ) : (
                                 <span className="text-[10px] opacity-90 font-bold truncate">
-                                  <i
-                                    className={`fas ${isFemale ? 'fa-female' : 'fa-male'} mr-1 text-[9px]`}
-                                  ></i>
-                                  {getTeacherName(slot.teacher_id)}
+                                  <i className="fas fa-school mr-1 text-[9px]"></i>
+                                  {getClassName(slot.class_id)}
                                 </span>
-                              )
-                            ) : (
-                              <span className="text-[10px] opacity-90 font-bold truncate">
-                                <i className="fas fa-school mr-1 text-[9px]"></i>
-                                {getClassName(slot.class_id)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <div
-                            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
-                              isClickable
-                                ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
-                                : 'border-light-border text-dark-muted bg-light-bg/20'
-                            } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                          >
-                            {isClickable ? (
-                              <span className="flex items-center gap-1">
-                                <i className="fas fa-plus text-[9px]" />
-                                Schedule
-                              </span>
-                            ) : (
-                              'Free'
-                            )}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          ) : (
+                            <div
+                              className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+                                isClickable
+                                  ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
+                                  : 'border-light-border text-dark-muted bg-light-bg/20'
+                              } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                            >
+                              {isClickable ? (
+                                <span className="flex items-center gap-1">
+                                  <i className="fas fa-plus text-[9px]" />
+                                  Schedule
+                                </span>
+                              ) : (
+                                'Free'
+                              )}
+                            </div>
+                          )}
 
-                        {/* Inline Popover */}
-                        {isPopoverOpen && (
-                          <AssignPopover
-                            popover={popover}
-                            teachers={teachers}
-                            subjects={subjects}
-                            classes={classes}
-                            slots={slots}
-                            assignments={assignments}
-                            onAssign={handleAssign}
-                            onClose={() => setPopover(null)}
-                          />
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                          {/* Inline Popover */}
+                          {isPopoverOpen && (
+                            <AssignPopover
+                              popover={popover}
+                              teachers={teachers}
+                              subjects={subjects}
+                              classes={classes}
+                              slots={slots}
+                              assignments={assignments}
+                              onAssign={handleAssign}
+                              onClose={() => setPopover(null)}
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {selectedId && (
+            <div className="mt-6 print:hidden">
+              <AllocationSummaryTable
+                viewType={viewType}
+                selectedId={selectedId}
+                slots={slots}
+                subjects={subjects}
+                teachers={teachers}
+                classes={classes}
+                assignments={assignments}
+              />
+            </div>
+          )}
+        </>
       ) : null}
 
       {/* ── Scheduler Grid View ── */}
       {viewType === 'scheduler' && (
-        <div className="w-full">
+        <div className="w-full space-y-6">
           <TimetableScheduler
             classId={selectedId}
             classes={classes}
@@ -1115,12 +1211,214 @@ const TimetableAdminView = ({
             slots={slots}
             assignments={assignments}
             onUpdateSlot={onUpdateSlot}
+            onMoveSlot={onMoveSlot}
             showBreaks={showBreaks}
           />
+          {selectedId && (
+            <div className="print:hidden">
+              <AllocationSummaryTable
+                viewType={viewType}
+                selectedId={selectedId}
+                slots={slots}
+                subjects={subjects}
+                teachers={teachers}
+                classes={classes}
+                assignments={assignments}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+};
+
+const AllocationSummaryTable = ({
+  viewType,
+  selectedId,
+  slots,
+  subjects,
+  teachers,
+  classes,
+  assignments,
+}) => {
+  const getSubjectName = (subId) =>
+    subjects.find((s) => String(s.id) === String(subId))?.name || 'Unknown';
+  const getClassName = (cId) =>
+    classes.find((c) => String(c.id) === String(cId))?.name || 'Unknown';
+
+  if (viewType === 'class' || viewType === 'scheduler') {
+    const classSlots = slots.filter(
+      (s) => String(s.class_id) === String(selectedId) && s.subject_id
+    );
+    const classAssignments = assignments.filter((a) => String(a.class_id) === String(selectedId));
+
+    const uniqueSubIds = [
+      ...new Set([
+        ...classAssignments.map((a) => String(a.subject_id)),
+        ...classSlots.map((s) => String(s.subject_id)),
+      ]),
+    ];
+
+    const rows = uniqueSubIds
+      .map((subId) => {
+        const subject = subjects.find((s) => String(s.id) === String(subId));
+        if (!subject) return null;
+
+        const count = classSlots.filter((s) => String(s.subject_id) === String(subId)).length;
+
+        return {
+          id: subId,
+          subjectName: subject.name,
+          count,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+
+    return (
+      <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 animate-in fade-in duration-300 print:hidden">
+        <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <i className="fas fa-chart-pie text-brand-primary"></i>
+          Weekly Period Allocations per Subject
+        </h4>
+        {rows.length === 0 ? (
+          <div className="text-xs italic text-dark-muted py-2">
+            No subjects assigned or scheduled.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {rows.map((row) => (
+              <div
+                key={row.id}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-light-border/60 hover:bg-light-lbg/60 transition-colors"
+              >
+                <span className="text-xs text-dark-primary truncate">
+                  {row.subjectName} (
+                  <span className="text-pink-primary">
+                    {row.count} {row.count === 1 ? 'period' : 'periods'}
+                  </span>
+                  )
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  } else if (viewType === 'teacher') {
+    const teacherSlots = slots.filter(
+      (s) => String(s.teacher_id) === String(selectedId) && s.subject_id
+    );
+    const teacherAssignments = assignments.filter(
+      (a) => String(a.teacher_id) === String(selectedId)
+    );
+
+    const subjectGroupsMap = new Map();
+    teacherAssignments.forEach((a) => {
+      const subId = String(a.subject_id);
+      const cId = String(a.class_id);
+      if (!subjectGroupsMap.has(subId)) {
+        subjectGroupsMap.set(subId, {
+          subjectId: subId,
+          subjectName: getSubjectName(subId),
+          classesMap: new Map(),
+        });
+      }
+      const group = subjectGroupsMap.get(subId);
+      if (!group.classesMap.has(cId)) {
+        group.classesMap.set(cId, {
+          classId: cId,
+          className: getClassName(cId),
+          count: 0,
+        });
+      }
+    });
+    teacherSlots.forEach((s) => {
+      const subId = String(s.subject_id);
+      const cId = String(s.class_id);
+      if (!subjectGroupsMap.has(subId)) {
+        subjectGroupsMap.set(subId, {
+          subjectId: subId,
+          subjectName: getSubjectName(subId),
+          classesMap: new Map(),
+        });
+      }
+      const group = subjectGroupsMap.get(subId);
+      if (!group.classesMap.has(cId)) {
+        group.classesMap.set(cId, {
+          classId: cId,
+          className: getClassName(cId),
+          count: 0,
+        });
+      }
+      group.classesMap.get(cId).count += 1;
+    });
+
+    const groups = Array.from(subjectGroupsMap.values())
+      .map((group) => {
+        const classesList = Array.from(group.classesMap.values()).sort((a, b) =>
+          a.className.localeCompare(b.className)
+        );
+        const totalCount = classesList.reduce((sum, c) => sum + c.count, 0);
+        return {
+          subjectId: group.subjectId,
+          subjectName: group.subjectName,
+          totalCount,
+          classes: classesList,
+        };
+      })
+      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+
+    return (
+      <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 animate-in fade-in duration-300 print:hidden">
+        <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <i className="fas fa-chart-pie text-brand-primary"></i>
+          Weekly Teaching Allocations Summary
+        </h4>
+        {groups.length === 0 ? (
+          <div className="text-xs italic text-dark-muted py-2">
+            No classes or subjects scheduled for this teacher.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {groups.map((group) => (
+              <div
+                key={group.subjectId}
+                className="flex flex-col gap-1.5 p-3 rounded-xl border bg-green-lbg/40 border-light-border/60 hover:bg-light-lbg/60 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${getSubjectColor(group.subjectName)}`}
+                  ></span>
+                  <span className="text-xs font-bold text-dark-primary truncate">
+                    {group.subjectName} - (
+                    <span className="text-pink-primary">
+                      {group.totalCount} - {group.totalCount === 1 ? 'period' : 'periods'}
+                    </span>
+                    )
+                  </span>
+                </div>
+                {group.classes.length > 0 && (
+                  <div className="pl-4 space-y-1 border-l border-light-border/60">
+                    {group.classes.map((cls) => (
+                      <div
+                        key={cls.classId}
+                        className="text-[10px] text-dark-soft font-semibold truncate"
+                      >
+                        {cls.className} - ({cls.count} - {cls.count === 1 ? 'period' : 'periods'})
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
 };
 
 export default TimetableAdminView;
