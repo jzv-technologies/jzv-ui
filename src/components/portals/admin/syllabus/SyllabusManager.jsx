@@ -1,5 +1,5 @@
 // src/components/portals/admin/syllabus/SyllabusManager.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import ClassificationsModal from '../timetable/ClassificationsModal';
@@ -7,6 +7,15 @@ import ConfirmModal from '../../../ConfirmModal';
 
 // Safe ID generator for offline/local storage usage
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
+
+// Calculate rolled-up complexity for a chapter based on its lessons list
+const getRolledUpComplexity = (chapLessons) => {
+  if (!chapLessons || chapLessons.length === 0) return null;
+  const complexities = chapLessons.map(l => l.complexity);
+  if (complexities.includes('Complex')) return 'Complex';
+  if (complexities.includes('Moderate')) return 'Moderate';
+  return 'Easy';
+};
 
 const SyllabusManager = ({ role }) => {
   const isAdmin = role === 'admin';
@@ -16,6 +25,261 @@ const SyllabusManager = ({ role }) => {
   const [collapsedClassifications, setCollapsedClassifications] = useState({});
   const [isClassificationsModalOpen, setIsClassificationsModalOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
+
+  // CSV Import State
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [csvRows, setCsvRows] = useState([]);
+  const [isCsvMappingOpen, setIsCsvMappingOpen] = useState(false);
+  const [importBookId, setImportBookId] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleCsvClick = (bookId) => {
+    setImportBookId(bookId);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target.result;
+      processCsvText(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const parseCSV = (text) => {
+    const lines = [];
+    let row = [""];
+    let inQuotes = false;
+    
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+      
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          row[row.length - 1] += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        row.push("");
+      } else if ((char === '\r' || char === '\n') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') {
+          i++;
+        }
+        lines.push(row);
+        row = [""];
+      } else {
+        row[row.length - 1] += char;
+      }
+    }
+    if (row.length > 1 || row[0] !== "") {
+      lines.push(row);
+    }
+    return lines;
+  };
+
+  const processCsvText = (text) => {
+    const rawRows = parseCSV(text);
+    
+    // Filter out completely empty rows
+    const cleanRows = rawRows.map(r => r.map(cell => cell.trim())).filter(r => r.some(cell => cell !== ""));
+    
+    if (cleanRows.length < 2) {
+      showToast("CSV must contain a header row and at least one data row.", "error");
+      return;
+    }
+
+    const headers = cleanRows[0];
+    
+    // Validate number of columns: must be min 3 and max 5
+    if (headers.length < 3 || headers.length > 5) {
+      showToast(`Invalid CSV column count (${headers.length}). The file must contain between 3 and 5 columns.`, "error");
+      return;
+    }
+
+    setCsvHeaders(headers);
+    setCsvRows(cleanRows.slice(1));
+    setIsCsvMappingOpen(true);
+  };
+
+  const handleExecuteCsvImport = async (mappings) => {
+    setIsCsvMappingOpen(false);
+    setLoading(true);
+    setMessage({ type: '', text: 'Importing curriculum data...' });
+
+    const { unitCol, chapterCol, lessonCol, complexityCol, pageCol } = mappings;
+
+    // Map column names to indices
+    const unitIdx = csvHeaders.indexOf(unitCol);
+    const chapterIdx = csvHeaders.indexOf(chapterCol);
+    const lessonIdx = csvHeaders.indexOf(lessonCol);
+    const complexityIdx = complexityCol ? csvHeaders.indexOf(complexityCol) : -1;
+    const pageIdx = pageCol ? csvHeaders.indexOf(pageCol) : -1;
+
+    try {
+      // Local lists that we modify as we import, to avoid duplicate DB insertions during the same import
+      let currentUnits = [...units];
+      let currentChapters = [...chapters];
+      let currentLessons = [...lessons];
+      
+      let rowsImported = 0;
+
+      for (const row of csvRows) {
+        const unitName = row[unitIdx];
+        const chapterName = row[chapterIdx];
+        const lessonName = row[lessonIdx];
+        
+        // Skip rows that don't have mandatory values
+        if (!unitName || !chapterName || !lessonName) {
+          continue;
+        }
+
+        // 1. Process Unit
+        let unitObj = currentUnits.find(
+          u => String(u.book_id) === String(importBookId) && u.name.toLowerCase().trim() === unitName.toLowerCase().trim()
+        );
+
+        if (!unitObj) {
+          // Add Unit
+          const newId = generateLocalId();
+          if (isSupabaseMode) {
+            const { data, error } = await supabase
+              .from('syllabus_units')
+              .insert([{ book_id: importBookId, name: unitName }])
+              .select();
+            if (error) throw error;
+            unitObj = data[0];
+          } else {
+            unitObj = { id: newId, book_id: importBookId, name: unitName };
+          }
+          currentUnits.push(unitObj);
+        }
+
+        // 2. Process Chapter
+        let chapterObj = currentChapters.find(
+          c => String(c.unit_id) === String(unitObj.id) && c.name.toLowerCase().trim() === chapterName.toLowerCase().trim()
+        );
+
+        if (!chapterObj) {
+          // Add Chapter
+          const newId = generateLocalId();
+          if (isSupabaseMode) {
+            const { data, error } = await supabase
+              .from('syllabus_chapters')
+              .insert([{ unit_id: unitObj.id, name: chapterName }])
+              .select();
+            if (error) throw error;
+            chapterObj = data[0];
+          } else {
+            chapterObj = { id: newId, unit_id: unitObj.id, name: chapterName };
+          }
+          currentChapters.push(chapterObj);
+        }
+
+        // 3. Process Lesson
+        let lessonObj = currentLessons.find(
+          l => String(l.chapter_id) === String(chapterObj.id) && l.name.toLowerCase().trim() === lessonName.toLowerCase().trim()
+        );
+
+        const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
+        let complexityVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
+        // Normalize complexity
+        if (complexityVal) {
+          complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+          if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+            complexityVal = 'Easy';
+          }
+        } else {
+          complexityVal = 'Easy';
+        }
+
+        if (!lessonObj) {
+          // Add Lesson
+          const newId = generateLocalId();
+          if (isSupabaseMode) {
+            const { data, error } = await supabase
+              .from('syllabus_lessons')
+              .insert([{
+                chapter_id: chapterObj.id,
+                name: lessonName,
+                page_count: pageVal,
+                complexity: complexityVal
+              }])
+              .select();
+            if (error) throw error;
+            lessonObj = data[0];
+          } else {
+            lessonObj = {
+              id: newId,
+              chapter_id: chapterObj.id,
+              name: lessonName,
+              page_count: pageVal,
+              complexity: complexityVal
+            };
+          }
+          currentLessons.push(lessonObj);
+        } else {
+          // Update Lesson optional fields if provided
+          if (isSupabaseMode) {
+            const updates = {};
+            let needsUpdate = false;
+            if (pageIdx !== -1 && lessonObj.page_count !== pageVal) {
+              updates.page_count = pageVal;
+              needsUpdate = true;
+            }
+            if (complexityIdx !== -1 && lessonObj.complexity !== complexityVal) {
+              updates.complexity = complexityVal;
+              needsUpdate = true;
+            }
+            if (needsUpdate) {
+              const { error } = await supabase
+                .from('syllabus_lessons')
+                .update(updates)
+                .eq('id', lessonObj.id);
+              if (error) throw error;
+              lessonObj.page_count = pageVal;
+              lessonObj.complexity = complexityVal;
+            }
+          } else {
+            if (pageIdx !== -1) lessonObj.page_count = pageVal;
+            if (complexityIdx !== -1) lessonObj.complexity = complexityVal;
+          }
+        }
+        
+        rowsImported++;
+      }
+
+      // Save state to sync component
+      saveState({
+        units: currentUnits,
+        chapters: currentChapters,
+        lessons: currentLessons
+      });
+
+      // Fetch fresh data if live database is connected
+      if (isSupabaseMode) {
+        await loadData();
+      }
+
+      showToast(`Successfully processed CSV. Imported/Consumed ${rowsImported} rows of curriculum!`, "success");
+      setMessage({ type: 'success', text: `Successfully imported ${rowsImported} items from CSV.` });
+    } catch (err) {
+      showToast("CSV Import Error: " + err.message, "error");
+      setMessage({ type: 'error', text: `Import failed: ${err.message}` });
+    } finally {
+      setLoading(false);
+      setImportBookId(null);
+    }
+  };
   
   // Data lists
   const [classifications, setClassifications] = useState([]);
@@ -203,7 +467,7 @@ const SyllabusManager = ({ role }) => {
 
   // Node CRUD Action Handlers
   const handleSaveNode = async (formData) => {
-    const { level, type, name, classificationId, pageCount, complexity, parentId, node } = formData;
+    const { level, type, name, classificationId, pageCount, complexity, parentId, node, unitsList, chaptersList, lessonsList } = formData;
     setLoading(true);
 
     try {
@@ -232,34 +496,320 @@ const SyllabusManager = ({ role }) => {
           }
           saveState({ books: updatedList });
         } else if (level === 'unit') {
-          payload.book_id = parentId;
-          let updatedList = [...units, { id: newId, book_id: parentId, name }];
-          if (isSupabaseMode) {
-            const { data, error } = await supabase.from('syllabus_units').insert([payload]).select();
-            if (error) throw error;
-            updatedList = [...units, data[0]];
+          let currentUnits = [...units];
+          let currentChapters = [...chapters];
+          let currentLessons = [...lessons];
+
+          for (const unit of unitsList) {
+            if (!unit.name.trim()) continue;
+
+            // Check if Unit already exists under this Book
+            let unitObj = currentUnits.find(
+              u => String(u.book_id) === String(parentId) && u.name.toLowerCase().trim() === unit.name.toLowerCase().trim()
+            );
+
+            if (!unitObj) {
+              const newId = generateLocalId();
+              if (isSupabaseMode) {
+                const { data, error } = await supabase
+                  .from('syllabus_units')
+                  .insert([{ book_id: parentId, name: unit.name.trim() }])
+                  .select();
+                if (error) throw error;
+                unitObj = data[0];
+              } else {
+                unitObj = { id: newId, book_id: parentId, name: unit.name.trim() };
+              }
+              currentUnits.push(unitObj);
+            }
+
+            // Process Chapters under this Unit
+            if (unit.chapters && unit.chapters.length > 0) {
+              for (const chap of unit.chapters) {
+                if (!chap.name.trim()) continue;
+
+                let chapterObj = currentChapters.find(
+                  c => String(c.unit_id) === String(unitObj.id) && c.name.toLowerCase().trim() === chap.name.toLowerCase().trim()
+                );
+
+                if (!chapterObj) {
+                  const newId = generateLocalId();
+                  if (isSupabaseMode) {
+                    const { data, error } = await supabase
+                      .from('syllabus_chapters')
+                      .insert([{ unit_id: unitObj.id, name: chap.name.trim() }])
+                      .select();
+                    if (error) throw error;
+                    chapterObj = data[0];
+                  } else {
+                    chapterObj = { id: newId, unit_id: unitObj.id, name: chap.name.trim() };
+                  }
+                  currentChapters.push(chapterObj);
+                }
+
+                // Process Lessons under this Chapter
+                if (chap.lessons && chap.lessons.length > 0) {
+                  for (const less of chap.lessons) {
+                    let lessonObj = currentLessons.find(
+                      l => String(l.chapter_id) === String(chapterObj.id) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
+                    );
+
+                    const pageVal = Number(less.pageCount || 0);
+                    let complexityVal = less.complexity || 'Easy';
+                    if (complexityVal) {
+                      complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+                      if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+                        complexityVal = 'Easy';
+                      }
+                    } else {
+                      complexityVal = 'Easy';
+                    }
+
+                    if (!lessonObj) {
+                      const newId = generateLocalId();
+                      if (isSupabaseMode) {
+                        const { data, error } = await supabase
+                          .from('syllabus_lessons')
+                          .insert([{
+                            chapter_id: chapterObj.id,
+                            name: less.name.trim(),
+                            page_count: pageVal,
+                            complexity: complexityVal
+                          }])
+                          .select();
+                        if (error) throw error;
+                        lessonObj = data[0];
+                      } else {
+                        lessonObj = {
+                          id: newId,
+                          chapter_id: chapterObj.id,
+                          name: less.name.trim(),
+                          page_count: pageVal,
+                          complexity: complexityVal
+                        };
+                      }
+                      currentLessons.push(lessonObj);
+                    } else {
+                      if (isSupabaseMode) {
+                        const updates = {};
+                        let needsUpdate = false;
+                        if (lessonObj.page_count !== pageVal) {
+                          updates.page_count = pageVal;
+                          needsUpdate = true;
+                        }
+                        if (lessonObj.complexity !== complexityVal) {
+                          updates.complexity = complexityVal;
+                          needsUpdate = true;
+                        }
+                        if (needsUpdate) {
+                          const { error } = await supabase
+                            .from('syllabus_lessons')
+                            .update(updates)
+                            .eq('id', lessonObj.id);
+                          if (error) throw error;
+                          lessonObj.page_count = pageVal;
+                          lessonObj.complexity = complexityVal;
+                        }
+                      } else {
+                        lessonObj.page_count = pageVal;
+                        lessonObj.complexity = complexityVal;
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
-          saveState({ units: updatedList });
+
+          saveState({
+            units: currentUnits,
+            chapters: currentChapters,
+            lessons: currentLessons
+          });
+          if (isSupabaseMode) {
+            await loadData();
+          }
         } else if (level === 'chapter') {
-          payload.unit_id = parentId;
-          let updatedList = [...chapters, { id: newId, unit_id: parentId, name }];
-          if (isSupabaseMode) {
-            const { data, error } = await supabase.from('syllabus_chapters').insert([payload]).select();
-            if (error) throw error;
-            updatedList = [...chapters, data[0]];
+          let currentChapters = [...chapters];
+          let currentLessons = [...lessons];
+
+          for (const chap of chaptersList) {
+            if (!chap.name.trim()) continue;
+
+            let chapterObj = currentChapters.find(
+              c => String(c.unit_id) === String(parentId) && c.name.toLowerCase().trim() === chap.name.toLowerCase().trim()
+            );
+
+            if (!chapterObj) {
+              const newId = generateLocalId();
+              if (isSupabaseMode) {
+                const { data, error } = await supabase
+                  .from('syllabus_chapters')
+                  .insert([{ unit_id: parentId, name: chap.name.trim() }])
+                  .select();
+                if (error) throw error;
+                chapterObj = data[0];
+              } else {
+                chapterObj = { id: newId, unit_id: parentId, name: chap.name.trim() };
+              }
+              currentChapters.push(chapterObj);
+            }
+
+            if (chap.lessons && chap.lessons.length > 0) {
+              for (const less of chap.lessons) {
+                let lessonObj = currentLessons.find(
+                  l => String(l.chapter_id) === String(chapterObj.id) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
+                );
+
+                const pageVal = Number(less.pageCount || 0);
+                let complexityVal = less.complexity || 'Easy';
+                if (complexityVal) {
+                  complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+                  if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+                    complexityVal = 'Easy';
+                  }
+                } else {
+                  complexityVal = 'Easy';
+                }
+
+                if (!lessonObj) {
+                  const newId = generateLocalId();
+                  if (isSupabaseMode) {
+                    const { data, error } = await supabase
+                      .from('syllabus_lessons')
+                      .insert([{
+                        chapter_id: chapterObj.id,
+                        name: less.name.trim(),
+                        page_count: pageVal,
+                        complexity: complexityVal
+                      }])
+                      .select();
+                    if (error) throw error;
+                    lessonObj = data[0];
+                  } else {
+                    lessonObj = {
+                      id: newId,
+                      chapter_id: chapterObj.id,
+                      name: less.name.trim(),
+                      page_count: pageVal,
+                      complexity: complexityVal
+                    };
+                  }
+                  currentLessons.push(lessonObj);
+                } else {
+                  if (isSupabaseMode) {
+                    const updates = {};
+                    let needsUpdate = false;
+                    if (lessonObj.page_count !== pageVal) {
+                      updates.page_count = pageVal;
+                      needsUpdate = true;
+                    }
+                    if (lessonObj.complexity !== complexityVal) {
+                      updates.complexity = complexityVal;
+                      needsUpdate = true;
+                    }
+                    if (needsUpdate) {
+                      const { error } = await supabase
+                        .from('syllabus_lessons')
+                        .update(updates)
+                        .eq('id', lessonObj.id);
+                      if (error) throw error;
+                      lessonObj.page_count = pageVal;
+                      lessonObj.complexity = complexityVal;
+                    }
+                  } else {
+                    lessonObj.page_count = pageVal;
+                    lessonObj.complexity = complexityVal;
+                  }
+                }
+              }
+            }
           }
-          saveState({ chapters: updatedList });
+
+          saveState({
+            chapters: currentChapters,
+            lessons: currentLessons
+          });
+          if (isSupabaseMode) {
+            await loadData();
+          }
         } else if (level === 'lesson') {
-          payload.chapter_id = parentId;
-          payload.page_count = Number(pageCount || 0);
-          payload.complexity = complexity;
-          let updatedList = [...lessons, { id: newId, chapter_id: parentId, name, page_count: payload.page_count, complexity }];
-          if (isSupabaseMode) {
-            const { data, error } = await supabase.from('syllabus_lessons').insert([payload]).select();
-            if (error) throw error;
-            updatedList = [...lessons, data[0]];
+          let currentLessons = [...lessons];
+
+          for (const less of lessonsList) {
+            let lessonObj = currentLessons.find(
+              l => String(l.chapter_id) === String(parentId) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
+            );
+
+            const pageVal = Number(less.pageCount || 0);
+            let complexityVal = less.complexity || 'Easy';
+            if (complexityVal) {
+              complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+              if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+                complexityVal = 'Easy';
+              }
+            } else {
+              complexityVal = 'Easy';
+            }
+
+            if (!lessonObj) {
+              const newId = generateLocalId();
+              if (isSupabaseMode) {
+                const { data, error } = await supabase
+                  .from('syllabus_lessons')
+                  .insert([{
+                    chapter_id: parentId,
+                    name: less.name.trim(),
+                    page_count: pageVal,
+                    complexity: complexityVal
+                  }])
+                  .select();
+                if (error) throw error;
+                lessonObj = data[0];
+              } else {
+                lessonObj = {
+                  id: newId,
+                  chapter_id: parentId,
+                  name: less.name.trim(),
+                  page_count: pageVal,
+                  complexity: complexityVal
+                };
+              }
+              currentLessons.push(lessonObj);
+            } else {
+              if (isSupabaseMode) {
+                const updates = {};
+                let needsUpdate = false;
+                if (lessonObj.page_count !== pageVal) {
+                  updates.page_count = pageVal;
+                  needsUpdate = true;
+                }
+                if (lessonObj.complexity !== complexityVal) {
+                  updates.complexity = complexityVal;
+                  needsUpdate = true;
+                }
+                if (needsUpdate) {
+                  const { error } = await supabase
+                    .from('syllabus_lessons')
+                    .update(updates)
+                    .eq('id', lessonObj.id);
+                  if (error) throw error;
+                  lessonObj.page_count = pageVal;
+                  lessonObj.complexity = complexityVal;
+                }
+              } else {
+                lessonObj.page_count = pageVal;
+                lessonObj.complexity = complexityVal;
+              }
+            }
           }
-          saveState({ lessons: updatedList });
+
+          saveState({
+            lessons: currentLessons
+          });
+          if (isSupabaseMode) {
+            await loadData();
+          }
         }
       } else if (type === 'edit') {
         const targetId = node.id;
@@ -790,6 +1340,13 @@ const SyllabusManager = ({ role }) => {
                               <i className="fas fa-plus"></i> Add Unit
                             </button>
                             <button
+                              onClick={() => handleCsvClick(book.id)}
+                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Import CSV Curriculum"
+                            >
+                              <i className="fas fa-file-csv text-sm"></i>
+                            </button>
+                            <button
                               onClick={() => setModal({ type: 'edit', level: 'book', node: book })}
                               className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
                               title="Rename Book"
@@ -871,6 +1428,9 @@ const SyllabusManager = ({ role }) => {
                                           unitChapters.map((chap) => {
                                             const isChapCollapsed = collapsedNodes[chap.id];
                                             const chapLessons = lessons.filter(l => String(l.chapter_id) === String(chap.id));
+                                            const visibleLessons = chapLessons.filter(l => l.name && l.name.trim() !== '');
+                                            const totalPages = chapLessons.reduce((sum, l) => sum + (l.page_count || 0), 0);
+                                            const rolledUpComp = getRolledUpComplexity(chapLessons);
 
                                             return (
                                               <div key={chap.id} className="border border-light-border/40 rounded-lg overflow-hidden pl-4">
@@ -883,9 +1443,30 @@ const SyllabusManager = ({ role }) => {
                                                     <i className={`fas fa-chevron-${isChapCollapsed ? 'right' : 'down'} text-[8px] text-dark-soft`} />
                                                     <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
                                                     <span className="font-extrabold text-xs text-dark-primary truncate">{chap.name}</span>
-                                                    <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
-                                                      {chapLessons.length} Lessons
-                                                    </span>
+                                                    {visibleLessons.length > 0 ? (
+                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                        {visibleLessons.length} Lessons
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                        No lessons
+                                                      </span>
+                                                    )}
+                                                    {visibleLessons.length === 0 && totalPages > 0 && (
+                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                                        <i className="far fa-file-lines mr-1" />
+                                                        {totalPages} pages
+                                                      </span>
+                                                    )}
+                                                    {visibleLessons.length === 0 && rolledUpComp && (
+                                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ml-1 ${
+                                                        rolledUpComp === 'Complex' ? 'bg-red-100 text-red-700 border-red-200' :
+                                                        rolledUpComp === 'Moderate' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                                        'bg-green-100 text-green-700 border-green-200'
+                                                      }`}>
+                                                        {rolledUpComp}
+                                                      </span>
+                                                    )}
                                                   </button>
 
                                                   <div className="flex items-center gap-1">
@@ -916,12 +1497,14 @@ const SyllabusManager = ({ role }) => {
                                                 {/* Lessons Container */}
                                                 {!isChapCollapsed && (
                                                   <div className="p-2 bg-white space-y-1.5">
-                                                    {chapLessons.length === 0 ? (
-                                                      <div className="text-[10px] italic text-dark-muted pl-6 py-1">
-                                                        No lessons added under this chapter.
-                                                      </div>
+                                                    {visibleLessons.length === 0 ? (
+                                                      chapLessons.length === 0 ? (
+                                                        <div className="text-[10px] italic text-dark-muted pl-6 py-1">
+                                                          No lessons added under this chapter.
+                                                        </div>
+                                                      ) : null
                                                     ) : (
-                                                      chapLessons.map((less) => {
+                                                      visibleLessons.map((less) => {
                                                         let compColor = 'bg-green-100 text-green-700 border-green-200';
                                                         if (less.complexity === 'Moderate') {
                                                           compColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
@@ -1017,6 +1600,24 @@ const SyllabusManager = ({ role }) => {
         onConfirm={confirmConfig?.onConfirm}
         onCancel={() => setConfirmConfig(null)}
       />
+
+      {/* CSV Column Mapping Modal */}
+      <SyllabusCsvMappingModal
+        isOpen={isCsvMappingOpen}
+        headers={csvHeaders}
+        previewRows={csvRows.slice(0, 5)}
+        onClose={() => setIsCsvMappingOpen(false)}
+        onImport={handleExecuteCsvImport}
+      />
+
+      {/* Hidden File Input for CSV Upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept=".csv"
+        onChange={handleFileChange}
+        className="hidden"
+      />
     </div>
   );
 };
@@ -1031,29 +1632,327 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
   const [pageCount, setPageCount] = useState(isEdit && level === 'lesson' ? node.page_count : 5);
   const [complexity, setComplexity] = useState(isEdit && level === 'lesson' ? node.complexity : 'Easy');
 
-  const title = `${isEdit ? 'Edit' : 'Add New'} ${level.charAt(0).toUpperCase() + level.slice(1)}`;
+  // Multi-entry addition states
+  const [unitsList, setUnitsList] = useState([
+    {
+      tempId: 'u-1',
+      name: '',
+      chapters: [
+        {
+          tempId: 'c-1',
+          name: '',
+          lessons: [
+            { tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }
+          ]
+        }
+      ]
+    }
+  ]);
+
+  const [chaptersList, setChaptersList] = useState([
+    {
+      tempId: 'c-1',
+      name: '',
+      lessons: [
+        { tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }
+      ]
+    }
+  ]);
+
+  const [lessonsList, setLessonsList] = useState([
+    { tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }
+  ]);
+
+  // Unit builders
+  const addUnit = () => {
+    setUnitsList([
+      ...unitsList,
+      {
+        tempId: 'u-' + Math.random().toString(36).substr(2, 9),
+        name: '',
+        chapters: [
+          {
+            tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+            name: '',
+            lessons: [
+              { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+            ]
+          }
+        ]
+      }
+    ]);
+  };
+
+  const removeUnit = (uId) => {
+    if (unitsList.length > 1) {
+      setUnitsList(unitsList.filter(u => u.tempId !== uId));
+    }
+  };
+
+  const updateUnitName = (uId, val) => {
+    setUnitsList(unitsList.map(u => u.tempId === uId ? { ...u, name: val } : u));
+  };
+
+  const addChapterToUnit = (uId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: [
+            ...u.chapters,
+            {
+              tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+              name: '',
+              lessons: [
+                { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+              ]
+            }
+          ]
+        };
+      }
+      return u;
+    }));
+  };
+
+  const removeChapterFromUnit = (uId, cId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: u.chapters.filter(c => c.tempId !== cId)
+        };
+      }
+      return u;
+    }));
+  };
+
+  const updateChapterNameInUnit = (uId, cId, val) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: u.chapters.map(c => c.tempId === cId ? { ...c, name: val } : c)
+        };
+      }
+      return u;
+    }));
+  };
+
+  const addLessonToChapterInUnit = (uId, cId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: u.chapters.map(c => {
+            if (c.tempId === cId) {
+              return {
+                ...c,
+                lessons: [
+                  ...c.lessons,
+                  { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+                ]
+              };
+            }
+            return c;
+          })
+        };
+      }
+      return u;
+    }));
+  };
+
+  const removeLessonFromChapterInUnit = (uId, cId, lId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: u.chapters.map(c => {
+            if (c.tempId === cId) {
+              return {
+                ...c,
+                lessons: c.lessons.filter(l => l.tempId !== lId)
+              };
+            }
+            return c;
+          })
+        };
+      }
+      return u;
+    }));
+  };
+
+  const updateLessonFieldInUnit = (uId, cId, lId, field, val) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          chapters: u.chapters.map(c => {
+            if (c.tempId === cId) {
+              return {
+                ...c,
+                lessons: c.lessons.map(l => l.tempId === lId ? { ...l, [field]: val } : l)
+              };
+            }
+            return c;
+          })
+        };
+      }
+      return u;
+    }));
+  };
+
+  // Chapter builders
+  const addChapter = () => {
+    setChaptersList([
+      ...chaptersList,
+      {
+        tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+        name: '',
+        lessons: [
+          { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+        ]
+      }
+    ]);
+  };
+
+  const removeChapter = (cId) => {
+    if (chaptersList.length > 1) {
+      setChaptersList(chaptersList.filter(c => c.tempId !== cId));
+    }
+  };
+
+  const updateChapterName = (cId, val) => {
+    setChaptersList(chaptersList.map(c => c.tempId === cId ? { ...c, name: val } : c));
+  };
+
+  const addLessonToChapter = (cId) => {
+    setChaptersList(chaptersList.map(c => {
+      if (c.tempId === cId) {
+        return {
+          ...c,
+          lessons: [
+            ...c.lessons,
+            { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+          ]
+        };
+      }
+      return c;
+    }));
+  };
+
+  const removeLessonFromChapter = (cId, lId) => {
+    setChaptersList(chaptersList.map(c => {
+      if (c.tempId === cId) {
+        return {
+          ...c,
+          lessons: c.lessons.filter(l => l.tempId !== lId)
+        };
+      }
+      return c;
+    }));
+  };
+
+  const updateLessonFieldInChapter = (cId, lId, field, val) => {
+    setChaptersList(chaptersList.map(c => {
+      if (c.tempId === cId) {
+        return {
+          ...c,
+          lessons: c.lessons.map(l => l.tempId === lId ? { ...l, [field]: val } : l)
+        };
+      }
+      return c;
+    }));
+  };
+
+  // Lesson builders
+  const addLesson = () => {
+    setLessonsList([
+      ...lessonsList,
+      { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+    ]);
+  };
+
+  const removeLesson = (lId) => {
+    if (lessonsList.length > 1) {
+      setLessonsList(lessonsList.filter(l => l.tempId !== lId));
+    }
+  };
+
+  const updateLessonField = (lId, field, val) => {
+    setLessonsList(lessonsList.map(l => l.tempId === lId ? { ...l, [field]: val } : l));
+  };
+
+  const title = `${isEdit ? 'Edit' : 'Add'} ${level.charAt(0).toUpperCase() + level.slice(1)}${!isEdit && (level === 'unit' || level === 'chapter' || level === 'lesson') ? 's Builder' : ''}`;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name.trim()) {
-      showToast('Name field cannot be empty.', 'error');
-      return;
+    if (isEdit) {
+      if (!name.trim()) {
+        showToast('Name field cannot be empty.', 'error');
+        return;
+      }
+      onSave({
+        level,
+        type,
+        name: name.trim(),
+        classificationId,
+        pageCount,
+        complexity,
+        parentId,
+        node,
+      });
+    } else {
+      // Bulk add mode
+      if (level === 'subject' || level === 'book') {
+        if (!name.trim()) {
+          showToast('Name field cannot be empty.', 'error');
+          return;
+        }
+        onSave({
+          level,
+          type,
+          name: name.trim(),
+          classificationId,
+          parentId,
+        });
+      } else if (level === 'unit') {
+        if (unitsList.some(u => !u.name.trim())) {
+          showToast('All unit names must be filled, or remove empty unit rows.', 'error');
+          return;
+        }
+        onSave({
+          level,
+          type,
+          parentId,
+          unitsList,
+        });
+      } else if (level === 'chapter') {
+        if (chaptersList.some(c => !c.name.trim())) {
+          showToast('All chapter names must be filled, or remove empty chapter rows.', 'error');
+          return;
+        }
+        onSave({
+          level,
+          type,
+          parentId,
+          chaptersList,
+        });
+      } else if (level === 'lesson') {
+        onSave({
+          level,
+          type,
+          parentId,
+          lessonsList,
+        });
+      }
     }
-    onSave({
-      level,
-      type,
-      name: name.trim(),
-      classificationId,
-      pageCount,
-      complexity,
-      parentId,
-      node,
-    });
   };
+
+  const modalWidth = (!isEdit && (level === 'unit' || level === 'chapter')) ? 'max-w-2xl' : 'max-w-md';
 
   return (
     <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className={`bg-white rounded-3xl border border-light-border shadow-2xl w-full overflow-hidden animate-in zoom-in-95 duration-200 ${modalWidth}`}>
         
         {/* Modal Header */}
         <div className="bg-brand-primary p-5 text-white flex justify-between items-center">
@@ -1071,68 +1970,401 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
 
         {/* Modal Form body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
-              {level.charAt(0).toUpperCase() + level.slice(1)} Name
-            </label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
-              placeholder={`Enter ${level} name...`}
-            />
-          </div>
-
-          {level === 'subject' && (
-            <div>
-              <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
-                Classification
-              </label>
-              <select
-                value={classificationId}
-                onChange={(e) => setClassificationId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
-              >
-                <option value="">No Classification</option>
-                {classifications.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Lesson specifics */}
-          {level === 'lesson' && (
-            <div className="grid grid-cols-2 gap-4">
+          
+          {/* Simple Single Fields for Edit OR Subject/Book Add */}
+          {(isEdit || level === 'subject' || level === 'book') && (
+            <>
               <div>
                 <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
-                  Page Count
+                  {level.charAt(0).toUpperCase() + level.slice(1)} Name
                 </label>
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
                   required
-                  value={pageCount}
-                  onChange={(e) => setPageCount(Number(e.target.value))}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full px-4 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+                  placeholder={`Enter ${level} name...`}
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
-                  Complexity
-                </label>
-                <select
-                  value={complexity}
-                  onChange={(e) => setComplexity(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+              {level === 'subject' && (
+                <div>
+                  <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
+                    Classification
+                  </label>
+                  <select
+                    value={classificationId}
+                    onChange={(e) => setClassificationId(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+                  >
+                    <option value="">No Classification</option>
+                    {classifications.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Lesson specifics (Edit mode only) */}
+              {isEdit && level === 'lesson' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
+                      Page Count
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      required
+                      value={pageCount}
+                      onChange={(e) => setPageCount(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
+                      Complexity
+                    </label>
+                    <select
+                      value={complexity}
+                      onChange={(e) => setComplexity(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Moderate">Moderate</option>
+                      <option value="Complex">Complex</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Bulk Unit Builder */}
+          {!isEdit && level === 'unit' && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Units & Sub-levels</span>
+                <button
+                  type="button"
+                  onClick={addUnit}
+                  className="bg-brand-primary/10 hover:bg-brand-primary text-brand-primary hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
                 >
-                  <option value="Easy">Easy</option>
-                  <option value="Moderate">Moderate</option>
-                  <option value="Complex">Complex</option>
-                </select>
+                  <i className="fas fa-plus text-[10px]"></i> Add Unit
+                </button>
+              </div>
+
+              {unitsList.map((unit, uIdx) => (
+                <div key={unit.tempId} className="border border-brand-soft/20 rounded-2xl p-4 bg-brand-lbg/5 space-y-4 animate-in fade-in duration-200">
+                  {/* Unit Title Row */}
+                  <div className="flex items-center gap-2">
+                    <span className="bg-brand-primary text-white w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                      U{uIdx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={unit.name}
+                      placeholder="Enter Unit Name (e.g. Unit 1: Introduction)..."
+                      onChange={(e) => updateUnitName(unit.tempId, e.target.value)}
+                      className="flex-1 bg-white border border-light-border rounded-xl px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                    />
+                    {unitsList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeUnit(unit.tempId)}
+                        className="p-1.5 text-red-primary hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                        title="Remove Unit"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Chapters Area */}
+                  <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Chapters under Unit {uIdx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => addChapterToUnit(unit.tempId)}
+                        className="bg-amber-500/10 hover:bg-amber-500 text-amber-600 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                      >
+                        <i className="fas fa-plus text-[9px]"></i> Add Chapter
+                      </button>
+                    </div>
+
+                    {unit.chapters.map((chap, cIdx) => (
+                      <div key={chap.tempId} className="border border-dashed border-amber-200/50 rounded-xl p-3 bg-amber-50/10 space-y-3 animate-in fade-in duration-200">
+                        {/* Chapter Title Row */}
+                        <div className="flex items-center gap-2">
+                          <span className="bg-amber-500 text-white w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] shrink-0">
+                            C{cIdx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            required
+                            value={chap.name}
+                            placeholder="Enter Chapter Name (e.g. Chapter 1)..."
+                            onChange={(e) => updateChapterNameInUnit(unit.tempId, chap.tempId, e.target.value)}
+                            className="flex-1 bg-white border border-light-border rounded-lg px-2.5 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                          />
+                          {unit.chapters.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeChapterFromUnit(unit.tempId, chap.tempId)}
+                              className="p-1 text-red-primary hover:bg-red-50 rounded shrink-0"
+                              title="Remove Chapter"
+                            >
+                              <i className="fas fa-times text-[10px]"></i>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Lessons Area */}
+                        <div className="pl-6 border-l border-dashed border-amber-200 ml-2 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[8px] font-bold text-dark-muted uppercase tracking-wider text-[7.5px]">Lessons for Chapter {cIdx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => addLessonToChapterInUnit(unit.tempId, chap.tempId)}
+                              className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-1.5 py-0.5 rounded text-[8px] font-bold flex items-center gap-0.5 transition-all"
+                            >
+                              <i className="fas fa-plus text-[7px]"></i> Add Lesson
+                            </button>
+                          </div>
+
+                          {chap.lessons.map((less, lIdx) => (
+                            <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
+                              <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
+                              
+                              <input
+                                type="text"
+                                required
+                                value={less.name}
+                                placeholder="Lesson Name..."
+                                onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'name', e.target.value)}
+                                className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
+                              />
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={less.pageCount}
+                                  placeholder="Pages"
+                                  title="Page Count"
+                                  onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                                  className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
+                                />
+                                
+                                <select
+                                  value={less.complexity}
+                                  onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'complexity', e.target.value)}
+                                  className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
+                                >
+                                  <option value="Easy">Easy</option>
+                                  <option value="Moderate">Mod</option>
+                                  <option value="Complex">Comp</option>
+                                </select>
+
+                                {chap.lessons.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeLessonFromChapterInUnit(unit.tempId, chap.tempId, less.tempId)}
+                                    className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
+                                    title="Remove Lesson"
+                                  >
+                                    <i className="fas fa-times text-[9px]"></i>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bulk Chapter Builder */}
+          {!isEdit && level === 'chapter' && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Chapters & Lessons</span>
+                <button
+                  type="button"
+                  onClick={addChapter}
+                  className="bg-amber-500/10 hover:bg-amber-500 text-amber-600 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                >
+                  <i className="fas fa-plus text-[10px]"></i> Add Chapter
+                </button>
+              </div>
+
+              {chaptersList.map((chap, cIdx) => (
+                <div key={chap.tempId} className="border border-amber-200/50 rounded-2xl p-4 bg-amber-50/5 space-y-4 animate-in fade-in duration-200">
+                  {/* Chapter Header Row */}
+                  <div className="flex items-center gap-2">
+                    <span className="bg-amber-500 text-white w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                      C{cIdx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={chap.name}
+                      placeholder="Enter Chapter Name (e.g. Chapter 1: Fractions)..."
+                      onChange={(e) => updateChapterName(chap.tempId, e.target.value)}
+                      className="flex-1 bg-white border border-light-border rounded-xl px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                    />
+                    {chaptersList.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeChapter(chap.tempId)}
+                        className="p-1.5 text-red-primary hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                        title="Remove Chapter"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Lessons Area */}
+                  <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Lessons for Chapter {cIdx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => addLessonToChapter(chap.tempId)}
+                        className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                      >
+                        <i className="fas fa-plus text-[9px]"></i> Add Lesson
+                      </button>
+                    </div>
+
+                    {chap.lessons.map((less, lIdx) => (
+                      <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
+                        <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
+                        
+                        <input
+                          type="text"
+                          required
+                          value={less.name}
+                          placeholder="Lesson Name..."
+                          onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'name', e.target.value)}
+                          className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
+                        />
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="1"
+                            value={less.pageCount}
+                            placeholder="Pages"
+                            title="Page Count"
+                            onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                            className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
+                          />
+                          
+                          <select
+                            value={less.complexity}
+                            onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'complexity', e.target.value)}
+                            className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
+                          >
+                            <option value="Easy">Easy</option>
+                            <option value="Moderate">Mod</option>
+                            <option value="Complex">Comp</option>
+                          </select>
+
+                          {chap.lessons.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeLessonFromChapter(chap.tempId, less.tempId)}
+                              className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
+                              title="Remove Lesson"
+                            >
+                              <i className="fas fa-times text-[9px]"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bulk Lesson Builder */}
+          {!isEdit && level === 'lesson' && (
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Lessons List</span>
+                <button
+                  type="button"
+                  onClick={addLesson}
+                  className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                >
+                  <i className="fas fa-plus text-[10px]"></i> Add Lesson
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {lessonsList.map((less, lIdx) => (
+                  <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2.5 rounded-xl text-xs font-semibold animate-in fade-in duration-200">
+                    <span className="bg-emerald-600 text-white w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">
+                      L{lIdx + 1}
+                    </span>
+                    
+                    <input
+                      type="text"
+                      required
+                      value={less.name}
+                      placeholder="Enter Lesson Name..."
+                      onChange={(e) => updateLessonField(less.tempId, 'name', e.target.value)}
+                      className="flex-1 min-w-[150px] bg-white border border-light-border rounded-xl px-3 py-1.5 text-xs outline-none"
+                    />
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="w-20">
+                        <input
+                          type="number"
+                          min="1"
+                          value={less.pageCount}
+                          placeholder="Pages"
+                          title="Page Count"
+                          onChange={(e) => updateLessonField(less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                          className="w-full bg-white border border-light-border rounded-xl px-2 py-1.5 text-center text-xs outline-none"
+                        />
+                      </div>
+                      
+                      <select
+                        value={less.complexity}
+                        onChange={(e) => updateLessonField(less.tempId, 'complexity', e.target.value)}
+                        className="bg-white border border-light-border rounded-xl px-2 py-1.5 text-xs outline-none"
+                      >
+                        <option value="Easy">Easy</option>
+                        <option value="Moderate">Moderate</option>
+                        <option value="Complex">Complex</option>
+                      </select>
+
+                      {lessonsList.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLesson(less.tempId)}
+                          className="text-red-primary hover:text-red-dark p-1.5 rounded-lg hover:bg-red-50 shrink-0"
+                          title="Remove Lesson"
+                        >
+                          <i className="fas fa-trash-alt text-xs"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1150,7 +2382,215 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
               type="submit"
               className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm outline-none"
             >
-              Save Level
+              {isEdit ? 'Save Changes' : 'Save Curriculum'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 6. CSV COLUMN MAPPING MODAL
+// ==========================================
+const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImport }) => {
+  const [unitCol, setUnitCol] = useState("");
+  const [chapterCol, setChapterCol] = useState("");
+  const [lessonCol, setLessonCol] = useState("");
+  const [complexityCol, setComplexityCol] = useState("");
+  const [pageCol, setPageCol] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Auto-map columns on headers load
+  useEffect(() => {
+    if (headers && headers.length > 0) {
+      // Helper to find matching column
+      const findMatch = (keys) => {
+        return headers.find(h => {
+          const lower = h.toLowerCase().trim();
+          return keys.includes(lower);
+        }) || "";
+      };
+
+      setUnitCol(findMatch(["unit", "units", "unit name", "unit_name", "section", "sections"]));
+      setChapterCol(findMatch(["chapter", "chapters", "chapter name", "chapter_name", "topic", "topics"]));
+      setLessonCol(findMatch(["lesson", "lessons", "lesson name", "lesson_name", "class", "classes"]));
+      setComplexityCol(findMatch(["complexity", "complex", "difficulty", "level"]));
+      setPageCol(findMatch(["page", "pages", "page_count", "page count", "pages count"]));
+    }
+  }, [headers]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Validate mappings
+    if (!unitCol || !chapterCol || !lessonCol) {
+      setErrorMsg("Please map all mandatory fields (Unit, Chapter, and Lesson).");
+      return;
+    }
+
+    // Ensure no duplicate mappings among targets
+    const mapped = [unitCol, chapterCol, lessonCol];
+    if (complexityCol) mapped.push(complexityCol);
+    if (pageCol) mapped.push(pageCol);
+
+    const uniqueMapped = new Set(mapped);
+    if (uniqueMapped.size !== mapped.length) {
+      setErrorMsg("Duplicate column mappings detected. Each target field must map to a unique column.");
+      return;
+    }
+
+    setErrorMsg("");
+    onImport({ unitCol, chapterCol, lessonCol, complexityCol, pageCol });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[2rem] border border-light-border shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+        {/* Header */}
+        <div className="bg-brand-primary p-5 text-white flex justify-between items-center shrink-0">
+          <div>
+            <h3 className="text-base font-bold flex items-center gap-2">
+              <i className="fas fa-file-import"></i>
+              CSV Column Mapping & Preview
+            </h3>
+            <p className="text-[10px] text-brand-lbg/80 mt-0.5">
+              Confirm which CSV columns contain the unit, chapter, and lesson information.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-white/80 hover:text-white transition-all text-xl outline-none p-1">
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+
+        {/* Body */}
+        <form onSubmit={handleSubmit} className="p-6 flex-1 overflow-y-auto space-y-5 min-h-0 flex flex-col">
+          {errorMsg && (
+            <div className="bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-xs font-bold flex items-center gap-2">
+              <i className="fas fa-exclamation-circle text-sm shrink-0"></i>
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Mappings Form Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+            {/* Mandatory */}
+            <div className="space-y-4 border-r border-light-border/40 pr-0 md:pr-4">
+              <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Mandatory Columns</h4>
+              
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Unit Column *</label>
+                <select
+                  value={unitCol}
+                  onChange={(e) => setUnitCol(e.target.value)}
+                  required
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- Select Column --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Chapter Column *</label>
+                <select
+                  value={chapterCol}
+                  onChange={(e) => setChapterCol(e.target.value)}
+                  required
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- Select Column --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Lesson Column *</label>
+                <select
+                  value={lessonCol}
+                  onChange={(e) => setLessonCol(e.target.value)}
+                  required
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- Select Column --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Optional */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Optional Columns</h4>
+
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Complexity Column</label>
+                <select
+                  value={complexityCol}
+                  onChange={(e) => setComplexityCol(e.target.value)}
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- None (Defaults to 'Easy') --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Page Count Column</label>
+                <select
+                  value={pageCol}
+                  onChange={(e) => setPageCol(e.target.value)}
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- None (Defaults to 0) --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Section */}
+          <div className="flex-1 flex flex-col min-h-[150px]">
+            <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider mb-2 shrink-0">CSV Data Preview (First 5 rows)</h4>
+            <div className="flex-1 overflow-auto border border-light-border/40 rounded-2xl bg-light-lbg/10 p-2 text-[10px]">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-light-border/60 text-dark-soft">
+                    {headers.map(h => (
+                      <th key={h} className="py-2 px-3 text-left font-bold truncate max-w-[120px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-light-border/30 text-dark-primary font-semibold">
+                  {previewRows.map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-white/50">
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx} className="py-2 px-3 truncate max-w-[120px]">{cell || <span className="text-dark-muted italic">empty</span>}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-4 flex justify-end gap-3 border-t border-light-border shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="bg-light-ui text-dark-soft hover:bg-light-border px-4 py-2 rounded-xl text-xs font-bold transition-all outline-none"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm outline-none flex items-center gap-1.5"
+            >
+              <i className="fas fa-check-circle"></i>
+              Import Curriculum
             </button>
           </div>
         </form>
