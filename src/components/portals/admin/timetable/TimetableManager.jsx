@@ -767,6 +767,45 @@ const TimetableManager = () => {
     saveState({ slots: updatedSlots });
   };
 
+  // CLEAR SLOTS HANDLER (Clear multiple periods for multiple days for class)
+  const handleClearSlots = async (classId, targetDays, targetPeriodIds) => {
+    let updatedSlots = [...slots];
+
+    // Local state updates
+    for (const day of targetDays) {
+      for (const periodId of targetPeriodIds) {
+        const existingIndex = updatedSlots.findIndex(
+          (s) =>
+            String(s.class_id) === String(classId) &&
+            s.day === day &&
+            String(s.period_id) === String(periodId)
+        );
+        if (existingIndex > -1) {
+          updatedSlots.splice(existingIndex, 1);
+        }
+      }
+    }
+
+    // DB Sync
+    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+      try {
+        const { error } = await supabase
+          .from('timetable_slots')
+          .delete()
+          .eq('class_id', classId)
+          .in('day', targetDays)
+          .in('period_id', targetPeriodIds);
+        if (error) throw error;
+        showToast('Slots cleared successfully.', 'success');
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        return;
+      }
+    }
+
+    saveState({ slots: updatedSlots });
+  };
+
   // MOVE SLOT HANDLER (Move slot from source day/period to target day/period)
   const handleMoveSlot = async (classId, sourceDay, sourcePeriodId, targetDay, targetPeriodId) => {
     const sourceSlot = slots.find(
@@ -1060,6 +1099,7 @@ const TimetableManager = () => {
               refreshing={loading}
               onUpdateSlot={handleUpdateSlot}
               onMoveSlot={handleMoveSlot}
+              onClearSlots={handleClearSlots}
             />
           )}
 

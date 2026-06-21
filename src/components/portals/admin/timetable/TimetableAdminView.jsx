@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import TimetableOverview from './TimetableOverview';
 import TimetableScheduler from './TimetableScheduler';
+import ConfirmModal from '../../../ConfirmModal';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -225,11 +226,15 @@ const AssignPopover = ({
   subjects,
   classes,
   slots,
+  days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
   assignments,
   onAssign,
   onClose,
 }) => {
   const ref = useRef(null);
+  
+  const [selSubjectId, setSelSubjectId] = useState('');
+  const [selectedDays, setSelectedDays] = useState([]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -238,6 +243,17 @@ const AssignPopover = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
+
+  useEffect(() => {
+    if (popover) {
+      setSelSubjectId('');
+      if (popover.day) {
+        setSelectedDays([popover.day]);
+      } else {
+        setSelectedDays([]);
+      }
+    }
+  }, [popover]);
 
   const { mode, day, periodId, classId, subjectId, teacherId } = popover;
 
@@ -430,8 +446,6 @@ const AssignPopover = ({
     const teacherName = teacherObj?.name || 'Teacher';
     const qualifiedSubjectIds = teacherObj?.subjects || [];
 
-    const [selSubjectId, setSelSubjectId] = useState('');
-
     const getEligibleClasses = (subId) => {
       if (!subId) return [];
       return classes
@@ -465,7 +479,7 @@ const AssignPopover = ({
         ref={ref}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className="absolute z-50 bg-white border border-light-border rounded-2xl shadow-2xl w-72 overflow-hidden"
+        className="absolute z-50 bg-white border border-light-border rounded-2xl shadow-2xl w-72 overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         style={{ top: 'calc(100% + 6px)', left: 0 }}
       >
         <div
@@ -496,6 +510,51 @@ const AssignPopover = ({
             </select>
           </div>
 
+          <div>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1.5">
+              Days to Schedule
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {days.map((d) => {
+                const isSelected = selectedDays.includes(d);
+                const isBusyOnDay = slots.some(
+                  (s) =>
+                    String(s.teacher_id) === String(teacherId) &&
+                    s.day === d &&
+                    String(s.period_id) === String(periodId)
+                );
+                return (
+                  <label
+                    key={d}
+                    className={`flex items-center justify-center px-2 py-1 rounded-lg border text-[10px] font-bold cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-brand-primary border-brand-primary text-white'
+                        : 'bg-white border-light-border text-dark-primary hover:bg-light-lbg'
+                    } ${isBusyOnDay && !isSelected ? 'opacity-50' : ''}`}
+                    title={isBusyOnDay ? `Busy on ${d}` : ''}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        setSelectedDays((prev) =>
+                          prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+                        );
+                      }}
+                      className="hidden"
+                    />
+                    <span>{d.substring(0, 3)}</span>
+                    {isBusyOnDay && (
+                      <span className={`text-[8px] ml-0.5 ${isSelected ? 'text-white/80' : 'text-red-primary'} font-bold`}>
+                        (Busy)
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
           {selSubjectId && (
             <div>
               <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
@@ -503,18 +562,23 @@ const AssignPopover = ({
               </label>
               {eligibleClasses.length === 0 ? (
                 <p className="text-[10px] text-dark-muted font-semibold italic">
-                  No eligible classes for this subject on this day.
+                  No eligible classes for this subject.
                 </p>
               ) : (
                 <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
                   {eligibleClasses.map((cls) => (
                     <button
                       key={cls.id}
+                      disabled={selectedDays.length === 0}
                       onClick={() => {
-                        onAssign(cls.id, day, periodId, selSubjectId, teacherId);
+                        onAssign(cls.id, selectedDays, periodId, selSubjectId, teacherId);
                         onClose();
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg border border-light-border hover:bg-brand-lbg/20 hover:border-brand-soft flex items-center justify-between transition-all"
+                      className={`w-full text-left px-3 py-2 rounded-lg border flex items-center justify-between transition-all ${
+                        selectedDays.length === 0
+                          ? 'opacity-40 cursor-not-allowed bg-light-bg/25 border-light-border'
+                          : 'border-light-border hover:bg-brand-lbg/20 hover:border-brand-soft cursor-pointer'
+                      }`}
                     >
                       <span className="text-xs font-bold text-dark-primary flex items-center gap-1.5">
                         {cls.name}
@@ -582,6 +646,7 @@ const TimetableAdminView = ({
   lockedClassId = '',
   onUpdateSlot = null, // if provided, viewer becomes interactive
   onMoveSlot = null,
+  onClearSlots = null,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
 }) => {
   const filteredViews = allowedViews.filter(
@@ -594,6 +659,7 @@ const TimetableAdminView = ({
   const [selectedId, setSelectedId] = useState('');
   const [showBreaks, setShowBreaks] = useState(true);
   const [popover, setPopover] = useState(null);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
 
   // ── Filter states (lifted from TimetableOverview) ──
   const [selClasses, setSelClasses] = useState([]);
@@ -958,6 +1024,17 @@ const TimetableAdminView = ({
                 <i className="fas fa-print text-sm" />
               </button>
             )}
+
+            {/* Clear Multiple Slots — only for class schedule / scheduler views */}
+            {(viewType === 'class' || viewType === 'scheduler') && selectedId && typeof onClearSlots === 'function' && (
+              <button
+                onClick={() => setIsClearModalOpen(true)}
+                title="Clear Multiple Slots"
+                className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
+              >
+                <i className="fas fa-eraser text-sm" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1170,6 +1247,7 @@ const TimetableAdminView = ({
                               subjects={subjects}
                               classes={classes}
                               slots={slots}
+                              days={days}
                               assignments={assignments}
                               onAssign={handleAssign}
                               onClose={() => setPopover(null)}
@@ -1228,6 +1306,22 @@ const TimetableAdminView = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Clear Slots Modal */}
+      {isClearModalOpen && (
+        <ClearSlotsModal
+          isOpen={isClearModalOpen}
+          onClose={() => setIsClearModalOpen(false)}
+          days={days}
+          periods={periods}
+          className={selectedEntityName}
+          onClear={(selectedDays, selectedPeriodIds) => {
+            if (onClearSlots) {
+              onClearSlots(selectedId, selectedDays, selectedPeriodIds);
+            }
+          }}
+        />
       )}
     </div>
   );
@@ -1419,6 +1513,213 @@ const AllocationSummaryTable = ({
     );
   }
   return null;
+};
+
+const ClearSlotsModal = ({
+  isOpen,
+  onClose,
+  days,
+  periods,
+  className,
+  onClear,
+}) => {
+  const [selDays, setSelDays] = useState([]);
+  const [selPeriods, setSelPeriods] = useState([]);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelDays([]);
+      setSelPeriods([]);
+      setConfirmConfig(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSelectAllDays = () => setSelDays([...days]);
+  const handleClearAllDays = () => setSelDays([]);
+
+  const handleSelectAllPeriods = () => setSelPeriods(periods.map((p) => String(p.id)));
+  const handleClearAllPeriods = () => setSelPeriods([]);
+
+  const handleToggleDay = (d) => {
+    setSelDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  };
+
+  const handleTogglePeriod = (pId) => {
+    setSelPeriods((prev) => (prev.includes(pId) ? prev.filter((x) => x !== pId) : [...prev, pId]));
+  };
+
+  const handleClearSlotsSubmit = () => {
+    if (selDays.length === 0) {
+      alert('Please select at least one day.');
+      return;
+    }
+    if (selPeriods.length === 0) {
+      alert('Please select at least one period.');
+      return;
+    }
+
+    setConfirmConfig({
+      title: 'Clear Timetable Slots',
+      message: `Are you sure you want to permanently clear the scheduled slots for Class ${className} on the selected days (${selDays.join(', ')}) and periods? This action cannot be undone.`,
+      confirmText: 'Clear Slots',
+      type: 'danger',
+      onConfirm: () => {
+        onClear(selDays, selPeriods);
+        setConfirmConfig(null);
+        onClose();
+      },
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-dark-primary/60 backdrop-blur-sm animate-in fade-in duration-250">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white border border-light-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+        >
+          {/* Header */}
+          <div className="bg-red-600 px-6 py-4 text-white flex items-center justify-between">
+            <div>
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <i className="fas fa-eraser"></i>
+                Clear Multiple Slots
+              </h3>
+              <p className="text-xs text-white/80 mt-0.5 font-semibold">Class: {className}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white hover:text-white/80 transition-colors border-none bg-transparent"
+            >
+              <i className="fas fa-times text-lg"></i>
+            </button>
+          </div>
+
+          <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
+            {/* Days Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b border-light-border pb-1">
+                <label className="text-xs font-bold text-dark-primary uppercase tracking-wider">
+                  Select Days
+                </label>
+                <div className="flex gap-2 text-[10px] font-bold">
+                  <button onClick={handleSelectAllDays} className="text-brand-primary hover:underline">
+                    Select All
+                  </button>
+                  <span className="text-dark-muted">|</span>
+                  <button onClick={handleClearAllDays} className="text-dark-muted hover:underline">
+                    Clear All
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {days.map((d) => {
+                  const isChecked = selDays.includes(d);
+                  return (
+                    <label
+                      key={d}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                        isChecked
+                          ? 'bg-red-50 border-red-200 text-red-700 font-bold'
+                          : 'bg-white border-light-border text-dark-primary hover:bg-light-lbg/60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleDay(d)}
+                        className="rounded text-red-600 focus:ring-red-soft w-4 h-4 shrink-0"
+                      />
+                      <span>{d}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Periods Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b border-light-border pb-1">
+                <label className="text-xs font-bold text-dark-primary uppercase tracking-wider">
+                  Select Periods
+                </label>
+                <div className="flex gap-2 text-[10px] font-bold">
+                  <button onClick={handleSelectAllPeriods} className="text-brand-primary hover:underline">
+                    Select All
+                  </button>
+                  <span className="text-dark-muted">|</span>
+                  <button onClick={handleClearAllPeriods} className="text-dark-muted hover:underline">
+                    Clear All
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                {periods.map((p) => {
+                  const isChecked = selPeriods.includes(String(p.id));
+                  return (
+                    <label
+                      key={p.id}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
+                        isChecked
+                          ? 'bg-red-50 border-red-200 text-red-700 font-bold'
+                          : 'bg-white border-light-border text-dark-primary hover:bg-light-lbg/60'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleTogglePeriod(String(p.id))}
+                        className="rounded text-red-600 focus:ring-red-soft w-4 h-4 shrink-0"
+                      />
+                      <div className="truncate">
+                        <span className="font-bold">{p.name || `Period ${p.period_number}`}</span>
+                        {p.is_break && (
+                          <span className="ml-1 text-[9px] bg-amber-100 text-amber-800 px-1 py-0.5 rounded font-bold">
+                            Break
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="bg-light-lbg px-6 py-4 flex justify-end gap-2.5 border-t border-light-border">
+            <button
+              onClick={onClose}
+              className="bg-light-ui text-dark-soft hover:bg-light-border px-4 py-2 rounded-xl text-xs font-bold transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleClearSlotsSubmit}
+              disabled={selDays.length === 0 || selPeriods.length === 0}
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 animate-pulse-once"
+            >
+              <i className="fas fa-trash-alt"></i>
+              Clear Selected Slots
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
+    </>
+  );
 };
 
 export default TimetableAdminView;
