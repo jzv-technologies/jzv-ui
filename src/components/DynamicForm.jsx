@@ -939,7 +939,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
             type="select"
             value={formData[key] || 'Open'}
             onChange={(val) => handleChange(key, val)}
-            listValues={['New', 'In Review', 'In Progress', 'Resolved', 'Closed']}
+            listValues={['Open', 'In Review', 'In Progress', 'Resolved', 'Closed']}
             required={required}
             error={error}
             textColor={textColor}
@@ -965,7 +965,8 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
         );
 
       case 'conversation':
-        const currentUserName = currentFullName || currentUserObj?.email || currentUserObj?.id || 'Reporter';
+        const currentUserName =
+          currentFullName || currentUserObj?.email || currentUserObj?.id || 'Reporter';
         return (
           <EmbeddedConversationChat
             key={key}
