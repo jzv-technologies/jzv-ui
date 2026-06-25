@@ -1552,6 +1552,7 @@ const TimetableManager = () => {
               classes={classes}
               teachers={teachers}
               subjects={subjects}
+              classifications={classifications}
               periods={periods}
               slots={slots}
               assignments={assignments}
@@ -1594,6 +1595,7 @@ const TimetableManager = () => {
               classes={classes}
               teachers={teachers}
               subjects={subjects}
+              classifications={classifications}
               assignments={assignments}
               onAddClass={handleAddClass}
               onUpdateClass={handleUpdateClass}

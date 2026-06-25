@@ -38,7 +38,7 @@ const App = () => {
     openModal,
     closeModal,
     getCard,
-  } = useModal(user);
+  } = useModal(user, userRoles);
 
   // Close modal on Escape key
   useEffect(() => {
@@ -146,6 +146,7 @@ const App = () => {
         <AppRoutes
           user={user}
           userRoles={userRoles}
+          fullName={fullName}
           rolesLoading={rolesLoading}
           gridCards={gridCards}
           openModal={handleCardClick}

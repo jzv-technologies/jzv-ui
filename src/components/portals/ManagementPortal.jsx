@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import RolePortal from "./RolePortal";
 import { showToast } from "../../utils/toast";
+import { calculateAge } from "../../utils/dateUtils";
 import DynamicForm from "../DynamicForm";
 import DataGrid from "../DataGrid";
 import DetailModal from "../DetailModal";
 import { supabase } from "../../utils/supabase";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../data/mockStudents";
 import TimetableAdminView from "./admin/timetable/TimetableAdminView";
+import SyllabusProgressReport from "./admin/syllabus/SyllabusProgressReport";
+import { CARD_THEMES } from "../../utils/cardTheme";
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -18,16 +21,72 @@ import {
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
-const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
+const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, openModal }) => {
   const [submissions, setSubmissions] = useState([]);
+  const [formFields, setFormFields] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [dynamicConfigs, setDynamicConfigs] = useState([]);
+
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("dynamic_form_configs")
+          .select("*");
+        if (!error && data) {
+          setDynamicConfigs(data);
+        }
+      } catch (err) {
+        console.error("Failed to load configs in ManagementPortal:", err);
+      }
+    };
+    fetchConfigs();
+  }, []);
 
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [editStatus, setEditStatus] = useState("Open");
   const [editComments, setEditComments] = useState("");
   const [editResolution, setEditResolution] = useState("");
   const [savingRecord, setSavingRecord] = useState(false);
+  const [personOptions, setPersonOptions] = useState([]);
+  const [editFormData, setEditFormData] = useState({});
+
+  useEffect(() => {
+    const fetchPersonOptions = async () => {
+      try {
+        const [teachersRes, usersRes] = await Promise.all([
+          supabase.from("teachers").select("name"),
+          supabase.from("admin_users_view").select("full_name"),
+        ]);
+        const namesMap = new Map();
+        if (teachersRes.data) {
+          teachersRes.data.forEach((t) => {
+            if (t.name) {
+              const trimmed = t.name.trim();
+              if (trimmed) {
+                namesMap.set(trimmed.toLowerCase(), trimmed);
+              }
+            }
+          });
+        }
+        if (usersRes.data) {
+          usersRes.data.forEach((u) => {
+            if (u.full_name) {
+              const trimmed = u.full_name.trim();
+              if (trimmed && !namesMap.has(trimmed.toLowerCase())) {
+                namesMap.set(trimmed.toLowerCase(), trimmed);
+              }
+            }
+          });
+        }
+        setPersonOptions(Array.from(namesMap.values()).sort((a, b) => a.localeCompare(b)));
+      } catch (err) {
+        console.warn("Failed to fetch person list:", err);
+      }
+    };
+    fetchPersonOptions();
+  }, []);
 
   // Timetable state (read-only for management)
   const [ttSubjects, setTtSubjects] = useState([]);
@@ -161,8 +220,7 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
           "Class": cls ? cls.name : "Unassigned",
           "Father Name": s.father_name || "",
           "Birth Date": s.birth_date || "",
-          "Age": s.age || "",
-          "Gender": s.gender || "",
+          "Age": calculateAge(s.birth_date),
           "Mobile 1": s.mobile1 || "",
           "Mobile 2": s.mobile2 || "",
           "Enrollment": s.enrollment || "Active",
@@ -195,8 +253,7 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
           "Class": cls ? cls.name : "Unassigned",
           "Father Name": s.father_name || "",
           "Birth Date": s.birth_date || "",
-          "Age": s.age || "",
-          "Gender": s.gender || "",
+          "Age": calculateAge(s.birth_date),
           "Mobile 1": s.mobile1 || "",
           "Mobile 2": s.mobile2 || "",
           "Enrollment": s.enrollment || "Active",
@@ -214,6 +271,7 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
     setLoading(true);
     setError("");
     setSubmissions([]);
+    setFormFields([]);
     try {
       const res = await fetch(`${APPS_SCRIPT_URL}?action=search`, {
         method: "POST",
@@ -230,12 +288,102 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       } else {
         throw new Error(result.error || "Failed to fetch submissions");
       }
+
+      // Fetch dynamic form configs to get display permissions
+      const { data: configData, error: configError } = await supabase
+        .from("dynamic_form_configs")
+        .select("fields")
+        .eq("form_name", uuid);
+      if (!configError && configData && configData.length > 0) {
+        const fieldsField = configData[0].fields;
+        const parsedFields = typeof fieldsField === "string" ? JSON.parse(fieldsField) : fieldsField;
+        setFormFields(parsedFields || []);
+      }
     } catch (err) {
       console.error(err);
       setError("Failed to load submissions: " + err.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const getExcludedGridColumns = () => {
+    const baseExcludes = ["uuid"];
+    if (subView === "students") return baseExcludes;
+    formFields.forEach((field) => {
+      const fieldName = field["Field Name"]?.trim();
+      if (fieldName) {
+        const displayIn = field["Screen"];
+        if (displayIn !== undefined && displayIn !== null && displayIn !== "") {
+          const options = String(displayIn).split(",").map(s => s.trim().toLowerCase());
+          if (options.length > 0 && !options.includes("data grid")) {
+            baseExcludes.push(fieldName);
+            return;
+          }
+        }
+        const visibility = field["Field Visibility"];
+        if (visibility !== undefined && visibility !== null && visibility !== "") {
+          const allowed = String(visibility).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+          if (allowed.length > 0) {
+            let hasAccess = false;
+            if (allowed.includes("all")) {
+              hasAccess = true;
+            } else if (allowed.includes("none")) {
+              hasAccess = false;
+            } else {
+              const userRolesLower = (userRoles || []).map(r => r.toLowerCase());
+              hasAccess = userRolesLower.some(r => allowed.includes(r)) || allowed.includes("reviewer");
+            }
+            if (!hasAccess) {
+              baseExcludes.push(fieldName);
+            }
+          }
+        }
+      }
+    });
+    return baseExcludes;
+  };
+
+  const getExcludedDetailFields = () => {
+    const baseExcludes = ["uuid"];
+    if (subView === "students") return baseExcludes;
+    formFields.forEach((field) => {
+      const fieldName = field["Field Name"]?.trim();
+      if (fieldName) {
+        const type = field["Field Type"]?.trim().toLowerCase();
+        if (type === "conversation" || fieldName.toLowerCase() === "conversation") {
+          baseExcludes.push(fieldName);
+          return;
+        }
+        const displayIn = field["Screen"];
+        if (displayIn !== undefined && displayIn !== null && displayIn !== "") {
+          const options = String(displayIn).split(",").map(s => s.trim().toLowerCase());
+          if (options.length > 0 && !options.includes("update")) {
+            baseExcludes.push(fieldName);
+            return;
+          }
+        }
+        const visibility = field["Field Visibility"];
+        if (visibility !== undefined && visibility !== null && visibility !== "") {
+          const allowed = String(visibility).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+          if (allowed.length > 0) {
+            let hasAccess = false;
+            if (allowed.includes("all")) {
+              hasAccess = true;
+            } else if (allowed.includes("none")) {
+              hasAccess = false;
+            } else {
+              const userRolesLower = (userRoles || []).map(r => r.toLowerCase());
+              hasAccess = userRolesLower.some(r => allowed.includes(r)) || allowed.includes("reviewer");
+            }
+            if (!hasAccess) {
+              baseExcludes.push(fieldName);
+            }
+          }
+        }
+      }
+    });
+    return baseExcludes;
   };
 
   useEffect(() => {
@@ -248,7 +396,7 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
     }
   }, [subView]);
 
-  const managementTiles = [
+  const baseManagementTiles = [
     {
       id: "resumes",
       title: "Job Applications",
@@ -294,13 +442,74 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       shadow: "shadow-teal-200",
       onClick: () => onSetSubView("take-test"),
     },
+    {
+      id: "syllabus-report",
+      title: "Syllabus Progress Reports",
+      description: "View syllabus coverage, time spent on chapters/lessons, and revisions.",
+      icon: "fa-chart-line",
+      buttonColor: "bg-blue-600 text-white",
+      shadow: "shadow-blue-200",
+      onClick: () => onSetSubView("syllabus-report"),
+    },
   ];
+
+  const dynamicTiles = dynamicConfigs
+    .filter((config) => {
+      if (!config.form_visibility) return false;
+      const roles = config.form_visibility
+        .split(",")
+        .map((r) => r.trim().toLowerCase());
+      return roles.includes("management") || roles.includes("all");
+    })
+    .map((config) => {
+      const themeKey = config.card_theme || "orange";
+      const theme = CARD_THEMES[themeKey] || CARD_THEMES.orange;
+      let shadowClass = "shadow-orange-200";
+      if (themeKey.startsWith("pink")) shadowClass = "shadow-pink-200";
+      else if (themeKey.startsWith("blue")) shadowClass = "shadow-blue-200";
+      else if (themeKey.startsWith("teal")) shadowClass = "shadow-teal-200";
+      else if (themeKey === "green") shadowClass = "shadow-green-200";
+      else if (themeKey === "red") shadowClass = "shadow-red-200";
+      else if (themeKey === "dark" || themeKey === "charcoal") shadowClass = "shadow-gray-200";
+
+      return {
+        id: config.form_name,
+        title: config.display_name || config.form_name,
+        description: config.description || `Fill out the ${config.display_name || config.form_name} form.`,
+        icon: config.icon || "fa-clipboard-list",
+        buttonColor: `${theme.color} text-white`,
+        shadow: shadowClass,
+        onClick: () => openModal(config.form_name),
+      };
+    });
+
+  const managementTiles = [...baseManagementTiles, ...dynamicTiles];
 
   const handleRowClick = (record) => {
     setSelectedRecord(record);
-    setEditStatus(record.Status || record.status || "Open");
-    setEditComments(record.Comments || record.comments || "");
-    setEditResolution(record.Resolution || record.resolution || "");
+    const initialData = {};
+    initialData["Status"] = record.Status || record.status || "Open";
+    initialData["Comments"] = record.Comments || record.comments || "";
+    initialData["Resolution"] = record.Resolution || record.resolution || "";
+
+    formFields.forEach((field) => {
+      const key = field["Field Name"]?.trim();
+      const type = field["Field Type"]?.trim().toLowerCase();
+      if (key) {
+        if (type === "conversation" || key === "conversation") {
+          initialData[key] = "";
+        } else if (type === "checkbox") {
+          initialData[key] = record[key] === true || String(record[key] ?? "").toLowerCase() === "true";
+        } else {
+          initialData[key] = record[key] || "";
+        }
+      }
+    });
+
+    setEditFormData(initialData);
+    setEditStatus(initialData["Status"]);
+    setEditComments(initialData["Comments"]);
+    setEditResolution(initialData["Resolution"]);
   };
 
   const getCurrentRecordState = () => {
@@ -341,13 +550,67 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
       );
       return;
     }
-    if (editStatus === "Resolved" && !editResolution.trim()) {
+
+    // Find the correct status and resolution keys
+    const statusField = formFields.find(f => 
+      f["Field Type"]?.trim().toLowerCase() === "status" || 
+      f["Field Name"]?.trim().toLowerCase() === "status"
+    );
+    const statusFieldName = statusField ? statusField["Field Name"]?.trim() : "status";
+    const statusKey = Object.keys(selectedRecord).find(k => k.toLowerCase() === statusFieldName.toLowerCase()) || statusFieldName;
+    const resolutionKey = Object.keys(selectedRecord).find(k => k.toLowerCase() === 'resolution') || 'resolution';
+
+    const finalStatus = editFormData[statusKey] !== undefined ? editFormData[statusKey] : (selectedRecord[statusKey] || "New");
+    const finalResolution = editFormData[resolutionKey] !== undefined ? editFormData[resolutionKey] : (selectedRecord[resolutionKey] || "");
+
+    if (finalStatus === "Resolved" && !finalResolution.trim()) {
       showToast("Resolution is required when status is marked as Resolved.", "error");
       return;
     }
 
     setSavingRecord(true);
     try {
+      const updateData = {
+        [statusKey]: finalStatus,
+        [resolutionKey]: finalStatus === "Resolved" ? finalResolution : "",
+      };
+
+      // Calculate resolution days if status is set to Resolved
+      if (finalStatus === "Resolved") {
+        const daysKey = Object.keys(selectedRecord).find(k => 
+          ["days_taken", "days index", "days to resolve", "resolve days", "days"].includes(k.toLowerCase())
+        ) || "days_taken";
+
+        let daysTaken = 0;
+        const dateKey = Object.keys(selectedRecord).find(k => 
+          ["timestamp", "time-stamp", "created", "created_at", "reported_at", "date"].includes(k.toLowerCase())
+        );
+        if (dateKey && selectedRecord[dateKey]) {
+          const start = new Date(selectedRecord[dateKey]);
+          if (!isNaN(start.getTime())) {
+            const diffMs = new Date() - start;
+            daysTaken = Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+          }
+        }
+        updateData[daysKey] = daysTaken;
+      }
+
+      // Add dynamic fields that are editable and not excluded
+      formFields.forEach((field) => {
+        const key = field["Field Name"]?.trim();
+        const type = field["Field Type"]?.trim().toLowerCase();
+        // Skip status and resolution as they are handled explicitly
+        if (
+          key && 
+          type !== "conversation" && 
+          key.toLowerCase() !== statusKey.toLowerCase() && 
+          key.toLowerCase() !== resolutionKey.toLowerCase() && 
+          !getExcludedDetailFields().includes(key)
+        ) {
+          updateData[key] = editFormData[key] !== undefined ? editFormData[key] : (selectedRecord[key] ?? "");
+        }
+      });
+
       const updatePayload = {
         action: "update",
         uuid: uuidMap[subView],
@@ -355,11 +618,7 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
         records: [
           {
             matchValue: selectedRecord.id,
-            data: {
-              Status: editStatus,
-              Comments: editComments,
-              Resolution: editStatus === "Resolved" ? editResolution : "",
-            },
+            data: updateData,
           },
         ],
       };
@@ -387,23 +646,290 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
   };
 
   const handleEditFieldChange = (fieldName, value) => {
-    switch (fieldName) {
-      case "Status":
-        setEditStatus(value);
-        break;
-      case "Comments":
-        setEditComments(value);
-        break;
-      case "Resolution":
-        setEditResolution(value);
-        break;
-      default:
-        break;
+    setEditFormData((prev) => ({
+      ...prev,
+      [fieldName]: value,
+    }));
+
+    const lowerName = fieldName.toLowerCase();
+    if (lowerName === "status") {
+      setEditStatus(value);
+    } else if (lowerName === "comments") {
+      setEditComments(value);
+    } else if (lowerName === "resolution") {
+      setEditResolution(value);
+    }
+  };
+
+  const handleSendConversationMessage = async (fieldName, messageText) => {
+    let existing = [];
+    try {
+      existing = JSON.parse(selectedRecord[fieldName] || "[]");
+      if (!Array.isArray(existing)) existing = [];
+    } catch {
+      existing = [];
+    }
+
+    const senderName = userRoles.includes("admin") ? "Admin" : "Management";
+    const newMsgObj = {
+      sender: senderName,
+      "time-stamp": new Date().toLocaleString(),
+      message: messageText,
+    };
+    const nextVal = JSON.stringify([...existing, newMsgObj]);
+
+    setSavingRecord(true);
+    try {
+      const updatePayload = {
+        action: "update",
+        uuid: uuidMap[subView],
+        matchColumn: "id",
+        records: [
+          {
+            matchValue: selectedRecord.id,
+            data: {
+              [fieldName]: nextVal,
+            },
+          },
+        ],
+      };
+
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(updatePayload),
+      });
+
+      const result = await res.json();
+      if (result.success) {
+        const updatedRecord = { ...selectedRecord, [fieldName]: nextVal };
+        setSelectedRecord(updatedRecord);
+        setSubmissions((prev) =>
+          prev.map((r) => (r.id === selectedRecord.id ? updatedRecord : r))
+        );
+        showToast("Response sent successfully!", "success");
+      } else {
+        throw new Error(result.error || "Failed to update conversation");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to send message: " + err.message, "error");
+    } finally {
+      setSavingRecord(false);
     }
   };
 
   const renderTableView = () => {
     const { current, total, hasPrev, hasNext } = getCurrentRecordState();
+
+    const isReadOnlyForReviewer = (field) => {
+      const type = field["Field Type"]?.trim().toLowerCase();
+      const rolesLower = (userRoles || []).map(r => r.toLowerCase());
+      if (rolesLower.length === 0) {
+        rolesLower.push("management");
+      }
+
+      // 1. Force system fields to be read-only always
+      if (type === "currenttimestamp" || type === "currentuser") {
+        return true;
+      }
+
+      // 2. If Update Allowed is "None", it is read-only for everyone
+      const updateAllowed = field["Update Allowed"] || field["Read Only For"];
+      const allowedRoles = updateAllowed
+        ? String(updateAllowed).split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+        : [];
+
+      if (allowedRoles.includes("none")) return true;
+
+      // 3. Admin can always edit everything else
+      if (rolesLower.includes("admin")) return false;
+
+      // 4. Force status type fields to be editable ONLY by teacher, management, admin
+      if (type === "status") {
+        const canChangeStatus = rolesLower.some(r => ["teacher", "management", "admin"].includes(r));
+        if (!canChangeStatus) return true;
+      }
+
+      // 5. If no restriction is specified, it should be editable
+      if (!updateAllowed || updateAllowed.trim() === "") {
+        return false;
+      }
+
+      if (allowedRoles.includes("all")) return false;
+
+      // Check if user has allowed role
+      if (rolesLower.some(r => allowedRoles.includes(r))) return false;
+
+      const currentUserIdentities = [user?.email, user?.id, fullName]
+        .map(s => String(s || '').toLowerCase().trim())
+        .filter(Boolean);
+
+      // Check if "Reporter" is allowed and current user is the reporter
+      if (allowedRoles.includes("reporter") && selectedRecord) {
+        const reporterField = formFields.find(f => f["Field Type"]?.trim().toLowerCase() === "currentuser")?.["Field Name"]?.trim();
+        const reporterKey = Object.keys(selectedRecord).find(k => k.toLowerCase() === 'reporter' || k.toLowerCase() === 'reported by');
+        const recordReporter = selectedRecord[reporterField] || selectedRecord[reporterKey];
+        const isUserReporter = recordReporter && currentUserIdentities.includes(String(recordReporter).toLowerCase().trim());
+        if (isUserReporter) return false;
+      }
+
+      // Check if "Reviewer" is allowed and current user is the assignee/reviewer
+      if (allowedRoles.includes("reviewer") && selectedRecord) {
+        const assigneeField = formFields.find(f => ["currentassignee", "person"].includes(f["Field Type"]?.trim().toLowerCase()))?.["Field Name"]?.trim();
+        const assigneeKey = Object.keys(selectedRecord).find(k => ["assigned", "assignee", "assignedto", "assigned to"].includes(k.toLowerCase()));
+        const recordAssignee = selectedRecord[assigneeField] || selectedRecord[assigneeKey];
+        const isUserAssignee = recordAssignee && currentUserIdentities.includes(String(recordAssignee).toLowerCase().trim());
+        if (isUserAssignee) return false;
+      }
+
+      return true;
+    };
+
+    // Build dynamic fieldLabels & columnConfig
+    const columnConfig = {};
+    const fieldLabels = {};
+    formFields.forEach((field) => {
+      const name = field["Field Name"]?.trim();
+      if (name) {
+        columnConfig[name] = {
+          label: field.Label || name
+        };
+        columnConfig[name.toLowerCase()] = {
+          label: field.Label || name
+        };
+        fieldLabels[name.toLowerCase()] = field.Label || name;
+      }
+    });
+
+    // Make sure standard/hardcoded labels map beautifully
+    fieldLabels["status"] = "Status";
+    fieldLabels["comments"] = "Comments";
+    fieldLabels["resolution"] = "Resolution";
+
+    // 1. Build dynamic editableFields
+    let modalEditableFields = null;
+    if (selectedRecord && subView !== "students") {
+      // Find status field from form config
+      const statusField = formFields.find(f => 
+        f["Field Type"]?.trim().toLowerCase() === "status" || 
+        f["Field Name"]?.trim().toLowerCase() === "status"
+      );
+      
+      const statusFieldName = statusField ? statusField["Field Name"]?.trim() : "status";
+      const statusKey = Object.keys(selectedRecord).find(k => k.toLowerCase() === statusFieldName.toLowerCase()) || statusFieldName;
+      
+      const resolutionKey = Object.keys(selectedRecord).find(k => k.toLowerCase() === 'resolution') || 'resolution';
+
+      let statusOptions = ["New", "In Review", "In Progress", "Resolved", "Closed"];
+      if (statusField && statusField.List) {
+        statusOptions = statusField.List.split(",").map(s => s.trim()).filter(Boolean);
+      }
+
+      const activeStatusValue = editFormData[statusKey] ?? selectedRecord[statusKey] ?? "New";
+
+      modalEditableFields = {
+        [statusKey]: {
+          value: activeStatusValue,
+          onChange: handleEditFieldChange,
+          type: "select",
+          options: statusOptions,
+        },
+        ...(activeStatusValue === "Resolved" && {
+          [resolutionKey]: {
+            value: editFormData[resolutionKey] ?? selectedRecord[resolutionKey] ?? "",
+            onChange: handleEditFieldChange,
+            type: "textarea",
+          },
+        }),
+      };
+
+      // Add dynamic fields that are not excluded
+      formFields.forEach((field) => {
+        const key = field["Field Name"]?.trim();
+        if (!key) return;
+        const type = field["Field Type"]?.trim().toLowerCase();
+        const isExcluded = getExcludedDetailFields().includes(key);
+
+        if (
+          type === "conversation" || 
+          key.toLowerCase() === "conversation" || 
+          key.toLowerCase() === statusKey.toLowerCase() || 
+          key.toLowerCase() === resolutionKey.toLowerCase() || 
+          isExcluded || 
+          isReadOnlyForReviewer(field)
+        ) return;
+
+        const listOptions = field.List
+          ? field.List.split(",").map(s => s.trim()).filter(Boolean)
+          : [];
+
+        if (type === "person" || type === "currentassignee") {
+          modalEditableFields[key] = {
+            value: editFormData[key] ?? selectedRecord[key] ?? "",
+            onChange: handleEditFieldChange,
+            type: "select",
+            options: personOptions,
+          };
+        } else if (type === "dropdown" || type === "select") {
+          modalEditableFields[key] = {
+            value: editFormData[key] ?? selectedRecord[key] ?? "",
+            onChange: handleEditFieldChange,
+            type: "select",
+            options: listOptions,
+          };
+        } else if (type === "checkbox") {
+          modalEditableFields[key] = {
+            value: editFormData[key] !== undefined ? editFormData[key] : (selectedRecord[key] === true || String(selectedRecord[key]).toLowerCase() === "true"),
+            onChange: handleEditFieldChange,
+            type: "checkbox",
+          };
+        } else {
+          modalEditableFields[key] = {
+            value: editFormData[key] ?? selectedRecord[key] ?? "",
+            onChange: handleEditFieldChange,
+            type: (type === "textarea" || type === "description" || type === "conversation") ? "textarea" : "text",
+          };
+        }
+      });
+    }
+
+    // 2. Build conversationFieldsData for the chat interface
+    const conversationFieldsData = [];
+    if (selectedRecord) {
+      formFields.forEach((field) => {
+        const key = field["Field Name"]?.trim();
+        const type = field["Field Type"]?.trim().toLowerCase();
+        if (key && (type === "conversation" || key.toLowerCase() === "conversation")) {
+          // Check visibility
+          const visibility = field["Field Visibility"];
+          let hasAccess = true;
+          if (visibility !== undefined && visibility !== null && visibility !== "") {
+            const allowed = String(visibility).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+            if (allowed.length > 0) {
+              if (allowed.includes("all")) {
+                hasAccess = true;
+              } else if (allowed.includes("none")) {
+                hasAccess = false;
+              } else {
+                const userRolesLower = (userRoles || []).map(r => r.toLowerCase());
+                hasAccess = userRolesLower.some(r => allowed.includes(r)) || allowed.includes("reviewer");
+              }
+            }
+          }
+
+          if (hasAccess) {
+            conversationFieldsData.push({
+              key: key,
+              label: field.Label || key,
+              value: selectedRecord[key] || "[]",
+              onSendMessage: handleSendConversationMessage,
+              isSending: savingRecord,
+            });
+          }
+        }
+      });
+    }
 
     return (
       <>
@@ -413,13 +939,15 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
           error={error}
           onRetry={() => subView === "students" ? fetchStudents() : fetchSubmissions(uuidMap[subView])}
           onRowClick={handleRowClick}
-          excludeColumns={["uuid", "id"]}
+          excludeColumns={getExcludedGridColumns()}
+          columnConfig={columnConfig}
         />
 
         {selectedRecord && (
           <DetailModal
             record={selectedRecord}
             onClose={() => setSelectedRecord(null)}
+            excludeFields={getExcludedDetailFields()}
             onSave={subView === "students" ? null : handleUpdateRecord}
             onPrevRecord={handlePrevRecord}
             onNextRecord={handleNextRecord}
@@ -435,30 +963,9 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
                   ? "Complaint Details"
                   : "Student Details"
             }
-            editableFields={
-              subView === "students"
-                ? null
-                : {
-                    Status: {
-                      value: editStatus,
-                      onChange: handleEditFieldChange,
-                      type: "select",
-                      options: ["Open", "In-Progress", "Deferred", "Resolved"],
-                    },
-                    ...(editStatus === "Resolved" && {
-                      Resolution: {
-                        value: editResolution,
-                        onChange: handleEditFieldChange,
-                        type: "textarea",
-                      },
-                    }),
-                    Comments: {
-                      value: editComments,
-                      onChange: handleEditFieldChange,
-                      type: "textarea",
-                    },
-                  }
-            }
+            editableFields={modalEditableFields}
+            conversationFields={conversationFieldsData}
+            fieldLabels={fieldLabels}
           />
         )}
       </>
@@ -487,6 +994,9 @@ const ManagementPortal = ({ userRoles, subView, onSetSubView }) => {
         ? renderTableView()
         : null}
       {subView === "take-test" ? renderTakeTestView() : null}
+      {subView === "syllabus-report" && (
+        <SyllabusProgressReport />
+      )}
       {subView === "timetable" && (
         ttLoading ? (
           <div className="flex items-center justify-center py-24">

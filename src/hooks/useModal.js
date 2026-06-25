@@ -1,10 +1,30 @@
 // src/hooks/useModal.js
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { getCards, getGroupByName } from "../components/homepage/CardsData";
+import { supabase } from "../utils/supabase";
+import { CARD_THEMES } from "../utils/cardTheme";
+import DynamicForm from "../components/DynamicForm";
 
-export const useModal = (user) => {
+export const useModal = (user, userRoles = []) => {
   const [activeModal, setActiveModal] = useState(null);
   const [activeTab, setActiveTab] = useState(null);
+  const [dynamicConfigs, setDynamicConfigs] = useState([]);
+
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("dynamic_form_configs")
+          .select("*");
+        if (!error && data) {
+          setDynamicConfigs(data);
+        }
+      } catch (err) {
+        console.error("Failed to load configs in useModal:", err);
+      }
+    };
+    fetchConfigs();
+  }, []);
 
   const [courseView, setCourseView] = useState("main");
   const [niosTab, setNiosTab] = useState("overview");
@@ -24,7 +44,7 @@ export const useModal = (user) => {
     if (id === "nios") setNiosTab("overview");
   };
 
-  const cards = getCards({
+  const baseCards = getCards({
     courseView,
     setCourseView,
     streamView,
@@ -38,7 +58,29 @@ export const useModal = (user) => {
     visionLang,
     setVisionLang,
     currentUser: user,
+    userRoles,
   });
+
+  const dynamicCards = dynamicConfigs.map((config) => {
+    const themeKey = config.card_theme || "orange";
+    const theme = CARD_THEMES[themeKey] || CARD_THEMES.orange;
+    return {
+      id: config.form_name,
+      title: config.display_name || config.form_name,
+      icon: config.icon || "fa-clipboard-list",
+      ...theme,
+      showAtHome: false,
+      content: React.createElement(DynamicForm, {
+        uuid: config.form_name,
+        textColor: theme.textColor,
+        additionalData: { email: user?.email },
+        userRoles: userRoles,
+      }),
+    };
+  });
+
+  const filteredBaseCards = baseCards.filter((c) => c.id !== "complaint-register");
+  const cards = [...filteredBaseCards, ...dynamicCards];
 
   const getCard = (id) => cards.find((c) => c.id === id);
 

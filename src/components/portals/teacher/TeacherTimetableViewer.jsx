@@ -136,7 +136,7 @@ const TeacherTimetableViewer = () => {
       slots={slots}
       onRefresh={() => fetchTimetableData(false)}
       refreshing={refreshing}
-      allowedViews={['class']}
+      allowedViews={['scheduler']}
     />
   );
 };

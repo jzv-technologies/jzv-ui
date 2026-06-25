@@ -8,20 +8,24 @@ const AdminFormConfigList = ({
   appsScriptError,
   onRefresh,
   onEdit,
+  onClone,
   onDelete,
-  onImport,
   onCreateNew,
   onBack,
+  onValidate,
+  validatingUuid,
+  onClearCache,
+  clearingCacheUuid,
 }) => {
   return (
-    <div className="bg-white border border-light-border shadow-xl overflow-hidden rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="bg-white border-0 overflow-hidden">
       <div className="p-8 border-b border-light-border flex flex-col md:flex-row justify-between items-start md:items-center bg-gray-50/50 gap-4">
         <div>
           <h3 className="text-2xl font-bold text-dark-deepblue">
-            Form Configurations
+            Form Schemas
           </h3>
           <p className="text-sm text-dark-muted">
-            Manage structures and data mappings for dynamic form portals.
+            Manage UI structures, validations, and field parameters for dynamic forms.
           </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
@@ -38,12 +42,6 @@ const AdminFormConfigList = ({
           >
             <i className="fas fa-sync-alt"></i> Refresh
           </button>
-          <button
-            onClick={onBack}
-            className="flex-1 md:flex-initial bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-          >
-            Go Back
-          </button>
         </div>
       </div>
 
@@ -54,25 +52,7 @@ const AdminFormConfigList = ({
             <p className="font-bold">Database Setup Required</p>
             <p>
               The Supabase table <code>dynamic_form_configs</code> was not
-              found. Forms will continue to run in fallback mode from Google
-              Sheets, but database edits are disabled. Please see the setup
-              instructions in <code>SUPABASE_SETUP.md</code> to create the
-              table.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {appsScriptError && (
-        <div className="m-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-start gap-3">
-          <i className="fas fa-exclamation-triangle mt-0.5 text-lg"></i>
-          <div>
-            <p className="font-bold">Google Apps Script Fetch Warning</p>
-            <p>{appsScriptError}</p>
-            <p className="mt-1 text-xs text-amber-700">
-              If you just updated your Apps Script code, make sure you published
-              a <strong>New Version</strong> of the Web App deployment in Google
-              Sheets editor.
+              found. Please verify that the table has been successfully configured.
             </p>
           </div>
         </div>
@@ -87,8 +67,7 @@ const AdminFormConfigList = ({
         <div className="p-20 text-center text-dark-muted">
           <i className="fas fa-sliders-h text-4xl mb-4 text-gray-300"></i>
           <p>
-            No form configurations found. Make sure Apps Script API is set up or
-            add one.
+            No form configurations found. Click "Add New Form" to define a schema.
           </p>
         </div>
       ) : (
@@ -96,81 +75,96 @@ const AdminFormConfigList = ({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/50 text-dark-deepblue uppercase text-xs font-bold tracking-wider">
-                <th className="p-6 border-b">Form UUID</th>
-                <th className="p-6 border-b text-center">Status Source</th>
-                <th className="p-6 border-b">Google Sheets Target</th>
+                <th className="p-6 border-b">Form Name</th>
+                <th className="p-6 border-b">ID Pattern</th>
+                <th className="p-6 border-b">Google Sheet Mapping</th>
                 <th className="p-6 border-b text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {configs.map((config) => (
                 <tr
-                  key={config.uuid}
+                  key={config.form_name}
                   className="hover:bg-gray-50/50 transition-colors border-b border-light-border last:border-0"
                 >
-                  <td className="p-6">
-                    <div className="font-bold text-dark-deepblue text-base font-mono">
-                      {config.uuid}
-                    </div>
-                    <div className="text-xs text-dark-muted font-mono">
-                      {config.idPattern || "ID-XXXXX"}
-                    </div>
-                  </td>
-                  <td className="p-6 text-center">
-                    {config.isDb ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                        Supabase DB
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                        Google Sheets Only
+                  <td className="p-6 text-dark-deepblue text-base">
+                    <span className="font-bold block">{config.display_name || config.form_name}</span>
+                    {config.display_name && (
+                      <span className="block text-xs font-normal text-dark-muted font-mono mt-0.5">
+                        ID: {config.form_name}
                       </span>
                     )}
                   </td>
-                  <td className="p-6">
-                    <div className="text-sm text-dark-deepblue">
-                      <span className="font-semibold text-dark-muted">
-                        Data Sheet:
-                      </span>{" "}
-                      {config.dataSheetName}
-                    </div>
-                    <div className="text-xs text-dark-muted">
-                      <span className="font-semibold">Config Sheet:</span>{" "}
-                      {config.configSheetName}
-                    </div>
+                  <td className="p-6 font-mono text-sm text-dark-muted">
+                    {config.id_pattern || "ID-XXXXX"}
                   </td>
-                  <td className="p-6 text-right">
+                  <td className="p-6 text-sm text-dark-primary font-semibold">
+                    {config.data_id ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+                        {config.data_id}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                        None (Not mapped)
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-6 text-right font-medium">
                     <div className="flex justify-end items-center gap-3">
-                      {!config.isDb ? (
-                        <button
-                          onClick={() => onImport(config)}
-                          disabled={dbTableMissing}
-                          className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-blue-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-blue-100"
-                          title="Add configuration to Supabase DB"
-                        >
-                          <i className="fas fa-plus"></i> Add to DB
-                        </button>
-                      ) : (
+                      {config.data_id && (
                         <>
                           <button
-                            onClick={() => onEdit(config)}
-                            disabled={dbTableMissing}
-                            className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-green-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-green-100"
-                            title="Update form schema in DB"
+                            onClick={() => onValidate(config)}
+                            disabled={dbTableMissing || validatingUuid !== null || clearingCacheUuid !== null}
+                            className="bg-blue-50 border border-blue-200 text-blue-600 px-4 py-2 rounded-xl font-bold text-xs hover:bg-blue-100 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-30"
+                            title="Validate sheet columns match form schema fields"
                           >
-                            <i className="fas fa-edit"></i> Update
+                            {validatingUuid === (config.form_name || config.uuid) ? (
+                              <i className="fas fa-spinner fa-spin"></i>
+                            ) : (
+                              <i className="fas fa-check-double"></i>
+                            )}
+                            Validate
                           </button>
                           <button
-                            onClick={() => onDelete(config)}
-                            disabled={dbTableMissing}
-                            className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-red-100"
-                            title="Delete configuration from DB"
+                            onClick={() => onClearCache(config)}
+                            disabled={dbTableMissing || validatingUuid !== null || clearingCacheUuid !== null}
+                            className="bg-amber-50 border border-amber-200 text-amber-600 px-4 py-2 rounded-xl font-bold text-xs hover:bg-amber-100 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-30"
+                            title="Clear cached sheet, configs, and headers for this form"
                           >
-                            <i className="fas fa-trash-alt"></i> Delete
+                            {clearingCacheUuid === (config.form_name || config.uuid) ? (
+                              <i className="fas fa-spinner fa-spin"></i>
+                            ) : (
+                              <i className="fas fa-trash-alt"></i>
+                            )}
+                            Clear Cache
                           </button>
                         </>
                       )}
+                      <button
+                        onClick={() => onEdit(config)}
+                        disabled={dbTableMissing}
+                        className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-green-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-green-100"
+                        title="Update form schema in DB"
+                      >
+                        <i className="fas fa-edit"></i> Edit
+                      </button>
+                      <button
+                        onClick={() => onClone(config)}
+                        disabled={dbTableMissing}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-indigo-100"
+                        title="Clone configuration with a new name"
+                      >
+                        <i className="fas fa-copy"></i> Clone
+                      </button>
+                      <button
+                        onClick={() => onDelete(config)}
+                        disabled={dbTableMissing}
+                        className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-1.5 disabled:opacity-30 shadow-md shadow-red-100"
+                        title="Delete configuration from DB"
+                      >
+                        <i className="fas fa-trash-alt"></i> Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

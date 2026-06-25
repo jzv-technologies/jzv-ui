@@ -1,8 +1,9 @@
 // src/components/portals/admin/timetable/TimetableScheduler.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { showToast } from "../../../../utils/toast";
 import ConfirmModal from "../../../ConfirmModal";
 import { getSubjectColor } from "./TimetableAdminView";
+import { renderSubjectOptionsGroupedByClassification } from "./TimetableSetupTabs";
 
 
 const TimetableScheduler = ({
@@ -10,6 +11,7 @@ const TimetableScheduler = ({
   classes = [],
   teachers = [],
   subjects = [],
+  classifications = [],
   periods = [],
   slots = [],
   assignments = [],
@@ -24,6 +26,16 @@ const TimetableScheduler = ({
   const [selectedDays, setSelectedDays] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
   const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, subjectId, teacherId }
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && editingSlot) {
+        setEditingSlot(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editingSlot]);
 
 
   const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
@@ -161,7 +173,10 @@ const TimetableScheduler = ({
     }
   };
 
+  const isReadOnly = !onUpdateSlot;
+
   const handleCellClick = (day, period) => {
+    if (isReadOnly) return;
     if (movingSlot) {
       handleCompleteMove(day, period.id);
       return;
@@ -430,8 +445,12 @@ const TimetableScheduler = ({
                         return (
                           <td
                             key={period.id || period.period_number}
-                            onClick={() => handleCellClick(day, period)}
-                            className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] cursor-pointer group hover:bg-light-bg/40 transition-colors ${
+                            onClick={() => !isReadOnly && handleCellClick(day, period)}
+                            className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] ${
+                              isReadOnly
+                                ? ""
+                                : "cursor-pointer group hover:bg-light-bg/40 transition-colors"
+                            } ${
                               movingSlot ? "hover:bg-brand-lbg/10" : ""
                             }`}
                           >
@@ -439,7 +458,13 @@ const TimetableScheduler = ({
                               <div
                                 className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
                                   isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
-                                } ${!movingSlot ? "group-hover:scale-95" : "group-hover:scale-95 group-hover:border-brand-primary"} relative`}
+                                } ${
+                                  !isReadOnly && !movingSlot
+                                    ? "group-hover:scale-95"
+                                    : !isReadOnly && movingSlot
+                                    ? "group-hover:scale-95 group-hover:border-brand-primary"
+                                    : ""
+                                } relative`}
                               >
                                 <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
                                   {subjectName}
@@ -457,7 +482,7 @@ const TimetableScheduler = ({
                                 )}
 
                                 {/* Move Button */}
-                                {!movingSlot && (
+                                {!isReadOnly && !movingSlot && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -473,11 +498,15 @@ const TimetableScheduler = ({
                               </div>
                             ) : (
                               <div className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
-                                movingSlot
+                                !isReadOnly && movingSlot
                                   ? "border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer"
-                                  : "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
+                                  : !isReadOnly
+                                  ? "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
+                                  : "border-light-border bg-light-bg/5"
                               }`}>
-                                {movingSlot ? (
+                                {isReadOnly ? (
+                                  "Free"
+                                ) : movingSlot ? (
                                   <span className="flex items-center gap-1">
                                     <i className="fas fa-check text-[9px]"></i> Place here
                                   </span>
@@ -531,37 +560,12 @@ const TimetableScheduler = ({
                   className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                 >
                   <option value="">-- Free Period (None) --</option>
-                  
-                  {/* Option Group for Class Mapped Subjects */}
-                  <optgroup label="Class Assigned Subjects">
-                    {assignments
-                      .filter((a) => String(a.class_id) === String(classId))
-                      .map((a) => subjects.find((s) => String(s.id) === String(a.subject_id)))
-                      .filter(Boolean)
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {sub.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  {/* Option Group for Other Database Subjects */}
-                  <optgroup label="Other Subjects">
-                    {subjects
-                      .filter(
-                        (sub) =>
-                          !assignments.some(
-                            (a) => String(a.class_id) === String(classId) && String(a.subject_id) === String(sub.id)
-                          )
-                      )
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {sub.name}
-                        </option>
-                      ))}
-                  </optgroup>
+                  {renderSubjectOptionsGroupedByClassification(subjects, classifications, (sub) => {
+                    const isMapped = assignments.some(
+                      (a) => String(a.class_id) === String(classId) && String(a.subject_id) === String(sub.id)
+                    );
+                    return isMapped ? `${sub.name} (Assigned to Class)` : sub.name;
+                  })}
                 </select>
               </div>
 

@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import HomeGrid from "./layout/HomeGrid";
 import RoleSelectionDashboard from "./RoleSelectionDashboard";
 import AdminPortal from "./portals/AdminPortal";
@@ -6,11 +7,14 @@ import ManagementPortal from "./portals/ManagementPortal";
 import RolePortal from "./portals/RolePortal";
 import DynamicForm from "./DynamicForm";
 import { CARD_THEMES } from "../utils/cardTheme";
+import { supabase } from "../utils/supabase";
 import Translate from "./Translate";
 import TeacherTimetableViewer from "./portals/teacher/TeacherTimetableViewer";
 import TeacherStudentsViewer from "./portals/teacher/TeacherStudentsViewer";
 import ParentTimetableViewer from "./portals/parent/ParentTimetableViewer";
 import SyllabusManager from "./portals/admin/syllabus/SyllabusManager";
+import SyllabusTracker from "./portals/teacher/SyllabusTracker";
+import ReporterTicketsView from "./portals/ReporterTicketsView";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -21,6 +25,7 @@ const portalRouteFallback = (
 export const AppRoutes = ({
   user,
   userRoles,
+  fullName,
   rolesLoading,
   gridCards,
   openModal,
@@ -34,6 +39,60 @@ export const AppRoutes = ({
   setParentSubView,
 }) => {
   const navigate = useNavigate();
+  const [dynamicConfigs, setDynamicConfigs] = useState([]);
+
+  useEffect(() => {
+    const fetchConfigs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("dynamic_form_configs")
+          .select("*");
+        if (!error && data) {
+          setDynamicConfigs(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch configs in AppRoutes:", err);
+      }
+    };
+    fetchConfigs();
+  }, []);
+
+  const getPortalTiles = (portalRole, baseTiles) => {
+    const filteredBase = baseTiles.filter(tile => tile.id !== "complaint-register");
+
+    const dynamicTiles = dynamicConfigs
+      .filter((config) => {
+        if (!config.form_visibility) return false;
+        const roles = config.form_visibility
+          .split(",")
+          .map((r) => r.trim().toLowerCase());
+        return roles.includes(portalRole.toLowerCase()) || roles.includes("all");
+      })
+      .map((config) => {
+        const themeKey = config.card_theme || "orange";
+        const theme = CARD_THEMES[themeKey] || CARD_THEMES.orange;
+        let shadowClass = "shadow-orange-200";
+        if (themeKey.startsWith("pink")) shadowClass = "shadow-pink-200";
+        else if (themeKey.startsWith("blue")) shadowClass = "shadow-blue-200";
+        else if (themeKey.startsWith("teal")) shadowClass = "shadow-teal-200";
+        else if (themeKey === "green") shadowClass = "shadow-green-200";
+        else if (themeKey === "red") shadowClass = "shadow-red-200";
+        else if (themeKey === "dark" || themeKey === "charcoal") shadowClass = "shadow-gray-200";
+
+        return {
+          id: config.form_name,
+          title: config.display_name || config.form_name,
+          description: config.description || `Fill out the ${config.display_name || config.form_name} form.`,
+          icon: config.icon || "fa-clipboard-list",
+          buttonColor: `${theme.color} text-white`,
+          shadow: shadowClass,
+          onClick: () => openModal(config.form_name),
+        };
+      });
+
+    return [...filteredBase, ...dynamicTiles];
+  };
+
   return (
     <Routes>
       <Route
@@ -89,9 +148,12 @@ export const AppRoutes = ({
               portalRouteFallback
             ) : userRoles.includes("management") ? (
               <ManagementPortal
+                user={user}
+                fullName={fullName}
                 userRoles={userRoles}
                 subView={managementSubView}
                 onSetSubView={setManagementSubView}
+                openModal={openModal}
               />
             ) : (
               <Navigate to="/" replace />
@@ -111,18 +173,7 @@ export const AppRoutes = ({
               <RolePortal
                 userRoles={userRoles}
                 role="parent"
-                tiles={[
-                  {
-                    id: "complaint-register",
-                    title: "Complaint Register",
-                    titleKey: "role_portal.complaint_register.title",
-                    description:
-                      "Submit and track your requests or complaints directly with the administration.",
-                    descriptionKey: "role_portal.complaint_register.description",
-                    icon: "fa-clipboard-list",
-                    buttonColor: "bg-orange-primary text-white",
-                    onClick: () => openModal("complaint-register"),
-                  },
+                tiles={getPortalTiles("parent", [
                   {
                     id: "view-timetable",
                     title: "Class Schedule",
@@ -134,13 +185,25 @@ export const AppRoutes = ({
                     shadow: "shadow-emerald-200",
                     onClick: () => setParentSubView("timetable"),
                   },
-                ]}
+                  {
+                    id: "track-tickets",
+                    title: "My Tickets",
+                    description: "View status and update comments on your submitted tickets.",
+                    icon: "fa-comments",
+                    buttonColor: "bg-indigo-600 text-white",
+                    shadow: "shadow-indigo-200",
+                    onClick: () => setParentSubView("tickets"),
+                  },
+                ])}
                 subView={parentSubView}
                 onSetSubView={setParentSubView}
                 openModal={openModal}
               >
                 {parentSubView === "timetable" && (
                   <ParentTimetableViewer student={user?.student} />
+                )}
+                {parentSubView === "tickets" && (
+                  <ReporterTicketsView user={user} fullName={fullName} />
                 )}
               </RolePortal>
             ) : (
@@ -161,18 +224,7 @@ export const AppRoutes = ({
               <RolePortal
                 userRoles={userRoles}
                 role="teacher"
-                tiles={[
-                  {
-                    id: "complaint-register",
-                    title: "Complaint Register",
-                    titleKey: "role_portal.complaint_register.title",
-                    description:
-                      "Submit and track your requests or complaints directly with the administration.",
-                    descriptionKey: "role_portal.complaint_register.description",
-                    icon: "fa-clipboard-list",
-                    buttonColor: "bg-orange-primary text-white",
-                    onClick: () => openModal("complaint-register"),
-                  },
+                tiles={getPortalTiles("teacher", [
                   {
                     id: "view-timetable",
                     title: "View Timetable",
@@ -201,7 +253,25 @@ export const AppRoutes = ({
                     shadow: "shadow-emerald-200",
                     onClick: () => setTeacherSubView("syllabus"),
                   },
-                ]}
+                  {
+                    id: "syllabus-tracker",
+                    title: "Daily Syllabus Tracker",
+                    description: "Submit daily reports on progress, mark lessons completed, and log revisions.",
+                    icon: "fa-list-check",
+                    buttonColor: "bg-blue-600 text-white",
+                    shadow: "shadow-blue-200",
+                    onClick: () => setTeacherSubView("syllabus-tracker"),
+                  },
+                  {
+                    id: "track-tickets",
+                    title: "My Tickets",
+                    description: "View status and update comments on your submitted tickets.",
+                    icon: "fa-comments",
+                    buttonColor: "bg-indigo-600 text-white",
+                    shadow: "shadow-indigo-200",
+                    onClick: () => setTeacherSubView("tickets"),
+                  },
+                ])}
                 subView={teacherSubView}
                 onSetSubView={setTeacherSubView}
                 openModal={openModal}
@@ -214,6 +284,12 @@ export const AppRoutes = ({
                 )}
                 {teacherSubView === "syllabus" && (
                   <SyllabusManager role="teacher" />
+                )}
+                {teacherSubView === "syllabus-tracker" && (
+                  <SyllabusTracker user={user} />
+                )}
+                {teacherSubView === "tickets" && (
+                  <ReporterTicketsView user={user} fullName={fullName} />
                 )}
               </RolePortal>
             ) : (
@@ -237,6 +313,7 @@ export const AppRoutes = ({
               <DynamicForm
                 uuid="career"
                 textColor={CARD_THEMES.blueDark.textColor}
+                userRoles={userRoles}
               />
             </div>
           </div>

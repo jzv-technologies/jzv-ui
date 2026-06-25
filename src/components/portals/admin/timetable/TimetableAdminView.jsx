@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import TimetableOverview from './TimetableOverview';
 import TimetableScheduler from './TimetableScheduler';
 import ConfirmModal from '../../../ConfirmModal';
+import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTabs';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -224,6 +225,7 @@ const AssignPopover = ({
   popover,
   teachers,
   subjects,
+  classifications = [],
   classes,
   slots,
   days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
@@ -235,6 +237,8 @@ const AssignPopover = ({
   
   const [selSubjectId, setSelSubjectId] = useState('');
   const [selectedDays, setSelectedDays] = useState([]);
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedNewClassId, setSelectedNewClassId] = useState('');
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -247,6 +251,8 @@ const AssignPopover = ({
   useEffect(() => {
     if (popover) {
       setSelSubjectId('');
+      setSelectedClassId('');
+      setSelectedNewClassId('');
       if (popover.day) {
         setSelectedDays([popover.day]);
       } else {
@@ -256,6 +262,28 @@ const AssignPopover = ({
   }, [popover]);
 
   const { mode, day, periodId, classId, subjectId, teacherId } = popover;
+
+  const getEligibleClasses = (subId, tId) => {
+    if (!subId) return [];
+    return classes
+      .map((cls) => {
+        const hasMappedAssignment = assignments.some(
+          (a) =>
+            String(a.class_id) === String(cls.id) &&
+            String(a.subject_id) === String(subId) &&
+            String(a.teacher_id) === String(tId)
+        );
+        return {
+          ...cls,
+          isMapped: hasMappedAssignment,
+        };
+      })
+      .sort((a, b) => {
+        if (a.isMapped && !b.isMapped) return -1;
+        if (!a.isMapped && b.isMapped) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  };
 
   // ── Mode: assign teacher (class schedule — subject set, no teacher) ──────────
   if (mode === 'assign_teacher') {
@@ -385,6 +413,10 @@ const AssignPopover = ({
       )
       .map((s) => s.day);
 
+    const eligibleClasses = getEligibleClasses(subjectId, teacherId).filter(
+      (cls) => String(cls.id) !== String(classId)
+    );
+
     return (
       <div
         ref={ref}
@@ -428,7 +460,58 @@ const AssignPopover = ({
             </button>
           </div>
         </div>
-        <div className="px-3 py-2 border-t border-light-border">
+
+        {/* Change Class Section */}
+        <div className="p-4 border-t border-light-border bg-gray-50/50 space-y-3">
+          <h4 className="text-[10px] font-bold text-dark-soft uppercase tracking-wide">
+            Change Class
+          </h4>
+          {eligibleClasses.length === 0 ? (
+            <p className="text-[10px] text-dark-muted font-semibold italic">
+              No other eligible classes for this subject.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-1 max-h-28 overflow-y-auto p-0.5">
+                {eligibleClasses.map((cls) => {
+                  const isSelected = String(selectedNewClassId) === String(cls.id);
+                  return (
+                    <button
+                      key={cls.id}
+                      type="button"
+                      onClick={() => setSelectedNewClassId(cls.id)}
+                      className={`text-center px-1.5 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
+                        isSelected
+                          ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                          : 'border-light-border bg-white hover:bg-brand-lbg/10 hover:border-brand-soft cursor-pointer text-dark-primary'
+                      }`}
+                    >
+                      <div className="truncate" title={cls.name}>{cls.name}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedNewClassId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // First unassign from the old class for this day
+                    onAssign(classId, day, periodId, null, null);
+                    // Then assign to the new class for this day
+                    onAssign(selectedNewClassId, day, periodId, subjectId, teacherId);
+                    onClose();
+                  }}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <i className="fas fa-exchange-alt"></i> Confirm Change
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-3 py-2 border-t border-light-border bg-white">
           <button
             onClick={onClose}
             className="w-full text-xs font-bold text-dark-muted hover:text-dark-primary transition-all"
@@ -446,33 +529,11 @@ const AssignPopover = ({
     const teacherName = teacherObj?.name || 'Teacher';
     const qualifiedSubjectIds = teacherObj?.subjects || [];
 
-    const getEligibleClasses = (subId) => {
-      if (!subId) return [];
-      return classes
-        .map((cls) => {
-          const hasMappedAssignment = assignments.some(
-            (a) =>
-              String(a.class_id) === String(cls.id) &&
-              String(a.subject_id) === String(subId) &&
-              String(a.teacher_id) === String(teacherId)
-          );
-          return {
-            ...cls,
-            isMapped: hasMappedAssignment,
-          };
-        })
-        .sort((a, b) => {
-          if (a.isMapped && !b.isMapped) return -1;
-          if (!a.isMapped && b.isMapped) return 1;
-          return a.name.localeCompare(b.name);
-        });
-    };
-
     const qualifiedSubjects = subjects.filter((s) =>
       qualifiedSubjectIds.some((sid) => String(sid) === String(s.id))
     );
 
-    const eligibleClasses = getEligibleClasses(selSubjectId);
+    const eligibleClasses = getEligibleClasses(selSubjectId, teacherId);
 
     return (
       <div
@@ -498,15 +559,14 @@ const AssignPopover = ({
             </label>
             <select
               value={selSubjectId}
-              onChange={(e) => setSelSubjectId(e.target.value)}
+              onChange={(e) => {
+                setSelSubjectId(e.target.value);
+                setSelectedClassId(''); // Reset selected class when subject changes
+              }}
               className="w-full bg-white border border-light-border rounded-lg px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
             >
               <option value="">-- Choose Subject --</option>
-              {qualifiedSubjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              {renderSubjectOptionsGroupedByClassification(qualifiedSubjects, classifications)}
             </select>
           </div>
 
@@ -556,47 +616,62 @@ const AssignPopover = ({
           </div>
 
           {selSubjectId && (
-            <div>
-              <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
-                Class
-              </label>
-              {eligibleClasses.length === 0 ? (
-                <p className="text-[10px] text-dark-muted font-semibold italic">
-                  No eligible classes for this subject.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
-                  {eligibleClasses.map((cls) => (
-                    <button
-                      key={cls.id}
-                      disabled={selectedDays.length === 0}
-                      onClick={() => {
-                        onAssign(cls.id, selectedDays, periodId, selSubjectId, teacherId);
-                        onClose();
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg border flex items-center justify-between transition-all ${
-                        selectedDays.length === 0
-                          ? 'opacity-40 cursor-not-allowed bg-light-bg/25 border-light-border'
-                          : 'border-light-border hover:bg-brand-lbg/20 hover:border-brand-soft cursor-pointer'
-                      }`}
-                    >
-                      <span className="text-xs font-bold text-dark-primary flex items-center gap-1.5">
-                        {cls.name}
-                        {cls.isMapped && (
-                          <span className="text-[8px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold">
-                            Mapped
-                          </span>
-                        )}
-                      </span>
-                      <i className="fas fa-plus text-brand-primary text-[10px]" />
-                    </button>
-                  ))}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                  Class
+                </label>
+                {eligibleClasses.length === 0 ? (
+                  <p className="text-[10px] text-dark-muted font-semibold italic">
+                    No eligible classes for this subject.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1 max-h-36 overflow-y-auto p-0.5">
+                    {eligibleClasses.map((cls) => {
+                      const isSelected = String(selectedClassId) === String(cls.id);
+                      return (
+                        <button
+                          key={cls.id}
+                          type="button"
+                          disabled={selectedDays.length === 0}
+                          onClick={() => setSelectedClassId(cls.id)}
+                          className={`text-center px-1.5 py-2 rounded-lg border text-[10px] font-bold transition-all relative ${
+                            selectedDays.length === 0
+                              ? 'opacity-40 cursor-not-allowed bg-light-bg/25 border-light-border'
+                              : isSelected
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                              : 'border-light-border bg-white hover:bg-brand-lbg/10 hover:border-brand-soft cursor-pointer text-dark-primary'
+                          }`}
+                        >
+                          <div className="truncate" title={cls.name}>{cls.name}</div>
+                          {cls.isMapped && !isSelected && (
+                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full border border-white" title="Mapped" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {selectedClassId && (
+                <div className="pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAssign(selectedClassId, selectedDays, periodId, selSubjectId, teacherId);
+                      onClose();
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <i className="fas fa-plus-circle"></i> Add Schedule
+                  </button>
                 </div>
               )}
             </div>
           )}
         </div>
-        <div className="px-3 py-2 border-t border-light-border">
+        <div className="px-3 py-2 border-t border-light-border bg-white">
           <button
             onClick={onClose}
             className="w-full text-xs font-bold text-dark-muted hover:text-dark-primary transition-all"
@@ -614,7 +689,6 @@ const AssignPopover = ({
 // ─── Main TimetableAdminView ──────────────────────────────────────────────────
 const ALL_VIEWS = [
   'scheduler',
-  'class',
   'teacher',
   'unassigned_classes',
   'free_teachers',
@@ -638,6 +712,7 @@ const TimetableAdminView = ({
   classes = [],
   teachers = [],
   subjects = [],
+  classifications = [],
   periods = [],
   slots = [],
   assignments = [],
@@ -650,12 +725,10 @@ const TimetableAdminView = ({
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
   seasonsConfig = null, // seasons configuration
 }) => {
-  const filteredViews = allowedViews.filter(
-    (v) => v !== 'scheduler' || typeof onUpdateSlot === 'function'
-  );
-  const defaultView = filteredViews[0] || 'class';
+  const filteredViews = allowedViews;
+  const defaultView = filteredViews[0] || 'scheduler';
   const [viewType, setViewType] = useState(defaultView);
-  const viewObj = viewOptionsMap[viewType] || viewOptionsMap['class'];
+  const viewObj = viewOptionsMap[viewType] || viewOptionsMap['scheduler'];
 
   const [selectedId, setSelectedId] = useState('');
   const [showBreaks, setShowBreaks] = useState(true);
@@ -977,7 +1050,6 @@ const TimetableAdminView = ({
                 <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
                   {[
                     { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
-                    { id: 'class', label: 'Class Schedule', icon: 'fa-building' },
                     { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
                     { id: 'unassigned_classes', label: 'Unassigned Classes', icon: 'fa-school' },
                     { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
@@ -1025,17 +1097,15 @@ const TimetableAdminView = ({
               <i className="fas fa-coffee text-sm" />
             </button>
 
-            {/* Print — only for grid views */}
-            {isGridView && (
-              <button
-                onClick={handlePrint}
-                disabled={!selectedId}
-                title="Print / Save as PDF"
-                className="p-2 rounded-lg border border-light-border bg-light-bg text-dark-soft hover:bg-light-ui hover:text-dark-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <i className="fas fa-print text-sm" />
-              </button>
-            )}
+            {/* Print — for all views */}
+            <button
+              onClick={handlePrint}
+              disabled={(viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') && !selectedId}
+              title="Print / Save as PDF"
+              className="p-2 rounded-lg border border-light-border bg-light-bg text-dark-soft hover:bg-light-ui hover:text-dark-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <i className="fas fa-print text-sm" />
+            </button>
 
             {/* Clear Multiple Slots — only for class schedule / scheduler views */}
             {(viewType === 'class' || viewType === 'scheduler') && selectedId && typeof onClearSlots === 'function' && (
@@ -1287,6 +1357,7 @@ const TimetableAdminView = ({
                                   popover={popover}
                                   teachers={teachers}
                                   subjects={subjects}
+                                  classifications={classifications}
                                   classes={classes}
                                   slots={slots}
                                   days={days.filter((d) => {
@@ -1339,6 +1410,7 @@ const TimetableAdminView = ({
             classes={classes}
             teachers={teachers}
             subjects={subjects}
+            classifications={classifications}
             periods={periods}
             slots={slots}
             assignments={assignments}

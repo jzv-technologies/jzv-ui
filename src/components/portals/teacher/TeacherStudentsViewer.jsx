@@ -1,6 +1,7 @@
 // src/components/portals/teacher/TeacherStudentsViewer.jsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../utils/supabase";
+import { calculateAge } from "../../../utils/dateUtils";
 import DataGrid from "../../DataGrid";
 import DetailModal from "../../DetailModal";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../../data/mockStudents";
@@ -88,7 +89,7 @@ const TeacherStudentsViewer = () => {
           "Class": cls ? cls.name : "Unassigned",
           "Father Name": s.father_name || "",
           "Birth Date": s.birth_date || "",
-          "Age": s.age || "",
+          "Age": calculateAge(s.birth_date),
           "Hostel": s.hostel || "No",
           "Transport Point": s.transport_point || "",
         };
@@ -118,7 +119,7 @@ const TeacherStudentsViewer = () => {
           "Class": cls ? cls.name : "Unassigned",
           "Father Name": s.father_name || "",
           "Birth Date": s.birth_date || "",
-          "Age": s.age || "",
+          "Age": calculateAge(s.birth_date),
           "Hostel": s.hostel || "No",
           "Transport Point": s.transport_point || "",
         };

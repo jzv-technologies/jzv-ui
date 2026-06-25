@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 const DataGrid = ({
   data = [],
@@ -14,6 +14,17 @@ const DataGrid = ({
   const [visibleColumns, setVisibleColumns] = useState({});
   const [columnOrder, setColumnOrder] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const columnManagerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (columnManagerRef.current && !columnManagerRef.current.contains(e.target)) {
+        setShowColumnManager(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Initialize / merge columns when data changes (preserve user preferences)
   useEffect(() => {
@@ -197,7 +208,7 @@ const DataGrid = ({
               <i className="fas fa-times-circle"></i> Clear Filters
             </button>
           )}
-          <div className="relative">
+          <div ref={columnManagerRef} className="relative">
             <button
               onClick={() => setShowColumnManager(!showColumnManager)}
               className="text-xs text-indigo-600 hover:text-indigo-700 font-bold flex items-center gap-1.5 hover:underline px-2 py-1 rounded hover:bg-indigo-50 transition-all"
@@ -219,7 +230,7 @@ const DataGrid = ({
                         className="w-4 h-4 rounded border-light-border cursor-pointer"
                       />
                       <span className="text-dark-deepblue font-medium">
-                        {col}
+                        {columnConfig[col]?.label || columnConfig[col]?.Label || col}
                       </span>
                     </label>
                   ))}
@@ -304,7 +315,7 @@ const DataGrid = ({
                       onDrop={(e) => handleDrop(e, columnIndex)}
                     >
                       <div className="flex items-center gap-1.5">
-                        {h}
+                        {columnConfig[h]?.label || columnConfig[h]?.Label || h}
                         <span className="text-gray-400 group-hover:text-indigo-600 transition-colors text-[10px] cursor-pointer">
                           {sortConfig.key === h ? (
                             sortConfig.direction === "asc" ? (
@@ -323,33 +334,89 @@ const DataGrid = ({
               </tr>
             </thead>
             <tbody>
-              {processedData.map((item, idx) => (
-                <tr
-                  key={idx}
-                  onClick={() => onRowClick && onRowClick(item)}
-                  className={`border-b border-light-border last:border-0 ${
-                    onRowClick
-                      ? "hover:bg-indigo-50/30 transition-colors cursor-pointer"
-                      : ""
-                  }`}
-                  title={onRowClick ? "Click to view details" : ""}
-                >
-                  {visibleHeaders.map((h) => (
-                    <td
-                      key={h}
-                      className="p-6 text-sm text-dark-charcoal whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis"
-                    >
-                      {String(item[h] ?? "")}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {processedData.map((item, idx) => {
+                const rowClass = getRowStatusClass(item);
+                return (
+                  <tr
+                    key={idx}
+                    onClick={() => onRowClick && onRowClick(item)}
+                    className={`border-b border-light-border last:border-0 transition-colors cursor-pointer ${rowClass}`}
+                    title={onRowClick ? "Click to view details" : ""}
+                  >
+                    {visibleHeaders.map((h) => {
+                      const valStr = String(item[h] ?? "");
+                      const valClean = valStr.toLowerCase().trim();
+                      const isStatus = ["open", "in-progress", "in progress", "resolved", "rejected"].includes(valClean);
+                      return (
+                        <td
+                          key={h}
+                          className="p-6 text-sm text-dark-charcoal whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis"
+                        >
+                          {isStatus ? (
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusStyles(item[h])}`}>
+                              {item[h]}
+                            </span>
+                          ) : (
+                            valStr
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
     </div>
   );
+};
+
+const getStatusStyles = (status) => {
+  const s = String(status || "").toLowerCase().trim();
+  switch (s) {
+    case "open":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    case "in-progress":
+    case "in progress":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "resolved":
+      return "bg-green-50 text-green-700 border-green-200";
+    case "rejected":
+      return "bg-red-50 text-red-700 border-red-200";
+    default:
+      return "bg-gray-50 text-gray-700 border-gray-200";
+  }
+};
+
+const getRowStatusClass = (item) => {
+  let s = "";
+  const statusKey = Object.keys(item).find((k) => k.toLowerCase() === "status");
+  if (statusKey) {
+    s = String(item[statusKey] || "").toLowerCase().trim();
+  } else {
+    for (const k in item) {
+      const val = String(item[k] || "").toLowerCase().trim();
+      if (["open", "in-progress", "in progress", "resolved", "rejected"].includes(val)) {
+        s = val;
+        break;
+      }
+    }
+  }
+  switch (s) {
+    case "open":
+      return "bg-blue-50/10 hover:bg-blue-100/20";
+    case "in-progress":
+    case "in progress":
+      return "bg-amber-50/10 hover:bg-amber-100/20";
+    case "resolved":
+      return "bg-green-50/10 hover:bg-green-100/20";
+    case "rejected":
+      return "bg-red-50/10 hover:bg-red-100/20";
+    default:
+      return "hover:bg-indigo-50/20";
+  }
 };
 
 export default DataGrid;

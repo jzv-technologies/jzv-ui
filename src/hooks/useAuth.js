@@ -167,6 +167,7 @@ export const useAuth = () => {
 
   const handleLogout = useCallback(async () => {
     localStorage.removeItem("jzv_parent_session");
+    localStorage.removeItem("jzv_admin_session");
     if (user && !user.parentMode) clearUserDataCookie(user.id);
     rolesFetchedRef.current = false;
     fetchingRef.current = false;
@@ -225,6 +226,22 @@ export const useAuth = () => {
         setUser(parsed.user);
         updateRoles(["parent"]);
         updateStudentIds(parsed.studentIds);
+        setFullName(parsed.fullName);
+        setAuthLoading(false);
+        return;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Check if there is a mock admin/staff session
+    const savedAdmin = localStorage.getItem("jzv_admin_session");
+    if (savedAdmin) {
+      try {
+        const parsed = JSON.parse(savedAdmin);
+        setUser(parsed.user);
+        updateRoles(parsed.roles || ["admin"]);
+        updateStudentIds("");
         setFullName(parsed.fullName);
         setAuthLoading(false);
         return;

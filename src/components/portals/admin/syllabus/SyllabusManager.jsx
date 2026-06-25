@@ -100,9 +100,9 @@ const SyllabusManager = ({ role }) => {
 
     const headers = cleanRows[0];
     
-    // Validate number of columns: must be min 3 and max 5
-    if (headers.length < 3 || headers.length > 5) {
-      showToast(`Invalid CSV column count (${headers.length}). The file must contain between 3 and 5 columns.`, "error");
+    // Validate number of columns: must be min 2 and max 5
+    if (headers.length < 2 || headers.length > 5) {
+      showToast(`Invalid CSV column count (${headers.length}). The file must contain between 2 and 5 columns.`, "error");
       return;
     }
 
@@ -114,18 +114,23 @@ const SyllabusManager = ({ role }) => {
   const handleExecuteCsvImport = async (mappings) => {
     setIsCsvMappingOpen(false);
     setLoading(true);
-    setMessage({ type: '', text: 'Importing curriculum data...' });
 
     const { unitCol, chapterCol, lessonCol, complexityCol, pageCol } = mappings;
 
     // Map column names to indices
-    const unitIdx = csvHeaders.indexOf(unitCol);
-    const chapterIdx = csvHeaders.indexOf(chapterCol);
-    const lessonIdx = csvHeaders.indexOf(lessonCol);
+    const unitIdx = unitCol ? csvHeaders.indexOf(unitCol) : -1;
+    const chapterIdx = chapterCol ? csvHeaders.indexOf(chapterCol) : -1;
+    const lessonIdx = lessonCol ? csvHeaders.indexOf(lessonCol) : -1;
     const complexityIdx = complexityCol ? csvHeaders.indexOf(complexityCol) : -1;
     const pageIdx = pageCol ? csvHeaders.indexOf(pageCol) : -1;
 
     try {
+      const targetBook = books.find(b => String(b.id) === String(importBookId));
+      const hierarchy = targetBook?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+      const hasUnits = hierarchy.includes('Unit');
+      const hasChapters = hierarchy.includes('Chapter');
+      const hasLessons = hierarchy.includes('Lesson');
+
       // Local lists that we modify as we import, to avoid duplicate DB insertions during the same import
       let currentUnits = [...units];
       let currentChapters = [...chapters];
@@ -134,124 +139,136 @@ const SyllabusManager = ({ role }) => {
       let rowsImported = 0;
 
       for (const row of csvRows) {
-        const unitName = row[unitIdx];
-        const chapterName = row[chapterIdx];
-        const lessonName = row[lessonIdx];
+        const unitName = hasUnits && unitIdx !== -1 ? row[unitIdx] : null;
+        const chapterName = hasChapters && chapterIdx !== -1 ? row[chapterIdx] : null;
+        const lessonName = hasLessons && lessonIdx !== -1 ? row[lessonIdx] : null;
         
-        // Skip rows that don't have mandatory values
-        if (!unitName || !chapterName || !lessonName) {
-          continue;
-        }
+        // Skip rows that don't have mandatory values matching the hierarchy
+        if (hasUnits && !unitName) continue;
+        if (hasChapters && !chapterName) continue;
+        if (hasLessons && !lessonName) continue;
 
-        // 1. Process Unit
-        let unitObj = currentUnits.find(
-          u => String(u.book_id) === String(importBookId) && u.name.toLowerCase().trim() === unitName.toLowerCase().trim()
-        );
+        // 1. Process Unit (if active)
+        let unitObj = null;
+        if (hasUnits) {
+          unitObj = currentUnits.find(
+            u => String(u.book_id) === String(importBookId) && u.name.toLowerCase().trim() === unitName.toLowerCase().trim()
+          );
 
-        if (!unitObj) {
-          // Add Unit
-          const newId = generateLocalId();
-          if (isSupabaseMode) {
-            const { data, error } = await supabase
-              .from('syllabus_units')
-              .insert([{ book_id: importBookId, name: unitName }])
-              .select();
-            if (error) throw error;
-            unitObj = data[0];
-          } else {
-            unitObj = { id: newId, book_id: importBookId, name: unitName };
+          if (!unitObj) {
+            const newId = generateLocalId();
+            if (isSupabaseMode) {
+              const { data, error } = await supabase
+                .from('syllabus_units')
+                .insert([{ book_id: importBookId, name: unitName }])
+                .select();
+              if (error) throw error;
+              unitObj = data[0];
+            } else {
+              unitObj = { id: newId, book_id: importBookId, name: unitName };
+            }
+            currentUnits.push(unitObj);
           }
-          currentUnits.push(unitObj);
         }
 
-        // 2. Process Chapter
-        let chapterObj = currentChapters.find(
-          c => String(c.unit_id) === String(unitObj.id) && c.name.toLowerCase().trim() === chapterName.toLowerCase().trim()
-        );
+        // 2. Process Chapter (if active)
+        let chapterObj = null;
+        if (hasChapters) {
+          chapterObj = currentChapters.find(c => {
+            if (hasUnits) {
+              return String(c.unit_id) === String(unitObj.id) && c.name.toLowerCase().trim() === chapterName.toLowerCase().trim();
+            } else {
+              return String(c.book_id) === String(importBookId) && c.name.toLowerCase().trim() === chapterName.toLowerCase().trim();
+            }
+          });
 
-        if (!chapterObj) {
-          // Add Chapter
-          const newId = generateLocalId();
-          if (isSupabaseMode) {
-            const { data, error } = await supabase
-              .from('syllabus_chapters')
-              .insert([{ unit_id: unitObj.id, name: chapterName }])
-              .select();
-            if (error) throw error;
-            chapterObj = data[0];
-          } else {
-            chapterObj = { id: newId, unit_id: unitObj.id, name: chapterName };
+          if (!chapterObj) {
+            const newId = generateLocalId();
+            if (isSupabaseMode) {
+              const insertData = hasUnits
+                ? { unit_id: unitObj.id, book_id: null, name: chapterName }
+                : { book_id: importBookId, unit_id: null, name: chapterName };
+              const { data, error } = await supabase
+                .from('syllabus_chapters')
+                .insert([insertData])
+                .select();
+              if (error) throw error;
+              chapterObj = data[0];
+            } else {
+              chapterObj = hasUnits
+                ? { id: newId, unit_id: unitObj.id, book_id: null, name: chapterName }
+                : { id: newId, book_id: importBookId, unit_id: null, name: chapterName };
+            }
+            currentChapters.push(chapterObj);
           }
-          currentChapters.push(chapterObj);
         }
 
-        // 3. Process Lesson
-        let lessonObj = currentLessons.find(
-          l => String(l.chapter_id) === String(chapterObj.id) && l.name.toLowerCase().trim() === lessonName.toLowerCase().trim()
-        );
+        // 3. Process Lesson (if active)
+        if (hasLessons) {
+          let lessonObj = currentLessons.find(l => {
+            if (hasChapters) {
+              return String(l.chapter_id) === String(chapterObj.id) && l.name.toLowerCase().trim() === lessonName.toLowerCase().trim();
+            } else {
+              return String(l.unit_id) === String(unitObj.id) && l.name.toLowerCase().trim() === lessonName.toLowerCase().trim();
+            }
+          });
 
-        const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
-        let complexityVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
-        // Normalize complexity
-        if (complexityVal) {
-          complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
-          if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+          const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
+          let complexityVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
+          // Normalize complexity
+          if (complexityVal) {
+            complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+            if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+              complexityVal = 'Easy';
+            }
+          } else {
             complexityVal = 'Easy';
           }
-        } else {
-          complexityVal = 'Easy';
-        }
 
-        if (!lessonObj) {
-          // Add Lesson
-          const newId = generateLocalId();
-          if (isSupabaseMode) {
-            const { data, error } = await supabase
-              .from('syllabus_lessons')
-              .insert([{
-                chapter_id: chapterObj.id,
-                name: lessonName,
-                page_count: pageVal,
-                complexity: complexityVal
-              }])
-              .select();
-            if (error) throw error;
-            lessonObj = data[0];
-          } else {
-            lessonObj = {
-              id: newId,
-              chapter_id: chapterObj.id,
-              name: lessonName,
-              page_count: pageVal,
-              complexity: complexityVal
-            };
-          }
-          currentLessons.push(lessonObj);
-        } else {
-          // Update Lesson optional fields if provided
-          if (isSupabaseMode) {
-            const updates = {};
-            let needsUpdate = false;
-            if (pageIdx !== -1 && lessonObj.page_count !== pageVal) {
-              updates.page_count = pageVal;
-              needsUpdate = true;
-            }
-            if (complexityIdx !== -1 && lessonObj.complexity !== complexityVal) {
-              updates.complexity = complexityVal;
-              needsUpdate = true;
-            }
-            if (needsUpdate) {
-              const { error } = await supabase
+          if (!lessonObj) {
+            const newId = generateLocalId();
+            if (isSupabaseMode) {
+              const insertData = hasChapters
+                ? { chapter_id: chapterObj.id, unit_id: null, name: lessonName, page_count: pageVal, complexity: complexityVal }
+                : { unit_id: unitObj.id, chapter_id: null, name: lessonName, page_count: pageVal, complexity: complexityVal };
+              const { data, error } = await supabase
                 .from('syllabus_lessons')
-                .update(updates)
-                .eq('id', lessonObj.id);
+                .insert([insertData])
+                .select();
               if (error) throw error;
-              lessonObj.page_count = pageVal;
-              lessonObj.complexity = complexityVal;
+              lessonObj = data[0];
+            } else {
+              lessonObj = hasChapters
+                ? { id: newId, chapter_id: chapterObj.id, unit_id: null, name: lessonName, page_count: pageVal, complexity: complexityVal }
+                : { id: newId, unit_id: unitObj.id, chapter_id: null, name: lessonName, page_count: pageVal, complexity: complexityVal };
             }
+            currentLessons.push(lessonObj);
           } else {
-            if (pageIdx !== -1) lessonObj.page_count = pageVal;
-            if (complexityIdx !== -1) lessonObj.complexity = complexityVal;
+            // Update Lesson optional fields if provided
+            if (isSupabaseMode) {
+              const updates = {};
+              let needsUpdate = false;
+              if (pageIdx !== -1 && lessonObj.page_count !== pageVal) {
+                updates.page_count = pageVal;
+                needsUpdate = true;
+              }
+              if (complexityIdx !== -1 && lessonObj.complexity !== complexityVal) {
+                updates.complexity = complexityVal;
+                needsUpdate = true;
+              }
+              if (needsUpdate) {
+                const { error } = await supabase
+                  .from('syllabus_lessons')
+                  .update(updates)
+                  .eq('id', lessonObj.id);
+                if (error) throw error;
+                lessonObj.page_count = pageVal;
+                lessonObj.complexity = complexityVal;
+              }
+            } else {
+              if (pageIdx !== -1) lessonObj.page_count = pageVal;
+              if (complexityIdx !== -1) lessonObj.complexity = complexityVal;
+            }
           }
         }
         
@@ -271,10 +288,8 @@ const SyllabusManager = ({ role }) => {
       }
 
       showToast(`Successfully processed CSV. Imported/Consumed ${rowsImported} rows of curriculum!`, "success");
-      setMessage({ type: 'success', text: `Successfully imported ${rowsImported} items from CSV.` });
     } catch (err) {
       showToast("CSV Import Error: " + err.message, "error");
-      setMessage({ type: 'error', text: `Import failed: ${err.message}` });
     } finally {
       setLoading(false);
       setImportBookId(null);
@@ -295,7 +310,6 @@ const SyllabusManager = ({ role }) => {
   // DB vs Offline State
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
 
   // Modal State
   const [modal, setModal] = useState(null); // { type: 'add'|'edit', level: 'subject'|'book'|'unit'|'chapter'|'lesson', parentId?, node? }
@@ -303,7 +317,6 @@ const SyllabusManager = ({ role }) => {
   // Load Data
   const loadData = async () => {
     setLoading(true);
-    setMessage({ type: '', text: '' });
     try {
       // 1. Try to fetch from Supabase
       const [
@@ -376,21 +389,21 @@ const SyllabusManager = ({ role }) => {
       { id: 'sub-2', name: 'Science', classification_id: 'cls-1' },
     ];
     const mockBooks = [
-      { id: 'book-1', subject_id: 'sub-1', name: 'Grade 10 Algebra' },
-      { id: 'book-2', subject_id: 'sub-2', name: 'Biology Part I' },
+      { id: 'book-1', subject_id: 'sub-1', name: 'Grade 10 Algebra', hierarchy_type: 'Book > Unit > Chapter > Lesson' },
+      { id: 'book-2', subject_id: 'sub-2', name: 'Biology Part I', hierarchy_type: 'Book > Unit > Chapter > Lesson' },
     ];
     const mockUnits = [
       { id: 'unit-1', book_id: 'book-1', name: 'Unit 1: Quadratic Equations' },
       { id: 'unit-2', book_id: 'book-2', name: 'Unit 2: Cell Structure' },
     ];
     const mockChapters = [
-      { id: 'chap-1', unit_id: 'unit-1', name: 'Chapter 1: Factoring' },
-      { id: 'chap-2', unit_id: 'unit-2', name: 'Chapter 3: Cell Wall' },
+      { id: 'chap-1', unit_id: 'unit-1', book_id: null, name: 'Chapter 1: Factoring' },
+      { id: 'chap-2', unit_id: 'unit-2', book_id: null, name: 'Chapter 3: Cell Wall' },
     ];
     const mockLessons = [
-      { id: 'less-1', chapter_id: 'chap-1', name: 'Factoring Trinomials', page_count: 12, complexity: 'Moderate' },
-      { id: 'less-2', chapter_id: 'chap-1', name: 'Quadratic Formula Method', page_count: 15, complexity: 'Complex' },
-      { id: 'less-3', chapter_id: 'chap-2', name: 'Cell Wall Components', page_count: 8, complexity: 'Easy' },
+      { id: 'less-1', chapter_id: 'chap-1', unit_id: null, name: 'Factoring Trinomials', page_count: 12, complexity: 'Moderate' },
+      { id: 'less-2', chapter_id: 'chap-1', unit_id: null, name: 'Quadratic Formula Method', page_count: 15, complexity: 'Complex' },
+      { id: 'less-3', chapter_id: 'chap-2', unit_id: null, name: 'Cell Wall Components', page_count: 8, complexity: 'Easy' },
     ];
 
     setClassifications(mockClassifications);
@@ -467,7 +480,7 @@ const SyllabusManager = ({ role }) => {
 
   // Node CRUD Action Handlers
   const handleSaveNode = async (formData) => {
-    const { level, type, name, classificationId, pageCount, complexity, parentId, node, unitsList, chaptersList, lessonsList } = formData;
+    const { level, type, name, classificationId, pageCount, complexity, parentId, node, unitsList, chaptersList, lessonsList, hierarchyType } = formData;
     setLoading(true);
 
     try {
@@ -488,7 +501,8 @@ const SyllabusManager = ({ role }) => {
           saveState({ subjects: updatedList });
         } else if (level === 'book') {
           payload.subject_id = parentId;
-          let updatedList = [...books, { id: newId, subject_id: parentId, name }];
+          payload.hierarchy_type = hierarchyType || 'Book > Unit > Chapter > Lesson';
+          let updatedList = [...books, { id: newId, subject_id: parentId, name, hierarchy_type: payload.hierarchy_type }];
           if (isSupabaseMode) {
             const { data, error } = await supabase.from('syllabus_books').insert([payload]).select();
             if (error) throw error;
@@ -523,7 +537,7 @@ const SyllabusManager = ({ role }) => {
               currentUnits.push(unitObj);
             }
 
-            // Process Chapters under this Unit
+            // Process Chapters under this Unit if they exist
             if (unit.chapters && unit.chapters.length > 0) {
               for (const chap of unit.chapters) {
                 if (!chap.name.trim()) continue;
@@ -537,19 +551,20 @@ const SyllabusManager = ({ role }) => {
                   if (isSupabaseMode) {
                     const { data, error } = await supabase
                       .from('syllabus_chapters')
-                      .insert([{ unit_id: unitObj.id, name: chap.name.trim() }])
+                      .insert([{ unit_id: unitObj.id, book_id: null, name: chap.name.trim() }])
                       .select();
                     if (error) throw error;
                     chapterObj = data[0];
                   } else {
-                    chapterObj = { id: newId, unit_id: unitObj.id, name: chap.name.trim() };
+                    chapterObj = { id: newId, unit_id: unitObj.id, book_id: null, name: chap.name.trim() };
                   }
                   currentChapters.push(chapterObj);
                 }
 
-                // Process Lessons under this Chapter
+                // Process Lessons under this Chapter if they exist
                 if (chap.lessons && chap.lessons.length > 0) {
                   for (const less of chap.lessons) {
+                    if (!less.name || !less.name.trim()) continue;
                     let lessonObj = currentLessons.find(
                       l => String(l.chapter_id) === String(chapterObj.id) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
                     );
@@ -572,6 +587,7 @@ const SyllabusManager = ({ role }) => {
                           .from('syllabus_lessons')
                           .insert([{
                             chapter_id: chapterObj.id,
+                            unit_id: null,
                             name: less.name.trim(),
                             page_count: pageVal,
                             complexity: complexityVal
@@ -583,6 +599,7 @@ const SyllabusManager = ({ role }) => {
                         lessonObj = {
                           id: newId,
                           chapter_id: chapterObj.id,
+                          unit_id: null,
                           name: less.name.trim(),
                           page_count: pageVal,
                           complexity: complexityVal
@@ -619,6 +636,80 @@ const SyllabusManager = ({ role }) => {
                 }
               }
             }
+
+            // Process Lessons directly under this Unit (hierarchy: Book > Unit > Lesson)
+            if (unit.lessons && unit.lessons.length > 0) {
+              for (const less of unit.lessons) {
+                if (!less.name || !less.name.trim()) continue;
+                let lessonObj = currentLessons.find(
+                  l => String(l.unit_id) === String(unitObj.id) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
+                );
+
+                const pageVal = Number(less.pageCount || 0);
+                let complexityVal = less.complexity || 'Easy';
+                if (complexityVal) {
+                  complexityVal = complexityVal.charAt(0).toUpperCase() + complexityVal.slice(1).toLowerCase();
+                  if (!['Easy', 'Moderate', 'Complex'].includes(complexityVal)) {
+                    complexityVal = 'Easy';
+                  }
+                } else {
+                  complexityVal = 'Easy';
+                }
+
+                if (!lessonObj) {
+                  const newId = generateLocalId();
+                  if (isSupabaseMode) {
+                    const { data, error } = await supabase
+                      .from('syllabus_lessons')
+                      .insert([{
+                        unit_id: unitObj.id,
+                        chapter_id: null,
+                        name: less.name.trim(),
+                        page_count: pageVal,
+                        complexity: complexityVal
+                      }])
+                      .select();
+                    if (error) throw error;
+                    lessonObj = data[0];
+                  } else {
+                    lessonObj = {
+                      id: newId,
+                      unit_id: unitObj.id,
+                      chapter_id: null,
+                      name: less.name.trim(),
+                      page_count: pageVal,
+                      complexity: complexityVal
+                    };
+                  }
+                  currentLessons.push(lessonObj);
+                } else {
+                  if (isSupabaseMode) {
+                    const updates = {};
+                    let needsUpdate = false;
+                    if (lessonObj.page_count !== pageVal) {
+                      updates.page_count = pageVal;
+                      needsUpdate = true;
+                    }
+                    if (lessonObj.complexity !== complexityVal) {
+                      updates.complexity = complexityVal;
+                      needsUpdate = true;
+                    }
+                    if (needsUpdate) {
+                      const { error } = await supabase
+                        .from('syllabus_lessons')
+                        .update(updates)
+                        .eq('id', lessonObj.id);
+                      if (error) throw error;
+                      lessonObj.page_count = pageVal;
+                      lessonObj.complexity = complexityVal;
+                    }
+                  } else {
+                    lessonObj.page_count = pageVal;
+                    lessonObj.complexity = complexityVal;
+                  }
+                }
+              }
+            }
           }
 
           saveState({
@@ -633,30 +724,42 @@ const SyllabusManager = ({ role }) => {
           let currentChapters = [...chapters];
           let currentLessons = [...lessons];
 
+          const isParentBook = books.some(b => String(b.id) === String(parentId));
+
           for (const chap of chaptersList) {
             if (!chap.name.trim()) continue;
 
-            let chapterObj = currentChapters.find(
-              c => String(c.unit_id) === String(parentId) && c.name.toLowerCase().trim() === chap.name.toLowerCase().trim()
-            );
+            let chapterObj = currentChapters.find(c => {
+              if (isParentBook) {
+                return String(c.book_id) === String(parentId) && c.name.toLowerCase().trim() === chap.name.toLowerCase().trim();
+              } else {
+                return String(c.unit_id) === String(parentId) && c.name.toLowerCase().trim() === chap.name.toLowerCase().trim();
+              }
+            });
 
             if (!chapterObj) {
               const newId = generateLocalId();
               if (isSupabaseMode) {
+                const insertData = isParentBook
+                  ? { book_id: parentId, unit_id: null, name: chap.name.trim() }
+                  : { unit_id: parentId, book_id: null, name: chap.name.trim() };
                 const { data, error } = await supabase
                   .from('syllabus_chapters')
-                  .insert([{ unit_id: parentId, name: chap.name.trim() }])
+                  .insert([insertData])
                   .select();
                 if (error) throw error;
                 chapterObj = data[0];
               } else {
-                chapterObj = { id: newId, unit_id: parentId, name: chap.name.trim() };
+                chapterObj = isParentBook
+                  ? { id: newId, book_id: parentId, unit_id: null, name: chap.name.trim() }
+                  : { id: newId, unit_id: parentId, book_id: null, name: chap.name.trim() };
               }
               currentChapters.push(chapterObj);
             }
 
             if (chap.lessons && chap.lessons.length > 0) {
               for (const less of chap.lessons) {
+                if (!less.name || !less.name.trim()) continue;
                 let lessonObj = currentLessons.find(
                   l => String(l.chapter_id) === String(chapterObj.id) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
                 );
@@ -679,6 +782,7 @@ const SyllabusManager = ({ role }) => {
                       .from('syllabus_lessons')
                       .insert([{
                         chapter_id: chapterObj.id,
+                        unit_id: null,
                         name: less.name.trim(),
                         page_count: pageVal,
                         complexity: complexityVal
@@ -690,6 +794,7 @@ const SyllabusManager = ({ role }) => {
                     lessonObj = {
                       id: newId,
                       chapter_id: chapterObj.id,
+                      unit_id: null,
                       name: less.name.trim(),
                       page_count: pageVal,
                       complexity: complexityVal
@@ -735,11 +840,17 @@ const SyllabusManager = ({ role }) => {
           }
         } else if (level === 'lesson') {
           let currentLessons = [...lessons];
+          const isParentChapter = chapters.some(c => String(c.id) === String(parentId));
 
           for (const less of lessonsList) {
-            let lessonObj = currentLessons.find(
-              l => String(l.chapter_id) === String(parentId) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim()
-            );
+            if (!less.name || !less.name.trim()) continue;
+            let lessonObj = currentLessons.find(l => {
+              if (isParentChapter) {
+                return String(l.chapter_id) === String(parentId) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim();
+              } else {
+                return String(l.unit_id) === String(parentId) && (l.name || '').toLowerCase().trim() === (less.name || '').toLowerCase().trim();
+              }
+            });
 
             const pageVal = Number(less.pageCount || 0);
             let complexityVal = less.complexity || 'Easy';
@@ -755,25 +866,19 @@ const SyllabusManager = ({ role }) => {
             if (!lessonObj) {
               const newId = generateLocalId();
               if (isSupabaseMode) {
+                const insertData = isParentChapter
+                  ? { chapter_id: parentId, unit_id: null, name: less.name.trim(), page_count: pageVal, complexity: complexityVal }
+                  : { unit_id: parentId, chapter_id: null, name: less.name.trim(), page_count: pageVal, complexity: complexityVal };
                 const { data, error } = await supabase
                   .from('syllabus_lessons')
-                  .insert([{
-                    chapter_id: parentId,
-                    name: less.name.trim(),
-                    page_count: pageVal,
-                    complexity: complexityVal
-                  }])
+                  .insert([insertData])
                   .select();
                 if (error) throw error;
                 lessonObj = data[0];
               } else {
-                lessonObj = {
-                  id: newId,
-                  chapter_id: parentId,
-                  name: less.name.trim(),
-                  page_count: pageVal,
-                  complexity: complexityVal
-                };
+                lessonObj = isParentChapter
+                  ? { id: newId, chapter_id: parentId, unit_id: null, name: less.name.trim(), page_count: pageVal, complexity: complexityVal }
+                  : { id: newId, unit_id: parentId, chapter_id: null, name: less.name.trim(), page_count: pageVal, complexity: complexityVal };
               }
               currentLessons.push(lessonObj);
             } else {
@@ -823,9 +928,9 @@ const SyllabusManager = ({ role }) => {
           }
           saveState({ subjects: updatedList });
         } else if (level === 'book') {
-          let updatedList = books.map(b => String(b.id) === String(targetId) ? { ...b, name } : b);
+          let updatedList = books.map(b => String(b.id) === String(targetId) ? { ...b, name, hierarchy_type: hierarchyType } : b);
           if (isSupabaseMode && !startLocal) {
-            const { error } = await supabase.from('syllabus_books').update({ name }).eq('id', targetId);
+            const { error } = await supabase.from('syllabus_books').update({ name, hierarchy_type: hierarchyType }).eq('id', targetId);
             if (error) throw error;
           }
           saveState({ books: updatedList });
@@ -854,7 +959,7 @@ const SyllabusManager = ({ role }) => {
         }
       }
       setModal(null);
-      setMessage({ type: 'success', text: `Saved syllabus level successfully.` });
+      showToast(`Saved syllabus level successfully.`, `success`);
     } catch (err) {
       showToast('Error updating database: ' + err.message, 'error');
     } finally {
@@ -993,9 +1098,9 @@ const SyllabusManager = ({ role }) => {
             const deletedBookIds = books.filter(b => String(b.subject_id) === String(id)).map(b => b.id);
             const nextUnits = units.filter(u => !deletedBookIds.includes(u.book_id));
             const deletedUnitIds = units.filter(u => deletedBookIds.includes(u.book_id)).map(u => u.id);
-            const nextChapters = chapters.filter(c => !deletedUnitIds.includes(c.unit_id));
-            const deletedChapterIds = chapters.filter(c => deletedUnitIds.includes(c.unit_id)).map(c => c.id);
-            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id));
+            const nextChapters = chapters.filter(c => !deletedUnitIds.includes(c.unit_id) && !deletedBookIds.includes(c.book_id));
+            const deletedChapterIds = chapters.filter(c => deletedUnitIds.includes(c.unit_id) || deletedBookIds.includes(c.book_id)).map(c => c.id);
+            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id) && !deletedUnitIds.includes(l.unit_id));
 
             saveState({
               subjects: updatedList,
@@ -1017,9 +1122,9 @@ const SyllabusManager = ({ role }) => {
             }
             const nextUnits = units.filter(u => String(u.book_id) !== String(id));
             const deletedUnitIds = units.filter(u => String(u.book_id) === String(id)).map(u => u.id);
-            const nextChapters = chapters.filter(c => !deletedUnitIds.includes(c.unit_id));
-            const deletedChapterIds = chapters.filter(c => deletedUnitIds.includes(c.unit_id)).map(c => c.id);
-            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id));
+            const nextChapters = chapters.filter(c => !deletedUnitIds.includes(c.unit_id) && String(c.book_id) !== String(id));
+            const deletedChapterIds = chapters.filter(c => deletedUnitIds.includes(c.unit_id) || String(c.book_id) === String(id)).map(c => c.id);
+            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id) && !deletedUnitIds.includes(l.unit_id));
 
             saveState({
               books: updatedList,
@@ -1035,7 +1140,7 @@ const SyllabusManager = ({ role }) => {
             }
             const nextChapters = chapters.filter(c => String(c.unit_id) !== String(id));
             const deletedChapterIds = chapters.filter(c => String(c.unit_id) === String(id)).map(c => c.id);
-            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id));
+            const nextLessons = lessons.filter(l => !deletedChapterIds.includes(l.chapter_id) && String(l.unit_id) !== String(id));
 
             saveState({
               units: updatedList,
@@ -1062,7 +1167,7 @@ const SyllabusManager = ({ role }) => {
             }
             saveState({ lessons: updatedList });
           }
-          setMessage({ type: 'success', text: `Deleted syllabus node successfully.` });
+          showToast(`Deleted syllabus node successfully.`, `success`);
         } catch (err) {
           showToast('Error updating database: ' + err.message, 'error');
         } finally {
@@ -1074,6 +1179,48 @@ const SyllabusManager = ({ role }) => {
 
   const currentSubject = subjects.find(s => String(s.id) === String(activeSubjectId));
   const activeBooks = books.filter(b => String(b.subject_id) === String(activeSubjectId));
+
+  const renderLessonRow = (less) => {
+    let compColor = 'bg-green-100 text-green-700 border-green-200';
+    if (less.complexity === 'Moderate') {
+      compColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    } else if (less.complexity === 'Complex') {
+      compColor = 'bg-red-100 text-red-700 border-red-200';
+    }
+
+    return (
+      <div key={less.id} className="p-2 border border-light-border/30 rounded-md hover:bg-light-lbg/10 transition-colors flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <i className="fas fa-file-alt text-dark-soft text-[10px]" />
+          <span className="text-xs font-semibold text-dark-primary truncate">{less.name}</span>
+          <span className="text-[9px] font-bold text-dark-muted shrink-0">
+            <i className="far fa-file-lines mr-1" />
+            {less.page_count || 0} pages
+          </span>
+          <span className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${compColor}`}>
+            {less.complexity || 'Easy'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            onClick={() => setModal({ type: 'edit', level: 'lesson', node: less })}
+            className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+          >
+            <i className="fas fa-edit text-[10px]"></i>
+          </button>
+          {(isAdmin || isTeacher) && (
+            <button
+              onClick={() => handleDeleteNode('lesson', less.id)}
+              className="p-1 text-red-primary hover:bg-red-50 rounded"
+            >
+              <i className="fas fa-trash-alt text-[10px]"></i>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="w-full bg-light-lbg/50 border border-light-border rounded-[2rem] shadow-sm p-6 animate-in fade-in duration-500 min-h-[500px]">
@@ -1107,15 +1254,6 @@ const SyllabusManager = ({ role }) => {
           </button>
         </div>
       </div>
-
-      {message.text && (
-        <div className="mb-6 flex justify-center">
-          <div className="px-6 py-2 rounded-full text-xs font-bold bg-green-50 text-green-600 border border-green-100 shadow-sm animate-pulse">
-            <i className="fas fa-check-circle mr-2"></i>
-            {message.text}
-          </div>
-        </div>
-      )}
 
       {/* Main Grid: Left side Subject Selector, Right side tree view */}
       <div className="flex flex-col lg:flex-row gap-8">
@@ -1312,7 +1450,13 @@ const SyllabusManager = ({ role }) => {
                 <div className="space-y-4">
                   {activeBooks.map((book) => {
                     const isBookCollapsed = collapsedNodes[book.id];
-                    const bookUnits = units.filter(u => String(u.book_id) === String(book.id));
+                    const hierarchy = book.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+                    const hasUnits = hierarchy.includes('Unit');
+                    const hasChapters = hierarchy.includes('Chapter');
+                    const hasLessons = hierarchy.includes('Lesson');
+
+                    const bookUnits = hasUnits ? units.filter(u => String(u.book_id) === String(book.id)) : [];
+                    const bookChapters = !hasUnits && hasChapters ? chapters.filter(c => String(c.book_id) === String(book.id)) : [];
 
                     return (
                       <div key={book.id} className="border border-light-border rounded-2xl overflow-hidden shadow-sm">
@@ -1326,19 +1470,32 @@ const SyllabusManager = ({ role }) => {
                             <i className="fas fa-book text-brand-primary text-sm" />
                             <span className="font-extrabold text-sm text-dark-deepblue truncate">{book.name}</span>
                             <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
-                              {bookUnits.length} Units
+                              {hasUnits ? `${bookUnits.length} Units` : `${bookChapters.length} Chapters`}
+                            </span>
+                            <span className="text-[9px] text-brand-primary bg-brand-lbg/30 border border-brand-soft/20 px-2 py-0.5 rounded-full font-semibold ml-1.5 shrink-0">
+                              {hierarchy}
                             </span>
                           </button>
 
                           {/* Actions */}
                           <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => setModal({ type: 'add', level: 'unit', parentId: book.id })}
-                              className="p-1.5 rounded-lg text-[10px] font-bold bg-white border border-light-border hover:bg-brand-lbg/10 hover:text-brand-primary hover:border-brand-soft transition-all"
-                              title="Add Unit"
-                            >
-                              <i className="fas fa-plus"></i> Add Unit
-                            </button>
+                            {hasUnits ? (
+                              <button
+                                onClick={() => setModal({ type: 'add', level: 'unit', parentId: book.id })}
+                                className="p-1.5 rounded-lg text-[10px] font-bold bg-white border border-light-border hover:bg-brand-lbg/10 hover:text-brand-primary hover:border-brand-soft transition-all"
+                                title="Add Unit"
+                              >
+                                <i className="fas fa-plus"></i> Add Unit
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setModal({ type: 'add', level: 'chapter', parentId: book.id })}
+                                className="p-1.5 rounded-lg text-[10px] font-bold bg-white border border-light-border hover:bg-brand-lbg/10 hover:text-brand-primary hover:border-brand-soft transition-all"
+                                title="Add Chapter"
+                              >
+                                <i className="fas fa-plus"></i> Add Chapter
+                              </button>
+                            )}
                             <button
                               onClick={() => handleCsvClick(book.id)}
                               className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors flex items-center justify-center"
@@ -1349,7 +1506,7 @@ const SyllabusManager = ({ role }) => {
                             <button
                               onClick={() => setModal({ type: 'edit', level: 'book', node: book })}
                               className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Rename Book"
+                              title="Rename/Edit Book"
                             >
                               <i className="fas fa-edit"></i>
                             </button>
@@ -1365,199 +1522,274 @@ const SyllabusManager = ({ role }) => {
                           </div>
                         </div>
 
-                        {/* Units Container */}
+                        {/* Units / Chapters Container */}
                         {!isBookCollapsed && (
                           <div className="p-4 bg-white border-t border-light-border space-y-4">
-                            {bookUnits.length === 0 ? (
-                              <div className="text-[10px] italic text-dark-muted pl-6 py-2">
-                                No units added under this book.
-                              </div>
-                            ) : (
-                              bookUnits.map((unit) => {
-                                const isUnitCollapsed = collapsedNodes[unit.id];
-                                const unitChapters = chapters.filter(c => String(c.unit_id) === String(unit.id));
+                            {/* Case A: Book has Units */}
+                            {hasUnits && (
+                              bookUnits.length === 0 ? (
+                                <div className="text-[10px] italic text-dark-muted pl-6 py-2">
+                                  No units added under this book.
+                                </div>
+                              ) : (
+                                bookUnits.map((unit) => {
+                                  const isUnitCollapsed = collapsedNodes[unit.id];
+                                  const unitChapters = hasChapters ? chapters.filter(c => String(c.unit_id) === String(unit.id)) : [];
+                                  const unitLessons = !hasChapters && hasLessons ? lessons.filter(l => String(l.unit_id) === String(unit.id)) : [];
 
-                                return (
-                                  <div key={unit.id} className="border border-dashed border-light-border rounded-xl overflow-hidden pl-2">
-                                    {/* Unit Header */}
-                                    <div className="bg-light-lbg/10 p-3 flex items-center justify-between gap-4 border-b border-light-border/40 border-dashed">
-                                      <button
-                                        onClick={() => toggleCollapse(unit.id)}
-                                        className="flex items-center gap-3 text-left focus:outline-none flex-1 min-w-0"
-                                      >
-                                        <i className={`fas fa-chevron-${isUnitCollapsed ? 'right' : 'down'} text-[9px] text-dark-soft`} />
-                                        <i className="fas fa-folder-open text-orange-primary text-xs" />
-                                        <span className="font-extrabold text-xs text-dark-deepblue truncate">{unit.name}</span>
-                                        <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
-                                          {unitChapters.length} Chapters
-                                        </span>
-                                      </button>
+                                  return (
+                                    <div key={unit.id} className="border border-dashed border-light-border rounded-xl overflow-hidden pl-2">
+                                      {/* Unit Header */}
+                                      <div className="bg-light-lbg/10 p-3 flex items-center justify-between gap-4 border-b border-light-border/40 border-dashed">
+                                        <button
+                                          onClick={() => toggleCollapse(unit.id)}
+                                          className="flex items-center gap-3 text-left focus:outline-none flex-1 min-w-0"
+                                        >
+                                          <i className={`fas fa-chevron-${isUnitCollapsed ? 'right' : 'down'} text-[9px] text-dark-soft`} />
+                                          <i className="fas fa-folder-open text-orange-primary text-xs" />
+                                          <span className="font-extrabold text-xs text-dark-deepblue truncate">{unit.name}</span>
+                                          <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                            {hasChapters ? `${unitChapters.length} Chapters` : `${unitLessons.length} Lessons`}
+                                          </span>
+                                        </button>
 
-                                      <div className="flex items-center gap-1.5">
-                                        <button
-                                          onClick={() => setModal({ type: 'add', level: 'chapter', parentId: unit.id })}
-                                          className="px-2 py-1 rounded-md text-[9px] font-bold bg-white border border-light-border hover:bg-orange-50 hover:text-orange-primary hover:border-orange-200 transition-all"
-                                        >
-                                          <i className="fas fa-plus"></i> Add Chapter
-                                        </button>
-                                        <button
-                                          onClick={() => setModal({ type: 'edit', level: 'unit', node: unit })}
-                                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                                        >
-                                          <i className="fas fa-edit text-xs"></i>
-                                        </button>
-                                        {isAdmin && (
+                                        <div className="flex items-center gap-1.5">
+                                          {hasChapters ? (
+                                            <button
+                                              onClick={() => setModal({ type: 'add', level: 'chapter', parentId: unit.id })}
+                                              className="px-2 py-1 rounded-md text-[9px] font-bold bg-white border border-light-border hover:bg-orange-50 hover:text-orange-primary hover:border-orange-200 transition-all"
+                                            >
+                                              <i className="fas fa-plus"></i> Add Chapter
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => setModal({ type: 'add', level: 'lesson', parentId: unit.id })}
+                                              className="px-2 py-1 rounded-md text-[9px] font-bold bg-white border border-light-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
+                                            >
+                                              <i className="fas fa-plus"></i> Add Lesson
+                                            </button>
+                                          )}
                                           <button
-                                            onClick={() => handleDeleteNode('unit', unit.id)}
-                                            className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors"
+                                            onClick={() => setModal({ type: 'edit', level: 'unit', node: unit })}
+                                            className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
                                           >
-                                            <i className="fas fa-trash-alt text-xs"></i>
+                                            <i className="fas fa-edit text-xs"></i>
                                           </button>
-                                        )}
+                                          {isAdmin && (
+                                            <button
+                                              onClick={() => handleDeleteNode('unit', unit.id)}
+                                              className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors"
+                                            >
+                                              <i className="fas fa-trash-alt text-xs"></i>
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
 
-                                    {/* Chapters Container */}
-                                    {!isUnitCollapsed && (
-                                      <div className="p-3 bg-white space-y-3">
-                                        {unitChapters.length === 0 ? (
-                                          <div className="text-[10px] italic text-dark-muted pl-6 py-1">
-                                            No chapters added under this unit.
-                                          </div>
-                                        ) : (
-                                          unitChapters.map((chap) => {
-                                            const isChapCollapsed = collapsedNodes[chap.id];
-                                            const chapLessons = lessons.filter(l => String(l.chapter_id) === String(chap.id));
-                                            const visibleLessons = chapLessons.filter(l => l.name && l.name.trim() !== '');
-                                            const totalPages = chapLessons.reduce((sum, l) => sum + (l.page_count || 0), 0);
-                                            const rolledUpComp = getRolledUpComplexity(chapLessons);
-
-                                            return (
-                                              <div key={chap.id} className="border border-light-border/40 rounded-lg overflow-hidden pl-4">
-                                                {/* Chapter Header */}
-                                                <div className="bg-light-lbg/5 p-2.5 flex items-center justify-between gap-4">
-                                                  <button
-                                                    onClick={() => toggleCollapse(chap.id)}
-                                                    className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
-                                                  >
-                                                    <i className={`fas fa-chevron-${isChapCollapsed ? 'right' : 'down'} text-[8px] text-dark-soft`} />
-                                                    <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
-                                                    <span className="font-extrabold text-xs text-dark-primary truncate">{chap.name}</span>
-                                                    {visibleLessons.length > 0 ? (
-                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
-                                                        {visibleLessons.length} Lessons
-                                                      </span>
-                                                    ) : (
-                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
-                                                        No lessons
-                                                      </span>
-                                                    )}
-                                                    {visibleLessons.length === 0 && totalPages > 0 && (
-                                                      <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
-                                                        <i className="far fa-file-lines mr-1" />
-                                                        {totalPages} pages
-                                                      </span>
-                                                    )}
-                                                    {visibleLessons.length === 0 && rolledUpComp && (
-                                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ml-1 ${
-                                                        rolledUpComp === 'Complex' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                        rolledUpComp === 'Moderate' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                                                        'bg-green-100 text-green-700 border-green-200'
-                                                      }`}>
-                                                        {rolledUpComp}
-                                                      </span>
-                                                    )}
-                                                  </button>
-
-                                                  <div className="flex items-center gap-1">
-                                                    <button
-                                                      onClick={() => setModal({ type: 'add', level: 'lesson', parentId: chap.id })}
-                                                      className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
-                                                    >
-                                                      <i className="fas fa-plus"></i> Add Lesson
-                                                    </button>
-                                                    <button
-                                                      onClick={() => setModal({ type: 'edit', level: 'chapter', node: chap })}
-                                                      className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
-                                                    >
-                                                      <i className="fas fa-edit text-[10px]"></i>
-                                                    </button>
-                                                    {/* Chapters can be deleted by both Admin and Teacher */}
-                                                    {(isAdmin || isTeacher) && (
-                                                      <button
-                                                        onClick={() => handleDeleteNode('chapter', chap.id)}
-                                                        className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors"
-                                                      >
-                                                        <i className="fas fa-trash-alt text-[10px]"></i>
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                </div>
-
-                                                {/* Lessons Container */}
-                                                {!isChapCollapsed && (
-                                                  <div className="p-2 bg-white space-y-1.5">
-                                                    {visibleLessons.length === 0 ? (
-                                                      chapLessons.length === 0 ? (
-                                                        <div className="text-[10px] italic text-dark-muted pl-6 py-1">
-                                                          No lessons added under this chapter.
-                                                        </div>
-                                                      ) : null
-                                                    ) : (
-                                                      visibleLessons.map((less) => {
-                                                        let compColor = 'bg-green-100 text-green-700 border-green-200';
-                                                        if (less.complexity === 'Moderate') {
-                                                          compColor = 'bg-yellow-100 text-yellow-800 border-yellow-200';
-                                                        } else if (less.complexity === 'Complex') {
-                                                          compColor = 'bg-red-100 text-red-700 border-red-200';
-                                                        }
-
-                                                        return (
-                                                          <div key={less.id} className="p-2 border border-light-border/30 rounded-md hover:bg-light-lbg/10 transition-colors flex items-center justify-between gap-4">
-                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                              <i className="fas fa-file-alt text-dark-soft text-[10px]" />
-                                                              <span className="text-xs font-semibold text-dark-primary truncate">{less.name}</span>
-                                                              <span className="text-[9px] font-bold text-dark-muted shrink-0">
-                                                                <i className="far fa-file-lines mr-1" />
-                                                                {less.page_count} pages
-                                                              </span>
-                                                              <span className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${compColor}`}>
-                                                                {less.complexity}
-                                                              </span>
-                                                            </div>
-
-                                                            <div className="flex items-center gap-0.5 shrink-0">
-                                                              <button
-                                                                onClick={() => setModal({ type: 'edit', level: 'lesson', node: less })}
-                                                                className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                                                              >
-                                                                <i className="fas fa-edit text-[10px]"></i>
-                                                              </button>
-                                                              {/* Lessons can be deleted by both Admin and Teacher */}
-                                                              {(isAdmin || isTeacher) && (
-                                                                <button
-                                                                  onClick={() => handleDeleteNode('lesson', less.id)}
-                                                                  className="p-1 text-red-primary hover:bg-red-50 rounded"
-                                                                >
-                                                                  <i className="fas fa-trash-alt text-[10px]"></i>
-                                                                </button>
-                                                              )}
-                                                            </div>
-                                                          </div>
-                                                        );
-                                                      })
-                                                    )}
-                                                  </div>
-                                                )}
+                                      {/* Chapters or Lessons under Unit */}
+                                      {!isUnitCollapsed && (
+                                        <div className="p-3 bg-white space-y-3">
+                                          {/* Case A1: Render Chapters under Unit */}
+                                          {hasChapters && (
+                                            unitChapters.length === 0 ? (
+                                              <div className="text-[10px] italic text-dark-muted pl-6 py-1">
+                                                No chapters added under this unit.
                                               </div>
-                                            );
-                                          })
-                                        )}
+                                            ) : (
+                                              unitChapters.map((chap) => {
+                                                const isChapCollapsed = collapsedNodes[chap.id];
+                                                const chapLessons = lessons.filter(l => String(l.chapter_id) === String(chap.id));
+                                                const visibleLessons = chapLessons.filter(l => l.name && l.name.trim() !== '');
+                                                const totalPages = chapLessons.reduce((sum, l) => sum + (l.page_count || 0), 0);
+                                                const rolledUpComp = getRolledUpComplexity(chapLessons);
+
+                                                return (
+                                                  <div key={chap.id} className="border border-light-border/40 rounded-lg overflow-hidden pl-4">
+                                                    {/* Chapter Header */}
+                                                    <div className="bg-light-lbg/5 p-2.5 flex items-center justify-between gap-4">
+                                                      <button
+                                                        onClick={() => toggleCollapse(chap.id)}
+                                                        className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
+                                                      >
+                                                        <i className={`fas fa-chevron-${isChapCollapsed ? 'right' : 'down'} text-[8px] text-dark-soft`} />
+                                                        <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
+                                                        <span className="font-extrabold text-xs text-dark-primary truncate">{chap.name}</span>
+                                                        {hasLessons && (
+                                                          visibleLessons.length > 0 ? (
+                                                            <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                              {visibleLessons.length} Lessons
+                                                            </span>
+                                                          ) : (
+                                                            <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                              No lessons
+                                                            </span>
+                                                          )
+                                                        )}
+                                                        {hasLessons && visibleLessons.length === 0 && totalPages > 0 && (
+                                                          <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                                            <i className="far fa-file-lines mr-1" />
+                                                            {totalPages} pages
+                                                          </span>
+                                                        )}
+                                                        {hasLessons && visibleLessons.length === 0 && rolledUpComp && (
+                                                          <span className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ml-1 ${
+                                                            rolledUpComp === 'Complex' ? 'bg-red-100 text-red-700 border-red-200' :
+                                                            rolledUpComp === 'Moderate' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                                            'bg-green-100 text-green-700 border-green-200'
+                                                          }`}>
+                                                            {rolledUpComp}
+                                                          </span>
+                                                        )}
+                                                      </button>
+
+                                                      <div className="flex items-center gap-1">
+                                                        {hasLessons && (
+                                                          <button
+                                                            onClick={() => setModal({ type: 'add', level: 'lesson', parentId: chap.id })}
+                                                            className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
+                                                          >
+                                                            <i className="fas fa-plus"></i> Add Lesson
+                                                          </button>
+                                                        )}
+                                                        <button
+                                                          onClick={() => setModal({ type: 'edit', level: 'chapter', node: chap })}
+                                                          className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                                                        >
+                                                          <i className="fas fa-edit text-[10px]"></i>
+                                                        </button>
+                                                        {(isAdmin || isTeacher) && (
+                                                          <button
+                                                            onClick={() => handleDeleteNode('chapter', chap.id)}
+                                                            className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors"
+                                                          >
+                                                            <i className="fas fa-trash-alt text-[10px]"></i>
+                                                          </button>
+                                                        )}
+                                                      </div>
+                                                    </div>
+
+                                                    {/* Lessons Container */}
+                                                    {!isChapCollapsed && hasLessons && (
+                                                      <div className="p-2 bg-white space-y-1.5">
+                                                        {visibleLessons.length === 0 ? (
+                                                          chapLessons.length === 0 ? (
+                                                            <div className="text-[10px] italic text-dark-muted pl-6 py-1">
+                                                              No lessons added under this chapter.
+                                                            </div>
+                                                          ) : null
+                                                        ) : (
+                                                          visibleLessons.map((less) => renderLessonRow(less))
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })
+                                            )
+                                          )}
+
+                                          {/* Case A2: Render Lessons directly under Unit (Book > Unit > Lesson) */}
+                                          {!hasChapters && hasLessons && (
+                                            unitLessons.length === 0 ? (
+                                              <div className="text-[10px] italic text-dark-muted pl-6 py-1">
+                                                No lessons added under this unit.
+                                              </div>
+                                            ) : (
+                                              <div className="space-y-1.5">
+                                                {unitLessons.map((less) => renderLessonRow(less))}
+                                              </div>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )
+                            )}
+
+                            {/* Case B: Book has Chapters directly (Book > Chapter > Lesson) */}
+                            {!hasUnits && hasChapters && (
+                              bookChapters.length === 0 ? (
+                                <div className="text-[10px] italic text-dark-muted pl-6 py-2">
+                                  No chapters added under this book.
+                                </div>
+                              ) : (
+                                bookChapters.map((chap) => {
+                                  const isChapCollapsed = collapsedNodes[chap.id];
+                                  const chapLessons = lessons.filter(l => String(l.chapter_id) === String(chap.id));
+                                  const visibleLessons = chapLessons.filter(l => l.name && l.name.trim() !== '');
+                                  const totalPages = chapLessons.reduce((sum, l) => sum + (l.page_count || 0), 0);
+                                  const rolledUpComp = getRolledUpComplexity(chapLessons);
+
+                                  return (
+                                    <div key={chap.id} className="border border-light-border/40 rounded-lg overflow-hidden pl-4">
+                                      {/* Chapter Header */}
+                                      <div className="bg-light-lbg/5 p-2.5 flex items-center justify-between gap-4">
+                                        <button
+                                          onClick={() => toggleCollapse(chap.id)}
+                                          className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
+                                        >
+                                          <i className={`fas fa-chevron-${isChapCollapsed ? 'right' : 'down'} text-[8px] text-dark-soft`} />
+                                          <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
+                                          <span className="font-extrabold text-xs text-dark-primary truncate">{chap.name}</span>
+                                          {hasLessons && (
+                                            visibleLessons.length > 0 ? (
+                                              <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                {visibleLessons.length} Lessons
+                                              </span>
+                                            ) : (
+                                              <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                                No lessons
+                                              </span>
+                                            )
+                                          )}
+                                        </button>
+
+                                        <div className="flex items-center gap-1">
+                                          {hasLessons && (
+                                            <button
+                                              onClick={() => setModal({ type: 'add', level: 'lesson', parentId: chap.id })}
+                                              className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
+                                            >
+                                              <i className="fas fa-plus"></i> Add Lesson
+                                            </button>
+                                          )}
+                                          <button
+                                            onClick={() => setModal({ type: 'edit', level: 'chapter', node: chap })}
+                                            className="p-1 text-blue-500 hover:bg-blue-50 rounded transition-colors"
+                                          >
+                                            <i className="fas fa-edit text-[10px]"></i>
+                                          </button>
+                                          {(isAdmin || isTeacher) && (
+                                            <button
+                                              onClick={() => handleDeleteNode('chapter', chap.id)}
+                                              className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors"
+                                            >
+                                              <i className="fas fa-trash-alt text-[10px]"></i>
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
-                                    )}
-                                  </div>
-                                );
-                              })
+
+                                      {/* Lessons Container */}
+                                      {!isChapCollapsed && hasLessons && (
+                                        <div className="p-2 bg-white space-y-1.5">
+                                          {visibleLessons.length === 0 ? (
+                                            chapLessons.length === 0 ? (
+                                              <div className="text-[10px] italic text-dark-muted pl-6 py-1">
+                                                No lessons added under this chapter.
+                                              </div>
+                                            ) : null
+                                          ) : (
+                                            visibleLessons.map((less) => renderLessonRow(less))
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )
                             )}
                           </div>
                         )}
@@ -1576,6 +1808,9 @@ const SyllabusManager = ({ role }) => {
         <SyllabusFormModal
           modal={modal}
           classifications={classifications}
+          books={books}
+          units={units}
+          chapters={chapters}
           onClose={() => setModal(null)}
           onSave={handleSaveNode}
         />
@@ -1608,6 +1843,7 @@ const SyllabusManager = ({ role }) => {
         previewRows={csvRows.slice(0, 5)}
         onClose={() => setIsCsvMappingOpen(false)}
         onImport={handleExecuteCsvImport}
+        hierarchy={books.find(b => String(b.id) === String(importBookId))?.hierarchy_type || 'Book > Unit > Chapter > Lesson'}
       />
 
       {/* Hidden File Input for CSV Upload */}
@@ -1623,7 +1859,7 @@ const SyllabusManager = ({ role }) => {
 };
 
 // Internal Modal Form Component
-const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => {
+const SyllabusFormModal = ({ modal, classifications = [], books = [], units = [], chapters = [], onClose, onSave }) => {
   const { type, level, parentId, node } = modal;
   const isEdit = type === 'edit';
 
@@ -1632,9 +1868,63 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
   const [pageCount, setPageCount] = useState(isEdit && level === 'lesson' ? node.page_count : 5);
   const [complexity, setComplexity] = useState(isEdit && level === 'lesson' ? node.complexity : 'Easy');
 
-  // Multi-entry addition states
-  const [unitsList, setUnitsList] = useState([
-    {
+  const [hierarchyType, setHierarchyType] = useState(isEdit && level === 'book' ? (node.hierarchy_type || 'Book > Unit > Chapter > Lesson') : 'Book > Unit > Chapter > Lesson');
+
+  // Determine parent book hierarchy
+  const getHierarchy = () => {
+    if (level === 'subject' || level === 'book') return 'Book > Unit > Chapter > Lesson';
+    if (level === 'unit') {
+      const parentBook = books.find(b => String(b.id) === String(parentId));
+      return parentBook?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+    }
+    if (level === 'chapter') {
+      const parentBook = books.find(b => String(b.id) === String(parentId));
+      if (parentBook) return parentBook.hierarchy_type;
+      const parentUnit = units.find(u => String(u.id) === String(parentId));
+      const pb = parentUnit ? books.find(b => String(b.id) === String(parentUnit.book_id)) : null;
+      return pb?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+    }
+    if (level === 'lesson') {
+      const parentUnit = units.find(u => String(u.id) === String(parentId));
+      if (parentUnit) {
+        const pb = books.find(b => String(b.id) === String(parentUnit.book_id));
+        return pb?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+      }
+      const parentChap = chapters.find(c => String(c.id) === String(parentId));
+      if (parentChap) {
+        if (parentChap.book_id) {
+          const pb = books.find(b => String(b.id) === String(parentChap.book_id));
+          return pb?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+        }
+        if (parentChap.unit_id) {
+          const pu = units.find(u => String(u.id) === String(parentChap.unit_id));
+          const pb = pu ? books.find(b => String(b.id) === String(pu.book_id)) : null;
+          return pb?.hierarchy_type || 'Book > Unit > Chapter > Lesson';
+        }
+      }
+    }
+    return 'Book > Unit > Chapter > Lesson';
+  };
+
+  const hierarchy = getHierarchy();
+
+  // Multi-entry initializers based on hierarchy
+  const initialUnits = () => {
+    if (hierarchy === 'Book > Unit > Lesson') {
+      return [{
+        tempId: 'u-1',
+        name: '',
+        lessons: [{ tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }]
+      }];
+    }
+    if (hierarchy === 'Book > Unit > Chapter') {
+      return [{
+        tempId: 'u-1',
+        name: '',
+        chapters: [{ tempId: 'c-1', name: '' }]
+      }];
+    }
+    return [{
       tempId: 'u-1',
       name: '',
       chapters: [
@@ -1646,41 +1936,54 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
           ]
         }
       ]
-    }
-  ]);
+    }];
+  };
 
-  const [chaptersList, setChaptersList] = useState([
-    {
+  const initialChapters = () => {
+    if (hierarchy === 'Book > Unit > Chapter') {
+      return [{
+        tempId: 'c-1',
+        name: ''
+      }];
+    }
+    return [{
       tempId: 'c-1',
       name: '',
       lessons: [
         { tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }
       ]
-    }
-  ]);
+    }];
+  };
 
+  const [unitsList, setUnitsList] = useState(initialUnits);
+  const [chaptersList, setChaptersList] = useState(initialChapters);
   const [lessonsList, setLessonsList] = useState([
     { tempId: 'l-1', name: '', pageCount: 5, complexity: 'Easy' }
   ]);
 
   // Unit builders
   const addUnit = () => {
-    setUnitsList([
-      ...unitsList,
-      {
-        tempId: 'u-' + Math.random().toString(36).substr(2, 9),
-        name: '',
-        chapters: [
-          {
-            tempId: 'c-' + Math.random().toString(36).substr(2, 9),
-            name: '',
-            lessons: [
-              { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
-            ]
-          }
-        ]
-      }
-    ]);
+    const newUnitId = 'u-' + Math.random().toString(36).substr(2, 9);
+    let newUnit = {
+      tempId: newUnitId,
+      name: '',
+    };
+    if (hierarchy === 'Book > Unit > Lesson') {
+      newUnit.lessons = [{ tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }];
+    } else if (hierarchy === 'Book > Unit > Chapter') {
+      newUnit.chapters = [{ tempId: 'c-' + Math.random().toString(36).substr(2, 9), name: '' }];
+    } else {
+      newUnit.chapters = [
+        {
+          tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+          name: '',
+          lessons: [
+            { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+          ]
+        }
+      ];
+    }
+    setUnitsList([...unitsList, newUnit]);
   };
 
   const removeUnit = (uId) => {
@@ -1696,17 +1999,18 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
   const addChapterToUnit = (uId) => {
     setUnitsList(unitsList.map(u => {
       if (u.tempId === uId) {
+        let newChap = {
+          tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+          name: '',
+        };
+        if (hierarchy !== 'Book > Unit > Chapter') {
+          newChap.lessons = [{ tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }];
+        }
         return {
           ...u,
           chapters: [
             ...u.chapters,
-            {
-              tempId: 'c-' + Math.random().toString(36).substr(2, 9),
-              name: '',
-              lessons: [
-                { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
-              ]
-            }
+            newChap
           ]
         };
       }
@@ -1801,17 +2105,58 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
     }));
   };
 
+  // Unit Direct Lesson builders (for Book > Unit > Lesson)
+  const addLessonToUnitDirect = (uId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          lessons: [
+            ...u.lessons,
+            { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
+          ]
+        };
+      }
+      return u;
+    }));
+  };
+
+  const removeLessonFromUnitDirect = (uId, lId) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          lessons: u.lessons.filter(l => l.tempId !== lId)
+        };
+      }
+      return u;
+    }));
+  };
+
+  const updateLessonFieldInUnitDirect = (uId, lId, field, val) => {
+    setUnitsList(unitsList.map(u => {
+      if (u.tempId === uId) {
+        return {
+          ...u,
+          lessons: u.lessons.map(l => l.tempId === lId ? { ...l, [field]: val } : l)
+        };
+      }
+      return u;
+    }));
+  };
+
   // Chapter builders
   const addChapter = () => {
+    let newChap = {
+      tempId: 'c-' + Math.random().toString(36).substr(2, 9),
+      name: '',
+    };
+    if (hierarchy !== 'Book > Unit > Chapter') {
+      newChap.lessons = [{ tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }];
+    }
     setChaptersList([
       ...chaptersList,
-      {
-        tempId: 'c-' + Math.random().toString(36).substr(2, 9),
-        name: '',
-        lessons: [
-          { tempId: 'l-' + Math.random().toString(36).substr(2, 9), name: '', pageCount: 5, complexity: 'Easy' }
-        ]
-      }
+      newChap
     ]);
   };
 
@@ -1900,6 +2245,7 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
         complexity,
         parentId,
         node,
+        hierarchyType,
       });
     } else {
       // Bulk add mode
@@ -1914,11 +2260,30 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
           name: name.trim(),
           classificationId,
           parentId,
+          hierarchyType,
         });
       } else if (level === 'unit') {
         if (unitsList.some(u => !u.name.trim())) {
           showToast('All unit names must be filled, or remove empty unit rows.', 'error');
           return;
+        }
+        if (hierarchy === 'Book > Unit > Chapter' || hierarchy === 'Book > Unit > Chapter > Lesson') {
+          if (unitsList.some(u => u.chapters.some(c => !c.name.trim()))) {
+            showToast('All chapter names must be filled, or remove empty chapter rows.', 'error');
+            return;
+          }
+        }
+        if (hierarchy === 'Book > Unit > Chapter > Lesson') {
+          if (unitsList.some(u => u.chapters.some(c => c.lessons.some(l => !l.name.trim())))) {
+            showToast('All lesson names must be filled, or remove empty lesson rows.', 'error');
+            return;
+          }
+        }
+        if (hierarchy === 'Book > Unit > Lesson') {
+          if (unitsList.some(u => u.lessons.some(l => !l.name.trim()))) {
+            showToast('All lesson names must be filled, or remove empty lesson rows.', 'error');
+            return;
+          }
         }
         onSave({
           level,
@@ -1931,6 +2296,12 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
           showToast('All chapter names must be filled, or remove empty chapter rows.', 'error');
           return;
         }
+        if (hierarchy !== 'Book > Unit > Chapter') {
+          if (chaptersList.some(c => c.lessons.some(l => !l.name.trim()))) {
+            showToast('All lesson names must be filled, or remove empty lesson rows.', 'error');
+            return;
+          }
+        }
         onSave({
           level,
           type,
@@ -1938,6 +2309,10 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
           chaptersList,
         });
       } else if (level === 'lesson') {
+        if (lessonsList.some(l => !l.name.trim())) {
+          showToast('All lesson names must be filled, or remove empty lesson rows.', 'error');
+          return;
+        }
         onSave({
           level,
           type,
@@ -2002,6 +2377,24 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
                     {classifications.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
+                  </select>
+                </div>
+              )}
+
+              {level === 'book' && (
+                <div>
+                  <label className="block text-xs font-bold text-dark-soft uppercase tracking-wider mb-1.5">
+                    Hierarchy Configuration
+                  </label>
+                  <select
+                    value={hierarchyType}
+                    onChange={(e) => setHierarchyType(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-light-bg/25 border border-light-border rounded-xl focus:border-brand-primary focus:ring-2 focus:ring-brand-soft outline-none text-sm font-semibold text-dark-primary transition-all"
+                  >
+                    <option value="Book > Unit > Chapter > Lesson">Book &gt; Unit &gt; Chapter &gt; Lesson</option>
+                    <option value="Book > Unit > Chapter">Book &gt; Unit &gt; Chapter</option>
+                    <option value="Book > Chapter > Lesson">Book &gt; Chapter &gt; Lesson</option>
+                    <option value="Book > Unit > Lesson">Book &gt; Unit &gt; Lesson</option>
                   </select>
                 </div>
               )}
@@ -2083,110 +2476,178 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
                     )}
                   </div>
 
-                  {/* Chapters Area */}
-                  <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Chapters under Unit {uIdx + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => addChapterToUnit(unit.tempId)}
-                        className="bg-amber-500/10 hover:bg-amber-500 text-amber-600 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
-                      >
-                        <i className="fas fa-plus text-[9px]"></i> Add Chapter
-                      </button>
-                    </div>
+                  {/* Chapters Area (when hierarchy has Chapters under Unit) */}
+                  {(hierarchy === 'Book > Unit > Chapter' || hierarchy === 'Book > Unit > Chapter > Lesson') && (
+                    <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Chapters under Unit {uIdx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => addChapterToUnit(unit.tempId)}
+                          className="bg-amber-500/10 hover:bg-amber-500 text-amber-600 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                        >
+                          <i className="fas fa-plus text-[9px]"></i> Add Chapter
+                        </button>
+                      </div>
 
-                    {unit.chapters.map((chap, cIdx) => (
-                      <div key={chap.tempId} className="border border-dashed border-amber-200/50 rounded-xl p-3 bg-amber-50/10 space-y-3 animate-in fade-in duration-200">
-                        {/* Chapter Title Row */}
-                        <div className="flex items-center gap-2">
-                          <span className="bg-amber-500 text-white w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] shrink-0">
-                            C{cIdx + 1}
-                          </span>
+                      {unit.chapters.map((chap, cIdx) => (
+                        <div key={chap.tempId} className="border border-dashed border-amber-200/50 rounded-xl p-3 bg-amber-50/10 space-y-3 animate-in fade-in duration-200">
+                          {/* Chapter Title Row */}
+                          <div className="flex items-center gap-2">
+                            <span className="bg-amber-500 text-white w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] shrink-0">
+                              C{cIdx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              value={chap.name}
+                              placeholder="Enter Chapter Name (e.g. Chapter 1)..."
+                              onChange={(e) => updateChapterNameInUnit(unit.tempId, chap.tempId, e.target.value)}
+                              className="flex-1 bg-white border border-light-border rounded-lg px-2.5 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                            />
+                            {unit.chapters.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeChapterFromUnit(unit.tempId, chap.tempId)}
+                                className="p-1 text-red-primary hover:bg-red-50 rounded shrink-0"
+                                title="Remove Chapter"
+                              >
+                                <i className="fas fa-times text-[10px]"></i>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Lessons Area (under Chapters in Book > Unit > Chapter > Lesson) */}
+                          {hierarchy === 'Book > Unit > Chapter > Lesson' && (
+                            <div className="pl-6 border-l border-dashed border-amber-200 ml-2 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-[8px] font-bold text-dark-muted uppercase tracking-wider text-[7.5px]">Lessons for Chapter {cIdx + 1}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => addLessonToChapterInUnit(unit.tempId, chap.tempId)}
+                                  className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-1.5 py-0.5 rounded text-[8px] font-bold flex items-center gap-0.5 transition-all"
+                                >
+                                  <i className="fas fa-plus text-[7px]"></i> Add Lesson
+                                </button>
+                              </div>
+
+                              {chap.lessons.map((less, lIdx) => (
+                                <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
+                                  <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
+                                  
+                                  <input
+                                    type="text"
+                                    required
+                                    value={less.name}
+                                    placeholder="Lesson Name..."
+                                    onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'name', e.target.value)}
+                                    className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
+                                  />
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={less.pageCount}
+                                      placeholder="Pages"
+                                      title="Page Count"
+                                      onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                                      className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
+                                    />
+                                    
+                                    <select
+                                      value={less.complexity}
+                                      onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'complexity', e.target.value)}
+                                      className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
+                                    >
+                                      <option value="Easy">Easy</option>
+                                      <option value="Moderate">Mod</option>
+                                      <option value="Complex">Comp</option>
+                                    </select>
+
+                                    {chap.lessons.length > 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeLessonFromChapterInUnit(unit.tempId, chap.tempId, less.tempId)}
+                                        className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
+                                        title="Remove Lesson"
+                                      >
+                                        <i className="fas fa-times text-[9px]"></i>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Lessons directly under Unit (when hierarchy is Book > Unit > Lesson) */}
+                  {hierarchy === 'Book > Unit > Lesson' && (
+                    <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Lessons under Unit {uIdx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => addLessonToUnitDirect(unit.tempId)}
+                          className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                        >
+                          <i className="fas fa-plus text-[9px]"></i> Add Lesson
+                        </button>
+                      </div>
+
+                      {unit.lessons.map((less, lIdx) => (
+                        <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2.5 rounded-xl text-xs font-semibold animate-in fade-in duration-200">
+                          <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
+                          
                           <input
                             type="text"
                             required
-                            value={chap.name}
-                            placeholder="Enter Chapter Name (e.g. Chapter 1)..."
-                            onChange={(e) => updateChapterNameInUnit(unit.tempId, chap.tempId, e.target.value)}
-                            className="flex-1 bg-white border border-light-border rounded-lg px-2.5 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+                            value={less.name}
+                            placeholder="Lesson Name..."
+                            onChange={(e) => updateLessonFieldInUnitDirect(unit.tempId, less.tempId, 'name', e.target.value)}
+                            className="flex-1 min-w-[120px] bg-white border border-light-border rounded-xl px-3 py-1.5 text-xs outline-none"
                           />
-                          {unit.chapters.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeChapterFromUnit(unit.tempId, chap.tempId)}
-                              className="p-1 text-red-primary hover:bg-red-50 rounded shrink-0"
-                              title="Remove Chapter"
-                            >
-                              <i className="fas fa-times text-[10px]"></i>
-                            </button>
-                          )}
-                        </div>
 
-                        {/* Lessons Area */}
-                        <div className="pl-6 border-l border-dashed border-amber-200 ml-2 space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="text-[8px] font-bold text-dark-muted uppercase tracking-wider text-[7.5px]">Lessons for Chapter {cIdx + 1}</span>
-                            <button
-                              type="button"
-                              onClick={() => addLessonToChapterInUnit(unit.tempId, chap.tempId)}
-                              className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-1.5 py-0.5 rounded text-[8px] font-bold flex items-center gap-0.5 transition-all"
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min="1"
+                              value={less.pageCount}
+                              placeholder="Pages"
+                              title="Page Count"
+                              onChange={(e) => updateLessonFieldInUnitDirect(unit.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                              className="w-12 bg-white border border-light-border rounded-xl px-2 py-1.5 text-center text-xs outline-none"
+                            />
+                            
+                            <select
+                              value={less.complexity}
+                              onChange={(e) => updateLessonFieldInUnitDirect(unit.tempId, less.tempId, 'complexity', e.target.value)}
+                              className="bg-white border border-light-border rounded-xl px-2 py-1.5 text-xs outline-none"
                             >
-                              <i className="fas fa-plus text-[7px]"></i> Add Lesson
-                            </button>
+                              <option value="Easy">Easy</option>
+                              <option value="Moderate">Moderate</option>
+                              <option value="Complex">Complex</option>
+                            </select>
+
+                            {unit.lessons.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeLessonFromUnitDirect(unit.tempId, less.tempId)}
+                                className="text-red-primary hover:text-red-dark p-1.5 rounded-lg hover:bg-red-50 shrink-0"
+                                title="Remove Lesson"
+                              >
+                                <i className="fas fa-times text-[10px]"></i>
+                              </button>
+                            )}
                           </div>
-
-                          {chap.lessons.map((less, lIdx) => (
-                            <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
-                              <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
-                              
-                              <input
-                                type="text"
-                                required
-                                value={less.name}
-                                placeholder="Lesson Name..."
-                                onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'name', e.target.value)}
-                                className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
-                              />
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={less.pageCount}
-                                  placeholder="Pages"
-                                  title="Page Count"
-                                  onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
-                                  className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
-                                />
-                                
-                                <select
-                                  value={less.complexity}
-                                  onChange={(e) => updateLessonFieldInUnit(unit.tempId, chap.tempId, less.tempId, 'complexity', e.target.value)}
-                                  className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
-                                >
-                                  <option value="Easy">Easy</option>
-                                  <option value="Moderate">Mod</option>
-                                  <option value="Complex">Comp</option>
-                                </select>
-
-                                {chap.lessons.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removeLessonFromChapterInUnit(unit.tempId, chap.tempId, less.tempId)}
-                                    className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
-                                    title="Remove Lesson"
-                                  >
-                                    <i className="fas fa-times text-[9px]"></i>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2196,7 +2657,7 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
           {!isEdit && level === 'chapter' && (
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Chapters & Lessons</span>
+                <span className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Chapters & Sub-levels</span>
                 <button
                   type="button"
                   onClick={addChapter}
@@ -2233,67 +2694,69 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
                     )}
                   </div>
 
-                  {/* Lessons Area */}
-                  <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Lessons for Chapter {cIdx + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => addLessonToChapter(chap.tempId)}
-                        className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
-                      >
-                        <i className="fas fa-plus text-[9px]"></i> Add Lesson
-                      </button>
-                    </div>
-
-                    {chap.lessons.map((less, lIdx) => (
-                      <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
-                        <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
-                        
-                        <input
-                          type="text"
-                          required
-                          value={less.name}
-                          placeholder="Lesson Name..."
-                          onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'name', e.target.value)}
-                          className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
-                        />
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <input
-                            type="number"
-                            min="1"
-                            value={less.pageCount}
-                            placeholder="Pages"
-                            title="Page Count"
-                            onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
-                            className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
-                          />
-                          
-                          <select
-                            value={less.complexity}
-                            onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'complexity', e.target.value)}
-                            className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
-                          >
-                            <option value="Easy">Easy</option>
-                            <option value="Moderate">Mod</option>
-                            <option value="Complex">Comp</option>
-                          </select>
-
-                          {chap.lessons.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeLessonFromChapter(chap.tempId, less.tempId)}
-                              className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
-                              title="Remove Lesson"
-                            >
-                              <i className="fas fa-times text-[9px]"></i>
-                            </button>
-                          )}
-                        </div>
+                  {/* Lessons Area (if hierarchy has lessons under chapters) */}
+                  {hierarchy !== 'Book > Unit > Chapter' && (
+                    <div className="pl-6 border-l border-dashed border-light-border ml-3 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] font-bold text-dark-soft uppercase tracking-wider">Lessons for Chapter {cIdx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => addLessonToChapter(chap.tempId)}
+                          className="bg-emerald-600/10 hover:bg-emerald-600 text-emerald-700 hover:text-white px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                        >
+                          <i className="fas fa-plus text-[9px]"></i> Add Lesson
+                        </button>
                       </div>
-                    ))}
-                  </div>
+
+                      {chap.lessons.map((less, lIdx) => (
+                        <div key={less.tempId} className="flex flex-wrap items-center gap-2 bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold animate-in fade-in duration-200">
+                          <span className="text-dark-muted text-[9px] font-bold shrink-0">L{lIdx + 1}</span>
+                          
+                          <input
+                            type="text"
+                            required
+                            value={less.name}
+                            placeholder="Lesson Name..."
+                            onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'name', e.target.value)}
+                            className="flex-1 min-w-[120px] bg-white border border-light-border rounded px-2 py-0.5 text-xs outline-none"
+                          />
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min="1"
+                              value={less.pageCount}
+                              placeholder="Pages"
+                              title="Page Count"
+                              onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'pageCount', parseInt(e.target.value) || 0)}
+                              className="w-12 bg-white border border-light-border rounded px-1.5 py-0.5 text-center text-xs outline-none"
+                            />
+                            
+                            <select
+                              value={less.complexity}
+                              onChange={(e) => updateLessonFieldInChapter(chap.tempId, less.tempId, 'complexity', e.target.value)}
+                              className="bg-white border border-light-border rounded px-1 py-0.5 text-xs outline-none"
+                            >
+                              <option value="Easy">Easy</option>
+                              <option value="Moderate">Mod</option>
+                              <option value="Complex">Comp</option>
+                            </select>
+
+                            {chap.lessons.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeLessonFromChapter(chap.tempId, less.tempId)}
+                                className="text-red-primary hover:text-red-dark p-0.5 shrink-0"
+                                title="Remove Lesson"
+                              >
+                                <i className="fas fa-times text-[9px]"></i>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -2394,13 +2857,17 @@ const SyllabusFormModal = ({ modal, classifications = [], onClose, onSave }) => 
 // ==========================================
 // 6. CSV COLUMN MAPPING MODAL
 // ==========================================
-const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImport }) => {
+const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImport, hierarchy = 'Book > Unit > Chapter > Lesson' }) => {
   const [unitCol, setUnitCol] = useState("");
   const [chapterCol, setChapterCol] = useState("");
   const [lessonCol, setLessonCol] = useState("");
   const [complexityCol, setComplexityCol] = useState("");
   const [pageCol, setPageCol] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  const hasUnits = hierarchy.includes('Unit');
+  const hasChapters = hierarchy.includes('Chapter');
+  const hasLessons = hierarchy.includes('Lesson');
 
   // Auto-map columns on headers load
   useEffect(() => {
@@ -2413,29 +2880,40 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
         }) || "";
       };
 
-      setUnitCol(findMatch(["unit", "units", "unit name", "unit_name", "section", "sections"]));
-      setChapterCol(findMatch(["chapter", "chapters", "chapter name", "chapter_name", "topic", "topics"]));
-      setLessonCol(findMatch(["lesson", "lessons", "lesson name", "lesson_name", "class", "classes"]));
-      setComplexityCol(findMatch(["complexity", "complex", "difficulty", "level"]));
-      setPageCol(findMatch(["page", "pages", "page_count", "page count", "pages count"]));
+      setUnitCol(hasUnits ? findMatch(["unit", "units", "unit name", "unit_name", "section", "sections"]) : "");
+      setChapterCol(hasChapters ? findMatch(["chapter", "chapters", "chapter name", "chapter_name", "topic", "topics"]) : "");
+      setLessonCol(hasLessons ? findMatch(["lesson", "lessons", "lesson name", "lesson_name", "class", "classes"]) : "");
+      setComplexityCol(hasLessons ? findMatch(["complexity", "complex", "difficulty", "level"]) : "");
+      setPageCol(hasLessons ? findMatch(["page", "pages", "page_count", "page count", "pages count"]) : "");
     }
-  }, [headers]);
+  }, [headers, hierarchy, hasUnits, hasChapters, hasLessons]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Validate mappings
-    if (!unitCol || !chapterCol || !lessonCol) {
-      setErrorMsg("Please map all mandatory fields (Unit, Chapter, and Lesson).");
+    // Validate mappings based on what levels are active
+    if (hasUnits && !unitCol) {
+      setErrorMsg("Please map the mandatory Unit column.");
+      return;
+    }
+    if (hasChapters && !chapterCol) {
+      setErrorMsg("Please map the mandatory Chapter column.");
+      return;
+    }
+    if (hasLessons && !lessonCol) {
+      setErrorMsg("Please map the mandatory Lesson column.");
       return;
     }
 
     // Ensure no duplicate mappings among targets
-    const mapped = [unitCol, chapterCol, lessonCol];
-    if (complexityCol) mapped.push(complexityCol);
-    if (pageCol) mapped.push(pageCol);
+    const mapped = [];
+    if (hasUnits && unitCol) mapped.push(unitCol);
+    if (hasChapters && chapterCol) mapped.push(chapterCol);
+    if (hasLessons && lessonCol) mapped.push(lessonCol);
+    if (hasLessons && complexityCol) mapped.push(complexityCol);
+    if (hasLessons && pageCol) mapped.push(pageCol);
 
     const uniqueMapped = new Set(mapped);
     if (uniqueMapped.size !== mapped.length) {
@@ -2457,8 +2935,8 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
               <i className="fas fa-file-import"></i>
               CSV Column Mapping & Preview
             </h3>
-            <p className="text-[10px] text-brand-lbg/80 mt-0.5">
-              Confirm which CSV columns contain the unit, chapter, and lesson information.
+            <p className="text-[10px] text-brand-lbg/80 mt-0.5 flex items-center flex-wrap gap-1">
+              Confirm which CSV columns map to the active book hierarchy: <span className="font-bold text-white bg-white/20 px-1.5 py-0.5 rounded text-[9px]">{hierarchy}</span>
             </p>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white transition-all text-xl outline-none p-1">
@@ -2481,73 +2959,87 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
             <div className="space-y-4 border-r border-light-border/40 pr-0 md:pr-4">
               <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Mandatory Columns</h4>
               
-              <div>
-                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Unit Column *</label>
-                <select
-                  value={unitCol}
-                  onChange={(e) => setUnitCol(e.target.value)}
-                  required
-                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">-- Select Column --</option>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {hasUnits && (
+                <div>
+                  <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Unit Column *</label>
+                  <select
+                    value={unitCol}
+                    onChange={(e) => setUnitCol(e.target.value)}
+                    required
+                    className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                  >
+                    <option value="">-- Select Column --</option>
+                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Chapter Column *</label>
-                <select
-                  value={chapterCol}
-                  onChange={(e) => setChapterCol(e.target.value)}
-                  required
-                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">-- Select Column --</option>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {hasChapters && (
+                <div>
+                  <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Chapter Column *</label>
+                  <select
+                    value={chapterCol}
+                    onChange={(e) => setChapterCol(e.target.value)}
+                    required
+                    className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                  >
+                    <option value="">-- Select Column --</option>
+                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Lesson Column *</label>
-                <select
-                  value={lessonCol}
-                  onChange={(e) => setLessonCol(e.target.value)}
-                  required
-                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">-- Select Column --</option>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {hasLessons && (
+                <div>
+                  <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Lesson Column *</label>
+                  <select
+                    value={lessonCol}
+                    onChange={(e) => setLessonCol(e.target.value)}
+                    required
+                    className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                  >
+                    <option value="">-- Select Column --</option>
+                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Optional */}
             <div className="space-y-4">
               <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Optional Columns</h4>
 
-              <div>
-                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Complexity Column</label>
-                <select
-                  value={complexityCol}
-                  onChange={(e) => setComplexityCol(e.target.value)}
-                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">-- None (Defaults to 'Easy') --</option>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+              {hasLessons ? (
+                <>
+                  <div>
+                    <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Complexity Column</label>
+                    <select
+                      value={complexityCol}
+                      onChange={(e) => setComplexityCol(e.target.value)}
+                      className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                    >
+                      <option value="">-- None (Defaults to 'Easy') --</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Page Count Column</label>
-                <select
-                  value={pageCol}
-                  onChange={(e) => setPageCol(e.target.value)}
-                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">-- None (Defaults to 0) --</option>
-                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Page Count Column</label>
+                    <select
+                      value={pageCol}
+                      onChange={(e) => setPageCol(e.target.value)}
+                      className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                    >
+                      <option value="">-- None (Defaults to 0) --</option>
+                      {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-dark-muted font-medium bg-light-lbg/10 p-3 rounded-xl border border-dashed border-light-border/40">
+                  No optional fields are available for the selected book hierarchy.
+                </div>
+              )}
             </div>
           </div>
 

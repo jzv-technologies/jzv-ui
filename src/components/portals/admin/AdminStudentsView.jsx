@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../../utils/supabase";
 import { showToast } from "../../../utils/toast";
+import { calculateAge } from "../../../utils/dateUtils";
 import DataGrid from "../../DataGrid";
 import ConfirmModal from "../../ConfirmModal";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../../data/mockStudents";
@@ -132,9 +133,10 @@ const AdminStudentsView = () => {
     }
 
     setLoading(true);
+    const calculatedAgeVal = calculateAge(formData.birth_date);
     const savePayload = {
       ...formData,
-      age: formData.age ? parseInt(formData.age) : null,
+      age: calculatedAgeVal ? parseFloat(calculatedAgeVal) : null,
       class_id: formData.class_id || null,
     };
 
@@ -289,8 +291,7 @@ const AdminStudentsView = () => {
       "Class": cls ? cls.name : "Unassigned",
       "Father Name": s.father_name || "",
       "Birth Date": s.birth_date || "",
-      "Age": s.age || "",
-      "Gender": s.gender || "",
+      "Age": calculateAge(s.birth_date),
       "Mobile 1": s.mobile1 || "",
       "Mobile 2": s.mobile2 || "",
       "Enrollment": s.enrollment || "Active",
@@ -432,11 +433,11 @@ const AdminStudentsView = () => {
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">Age</label>
                     <input
-                      type="number"
-                      placeholder="Age"
-                      value={formData.age}
-                      onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                      type="text"
+                      placeholder="Age (calculated)"
+                      readOnly
+                      value={calculateAge(formData.birth_date)}
+                      className="w-full px-4 py-2.5 border border-light-border bg-gray-50 text-dark-muted cursor-not-allowed rounded-xl outline-none transition-all text-sm font-semibold"
                     />
                   </div>
                   <div>

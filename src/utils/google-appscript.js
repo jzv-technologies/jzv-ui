@@ -39,8 +39,26 @@ function handleRequest(e) {
       case "update":
         return updateFormData(body);
 
-      case "invalidate-form-cache":
-        return clearAllCache();
+      case "test-connection": {
+        const sheetId = e.parameter.google_sheet_id || (body ? body.google_sheet_id : null);
+        const sheetName = e.parameter.data_sheet_name || (body ? body.data_sheet_name : null);
+        return testConnection(sheetId, sheetName);
+      }
+
+      case "create-sheet": {
+        const sheetId = e.parameter.google_sheet_id || (body ? body.google_sheet_id : null);
+        const sheetName = e.parameter.data_sheet_name || (body ? body.data_sheet_name : null);
+        return createSheetTab(sheetId, sheetName);
+      }
+
+      case "validate-fields": {
+        return validateFields(body);
+      }
+
+      case "invalidate-form-cache": {
+        const uuid = e.parameter.uuid || (body ? body.uuid : null);
+        return clearFormCache(uuid);
+      }
 
       default:
         return jsonResponse(null, "Invalid action");
@@ -212,18 +230,26 @@ function submitFormData(body) {
   const uuid = body.uuid;
   const formData = body.data;
 
-  if (!uuid || !formData) return jsonResponse(null, "Missing uuid or data");
+  if (!formData) return jsonResponse(null, "Missing data");
 
   // Automatically add created/updated timestamps
   const now = new Date().toISOString();
   if (!formData.created) formData.created = now;
   formData.updated = now;
 
-  const mapping = getMapping(uuid);
-  if (!mapping) return jsonResponse(null, `UUID "${uuid}" not found`);
+  let targetSheetId = body.google_sheet_id || body.dataSheetId;
+  let targetSheetName = body.data_sheet_name || body.dataSheetName;
+  let pattern = body.id_pattern || body.idPattern || "ID-XXXXX";
 
-  const targetSheetId = mapping.dataSheetId;
-  const targetSheetName = mapping.dataSheetName;
+  if (!targetSheetId || !targetSheetName) {
+    if (!uuid) return jsonResponse(null, "Missing uuid or sheet override parameters");
+    const mapping = getMapping(uuid);
+    if (!mapping) return jsonResponse(null, `UUID "${uuid}" not found`);
+
+    targetSheetId = mapping.dataSheetId;
+    targetSheetName = mapping.dataSheetName;
+    pattern = body.id_pattern || body.idPattern || mapping.idPattern || "ID-XXXXX";
+  }
 
   const ss = SpreadsheetApp.openById(targetSheetId);
   const sheet = ss.getSheetByName(targetSheetName);
@@ -250,7 +276,6 @@ function submitFormData(body) {
     scriptProperties.setProperty(storageKey, nextCounter.toString());
 
     // Generate pattern-based ID (e.g., CMP-00001)
-    const pattern = mapping.idPattern || "ID-XXXXX";
     const [prefix, format] = pattern.split("-");
     const padLength = (format || "XXXXX").length;
     const formattedId = `${prefix}-${nextCounter.toString().padStart(padLength, "0")}`;
@@ -315,20 +340,28 @@ function submitFormData(body) {
  * Expected JSON payload: { "action": "search", "uuid": "...", "criteria": { "Status": "Active", "Role": "Admin" } }
  */
 function searchFormData(body) {
-  if (!body || !body.uuid) return jsonResponse(null, "Missing uuid");
+  if (!body) return jsonResponse(null, "Missing request body");
+  const uuid = body.uuid;
 
   // Normalize criteria keys to lowercase for foolproof matching
   const criteria = body.criteria || {};
   const criteriaKeys = Object.keys(criteria);
 
-  // If no criteria provided, we don't need to filter, but we might want to cap it to prevent crash
-  const mapping = getMapping(body.uuid);
-  if (!mapping) return jsonResponse(null, `UUID "${body.uuid}" not found`);
+  let targetSheetId = body.google_sheet_id || body.dataSheetId;
+  let targetSheetName = body.data_sheet_name || body.dataSheetName;
 
-  const ss = SpreadsheetApp.openById(mapping.dataSheetId);
-  const sheet = ss.getSheetByName(mapping.dataSheetName);
+  if (!targetSheetId || !targetSheetName) {
+    if (!uuid) return jsonResponse(null, "Missing uuid or sheet override parameters");
+    const mapping = getMapping(uuid);
+    if (!mapping) return jsonResponse(null, `UUID "${uuid}" not found`);
+    targetSheetId = mapping.dataSheetId;
+    targetSheetName = mapping.dataSheetName;
+  }
+
+  const ss = SpreadsheetApp.openById(targetSheetId);
+  const sheet = ss.getSheetByName(targetSheetName);
   if (!sheet)
-    return jsonResponse(null, `Sheet "${mapping.dataSheetName}" not found`);
+    return jsonResponse(null, `Sheet "${targetSheetName}" not found`);
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) return jsonResponse([]);
@@ -387,8 +420,8 @@ function searchFormData(body) {
  * }
  */
 function updateFormData(body) {
-  if (!body || !body.uuid) return jsonResponse(null, "Missing uuid");
-
+  if (!body) return jsonResponse(null, "Missing request body");
+  const uuid = body.uuid;
   const matchColumn = body.matchColumn || "id"; // Default fallback to your standard 'id' column
   const recordsToUpdate = body.records;
 
@@ -396,13 +429,21 @@ function updateFormData(body) {
     return jsonResponse(null, "Missing or invalid 'records' array for update.");
   }
 
-  const mapping = getMapping(body.uuid);
-  if (!mapping) return jsonResponse(null, `UUID "${body.uuid}" not found`);
+  let targetSheetId = body.google_sheet_id || body.dataSheetId;
+  let targetSheetName = body.data_sheet_name || body.dataSheetName;
 
-  const ss = SpreadsheetApp.openById(mapping.dataSheetId);
-  const sheet = ss.getSheetByName(mapping.dataSheetName);
+  if (!targetSheetId || !targetSheetName) {
+    if (!uuid) return jsonResponse(null, "Missing uuid or sheet override parameters");
+    const mapping = getMapping(uuid);
+    if (!mapping) return jsonResponse(null, `UUID "${uuid}" not found`);
+    targetSheetId = mapping.dataSheetId;
+    targetSheetName = mapping.dataSheetName;
+  }
+
+  const ss = SpreadsheetApp.openById(targetSheetId);
+  const sheet = ss.getSheetByName(targetSheetName);
   if (!sheet)
-    return jsonResponse(null, `Sheet "${mapping.dataSheetName}" not found`);
+    return jsonResponse(null, `Sheet "${targetSheetName}" not found`);
 
   const dataRange = sheet.getDataRange();
   const values = dataRange.getValues();
@@ -430,7 +471,7 @@ function updateFormData(body) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
     // Clear and update the cached headers
-    const headerKey = `HEADERS_${mapping.dataSheetId}_${mapping.dataSheetName}`;
+    const headerKey = `HEADERS_${targetSheetId}_${targetSheetName}`;
     PropertiesService.getScriptProperties().setProperty(
       headerKey,
       JSON.stringify(headers),
@@ -498,6 +539,37 @@ function updateFormData(body) {
   });
 }
 
+function clearFormCache(uuid) {
+  if (!uuid) return clearAllCache();
+  
+  const props = PropertiesService.getScriptProperties();
+  
+  // Delete mapping cache key
+  props.deleteProperty(`MAPPING_${uuid}`);
+  
+  // Find mapping to clean up the FORM_ and HEADERS_ cache keys
+  try {
+    const mapping = getMapping(uuid);
+    if (mapping) {
+      if (mapping.configSheetName) {
+        props.deleteProperty(`FORM_${mapping.configSheetName}`);
+      }
+      if (mapping.dataSheetId && mapping.dataSheetName) {
+        props.deleteProperty(`HEADERS_${mapping.dataSheetId}_${mapping.dataSheetName}`);
+      }
+    }
+  } catch (e) {
+    console.warn("clearFormCache lookup failed:", e);
+  }
+  
+  // Explicitly delete mapping cache key again (to make sure it's gone)
+  props.deleteProperty(`MAPPING_${uuid}`);
+  
+  return jsonResponse({
+    message: `Cache cleared for form "${uuid}"`
+  });
+}
+
 function clearAllCache() {
   const props = PropertiesService.getScriptProperties();
   const keys = props.getKeys();
@@ -523,4 +595,109 @@ function jsonResponse(data = null, error = null) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(
     ContentService.MimeType.JSON,
   );
+}
+
+function testConnection(sheetId, sheetName) {
+  if (!sheetId) return jsonResponse(null, "Missing Google Sheet ID");
+  if (!sheetName) return jsonResponse(null, "Missing Sheet Tab Name");
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      return jsonResponse(null, "Sheet tab \"" + sheetName + "\" not found in spreadsheet.");
+    }
+    return jsonResponse({ message: "Successfully connected to sheet tab." });
+  } catch (err) {
+    return jsonResponse(null, "Connection failed: " + err.message);
+  }
+}
+
+function createSheetTab(sheetId, sheetName) {
+  if (!sheetId) return jsonResponse(null, "Missing Google Sheet ID");
+  if (!sheetName) return jsonResponse(null, "Missing Sheet Tab Name");
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    let sheet = ss.getSheetByName(sheetName);
+    if (sheet) {
+      return jsonResponse({ message: "Sheet tab \"" + sheetName + "\" already exists." });
+    }
+    sheet = ss.insertSheet(sheetName);
+    // Initialize headers with 'id'
+    sheet.getRange(1, 1).setValue("id");
+    return jsonResponse({ message: "Successfully created sheet tab \"" + sheetName + "\"." });
+  } catch (err) {
+    return jsonResponse(null, "Failed to create sheet tab: " + err.message);
+  }
+}
+
+function validateFields(body) {
+  if (!body) return jsonResponse(null, "Missing request body");
+  const sheetId = body.google_sheet_id;
+  const sheetName = body.data_sheet_name;
+  const fieldsToCheck = body.fields || [];
+
+  if (!sheetId) return jsonResponse(null, "Missing Google Sheet ID");
+  if (!sheetName) return jsonResponse(null, "Missing Sheet Tab Name");
+
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      return jsonResponse(null, "Sheet tab \"" + sheetName + "\" not found in spreadsheet.");
+    }
+
+    // Read current headers
+    const values = sheet.getDataRange().getValues();
+    let headers = [];
+    if (values.length > 0) {
+      headers = values[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    }
+
+    // Check which fields are missing (case-insensitive check)
+    const missingFields = [];
+    fieldsToCheck.forEach(function(f) {
+      const fieldName = String(f).trim();
+      if (fieldName && headers.indexOf(fieldName.toLowerCase()) === -1) {
+        missingFields.push(fieldName);
+      }
+    });
+
+    if (missingFields.length === 0) {
+      return jsonResponse({
+        message: "All fields exist in the target sheet.",
+        missingCount: 0,
+        createdFields: []
+      });
+    }
+
+    // If there are missing fields, create them!
+    let currentHeaders = [];
+    if (values.length > 0) {
+      currentHeaders = values[0].map(function(h) { return String(h).trim(); });
+    } else {
+      currentHeaders = ["id"];
+    }
+
+    // Filter out empty headers and append missing fields
+    const newHeaders = currentHeaders.slice();
+    missingFields.forEach(function(f) {
+      newHeaders.push(f);
+    });
+
+    // Write headers back to row 1
+    sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+
+    // Invalidate script properties headers cache
+    const scriptProperties = PropertiesService.getScriptProperties();
+    const headerKey = "HEADERS_" + sheetId + "_" + sheetName;
+    scriptProperties.setProperty(headerKey, JSON.stringify(newHeaders));
+
+    return jsonResponse({
+      message: "Successfully validated sheet. Added " + missingFields.length + " missing fields: " + missingFields.join(", "),
+      missingCount: missingFields.length,
+      createdFields: missingFields
+    });
+  } catch (err) {
+    return jsonResponse(null, "Validation failed: " + err.message);
+  }
 }

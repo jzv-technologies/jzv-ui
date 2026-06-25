@@ -73,6 +73,7 @@ export const getCards = ({
   visionLang,
   setVisionLang,
   currentUser,
+  userRoles = [],
 }) => [
   // ── Standalone ──────────────────────────────────────────────────────────
   {
@@ -274,6 +275,7 @@ export const getCards = ({
         uuid="complaint"
         textColor={CARD_THEMES.orange.textColor}
         additionalData={{ email: currentUser?.email }}
+        userRoles={userRoles}
       />
     ),
   },
@@ -295,7 +297,7 @@ export const getCards = ({
     ...CARD_THEMES.blueDark,
     showAtHome: false,
     content: (
-      <DynamicForm uuid="career" textColor={CARD_THEMES.blueDark.textColor} />
+      <DynamicForm uuid="career" textColor={CARD_THEMES.blueDark.textColor} userRoles={userRoles} />
     ),
   },
   {

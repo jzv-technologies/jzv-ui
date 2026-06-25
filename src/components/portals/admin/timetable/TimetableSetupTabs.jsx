@@ -9,6 +9,59 @@ export const generateLocalId = () => {
   return "local-" + Math.random().toString(36).substr(2, 9);
 };
 
+export const renderSubjectOptionsGroupedByClassification = (subjectsList, classificationsList, getOptionLabel = (sub) => sub.name) => {
+  const sortedClassifications = [...classificationsList].sort((a, b) => a.name.localeCompare(b.name));
+  
+  const grouped = {};
+  const unclassified = [];
+
+  subjectsList.forEach((sub) => {
+    const cls = sub.classification_id
+      ? classificationsList.find((c) => String(c.id) === String(sub.classification_id))
+      : null;
+    if (cls) {
+      if (!grouped[cls.id]) grouped[cls.id] = [];
+      grouped[cls.id].push(sub);
+    } else {
+      unclassified.push(sub);
+    }
+  });
+
+  const elements = [];
+
+  sortedClassifications.forEach((cls) => {
+    const clsSubjects = grouped[cls.id];
+    if (clsSubjects && clsSubjects.length > 0) {
+      const sortedClsSubjects = [...clsSubjects].sort((a, b) => a.name.localeCompare(b.name));
+      elements.push(
+        <optgroup key={cls.id} label={cls.name}>
+          {sortedClsSubjects.map((sub) => (
+            <option key={sub.id} value={sub.id}>
+              {getOptionLabel(sub)}
+            </option>
+          ))}
+        </optgroup>
+      );
+    }
+  });
+
+  if (unclassified.length > 0) {
+    const sortedUnclassified = [...unclassified].sort((a, b) => a.name.localeCompare(b.name));
+    elements.push(
+      <optgroup key="unclassified" label="Unclassified">
+        {sortedUnclassified.map((sub) => (
+          <option key={sub.id} value={sub.id}>
+            {getOptionLabel(sub)}
+          </option>
+        ))}
+      </optgroup>
+    );
+  }
+
+  return elements;
+};
+
+
 // ==========================================
 // 1. SUBJECTS SETUP
 // ==========================================
@@ -518,6 +571,7 @@ export const ClassesSetup = ({
   classes,
   teachers,
   subjects,
+  classifications = [],
   assignments,
   onAddClass,
   onUpdateClass,
@@ -757,9 +811,7 @@ export const ClassesSetup = ({
                     required
                   >
                     <option value="">-- Choose Subject --</option>
-                    {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
+                    {renderSubjectOptionsGroupedByClassification(subjects, classifications)}
                   </select>
                 </div>
 
