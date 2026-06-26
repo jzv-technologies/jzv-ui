@@ -4,6 +4,7 @@ import { showToast } from "../../../../utils/toast";
 import ConfirmModal from "../../../ConfirmModal";
 import { getSubjectColor } from "./TimetableAdminView";
 import { renderSubjectOptionsGroupedByClassification } from "./TimetableSetupTabs";
+import { CARD_THEMES } from "../../../../utils/cardTheme";
 
 
 const TimetableScheduler = ({
@@ -17,6 +18,8 @@ const TimetableScheduler = ({
   assignments = [],
   onUpdateSlot,
   onMoveSlot,
+  onClearSlots,
+  onMoveColumn,
   showBreaks = true,
   seasonsConfig = null,
 }) => {
@@ -25,7 +28,9 @@ const TimetableScheduler = ({
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
   const [selectedDays, setSelectedDays] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
-  const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, subjectId, teacherId }
+  const [popover, setPopover] = useState(null); // { type, cellKey, targetElement, currentAssignData }
+  const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, classId, subjectId, teacherId }
+  const [movingColumnPeriodId, setMovingColumnPeriodId] = useState(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -327,6 +332,32 @@ const TimetableScheduler = ({
         </div>
       )}
 
+      {/* Move Column banner */}
+      {movingColumnPeriodId && (
+        <div className="bg-brand-lbg/30 border border-brand-soft rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-brand-primary/10 flex items-center justify-center text-brand-primary shrink-0 animate-bounce">
+              <i className="fas fa-columns"></i>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-dark-primary">
+                Moving Column: <span className="text-brand-primary uppercase font-extrabold">{periods.find(p => String(p.id) === String(movingColumnPeriodId))?.name || 'Unknown'}</span>
+              </div>
+              <p className="text-[10px] text-dark-soft font-semibold mt-0.5">
+                Click another period column header to move all assignments to it.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMovingColumnPeriodId(null)}
+            className="bg-white hover:bg-light-ui border border-light-border px-3 py-1.5 rounded-lg text-xs font-bold text-dark-soft transition-all shrink-0 shadow-sm animate-pulse"
+          >
+            Cancel Move
+          </button>
+        </div>
+      )}
+
       {/* Grid view */}
       {visiblePeriods.length === 0 ? (
         <div className="text-center py-12 bg-white border border-light-border rounded-3xl">
@@ -335,20 +366,37 @@ const TimetableScheduler = ({
       ) : (
         <div className="w-full overflow-x-auto rounded-2xl border border-light-border bg-white shadow-sm">
           <table className="w-full border-collapse min-w-[900px]">
-            <thead>
+            <thead className="table-sticky-header">
               <tr className="bg-light-lbg border-b border-light-border">
-                <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px]">
+                <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] table-sticky-col table-sticky-intersection bg-light-lbg">
                   Day
                 </th>
                  {visiblePeriods.map((period) => (
                   <th
                     key={period.id || period.period_number}
-                    className="py-3 px-3 text-center border-r border-light-border last:border-r-0"
+                    className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 group relative select-none ${movingColumnPeriodId === period.id ? 'ring-2 ring-brand-primary bg-brand-lbg/20 z-10' : 'bg-light-lbg'} ${!isReadOnly && onMoveColumn ? 'cursor-pointer hover:bg-light-bg/20' : ''}`}
+                    onClick={() => {
+                      if (!isReadOnly && onMoveColumn) {
+                        if (movingColumnPeriodId && movingColumnPeriodId !== period.id) {
+                          onMoveColumn(classId, movingColumnPeriodId, period.id);
+                          setMovingColumnPeriodId(null);
+                        } else {
+                          setMovingColumnPeriodId(prev => prev === period.id ? null : period.id);
+                        }
+                      }
+                    }}
                   >
                     <div className="font-extrabold text-sm text-dark-deepblue">{period.name || `Period ${period.period_number}`}</div>
                     {period.start_time && period.end_time && (
                       <div className="text-[10px] text-dark-soft font-semibold mt-0.5">
                         {period.start_time} - {period.end_time}
+                      </div>
+                    )}
+                    {!isReadOnly && onMoveColumn && !movingColumnPeriodId && (
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button title="Move Column" className="text-brand-primary hover:text-brand-dark p-1 pointer-events-none">
+                          <i className="fas fa-arrows-alt-h text-[10px]"></i>
+                        </button>
                       </div>
                     )}
                   </th>
@@ -363,9 +411,9 @@ const TimetableScheduler = ({
                 return (
                   <tr
                     key={day}
-                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors"
+                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors bg-white"
                   >
-                    <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-light-lbg/10 w-[120px]">
+                    <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col w-[120px]">
                       {day}
                     </td>
                     {isHoliday ? (
@@ -405,15 +453,24 @@ const TimetableScheduler = ({
                         const isTeacherAssigned = slot && slot.teacher_id;
                         const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
                         const isFemale = teacher && teacher.is_male === false;
+                        const subjectObj = isAssigned ? subjects.find(s => String(s.id) === String(slot.subject_id)) : null;
+                        const requiresTeacher = subjectObj ? subjectObj.requires_teacher !== false : true;
                         
+                        const clsObj = subjectObj && subjectObj.classification_id ? classifications.find(c => String(c.id) === String(subjectObj.classification_id)) : null;
+                        const themeStr = clsObj ? clsObj.theme : null;
+                        const themeStyles = themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
                         let colorClass = "";
+                        let borderClass = "";
                         if (isAssigned) {
-                          if (!isTeacherAssigned) {
+                          if (themeStyles) {
+                            colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
+                          } else if (!isTeacherAssigned) {
                             colorClass = getSubjectColor(subjectName);
                           } else if (isFemale) {
-                            colorClass = "bg-purple-100 text-purple-900 border-purple-200";
+                            colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
                           } else {
-                            colorClass = "bg-blue-lbg text-blue-dark border-blue-200";
+                            colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
                           }
                         }
 
@@ -458,7 +515,7 @@ const TimetableScheduler = ({
                               <div
                                 className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
                                   isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
-                                } ${
+                                } ${themeStyles ? `${themeStyles.color.replace('bg-', 'border-l-')} border-l-[6px]` : ''} ${
                                   !isReadOnly && !movingSlot
                                     ? "group-hover:scale-95"
                                     : !isReadOnly && movingSlot
@@ -469,15 +526,19 @@ const TimetableScheduler = ({
                                 <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
                                   {subjectName}
                                 </span>
-                                {!isTeacherAssigned ? (
+                                {!isTeacherAssigned && requiresTeacher ? (
                                   <span className="text-[9px] font-bold truncate text-red-primary flex items-center justify-center gap-1">
                                     <i className="fas fa-exclamation-triangle text-[8px] animate-pulse"></i>
                                     Not Assigned
                                   </span>
-                                ) : (
-                                  <span className="text-[9px] opacity-90 font-bold truncate">
-                                    <i className={`fas ${isFemale ? "fa-female" : "fa-male"} mr-1 text-[8px]`}></i>
+                                ) : isTeacherAssigned ? (
+                                  <span className={`text-[9px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}>
+                                    {isFemale && <i className="fas fa-female mr-1 text-[8px]"></i>}
                                     {getTeacherName(slot.teacher_id)}
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] opacity-90 font-bold truncate text-dark-muted">
+                                    No Teacher Required
                                   </span>
                                 )}
 
@@ -565,7 +626,7 @@ const TimetableScheduler = ({
                       (a) => String(a.class_id) === String(classId) && String(a.subject_id) === String(sub.id)
                     );
                     return isMapped ? `${sub.name} (Assigned to Class)` : sub.name;
-                  })}
+                  }, selectedSubjectId)}
                 </select>
               </div>
 

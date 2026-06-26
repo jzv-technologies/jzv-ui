@@ -26,6 +26,89 @@ const SyllabusManager = ({ role }) => {
   const [collapsedClassifications, setCollapsedClassifications] = useState({});
   const [activeSubjectId, setActiveSubjectId] = useState(null);
 
+  const [deleteModalSubject, setDeleteModalSubject] = useState(null);
+  const [mappedClasses, setMappedClasses] = useState([]);
+
+  const checkTimetableMappings = async (subjectId) => {
+    let mapped = [];
+    if (isSupabaseMode) {
+      try {
+        const { data, error } = await supabase
+          .from('timetable_slots')
+          .select('class_id, classes(name)')
+          .eq('subject_id', subjectId);
+
+        if (data && data.length > 0) {
+          const classMap = new Map();
+          data.forEach((slot) => {
+            if (slot.class_id) {
+              const className = slot.classes?.name || `Class ID ${slot.class_id}`;
+              classMap.set(String(slot.class_id), className);
+            }
+          });
+          mapped = Array.from(classMap.values());
+        }
+      } catch (err) {
+        console.warn('Error fetching DB timetable slots:', err.message);
+      }
+    } else {
+      const raw = localStorage.getItem('jzv_timetable_local_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const slots = parsed.slots || [];
+          const classesList = parsed.classes || [];
+          const matchingSlots = slots.filter((s) => String(s.subject_id) === String(subjectId));
+          const classMap = new Map();
+          matchingSlots.forEach((s) => {
+            const cls = classesList.find((c) => String(c.id) === String(s.class_id));
+            const className = cls?.name || `Class ID ${s.class_id}`;
+            classMap.set(String(s.class_id), className);
+          });
+          mapped = Array.from(classMap.values());
+        } catch (e) {
+          console.warn('Error parsing local timetable storage:', e);
+        }
+      }
+    }
+    return mapped;
+  };
+
+  const handleInitiateDeleteSubject = async (sub) => {
+    setLoading(true);
+    try {
+      const classesMapped = await checkTimetableMappings(sub.id);
+      setMappedClasses(classesMapped);
+      setDeleteModalSubject(sub);
+    } catch (err) {
+      showToast('Error checking timetable mappings: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReactivateSubject = async (id) => {
+    setLoading(true);
+    try {
+      if (isSupabaseMode) {
+        await supabase
+          .from('subjects')
+          .update({ deactivated: false, deactivate: false })
+          .eq('id', id);
+      }
+      saveState({
+        subjects: subjects.map((s) =>
+          String(s.id) === String(id) ? { ...s, deactivated: false, deactivate: false } : s
+        ),
+      });
+      showToast('Subject reactivated successfully!', 'success');
+    } catch (err) {
+      showToast('Error reactivating subject: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -308,12 +391,21 @@ const SyllabusManager = ({ role }) => {
           if (isSupabaseMode)
             await supabase
               .from('subjects')
-              .update({ name: data.name, classification_id: data.classificationId || null })
+              .update({
+                name: data.name,
+                classification_id: data.classificationId || null,
+                requires_teacher: data.requires_teacher,
+              })
               .eq('id', data.node.id);
           saveState({
             subjects: subjects.map((s) =>
               String(s.id) === String(data.node.id)
-                ? { ...s, name: data.name, classification_id: data.classificationId || null }
+                ? {
+                    ...s,
+                    name: data.name,
+                    classification_id: data.classificationId || null,
+                    requires_teacher: data.requires_teacher,
+                  }
                 : s
             ),
           });
@@ -421,11 +513,22 @@ const SyllabusManager = ({ role }) => {
             id: generateLocalId(),
             name: data.name,
             classification_id: data.classificationId || null,
+            requires_teacher: data.requires_teacher,
+            deactivated: false,
+            deactivate: false,
           };
           if (isSupabaseMode) {
             const { data: res } = await supabase
               .from('subjects')
-              .insert([{ name: data.name, classification_id: data.classificationId || null }])
+              .insert([
+                {
+                  name: data.name,
+                  classification_id: data.classificationId || null,
+                  requires_teacher: data.requires_teacher,
+                  deactivated: false,
+                  deactivate: false,
+                },
+              ])
               .select();
             newSub = res[0];
           }
@@ -545,8 +648,25 @@ const SyllabusManager = ({ role }) => {
         setLoading(true);
         try {
           if (level === 'subject') {
-            if (isSupabaseMode) await supabase.from('subjects').delete().eq('id', id);
-            saveState({ subjects: subjects.filter((s) => String(s.id) !== String(id)) });
+            const isSoft = nodeData?.isSoftDelete;
+            if (isSoft) {
+              if (isSupabaseMode) {
+                await supabase
+                  .from('subjects')
+                  .update({ deactivated: true, deactivate: true })
+                  .eq('id', id);
+              }
+              saveState({
+                subjects: subjects.map((s) =>
+                  String(s.id) === String(id) ? { ...s, deactivated: true, deactivate: true } : s
+                ),
+              });
+              showToast('Subject deactivated successfully', 'success');
+            } else {
+              if (isSupabaseMode) await supabase.from('subjects').delete().eq('id', id);
+              saveState({ subjects: subjects.filter((s) => String(s.id) !== String(id)) });
+              showToast('Subject deleted permanently', 'success');
+            }
           } else if (level === 'book') {
             if (isSupabaseMode) await supabase.from('syllabus_books').delete().eq('id', id);
             saveState({
@@ -676,17 +796,21 @@ const SyllabusManager = ({ role }) => {
   };
 
   const handleSaveClassifications = async (updatedCls) => {
-    setIsClassificationsModalOpen(false);
     setLoading(true);
     try {
       if (isSupabaseMode) {
         for (const c of updatedCls) {
           if (String(c.id).startsWith('local-') || String(c.id).startsWith('cls-')) {
-            await supabase.from('subject_classifications').insert([{ name: c.name }]);
+            await supabase
+              .from('subject_classifications')
+              .insert([{ name: c.name, theme: c.theme || 'blue' }]);
           } else if (c._deleted) {
             await supabase.from('subject_classifications').delete().eq('id', c.id);
           } else {
-            await supabase.from('subject_classifications').update({ name: c.name }).eq('id', c.id);
+            await supabase
+              .from('subject_classifications')
+              .update({ name: c.name, theme: c.theme || 'blue' })
+              .eq('id', c.id);
           }
         }
       }
@@ -765,17 +889,42 @@ const SyllabusManager = ({ role }) => {
           <div className="mt-2 space-y-1 pl-4 border-l border-light-border border-dashed ml-3">
             {subs.map((sub) => {
               const isSelected = String(activeSubjectId) === String(sub.id);
+              const isSubDeactivated = sub.deactivated === true || sub.deactivate === true;
               return (
                 <div
                   key={sub.id}
                   onClick={() => setActiveSubjectId(sub.id)}
-                  className={`group w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex justify-between items-center cursor-pointer ${isSelected ? 'bg-brand-primary text-white font-bold' : 'text-dark-soft hover:bg-light-ui hover:text-dark-primary'}`}
+                  className={`group w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex justify-between items-center cursor-pointer ${isSelected ? 'bg-brand-primary text-white font-bold' : 'text-dark-soft hover:bg-light-ui hover:text-dark-primary'} ${isSubDeactivated ? 'opacity-60' : ''}`}
                 >
                   <span className="flex items-center gap-2 truncate">
                     <i
                       className={`fas fa-book-open text-[10px] ${isSelected ? 'text-white' : 'text-blue-primary'}`}
                     />
-                    <span className="truncate">{sub.name}</span>
+                    <span className={`truncate ${isSubDeactivated ? 'line-through' : ''}`}>
+                      {sub.name}
+                    </span>
+                    {sub.requires_teacher !== false ? (
+                      <i
+                        className={`fas fa-user text-[10px] ${
+                          isSelected ? 'text-white/80' : 'text-black-500'
+                        }`}
+                        title="Requires Teacher"
+                      />
+                    ) : (
+                      <i
+                        className={`fas fa-user-slash text-[10px] ${
+                          isSelected ? 'text-red-200' : 'text-red-500'
+                        }`}
+                        title="Does Not Require Teacher"
+                      />
+                    )}
+                    {isSubDeactivated && (
+                      <span
+                        className={`text-[8px] font-bold px-1 py-0.2 rounded border shrink-0 ${isSelected ? 'bg-white/20 text-white border-white/30' : 'bg-red-50 text-red-500 border-red-100'}`}
+                      >
+                        Deactivated
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
                     {(isAdmin || isTeacher) && (
@@ -796,16 +945,34 @@ const SyllabusManager = ({ role }) => {
                       </button>
                     )}
                     {isAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteNode('subject', sub.id);
-                        }}
-                        className={`p-1 rounded transition-colors ${isSelected ? 'text-white/80 hover:text-white hover:bg-white/20' : 'text-red-primary hover:bg-red-50'}`}
-                        title="Delete Subject"
-                      >
-                        <i className="fas fa-trash-alt text-[10px]"></i>
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {isSubDeactivated ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReactivateSubject(sub.id);
+                            }}
+                            className={`p-1 rounded transition-colors ${isSelected ? 'text-white/80 hover:text-white hover:bg-white/20' : 'text-green-600 hover:bg-green-50'}`}
+                            title="Reactivate Subject"
+                          >
+                            <i className="fas fa-redo-alt text-[10px]"></i>
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInitiateDeleteSubject(sub);
+                          }}
+                          className={`p-1 rounded transition-colors ${isSelected ? 'text-white/80 hover:text-white hover:bg-white/20' : 'text-red-primary hover:bg-red-50'}`}
+                          title={
+                            isSubDeactivated
+                              ? 'Delete Subject Permanently'
+                              : 'Delete / Deactivate Subject'
+                          }
+                        >
+                          <i className="fas fa-trash-alt text-[10px]"></i>
+                        </button>
+                      </div>
                     )}
                   </div>
                   {isSelected && (
@@ -1415,6 +1582,105 @@ const SyllabusManager = ({ role }) => {
         onCancel={() => setConfirmConfig(null)}
       />
 
+      {deleteModalSubject && (
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 p-6 flex flex-col space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-red-50 rounded-full shrink-0">
+                <i className="fas fa-trash-alt text-red-500 text-xl"></i>
+              </div>
+              <h3 className="text-base font-extrabold text-dark-deepblue">
+                Delete or Deactivate Subject
+              </h3>
+            </div>
+
+            <div className="space-y-2 text-left">
+              <p className="text-xs text-dark-soft font-semibold leading-relaxed">
+                Subject: <strong className="text-dark-primary">{deleteModalSubject.name}</strong>
+              </p>
+
+              {mappedClasses.length >= 2 ? (
+                <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-700 font-semibold space-y-1.5">
+                  <p className="font-bold">
+                    <i className="fas fa-ban mr-1"></i> Cannot Delete or Deactivate
+                  </p>
+                  <p>This subject is currently mapped to multiple timetables:</p>
+                  <ul className="list-disc pl-5 font-bold">
+                    {mappedClasses.map((cls, i) => (
+                      <li key={i}>{cls}</li>
+                    ))}
+                  </ul>
+                  <p className="font-normal mt-1 text-[11px]">
+                    Please remove it from these timetables first.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {mappedClasses.length === 1 ? (
+                    <p className="p-2.5 bg-amber-50 border border-amber-100 text-amber-800 text-[11px] rounded-lg font-bold">
+                      <i className="fas fa-exclamation-triangle mr-1"></i> Warning: This subject is
+                      currently mapped to 1 timetable ({mappedClasses[0]}).
+                    </p>
+                  ) : (
+                    <p className="text-xs text-dark-muted">
+                      This subject is not assigned to any timetables.
+                    </p>
+                  )}
+                  <p className="text-xs text-dark-soft">Choose one of the following actions:</p>
+                  <div className="bg-light-bg/30 p-3 rounded-xl border border-light-border/40 text-[11px] text-dark-soft space-y-2">
+                    <p>
+                      <strong>Deactivate (Soft Delete):</strong> The subject will be marked as
+                      deactivated. It cannot be assigned to new timetable slots, but existing
+                      timetable assignments will remain unless explicitly removed.
+                    </p>
+                    <p>
+                      <strong>Permanently Delete:</strong> Completely delete the subject. This will
+                      clear it from any existing slots and assignments.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 w-full pt-2 flex-wrap sm:flex-nowrap">
+              <button
+                type="button"
+                onClick={() => setDeleteModalSubject(null)}
+                className="flex-1 px-4 py-2.5 bg-light-ui text-dark-soft hover:bg-light-border rounded-xl text-xs font-bold transition-all outline-none"
+              >
+                Cancel
+              </button>
+              {mappedClasses.length < 2 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const subId = deleteModalSubject.id;
+                      setDeleteModalSubject(null);
+                      handleDeleteNode('subject', subId, { isSoftDelete: true });
+                    }}
+                    className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all outline-none"
+                  >
+                    Deactivate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const subId = deleteModalSubject.id;
+                      setDeleteModalSubject(null);
+                      handleDeleteNode('subject', subId, { isSoftDelete: false });
+                    }}
+                    className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all outline-none"
+                  >
+                    Permanently Delete
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <SyllabusCsvMappingModal
         isOpen={isCsvMappingOpen}
         headers={csvHeaders}
@@ -1456,6 +1722,9 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
   const [name, setName] = useState(isEdit ? pName || modal.node?.name || '' : '');
   const [classificationId, setClassificationId] = useState(
     isEdit && level === 'subject' ? modal.node?.classification_id || '' : ''
+  );
+  const [requiresTeacher, setRequiresTeacher] = useState(
+    isEdit && level === 'subject' ? modal.node?.requires_teacher !== false : true
   );
   const [hierarchyType, setHierarchyType] = useState(
     isEdit && level === 'book'
@@ -1522,6 +1791,7 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
         level,
         name: name.trim(),
         classificationId,
+        requires_teacher: level === 'subject' ? requiresTeacher : undefined,
         hierarchyType,
         bookId,
         oldLevel1,
@@ -1539,6 +1809,7 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
           level,
           name: name.trim(),
           classificationId,
+          requires_teacher: level === 'subject' ? requiresTeacher : undefined,
           hierarchyType,
           parentId: modal.parentId,
         });
@@ -1612,23 +1883,40 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
                 />
               </div>
               {level === 'subject' && (
-                <div>
-                  <label className="block text-xs font-bold text-dark-soft mb-1.5">
-                    Classification
-                  </label>
-                  <select
-                    value={classificationId}
-                    onChange={(e) => setClassificationId(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
-                  >
-                    <option value="">No Classification</option>
-                    {classifications.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                      Classification
+                    </label>
+                    <select
+                      value={classificationId}
+                      onChange={(e) => setClassificationId(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-xl"
+                    >
+                      <option value="">No Classification</option>
+                      {classifications.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="checkbox"
+                      id="requiresTeacher"
+                      checked={requiresTeacher}
+                      onChange={(e) => setRequiresTeacher(e.target.checked)}
+                      className="w-4 h-4 text-brand-primary border-light-border rounded focus:ring-brand-soft"
+                    />
+                    <label
+                      htmlFor="requiresTeacher"
+                      className="text-xs font-bold text-dark-soft cursor-pointer select-none"
+                    >
+                      Requires Teacher
+                    </label>
+                  </div>
+                </>
               )}
               {level === 'book' && (
                 <div>

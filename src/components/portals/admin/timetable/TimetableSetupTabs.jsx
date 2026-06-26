@@ -1,7 +1,7 @@
 // src/components/portals/admin/timetable/TimetableSetupTabs.jsx
-import React, { useState } from "react";
-import ClassificationsModal from "./ClassificationsModal";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import ConfirmModal from "../../../ConfirmModal";
+import { CARD_THEMES } from "../../../../utils/cardTheme";
 
 
 // Helper to generate UUIDs locally when offline
@@ -9,13 +9,19 @@ export const generateLocalId = () => {
   return "local-" + Math.random().toString(36).substr(2, 9);
 };
 
-export const renderSubjectOptionsGroupedByClassification = (subjectsList, classificationsList, getOptionLabel = (sub) => sub.name) => {
+export const renderSubjectOptionsGroupedByClassification = (subjectsList, classificationsList, getOptionLabel = (sub) => sub.name, currentSelectedSubjectId = null) => {
   const sortedClassifications = [...classificationsList].sort((a, b) => a.name.localeCompare(b.name));
   
   const grouped = {};
   const unclassified = [];
 
   subjectsList.forEach((sub) => {
+    // Skip deactivated subjects unless currently selected
+    const isDeactivated = sub.deactivated === true || sub.deactivate === true;
+    if (isDeactivated && String(sub.id) !== String(currentSelectedSubjectId)) {
+      return;
+    }
+
     const cls = sub.classification_id
       ? classificationsList.find((c) => String(c.id) === String(sub.classification_id))
       : null;
@@ -62,247 +68,236 @@ export const renderSubjectOptionsGroupedByClassification = (subjectsList, classi
 };
 
 
-// ==========================================
-// 1. SUBJECTS SETUP
-// ==========================================
-export const SubjectsSetup = ({
-  subjects,
-  classifications = [],
-  onAddSubject,
-  onUpdateSubject,
-  onDeleteSubject,
-  onSaveClassifications,
-  onBulkMapSubjects,
-  slots,
-  assignments
-}) => {
-  const [name, setName] = useState("");
-  const [classificationId, setClassificationId] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [editClassificationId, setEditClassificationId] = useState("");
-  const [isClassificationsModalOpen, setIsClassificationsModalOpen] = useState(false);
-  const [confirmConfig, setConfirmConfig] = useState(null);
 
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    onAddSubject(name.trim(), classificationId || null);
-    setName("");
-    setClassificationId("");
-  };
-
-  const handleStartEdit = (sub) => {
-    setEditingId(sub.id);
-    setEditName(sub.name);
-    setEditClassificationId(sub.classification_id || "");
-  };
-
-  const handleSaveEdit = (id) => {
-    if (!editName.trim()) return;
-    onUpdateSubject(id, editName.trim(), editClassificationId || null);
-    setEditingId(null);
-  };
-
-  const handleDelete = (subId, name) => {
-    const isUsedInSlots = slots.some((s) => String(s.subject_id) === String(subId));
-    const isUsedInAssignments = assignments.some((a) => String(a.subject_id) === String(subId));
-
-    let warning = `Are you sure you want to delete the subject "${name}"?`;
-    if (isUsedInSlots || isUsedInAssignments) {
-      warning += `\n\nWARNING: This subject is currently assigned to classes or scheduled in the timetable. Deleting it will clear those assignments/slots!`;
-    }
-
-    setConfirmConfig({
-      title: "Delete Subject",
-      message: warning,
-      confirmText: "Delete",
-      type: "danger",
-      onConfirm: () => {
-        setConfirmConfig(null);
-        onDeleteSubject(subId);
-      }
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl">
-        <div className="flex justify-between items-center mb-3">
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide">Add New Subject</h4>
-          <button
-            type="button"
-            onClick={() => setIsClassificationsModalOpen(true)}
-            className="text-brand-primary hover:text-brand-dark hover:bg-brand-lbg/20 text-xs font-bold px-3 py-1.5 rounded-lg border border-brand-soft/20 flex items-center gap-1.5 transition-all outline-none"
-          >
-            <i className="fas fa-sliders-h"></i> Manage Classifications
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <div>
-            <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">Subject Name</label>
-            <input
-              type="text"
-              placeholder="e.g. Mathematics, Islamic Studies, English"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">Classification</label>
-            <select
-              value={classificationId}
-              onChange={(e) => setClassificationId(e.target.value)}
-              className="w-full bg-white border border-light-border rounded-xl px-3 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-            >
-              <option value="">-- Choose Classification --</option>
-              {classifications.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center justify-center gap-2 transition-all h-[46px]"
-          >
-            <i className="fas fa-plus"></i> Add Subject
-          </button>
-        </form>
-      </div>
-
-      <div className="border border-light-border rounded-2xl overflow-hidden bg-white">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="bg-light-lbg border-b border-light-border">
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Subject Name</th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Classification</th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-light-border">
-            {subjects.length === 0 ? (
-              <tr>
-                <td colSpan="3" className="py-8 text-center text-dark-muted text-sm">
-                  No subjects configured. Add one above!
-                </td>
-              </tr>
-            ) : (
-              [...subjects]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((sub) => (
-                <tr key={sub.id} className="hover:bg-light-bg/20 transition-colors">
-                  <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
-                    {editingId === sub.id ? (
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="bg-white border border-light-border rounded-lg px-3 py-1.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft w-full"
-                      />
-                    ) : (
-                      sub.name
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
-                    {editingId === sub.id ? (
-                      <select
-                        value={editClassificationId}
-                        onChange={(e) => setEditClassificationId(e.target.value)}
-                        className="bg-white border border-light-border rounded-lg px-3 py-1.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft w-full"
-                      >
-                        <option value="">No Classification</option>
-                        {classifications.map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      classifications.find(c => String(c.id) === String(sub.classification_id))?.name || <span className="text-dark-muted italic">Unclassified</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    {editingId === sub.id ? (
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleSaveEdit(sub.id)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg text-xs font-bold transition-all"
-                          title="Save"
-                        >
-                          <i className="fas fa-check"></i>
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="bg-light-ui hover:bg-light-border text-dark-soft p-2 rounded-lg text-xs font-bold transition-all"
-                          title="Cancel"
-                        >
-                          <i className="fas fa-times"></i>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleStartEdit(sub)}
-                          className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
-                          title="Rename"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(sub.id, sub.name)}
-                          className="text-red-primary hover:text-red-dark p-2 rounded-lg hover:bg-red-lbg transition-all"
-                          title="Delete"
-                        >
-                          <i className="fas fa-trash-alt"></i>
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Classifications Management Modal */}
-      <ClassificationsModal
-        isOpen={isClassificationsModalOpen}
-        onClose={() => setIsClassificationsModalOpen(false)}
-        classifications={classifications}
-        subjects={subjects}
-        onSaveClassifications={onSaveClassifications}
-        onBulkMapSubjects={onBulkMapSubjects}
-      />
-
-      <ConfirmModal
-        isOpen={confirmConfig !== null}
-        title={confirmConfig?.title}
-        message={confirmConfig?.message}
-        type={confirmConfig?.type}
-        confirmText={confirmConfig?.confirmText}
-        onConfirm={confirmConfig?.onConfirm}
-        onCancel={() => setConfirmConfig(null)}
-      />
-    </div>
-  );
-};
 
 
 // ==========================================
 // 2. TEACHERS SETUP
 // ==========================================
-export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeacher, onDeleteTeacher, slots, assignments }) => {
+// Custom multi-select component grouping subjects by classification with a search filter
+const GroupedSubjectMultiSelect = ({
+  subjects = [],
+  classifications = [],
+  selectedIds = [],
+  onChange,
+  placeholder = "Select qualified subjects..."
+}) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef(null);
+  const [controlWidth, setControlWidth] = useState(0);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        setControlWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const colsClass = useMemo(() => {
+    if (controlWidth < 250) return "grid-cols-1";
+    if (controlWidth < 450) return "grid-cols-2";
+    if (controlWidth < 650) return "grid-cols-3";
+    if (controlWidth < 850) return "grid-cols-4";
+    return "grid-cols-5";
+  }, [controlWidth]);
+
+  // Filter subjects based on search query
+  const filteredSubjects = subjects.filter(s =>
+    s.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Group filtered subjects by classification
+  const grouped = useMemo(() => {
+    const groups = {};
+
+    // Initialize groups for classifications to preserve classification order/existence
+    classifications.forEach(c => {
+      groups[c.id] = {
+        name: c.name,
+        theme: c.theme,
+        items: []
+      };
+    });
+
+    const unclassifiedKey = "unclassified";
+    groups[unclassifiedKey] = {
+      name: "Unclassified Subjects",
+      theme: "charcoal",
+      items: []
+    };
+
+    filteredSubjects.forEach(s => {
+      const key = s.classification_id && groups[s.classification_id] ? s.classification_id : unclassifiedKey;
+      groups[key].items.push(s);
+    });
+
+    return Object.keys(groups)
+      .map(id => ({ id, ...groups[id] }))
+      .filter(g => g.items.length > 0);
+  }, [filteredSubjects, classifications]);
+
+  const selectedCount = selectedIds.length;
+  
+  const handleToggleSubject = (subId) => {
+    const current = selectedIds.map(String);
+    const subStr = String(subId);
+    let updated;
+    if (current.includes(subStr)) {
+      updated = selectedIds.filter(id => String(id) !== subStr);
+    } else {
+      updated = [...selectedIds, subId];
+    }
+    onChange(updated);
+  };
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between gap-2 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft hover:bg-light-lbg/10 transition-all text-left"
+      >
+        <span className="truncate">
+          {selectedCount === 0 
+            ? placeholder 
+            : `${selectedCount} subject${selectedCount > 1 ? "s" : ""} selected`}
+        </span>
+        <span className="flex items-center gap-1.5 shrink-0 text-dark-muted">
+          {selectedCount > 0 && (
+            <span className="text-[10px] bg-brand-primary text-white font-extrabold px-1.5 py-0.5 rounded-full">
+              {selectedCount}
+            </span>
+          )}
+          <i className={`fas fa-chevron-${open ? "up" : "down"} text-xs`}></i>
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 mt-1 w-full bg-white border border-light-border rounded-xl shadow-xl z-50 p-2.5 max-h-96 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-1 duration-150">
+          {/* Search box */}
+          <div className="relative mb-2 shrink-0">
+            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+            <input
+              type="text"
+              placeholder="Search subjects..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-light-lbg/40 border border-light-border/60 rounded-lg outline-none font-semibold text-dark-primary focus:border-brand-soft"
+            />
+          </div>
+
+          {/* Grouped list */}
+          <div className="flex-1 overflow-y-auto space-y-3.5 pr-1.5 scrollbar-thin">
+            {grouped.length === 0 ? (
+              <div className="text-center text-xs italic text-dark-muted py-6">
+                No matching subjects found.
+              </div>
+            ) : (
+              grouped.map((group) => {
+                const groupTheme = CARD_THEMES[group.theme] || CARD_THEMES.charcoal;
+                return (
+                  <div key={group.id} className="space-y-1.5">
+                    {/* Header */}
+                    <div className="flex items-center gap-1.5 px-1.5 shrink-0">
+                      <span className={`w-2.5 h-2.5 rounded-full ${groupTheme.color}`} />
+                      <span className="text-[10px] font-extrabold text-dark-deepblue uppercase tracking-wider">
+                        {group.name} ({group.items.length})
+                      </span>
+                    </div>
+
+                    {/* Group Items Grid */}
+                    <div className={`grid gap-1.5 pl-3.5 ${colsClass}`}>
+                      {group.items.map((sub) => {
+                        const isChecked = selectedIds.some(sid => String(sid) === String(sub.id));
+                        return (
+                          <label
+                            key={sub.id}
+                            className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all cursor-pointer text-xs font-semibold ${
+                              isChecked
+                                ? "bg-brand-lbg/10 border-brand-soft text-brand-primary"
+                                : "bg-white border-light-border/40 hover:bg-light-lbg/20 text-dark-primary"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSubject(sub.id)}
+                              className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5"
+                            />
+                            <span className="truncate flex-1">{sub.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const TeachersSetup = ({
+  teachers,
+  subjects,
+  classifications = [],
+  onAddTeacher,
+  onUpdateTeacher,
+  onDeleteTeacher,
+  slots,
+  assignments
+}) => {
   const [name, setName] = useState("");
-  const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [isMale, setIsMale] = useState(true);
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
   
   const [editingTeacher, setEditingTeacher] = useState(null);
   const [editName, setEditName] = useState("");
-  const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
   const [editIsMale, setEditIsMale] = useState(true);
+  const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
 
+  const [activeSubjectDropdownId, setActiveSubjectDropdownId] = useState(null);
+  const dropdownRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setActiveSubjectDropdownId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleInlineSubjectToggle = (teacher, subjectId) => {
+    const currentSubjects = teacher.subjects || [];
+    let newSubjects;
+    if (currentSubjects.some(sid => String(sid) === String(subjectId))) {
+      newSubjects = currentSubjects.filter(id => String(id) !== String(subjectId));
+    } else {
+      newSubjects = [...currentSubjects, subjectId];
+    }
+    onUpdateTeacher(teacher.id, teacher.name, teacher.is_male, newSubjects);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -379,49 +374,49 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
         <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl">
           <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-3">Add New Teacher</h4>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-3">
-              <input
-                type="text"
-                placeholder="Teacher's Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="flex-1 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-              />
-              <select
-                value={isMale ? "male" : "female"}
-                onChange={(e) => setIsMale(e.target.value === "male")}
-                className="bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft min-w-[120px]"
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
+            <div className="flex flex-col md:flex-row md:items-end gap-3">
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Teacher Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Teacher's Full Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                />
+              </div>
+              <div className="w-full md:w-32">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
+                <select
+                  value={isMale ? "male" : "female"}
+                  onChange={(e) => setIsMale(e.target.value === "male")}
+                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Qualified Subjects</label>
+                {subjects.length === 0 ? (
+                  <p className="text-xs text-dark-muted italic py-2.5">Please add subjects first.</p>
+                ) : (
+                  <GroupedSubjectMultiSelect
+                    subjects={subjects}
+                    classifications={classifications}
+                    selectedIds={selectedSubjects}
+                    onChange={setSelectedSubjects}
+                    placeholder="Select qualified subjects..."
+                  />
+                )}
+              </div>
               <button
                 type="submit"
-                className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 transition-all md:w-auto w-full justify-center"
+                className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 transition-all shrink-0 justify-center h-[42px] md:w-auto w-full"
               >
                 <i className="fas fa-plus"></i> Add Teacher
               </button>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold text-dark-soft mb-2">Select Subjects Qualified to Teach:</p>
-              {subjects.length === 0 ? (
-                <p className="text-xs text-dark-muted italic">Please add subjects first.</p>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
-                    <label key={sub.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-light-border hover:bg-light-bg/20 transition-all cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedSubjects.some(sid => String(sid) === String(sub.id))}
-                        onChange={() => handleSubjectToggle(sub.id)}
-                        className="rounded text-brand-primary focus:ring-brand-soft w-4 h-4"
-                      />
-                      <span className="text-xs font-semibold text-dark-primary truncate">{sub.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
             </div>
           </form>
         </div>
@@ -432,51 +427,55 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
         <div className="bg-blue-50/50 border border-blue-200 p-5 rounded-2xl animate-in fade-in duration-300">
           <h4 className="text-sm font-bold text-blue-dark uppercase tracking-wide mb-3">Edit Teacher: {editingTeacher.name}</h4>
           <div className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center gap-3">
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="flex-1 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-              />
-              <select
-                value={editIsMale ? "male" : "female"}
-                onChange={(e) => setEditIsMale(e.target.value === "male")}
-                className="bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft min-w-[120px]"
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-              <div className="flex gap-2">
+            <div className="flex flex-col md:flex-row md:items-end gap-3">
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Teacher Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                />
+              </div>
+              <div className="w-full md:w-32">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
+                <select
+                  value={editIsMale ? "male" : "female"}
+                  onChange={(e) => setEditIsMale(e.target.value === "male")}
+                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">Qualified Subjects</label>
+                {subjects.length === 0 ? (
+                  <p className="text-xs text-dark-muted italic py-2.5">Please add subjects first.</p>
+                ) : (
+                  <GroupedSubjectMultiSelect
+                    subjects={subjects}
+                    classifications={classifications}
+                    selectedIds={editSelectedSubjects}
+                    onChange={setEditSelectedSubjects}
+                    placeholder="Select qualified subjects..."
+                  />
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0 md:w-auto w-full">
                 <button
                   onClick={handleSaveEdit}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all h-[42px] flex-1 md:flex-initial"
                 >
-                  Save Changes
+                  Save
                 </button>
                 <button
                   onClick={() => setEditingTeacher(null)}
-                  className="bg-light-ui hover:bg-light-border text-dark-soft px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all"
+                  className="bg-light-ui hover:bg-light-border text-dark-soft px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all h-[42px] flex-1 md:flex-initial"
                 >
                   Cancel
                 </button>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-bold text-dark-soft mb-2">Update Qualified Subjects:</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {[...subjects].sort((a, b) => a.name.localeCompare(b.name)).map(sub => (
-                  <label key={sub.id} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-light-border hover:bg-light-bg/20 transition-all cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editSelectedSubjects.some(sid => String(sid) === String(sub.id))}
-                      onChange={() => handleSubjectToggle(sub.id, true)}
-                      className="rounded text-brand-primary focus:ring-brand-soft w-4 h-4"
-                    />
-                    <span className="text-xs font-semibold text-dark-primary truncate">{sub.name}</span>
-                  </label>
-                ))}
               </div>
             </div>
           </div>
@@ -525,6 +524,46 @@ export const TeachersSetup = ({ teachers, subjects, onAddTeacher, onUpdateTeache
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex justify-end gap-2">
+                      <div className="relative" ref={activeSubjectDropdownId === teacher.id ? dropdownRef : null}>
+                        <button
+                          onClick={() => setActiveSubjectDropdownId(activeSubjectDropdownId === teacher.id ? null : teacher.id)}
+                          className="text-brand-primary hover:text-brand-dark p-2 rounded-lg hover:bg-brand-lbg transition-all"
+                          title="Assign Subjects"
+                          disabled={!!editingTeacher}
+                        >
+                          <i className="fas fa-book-medical"></i>
+                        </button>
+                        {activeSubjectDropdownId === teacher.id && (
+                          <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-light-border rounded-xl shadow-xl z-50 p-2 max-h-60 overflow-y-auto">
+                            <h5 className="text-xs font-bold text-dark-deepblue mb-2 px-1 border-b border-light-border pb-1">Assign Subjects to {teacher.name}</h5>
+                            <div className="flex flex-col gap-1">
+                              {subjects.length === 0 ? (
+                                <span className="text-[10px] text-dark-muted px-1">No subjects available</span>
+                              ) : (
+                                [...subjects].sort((a,b) => a.name.localeCompare(b.name)).map(sub => (
+                                  <label key={sub.id} className="flex items-center gap-2 p-1.5 hover:bg-light-lbg rounded cursor-pointer transition-colors">
+                                    <input 
+                                      type="checkbox" 
+                                      className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5 border-light-border"
+                                      checked={(teacher.subjects || []).some(sid => String(sid) === String(sub.id))}
+                                      onChange={() => handleInlineSubjectToggle(teacher, sub.id)}
+                                    />
+                                    <span className="text-xs font-semibold text-dark-primary truncate">{sub.name}</span>
+                                  </label>
+                                ))
+                              )}
+                            </div>
+                            <div className="mt-2 pt-2 border-t border-light-border text-right">
+                              <button
+                                onClick={() => setActiveSubjectDropdownId(null)}
+                                className="bg-brand-primary hover:bg-brand-dark text-white px-3 py-1 rounded-md text-[10px] font-bold"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleStartEdit(teacher)}
                         className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
@@ -811,7 +850,7 @@ export const ClassesSetup = ({
                     required
                   >
                     <option value="">-- Choose Subject --</option>
-                    {renderSubjectOptionsGroupedByClassification(subjects, classifications)}
+                    {renderSubjectOptionsGroupedByClassification(subjects, classifications, undefined, newSubId)}
                   </select>
                 </div>
 

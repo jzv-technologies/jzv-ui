@@ -7,7 +7,6 @@ import ConfirmModal from '../../../ConfirmModal';
 import TimetableCompareModal from './TimetableCompareModal';
 
 import {
-  SubjectsSetup,
   TeachersSetup,
   ClassesSetup,
   PeriodsSetup,
@@ -402,180 +401,7 @@ const TimetableManager = () => {
     if (updates.slots !== undefined) setSlots(updates.slots);
   };
 
-  // SUBJECT ACTION HANDLERS
-  const handleAddSubject = async (name, classificationId) => {
-    const newSub = { id: generateLocalId(), name, classification_id: classificationId };
-    let updatedSubjects = [...subjects, newSub];
 
-    if (isSupabaseMode) {
-      try {
-        const { data, error } = await supabase
-          .from('subjects')
-          .insert([{ name, classification_id: classificationId }])
-          .select();
-        if (error) throw error;
-        updatedSubjects = [...subjects, data[0]];
-      } catch (err) {
-        showToast('DB Error: ' + err.message, 'error');
-        return;
-      }
-    }
-    saveState({ subjects: updatedSubjects });
-  };
-
-  const handleUpdateSubject = async (id, name, classificationId) => {
-    const updatedSubjects = subjects.map((s) =>
-      String(s.id) === String(id) ? { ...s, name, classification_id: classificationId } : s
-    );
-
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
-      try {
-        const { error } = await supabase
-          .from('subjects')
-          .update({ name, classification_id: classificationId })
-          .eq('id', id);
-        if (error) throw error;
-      } catch (err) {
-        showToast('DB Error: ' + err.message, 'error');
-        return;
-      }
-    }
-    saveState({ subjects: updatedSubjects });
-  };
-
-  const handleSaveClassifications = async (updatedList, deletedId = null) => {
-    if (isSupabaseMode) {
-      try {
-        if (deletedId && !deletedId.toString().startsWith('local-')) {
-          const { error } = await supabase
-            .from('subject_classifications')
-            .delete()
-            .eq('id', deletedId);
-          if (error) throw error;
-        }
-
-        const promises = updatedList.map(async (cls) => {
-          const isLocal = cls.id.toString().startsWith('local-');
-          if (isLocal) {
-            const { data, error } = await supabase
-              .from('subject_classifications')
-              .insert([{ name: cls.name }])
-              .select();
-            if (error) throw error;
-            return data[0];
-          } else {
-            const { error } = await supabase
-              .from('subject_classifications')
-              .update({ name: cls.name })
-              .eq('id', cls.id);
-            if (error) throw error;
-            return cls;
-          }
-        });
-
-        const nextDbList = await Promise.all(promises);
-
-        const { data: refetched } = await supabase
-          .from('subject_classifications')
-          .select('*')
-          .order('name', { ascending: true });
-
-        const finalClassifications = refetched || nextDbList;
-        saveState({ classifications: finalClassifications });
-
-        if (deletedId) {
-          const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
-          if (refetchedSubjects) {
-            saveState({
-              classifications: finalClassifications,
-              subjects: refetchedSubjects,
-            });
-          }
-        }
-        return;
-      } catch (err) {
-        showToast('Database Sync Error: ' + err.message, 'error');
-        return;
-      }
-    }
-
-    let nextSubjects = subjects;
-    if (deletedId) {
-      nextSubjects = subjects.map((s) =>
-        String(s.classification_id) === String(deletedId) ? { ...s, classification_id: null } : s
-      );
-    }
-    saveState({
-      classifications: updatedList,
-      subjects: nextSubjects,
-    });
-  };
-
-  const handleBulkMapSubjects = async (classificationId, selectedSubjectIds) => {
-    if (isSupabaseMode) {
-      try {
-        if (!classificationId.toString().startsWith('local-')) {
-          await supabase
-            .from('subjects')
-            .update({ classification_id: null })
-            .eq('classification_id', classificationId);
-
-          const realSubjectIds = selectedSubjectIds.filter(
-            (id) => !id.toString().startsWith('local-')
-          );
-          if (realSubjectIds.length > 0) {
-            const { error } = await supabase
-              .from('subjects')
-              .update({ classification_id: classificationId })
-              .in('id', realSubjectIds);
-            if (error) throw error;
-          }
-        }
-
-        const { data: refetchedSubjects } = await supabase.from('subjects').select('*');
-        if (refetchedSubjects) {
-          saveState({ subjects: refetchedSubjects });
-        }
-        return;
-      } catch (err) {
-        showToast('Database Sync Error: ' + err.message, 'error');
-        return;
-      }
-    }
-
-    const nextSubjects = subjects.map((s) => {
-      const isSelected = selectedSubjectIds.includes(s.id);
-      const isCurrentlyMappedToThis = String(s.classification_id) === String(classificationId);
-
-      if (isSelected) {
-        return { ...s, classification_id: classificationId };
-      } else if (isCurrentlyMappedToThis) {
-        return { ...s, classification_id: null };
-      }
-      return s;
-    });
-
-    saveState({ subjects: nextSubjects });
-  };
-
-  const handleDeleteSubject = async (id) => {
-    const updatedSubjects = subjects.filter((s) => String(s.id) !== String(id));
-    const updatedAssignments = assignments.filter((a) => String(a.subject_id) !== String(id));
-    const updatedSlots = slots.filter((s) => String(s.subject_id) !== String(id));
-
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
-      try {
-        await supabase.from('subjects').delete().eq('id', id);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    saveState({
-      subjects: updatedSubjects,
-      assignments: updatedAssignments,
-      slots: updatedSlots,
-    });
-  };
 
   // TEACHER ACTION HANDLERS
   const handleAddTeacher = async (name, qualifiedSubjects, isMale = true) => {
@@ -1302,6 +1128,71 @@ const TimetableManager = () => {
     showToast('Slot moved successfully!', 'success');
   };
 
+  // MOVE COLUMN HANDLER (Move all slots for a class from one period to another)
+  const handleMoveColumn = async (classId, sourcePeriodId, targetPeriodId) => {
+    let updatedSlots = [...slots];
+    const slotsToMove = updatedSlots.filter(s => String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId));
+    
+    if (slotsToMove.length === 0) {
+      showToast('No slots to move in this column.', 'info');
+      return;
+    }
+
+    const existingTargetSlots = updatedSlots.filter(s => String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId));
+    if (existingTargetSlots.length > 0) {
+      const confirmMove = window.confirm('The target column already has assignments for this class. They will be overwritten. Proceed?');
+      if (!confirmMove) return;
+    }
+
+    // Remove source slots
+    updatedSlots = updatedSlots.filter(s => !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId)));
+
+    // Remove old target slots (overwrite)
+    updatedSlots = updatedSlots.filter(s => !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId)));
+
+    const newSlotsVal = slotsToMove.map(s => ({
+      class_id: classId,
+      day: s.day,
+      period_id: targetPeriodId,
+      subject_id: s.subject_id,
+      teacher_id: s.teacher_id,
+    }));
+
+    newSlotsVal.forEach(ns => {
+      updatedSlots.push({ id: generateLocalId(), ...ns });
+    });
+
+    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+      try {
+        await supabase
+          .from('timetable_slots')
+          .delete()
+          .eq('class_id', classId)
+          .in('period_id', [sourcePeriodId, targetPeriodId]);
+
+        const { data, error } = await supabase
+          .from('timetable_slots')
+          .upsert(newSlotsVal, { onConflict: 'class_id,day,period_id' })
+          .select();
+        
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          data.forEach(dbSlot => {
+            const idx = updatedSlots.findIndex(s => String(s.class_id) === String(dbSlot.class_id) && s.day === dbSlot.day && String(s.period_id) === String(dbSlot.period_id));
+            if (idx > -1) updatedSlots[idx] = dbSlot;
+          });
+        }
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        await loadData();
+        return;
+      }
+    }
+    saveState({ slots: updatedSlots });
+    showToast('Column moved successfully!', 'success');
+  };
+
   // JSON EXPORT HANDLER
   const handleExportJson = () => {
     const backupData = {
@@ -1468,7 +1359,6 @@ const TimetableManager = () => {
               { id: 'view', label: 'Admin View', icon: 'fa-eye' },
               { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
               { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
-              { id: 'subjects', label: 'Subjects Setup', icon: 'fa-book' },
               { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
             ].map((tab) => (
               <button
@@ -1561,27 +1451,17 @@ const TimetableManager = () => {
               onUpdateSlot={handleUpdateSlot}
               onMoveSlot={handleMoveSlot}
               onClearSlots={handleClearSlots}
+              onMoveColumn={handleMoveColumn}
             />
           )}
 
-          {activeTab === 'subjects' && (
-            <SubjectsSetup
-              subjects={subjects}
-              classifications={classifications}
-              onAddSubject={handleAddSubject}
-              onUpdateSubject={handleUpdateSubject}
-              onDeleteSubject={handleDeleteSubject}
-              onSaveClassifications={handleSaveClassifications}
-              onBulkMapSubjects={handleBulkMapSubjects}
-              slots={slots}
-              assignments={assignments}
-            />
-          )}
+
 
           {activeTab === 'teachers' && (
             <TeachersSetup
               teachers={teachers}
               subjects={subjects}
+              classifications={classifications}
               onAddTeacher={handleAddTeacher}
               onUpdateTeacher={handleUpdateTeacher}
               onDeleteTeacher={handleDeleteTeacher}
@@ -1676,6 +1556,8 @@ const TimetableManager = () => {
 CREATE TABLE public.subjects (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name VARCHAR(255) UNIQUE NOT NULL,
+  requires_teacher BOOLEAN DEFAULT TRUE,
+  deactivated BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

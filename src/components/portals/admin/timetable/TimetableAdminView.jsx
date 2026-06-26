@@ -4,6 +4,7 @@ import TimetableOverview from './TimetableOverview';
 import TimetableScheduler from './TimetableScheduler';
 import ConfirmModal from '../../../ConfirmModal';
 import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTabs';
+import { CARD_THEMES } from '../../../../utils/cardTheme';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -55,6 +56,7 @@ export const getSubjectColor = (subjectName) => {
 // ─── Reusable single-select dropdown ─────────────────────────────────────────
 const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const ref = useRef(null);
 
   useEffect(() => {
@@ -65,7 +67,14 @@ const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => {
+    if (!open) setSearchQuery('');
+  }, [open]);
+
   const selectedOption = options.find((opt) => String(opt.value) === String(selected));
+  const filteredOptions = options.filter((opt) =>
+    opt.label.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div ref={ref} className="relative">
@@ -82,13 +91,24 @@ const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
           className="absolute top-full left-0 mt-1 z-50 bg-white border border-light-border rounded-2xl shadow-xl overflow-hidden divide-y divide-light-border"
           style={{ minWidth: 220 }}
         >
+          <div className="p-2 border-b border-light-border bg-light-lbg/50">
+            <input
+              type="text"
+              autoFocus
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white border border-light-border rounded-lg px-2.5 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
           <div className="max-h-60 overflow-y-auto">
-            {options.length === 0 && (
+            {filteredOptions.length === 0 && (
               <div className="px-3 py-4 text-xs text-dark-muted text-center font-semibold">
                 No options
               </div>
             )}
-            {options.map((opt) => {
+            {filteredOptions.map((opt) => {
               const isSelected = String(opt.value) === String(selected);
               return (
                 <button
@@ -120,7 +140,15 @@ const SingleSelectDropdown = ({ label, options, selected, onChange }) => {
 };
 
 // ─── Reusable multi-select dropdown ──────────────────────────────────────────
-const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
+// Optional `genderFilter` (string: 'all'|'male'|'female') + `onGenderChange`
+// adds a Gender group at the very top of the panel (Option C).
+const GENDER_OPTIONS = [
+  { id: 'all', label: 'All', icon: 'fa-users' },
+  { id: 'male', label: 'Male', icon: 'fa-male' },
+  { id: 'female', label: 'Female', icon: 'fa-female' },
+];
+
+const MultiSelectDropdown = ({ label, options, selected, onChange, genderFilter, onGenderChange }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -133,6 +161,9 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
   }, []);
 
   const selectedCount = selected.length;
+  const hasGender = genderFilter != null && onGenderChange != null;
+  // Derive active badge text for gender (shown in trigger when no specific teachers are selected)
+  const genderBadge = hasGender && genderFilter !== 'all' ? genderFilter : null;
 
   const toggle = (val) => {
     onChange(selected.includes(val) ? selected.filter((s) => s !== val) : [...selected, val]);
@@ -144,7 +175,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
       <button
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all whitespace-nowrap ${
-          selectedCount > 0
+          selectedCount > 0 || genderBadge
             ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
             : 'bg-white border-light-border text-dark-primary hover:border-brand-soft hover:bg-light-lbg'
         }`}
@@ -156,16 +187,50 @@ const MultiSelectDropdown = ({ label, options, selected, onChange }) => {
             {selectedCount}
           </span>
         )}
+        {genderBadge && selectedCount === 0 && (
+          <span className="bg-white/30 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ml-0.5 capitalize">
+            {genderBadge}
+          </span>
+        )}
         <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-0.5`} />
       </button>
 
       {open && (
         <div
           className="absolute top-full left-0 mt-1 z-50 bg-white border border-light-border rounded-xl shadow-xl overflow-hidden"
-          style={{ minWidth: 180, maxWidth: 240 }}
+          style={{ minWidth: 190, maxWidth: 250 }}
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-light-border bg-light-lbg/50">
-            <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wide">
+          {/* ── Group 1: Gender filter (only when enabled) ─── */}
+          {hasGender && (
+            <>
+              <div className="px-3 py-1.5 bg-light-lbg/50 border-b border-light-border">
+                <span className="text-[9px] font-extrabold text-dark-muted uppercase tracking-wider">
+                  Gender
+                </span>
+              </div>
+              <div className="flex gap-1 px-2 py-2 border-b border-light-border">
+                {GENDER_OPTIONS.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onGenderChange(g.id); }}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                      genderFilter === g.id
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'bg-light-lbg text-dark-soft hover:text-dark-primary hover:bg-light-border'
+                    }`}
+                  >
+                    <i className={`fas ${g.icon} text-[9px]`} />
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── Group 2: Teacher / item list ─── */}
+          <div className="flex items-center justify-between px-3 py-1.5 bg-light-lbg/50 border-b border-light-border">
+            <span className="text-[9px] font-extrabold text-dark-muted uppercase tracking-wider">
               {label}
             </span>
             {selectedCount > 0 && (
@@ -234,7 +299,7 @@ const AssignPopover = ({
   onClose,
 }) => {
   const ref = useRef(null);
-  
+
   const [selSubjectId, setSelSubjectId] = useState('');
   const [selectedDays, setSelectedDays] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -486,7 +551,9 @@ const AssignPopover = ({
                           : 'border-light-border bg-white hover:bg-brand-lbg/10 hover:border-brand-soft cursor-pointer text-dark-primary'
                       }`}
                     >
-                      <div className="truncate" title={cls.name}>{cls.name}</div>
+                      <div className="truncate" title={cls.name}>
+                        {cls.name}
+                      </div>
                     </button>
                   );
                 })}
@@ -566,7 +633,12 @@ const AssignPopover = ({
               className="w-full bg-white border border-light-border rounded-lg px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
             >
               <option value="">-- Choose Subject --</option>
-              {renderSubjectOptionsGroupedByClassification(qualifiedSubjects, classifications)}
+              {renderSubjectOptionsGroupedByClassification(
+                qualifiedSubjects,
+                classifications,
+                undefined,
+                selSubjectId
+              )}
             </select>
           </div>
 
@@ -605,7 +677,9 @@ const AssignPopover = ({
                     />
                     <span>{d.substring(0, 3)}</span>
                     {isBusyOnDay && (
-                      <span className={`text-[8px] ml-0.5 ${isSelected ? 'text-white/80' : 'text-red-primary'} font-bold`}>
+                      <span
+                        className={`text-[8px] ml-0.5 ${isSelected ? 'text-white/80' : 'text-red-primary'} font-bold`}
+                      >
                         (Busy)
                       </span>
                     )}
@@ -639,13 +713,18 @@ const AssignPopover = ({
                             selectedDays.length === 0
                               ? 'opacity-40 cursor-not-allowed bg-light-bg/25 border-light-border'
                               : isSelected
-                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
-                              : 'border-light-border bg-white hover:bg-brand-lbg/10 hover:border-brand-soft cursor-pointer text-dark-primary'
+                                ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                                : 'border-light-border bg-white hover:bg-brand-lbg/10 hover:border-brand-soft cursor-pointer text-dark-primary'
                           }`}
                         >
-                          <div className="truncate" title={cls.name}>{cls.name}</div>
+                          <div className="truncate" title={cls.name}>
+                            {cls.name}
+                          </div>
                           {cls.isMapped && !isSelected && (
-                            <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full border border-white" title="Mapped" />
+                            <span
+                              className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full border border-white"
+                              title="Mapped"
+                            />
                           )}
                         </button>
                       );
@@ -722,6 +801,7 @@ const TimetableAdminView = ({
   onUpdateSlot = null, // if provided, viewer becomes interactive
   onMoveSlot = null,
   onClearSlots = null,
+  onMoveColumn = null,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
   seasonsConfig = null, // seasons configuration
 }) => {
@@ -730,7 +810,20 @@ const TimetableAdminView = ({
   const [viewType, setViewType] = useState(defaultView);
   const viewObj = viewOptionsMap[viewType] || viewOptionsMap['scheduler'];
 
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+  const [freeTeachersGender, setFreeTeachersGender] = useState('all');
+  const [assignedTeachersGender, setAssignedTeachersGender] = useState('all');
+
+  const selectedId = viewType === 'teacher' ? selectedTeacherId : selectedClassId;
+  const setSelectedId = (id) => {
+    if (viewType === 'teacher') {
+      setSelectedTeacherId(id);
+    } else {
+      setSelectedClassId(id);
+    }
+  };
+
   const [showBreaks, setShowBreaks] = useState(true);
   const [popover, setPopover] = useState(null);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
@@ -749,7 +842,7 @@ const TimetableAdminView = ({
     Thursday: 'Weekday',
     Friday: 'Weekday',
     Saturday: 'Working Weekend',
-    Sunday: 'Holiday Weekend'
+    Sunday: 'Holiday Weekend',
   };
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -771,44 +864,36 @@ const TimetableAdminView = ({
       prefixStyle: { color: t.is_male === false ? '#F472B6' : '#3B82F6' },
     }));
 
-  // Reset filter state on view change
-  useEffect(() => {
-    setSelClasses([]);
-    setSelTeachers([]);
-    setSelAssignedTeachers([]);
-    setSelAssignedClasses([]);
-  }, [viewType]);
-
   // Handle default selection
   React.useEffect(() => {
     if (lockedClassId) {
       setViewType('class');
-      setSelectedId(lockedClassId);
+      setSelectedClassId(lockedClassId);
       return;
     }
 
     if (viewType === 'scheduler' || viewType === 'class') {
       if (classes.length > 0) {
-        const isValid = classes.some((c) => String(c.id) === String(selectedId));
+        const isValid = classes.some((c) => String(c.id) === String(selectedClassId));
         if (!isValid) {
           const sortedClasses = [...classes].sort((a, b) => a.name.localeCompare(b.name));
-          setSelectedId(sortedClasses[0].id);
+          setSelectedClassId(sortedClasses[0].id);
         }
       } else {
-        setSelectedId('');
+        setSelectedClassId('');
       }
     } else if (viewType === 'teacher') {
       if (teachers.length > 0) {
-        const isValid = teachers.some((t) => String(t.id) === String(selectedId));
+        const isValid = teachers.some((t) => String(t.id) === String(selectedTeacherId));
         if (!isValid) {
           const sortedTeachers = [...teachers].sort((a, b) => a.name.localeCompare(b.name));
-          setSelectedId(sortedTeachers[0].id);
+          setSelectedTeacherId(sortedTeachers[0].id);
         }
       } else {
-        setSelectedId('');
+        setSelectedTeacherId('');
       }
     }
-  }, [viewType, classes, teachers, lockedClassId, selectedId]);
+  }, [viewType, classes, teachers, lockedClassId, selectedClassId, selectedTeacherId]);
 
   const isSchedulerView = viewType === 'scheduler';
   const isGridView = viewType === 'class' || viewType === 'teacher';
@@ -975,6 +1060,8 @@ const TimetableAdminView = ({
                   options={teacherOptions}
                   selected={selTeachers}
                   onChange={setSelTeachers}
+                  genderFilter={freeTeachersGender}
+                  onGenderChange={setFreeTeachersGender}
                 />
               )}
               {viewType === 'assigned_teachers' && (
@@ -984,6 +1071,8 @@ const TimetableAdminView = ({
                     options={teacherOptions}
                     selected={selAssignedTeachers}
                     onChange={setSelAssignedTeachers}
+                    genderFilter={assignedTeachersGender}
+                    onGenderChange={setAssignedTeachersGender}
                   />
                   <MultiSelectDropdown
                     label="Classes"
@@ -1100,7 +1189,10 @@ const TimetableAdminView = ({
             {/* Print — for all views */}
             <button
               onClick={handlePrint}
-              disabled={(viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') && !selectedId}
+              disabled={
+                (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                !selectedId
+              }
               title="Print / Save as PDF"
               className="p-2 rounded-lg border border-light-border bg-light-bg text-dark-soft hover:bg-light-ui hover:text-dark-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -1108,15 +1200,17 @@ const TimetableAdminView = ({
             </button>
 
             {/* Clear Multiple Slots — only for class schedule / scheduler views */}
-            {(viewType === 'class' || viewType === 'scheduler') && selectedId && typeof onClearSlots === 'function' && (
-              <button
-                onClick={() => setIsClearModalOpen(true)}
-                title="Clear Multiple Slots"
-                className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
-              >
-                <i className="fas fa-eraser text-sm" />
-              </button>
-            )}
+            {(viewType === 'class' || viewType === 'scheduler') &&
+              selectedId &&
+              typeof onClearSlots === 'function' && (
+                <button
+                  onClick={() => setIsClearModalOpen(true)}
+                  title="Clear Multiple Slots"
+                  className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
+                >
+                  <i className="fas fa-eraser text-sm" />
+                </button>
+              )}
           </div>
         </div>
       </div>
@@ -1145,6 +1239,8 @@ const TimetableAdminView = ({
           selTeachers={selTeachers}
           selAssignedTeachers={selAssignedTeachers}
           selAssignedClasses={selAssignedClasses}
+          freeTeachersGender={freeTeachersGender}
+          assignedTeachersGender={assignedTeachersGender}
         />
       )}
 
@@ -1171,15 +1267,15 @@ const TimetableAdminView = ({
         <>
           <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
             <table className="w-full border-collapse min-w-[900px] print:min-w-full">
-              <thead>
+              <thead className="table-sticky-header">
                 <tr className="bg-light-lbg print:bg-gray-100 border-b border-light-border">
-                  <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black">
+                  <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black table-sticky-col table-sticky-intersection bg-light-lbg">
                     Day
                   </th>
                   {visiblePeriods.map((period) => (
                     <th
                       key={period.id || period.period_number}
-                      className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black"
+                      className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black bg-light-lbg"
                     >
                       <div className="font-extrabold text-sm text-dark-deepblue">
                         {period.name || `Period ${period.period_number}`}
@@ -1199,8 +1295,8 @@ const TimetableAdminView = ({
                   const isHoliday = dayType === 'Holiday Weekend';
 
                   return (
-                    <tr key={day} className="border-b border-light-border last:border-b-0 bg-white ">
-                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px]">
+                    <tr key={day} className="border-b border-light-border last:border-b-0 bg-white">
+                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px] table-sticky-col bg-white">
                         {day}
                       </td>
                       {isHoliday ? (
@@ -1242,15 +1338,33 @@ const TimetableAdminView = ({
                             ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
                             : null;
                           const isFemale = teacher && teacher.is_male === false;
+                          const subjectObj = isAssigned
+                            ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+                            : null;
+                          const requiresTeacher = subjectObj
+                            ? subjectObj.requires_teacher !== false
+                            : true;
+
+                          const clsObj =
+                            subjectObj && subjectObj.classification_id
+                              ? classifications.find(
+                                  (c) => String(c.id) === String(subjectObj.classification_id)
+                                )
+                              : null;
+                          const themeStr = clsObj ? clsObj.theme : null;
+                          const themeStyles =
+                            themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
 
                           let colorClass = '';
                           if (isAssigned) {
-                            if (!isTeacherAssigned) {
+                            if (themeStyles) {
+                              colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
+                            } else if (!isTeacherAssigned) {
                               colorClass = getSubjectColor(subjectName);
                             } else if (isFemale) {
-                              colorClass = 'bg-purple-100 text-purple-900 border-purple-200';
+                              colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
                             } else {
-                              colorClass = 'bg-blue-lbg text-blue-dark border-blue-200';
+                              colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
                             }
                           }
 
@@ -1265,23 +1379,23 @@ const TimetableAdminView = ({
 
                           if (isBreak) {
                             const nameLower = (period.name || 'Break').toLowerCase();
-                            const breakIcon = period.icon || (
-                              nameLower.includes('salah') ||
+                            const breakIcon =
+                              period.icon ||
+                              (nameLower.includes('salah') ||
                               nameLower.includes('prayer') ||
                               nameLower.includes('namaz') ||
                               nameLower.includes('zohr') ||
                               nameLower.includes('asr')
                                 ? 'fa-mosque'
                                 : nameLower.includes('lunch') ||
-                                  nameLower.includes('breakfast') ||
-                                  nameLower.includes('recess') ||
-                                  nameLower.includes('tea') ||
-                                  nameLower.includes('snack') ||
-                                  nameLower.includes('food') ||
-                                  nameLower.includes('tiffin')
-                                ? 'fa-utensils'
-                                : 'fa-coffee'
-                            );
+                                    nameLower.includes('breakfast') ||
+                                    nameLower.includes('recess') ||
+                                    nameLower.includes('tea') ||
+                                    nameLower.includes('snack') ||
+                                    nameLower.includes('food') ||
+                                    nameLower.includes('tiffin')
+                                  ? 'fa-utensils'
+                                  : 'fa-coffee');
 
                             return (
                               <td
@@ -1289,7 +1403,9 @@ const TimetableAdminView = ({
                                 className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
                               >
                                 <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                                  <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
+                                  <i
+                                    className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}
+                                  ></i>
                                   {period.name || 'Break'}
                                 </div>
                               </td>
@@ -1306,24 +1422,30 @@ const TimetableAdminView = ({
                             >
                               {isAssigned ? (
                                 <div
-                                  className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                                  className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${themeStyles ? `${themeStyles.color.replace('bg-', 'border-l-')} border-l-[6px]` : ''} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
                                 >
                                   <span className="font-extrabold text-xs tracking-wide uppercase truncate">
                                     {subjectName}
                                   </span>
                                   {viewType === 'class' ? (
-                                    !isTeacherAssigned ? (
-                                      <span className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
+                                    !isTeacherAssigned && requiresTeacher ? (
+                                      <p className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
                                         <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
                                         {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] opacity-90 font-bold truncate">
-                                        <i
-                                          className={`fas ${isFemale ? 'fa-female' : 'fa-male'} mr-1 text-[9px]`}
-                                        ></i>
+                                      </p>
+                                    ) : isTeacherAssigned ? (
+                                      <p
+                                        className={`text-[10px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}
+                                      >
+                                        {isFemale && (
+                                          <i className="fas fa-female mr-1 text-[9px]"></i>
+                                        )}
                                         {getTeacherName(slot.teacher_id)}
-                                      </span>
+                                      </p>
+                                    ) : (
+                                      <p className="text-[10px] opacity-90 font-bold truncate text-dark-muted">
+                                        No Teacher Required
+                                      </p>
                                     )
                                   ) : (
                                     <span className="text-[10px] opacity-90 font-bold truncate">
@@ -1416,6 +1538,8 @@ const TimetableAdminView = ({
             assignments={assignments}
             onUpdateSlot={onUpdateSlot}
             onMoveSlot={onMoveSlot}
+            onClearSlots={onClearSlots}
+            onMoveColumn={onMoveColumn}
             showBreaks={showBreaks}
             seasonsConfig={seasonsConfig}
           />
@@ -1642,14 +1766,7 @@ const AllocationSummaryTable = ({
   return null;
 };
 
-const ClearSlotsModal = ({
-  isOpen,
-  onClose,
-  days,
-  periods,
-  className,
-  onClear,
-}) => {
+const ClearSlotsModal = ({ isOpen, onClose, days, periods, className, onClear }) => {
   const [selDays, setSelDays] = useState([]);
   const [selPeriods, setSelPeriods] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -1748,7 +1865,10 @@ const ClearSlotsModal = ({
                   Select Days
                 </label>
                 <div className="flex gap-2 text-[10px] font-bold">
-                  <button onClick={handleSelectAllDays} className="text-brand-primary hover:underline">
+                  <button
+                    onClick={handleSelectAllDays}
+                    className="text-brand-primary hover:underline"
+                  >
                     Select All
                   </button>
                   <span className="text-dark-muted">|</span>
@@ -1789,11 +1909,17 @@ const ClearSlotsModal = ({
                   Select Periods
                 </label>
                 <div className="flex gap-2 text-[10px] font-bold">
-                  <button onClick={handleSelectAllPeriods} className="text-brand-primary hover:underline">
+                  <button
+                    onClick={handleSelectAllPeriods}
+                    className="text-brand-primary hover:underline"
+                  >
                     Select All
                   </button>
                   <span className="text-dark-muted">|</span>
-                  <button onClick={handleClearAllPeriods} className="text-dark-muted hover:underline">
+                  <button
+                    onClick={handleClearAllPeriods}
+                    className="text-dark-muted hover:underline"
+                  >
                     Clear All
                   </button>
                 </div>

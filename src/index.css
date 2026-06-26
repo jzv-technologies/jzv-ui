@@ -157,3 +157,20 @@ html[lang="ar"] select,
 html[lang="ar"] textarea {
   font-family: "Alyamama", "Arial", sans-serif !important;
 }
+
+/* Reusable Sticky Table Classes */
+.table-sticky-header th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.table-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+
+.table-sticky-intersection {
+  z-index: 30 !important;
+}

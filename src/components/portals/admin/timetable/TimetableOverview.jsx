@@ -50,6 +50,8 @@ const TimetableOverview = ({
   selTeachers = [],
   selAssignedTeachers = [],
   selAssignedClasses = [],
+  freeTeachersGender = 'all',
+  assignedTeachersGender = 'all',
 }) => {
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
 
@@ -70,8 +72,11 @@ const TimetableOverview = ({
   const getUnassignedClasses = (day, periodId) =>
     classes.flatMap((cls) => {
       const slot = getSlot(cls.id, day, periodId);
-      if (slot && slot.subject_id && !slot.teacher_id)
+      if (slot && slot.subject_id && !slot.teacher_id) {
+        const subjectObj = subjects.find((s) => String(s.id) === String(slot.subject_id));
+        if (subjectObj && subjectObj.requires_teacher === false) return [];
         return [{ class: cls, subjectName: getSubjectName(slot.subject_id) }];
+      }
       return [];
     });
 
@@ -171,6 +176,12 @@ const TimetableOverview = ({
         : null;
     })
     .filter(Boolean)
+    .filter((t) => {
+      if (selAssignedTeachers.length > 0 && !selAssignedTeachers.includes(String(t.id))) return false;
+      if (assignedTeachersGender === 'male' && t.isFemale) return false;
+      if (assignedTeachersGender === 'female' && !t.isFemale) return false;
+      return true;
+    })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // ─── Cell renderer ────────────────────────────────────────────────────────
@@ -250,8 +261,13 @@ const TimetableOverview = ({
     // ── Free Teachers ──
     if (view === 'free_teachers') {
       const raw = getFreeTeachers(day, period.id);
-      const freeList =
+      let freeList =
         selTeachers.length > 0 ? raw.filter((t) => selTeachers.includes(String(t.id))) : raw;
+      if (freeTeachersGender === 'male') {
+        freeList = freeList.filter((t) => t.is_male !== false);
+      } else if (freeTeachersGender === 'female') {
+        freeList = freeList.filter((t) => t.is_male === false);
+      }
       const allBusy = raw.length === 0;
 
       return (
@@ -307,6 +323,11 @@ const TimetableOverview = ({
         items = items.filter((a) => selAssignedTeachers.includes(String(a.teacherId)));
       if (selAssignedClasses.length > 0)
         items = items.filter((a) => selAssignedClasses.includes(String(a.classId)));
+      if (assignedTeachersGender === 'male') {
+        items = items.filter((a) => a.isFemale === false);
+      } else if (assignedTeachersGender === 'female') {
+        items = items.filter((a) => a.isFemale === true);
+      }
 
       return (
         <td
@@ -348,8 +369,9 @@ const TimetableOverview = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-1 pl-3">
-                      <i className="fas fa-arrow-right text-[7px] text-dark-muted" />
                       <span className="text-[8px] font-semibold text-dark-soft truncate">
+                        {a.subjectName}{' '}
+                        <i className="fas fa-arrow-right text-[7px] text-dark-muted" />{' '}
                         {a.className}
                       </span>
                     </div>
@@ -378,10 +400,10 @@ const TimetableOverview = ({
           {/* ── Table — header aligned to match Class Schedule style ── */}
           <div className="w-full overflow-x-auto">
             <table className="w-full border-collapse min-w-[900px]">
-              <thead>
+              <thead className="table-sticky-header">
                 <tr className="bg-light-lbg border-b border-light-border">
                   <th
-                    className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border sticky left-0 bg-light-lbg z-10"
+                    className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border table-sticky-col table-sticky-intersection bg-light-lbg"
                     style={{ minWidth: 120 }}
                   >
                     Day
@@ -408,10 +430,10 @@ const TimetableOverview = ({
                 {DAYS.map((day) => (
                   <tr
                     key={day}
-                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors"
+                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors bg-white"
                   >
                     <td
-                      className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-light-lbg/30 sticky left-0 z-10"
+                      className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col"
                       style={{ minWidth: 120 }}
                     >
                       <span className="hidden sm:inline">{day}</span>
