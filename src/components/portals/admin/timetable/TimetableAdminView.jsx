@@ -148,7 +148,14 @@ const GENDER_OPTIONS = [
   { id: 'female', label: 'Female', icon: 'fa-female' },
 ];
 
-const MultiSelectDropdown = ({ label, options, selected, onChange, genderFilter, onGenderChange }) => {
+const MultiSelectDropdown = ({
+  label,
+  options,
+  selected,
+  onChange,
+  genderFilter,
+  onGenderChange,
+}) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -213,7 +220,10 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, genderFilter,
                   <button
                     key={g.id}
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); onGenderChange(g.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onGenderChange(g.id);
+                    }}
                     className={`flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-bold transition-all ${
                       genderFilter === g.id
                         ? 'bg-brand-primary text-white shadow-sm'
@@ -765,11 +775,293 @@ const AssignPopover = ({
   return null;
 };
 
+// ─── Helpers for My Timetable ──────────────────────────────────────────────────
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const getTodayName = () => {
+  const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return names[new Date().getDay()];
+};
+
+const formatTime = (t) => {
+  if (!t) return null;
+  const [h, m] = t.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const display = hour % 12 || 12;
+  return `${display}:${m} ${ampm}`;
+};
+
+// ─── Today view: vertical period cards ───────────────────────────────────────
+const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
+  const today = getTodayName();
+  const nonBreaks = periods.filter((p) => !p.is_break);
+
+  const getSlot = (periodId) =>
+    slots.find(
+      (s) =>
+        String(s.teacher_id) === String(teacherId) &&
+        s.day === today &&
+        String(s.period_id) === String(periodId)
+    );
+
+  const getClassName = (id) => classes.find((c) => String(c.id) === String(id))?.name || '—';
+  const getSubjectName = (id) => subjects.find((s) => String(s.id) === String(id))?.name || '—';
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-3">
+      {/* Date header */}
+      <div className="flex items-center gap-3 mb-1">
+        <div className="w-10 h-10 rounded-2xl bg-brand-primary/10 flex items-center justify-center">
+          <i className="fas fa-calendar-day text-brand-primary text-sm" />
+        </div>
+        <div>
+          <div className="text-sm font-extrabold text-dark-deepblue">{today}</div>
+          <div className="text-[11px] text-dark-muted font-semibold">
+            {new Date().toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
+          </div>
+        </div>
+      </div>
+
+      {nonBreaks.length === 0 && (
+        <div className="text-center py-12 bg-white border border-light-border rounded-3xl">
+          <i className="fas fa-clock text-3xl text-dark-muted mb-2 block" />
+          <p className="text-dark-soft font-semibold text-sm">No periods configured.</p>
+        </div>
+      )}
+
+      {nonBreaks.map((period, idx) => {
+        const slot = getSlot(period.id);
+        const hasClass = slot?.subject_id;
+        const breakBefore = periods
+          .filter((p) => p.is_break)
+          .find((bp) => {
+            const bpIdx = periods.findIndex((x) => String(x.id) === String(bp.id));
+            const nonBreaksBefore = periods.slice(0, bpIdx).filter((x) => !x.is_break).length;
+            return nonBreaksBefore === idx;
+          });
+
+        return (
+          <React.Fragment key={period.id}>
+            {/* Inline break card between periods */}
+            {breakBefore &&
+              (() => {
+                const bNl = (breakBefore.name || '').toLowerCase();
+                const bIcon =
+                  bNl.includes('salah') || bNl.includes('prayer') || bNl.includes('namaz')
+                    ? 'fa-mosque'
+                    : bNl.includes('lunch') || bNl.includes('food') || bNl.includes('recess')
+                      ? 'fa-utensils'
+                      : 'fa-coffee';
+                return (
+                  <div className="flex items-center gap-3 px-4 py-2 bg-light-lbg border border-dashed border-light-border rounded-2xl">
+                    <i className={`fas ${bIcon} text-brand-soft text-sm`} />
+                    <span className="text-[11px] font-bold text-dark-muted uppercase tracking-wide">
+                      {breakBefore.name || 'Break'}
+                    </span>
+                    {breakBefore.start_time && (
+                      <span className="text-[10px] text-dark-muted font-semibold ml-auto">
+                        {formatTime(breakBefore.start_time)}
+                        {breakBefore.end_time ? ` – ${formatTime(breakBefore.end_time)}` : ''}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+            {/* Period card */}
+            <div
+              className={`relative flex gap-4 items-stretch bg-white border rounded-2xl overflow-hidden shadow-sm transition-all ${
+                hasClass
+                  ? 'border-brand-soft border-l-4 border-l-brand-primary'
+                  : 'border-light-border border-dashed'
+              }`}
+            >
+              {/* Left accent / period number */}
+              <div
+                className={`flex flex-col items-center justify-center px-4 py-4 min-w-[68px] ${
+                  hasClass ? 'bg-brand-primary/5' : 'bg-light-bg/40'
+                }`}
+              >
+                <span className="text-[10px] font-extrabold text-dark-muted uppercase tracking-wider">
+                  P{period.period_number}
+                </span>
+                {period.start_time && (
+                  <>
+                    <span className="text-[11px] font-bold text-dark-deepblue mt-1">
+                      {formatTime(period.start_time)}
+                    </span>
+                    {period.end_time && (
+                      <span className="text-[9px] text-dark-muted font-semibold">
+                        {formatTime(period.end_time)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 py-4 pr-4 flex flex-col justify-center">
+                {hasClass ? (
+                  <>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <i className="fas fa-book text-brand-primary text-[10px]" />
+                      <span className="text-sm font-extrabold text-dark-deepblue">
+                        {getSubjectName(slot.subject_id)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <i className="fas fa-building text-dark-muted text-[9px]" />
+                      <span className="text-xs font-semibold text-dark-soft">
+                        {getClassName(slot.class_id)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-dark-muted">
+                    <i className="fas fa-minus-circle text-[11px]" />
+                    <span className="text-xs font-semibold italic">Free period</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status dot */}
+              <div className="flex items-center pr-4">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    hasClass ? 'bg-brand-primary' : 'bg-light-border'
+                  }`}
+                />
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── Weekly view: horizontal day × period grid ────────────────────────────────
+const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects }) => {
+  const visiblePeriods = periods.filter((p) => !p.is_break);
+
+  const getSlot = (day, periodId) =>
+    slots.find(
+      (s) =>
+        String(s.teacher_id) === String(teacherId) &&
+        s.day === day &&
+        String(s.period_id) === String(periodId)
+    );
+
+  const getClassName = (id) => classes.find((c) => String(c.id) === String(id))?.name || '—';
+  const getSubjectName = (id) => subjects.find((s) => String(s.id) === String(id))?.name || '—';
+
+  const today = getTodayName();
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+      <div className="w-full overflow-x-auto">
+        <table className="w-full border-collapse min-w-[700px]">
+          <thead>
+            <tr className="bg-light-lbg border-b border-light-border">
+              <th
+                className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border"
+                style={{ minWidth: 110 }}
+              >
+                Day
+              </th>
+              {visiblePeriods.map((p) => (
+                <th
+                  key={p.id}
+                  className="py-3 px-3 text-center border-r border-light-border last:border-r-0"
+                  style={{ minWidth: 130 }}
+                >
+                  <div className="font-extrabold text-sm text-dark-deepblue">
+                    {p.name || `Period ${p.period_number}`}
+                  </div>
+                  {p.start_time && p.end_time && (
+                    <div className="text-[10px] text-dark-soft font-semibold mt-0.5">
+                      {formatTime(p.start_time)} – {formatTime(p.end_time)}
+                    </div>
+                  )}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {DAYS.map((day) => {
+              const isToday = day === today;
+              return (
+                <tr
+                  key={day}
+                  className={`border-b border-light-border last:border-b-0 transition-colors ${
+                    isToday ? 'bg-brand-primary/5' : 'hover:bg-light-bg/20 bg-white'
+                  }`}
+                >
+                  <td
+                    className={`py-3 px-4 font-bold text-sm border-r border-light-border ${
+                      isToday ? 'text-brand-primary' : 'text-dark-deepblue'
+                    }`}
+                    style={{ minWidth: 110 }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isToday && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-primary inline-block" />
+                      )}
+                      {day}
+                    </div>
+                  </td>
+                  {visiblePeriods.map((period) => {
+                    const slot = getSlot(day, period.id);
+                    const hasClass = slot?.subject_id;
+                    return (
+                      <td
+                        key={period.id}
+                        className="p-2 border-r border-light-border last:border-r-0 align-top"
+                        style={{ minWidth: 130, verticalAlign: 'top' }}
+                      >
+                        {hasClass ? (
+                          <div className="flex flex-col gap-0.5 bg-brand-lbg/20 border border-brand-soft/40 rounded-xl px-2 py-2 min-h-[54px]">
+                            <div className="flex items-center gap-1">
+                              <i className="fas fa-book text-brand-primary text-[8px] shrink-0" />
+                              <span className="font-extrabold text-[10px] text-brand-primary truncate leading-tight">
+                                {getSubjectName(slot.subject_id)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 pl-3">
+                              <span className="text-[9px] font-semibold text-dark-soft truncate">
+                                {getClassName(slot.class_id)}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center min-h-[54px] rounded-xl border border-dashed border-light-border">
+                            <span className="text-[9px] text-dark-muted font-semibold">Free</span>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ─── Main TimetableAdminView ──────────────────────────────────────────────────
 const ALL_VIEWS = [
   'scheduler',
   'teacher',
-  'unassigned_classes',
+  'teacher_unassigned',
+  'subject_unassigned',
   'free_teachers',
   'assigned_teachers',
 ];
@@ -778,7 +1070,12 @@ const viewOptionsMap = {
   scheduler: { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
   class: { id: 'class', label: 'Class Schedule', icon: 'fa-building' },
   teacher: { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
-  unassigned_classes: { id: 'unassigned_classes', label: 'Unassigned Classes', icon: 'fa-school' },
+  teacher_unassigned: { id: 'teacher_unassigned', label: 'Teacher Unassigned', icon: 'fa-school' },
+  subject_unassigned: {
+    id: 'subject_unassigned',
+    label: 'Subject Unassigned',
+    icon: 'fa-book-open',
+  },
   free_teachers: { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
   assigned_teachers: {
     id: 'assigned_teachers',
@@ -804,11 +1101,16 @@ const TimetableAdminView = ({
   onMoveColumn = null,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
   seasonsConfig = null, // seasons configuration
+  user = null,
+  showMyTimetable = false,
 }) => {
   const filteredViews = allowedViews;
   const defaultView = filteredViews[0] || 'scheduler';
   const [viewType, setViewType] = useState(defaultView);
   const viewObj = viewOptionsMap[viewType] || viewOptionsMap['scheduler'];
+
+  const [myTab, setMyTab] = useState(showMyTimetable ? 'my' : 'class');
+  const [myView, setMyView] = useState('today'); // 'today' | 'weekly'
 
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -1005,6 +1307,9 @@ const TimetableAdminView = ({
     setPopover(null);
   };
 
+  // Resolve logged-in teacher if user object is passed
+  const myTeacher = user?.id ? teachers.find((t) => String(t.auth_id) === String(user.id)) : null;
+
   // Active filter count for overview views
   const hasActiveFilters =
     selClasses.length > 0 ||
@@ -1017,36 +1322,44 @@ const TimetableAdminView = ({
       {/* ── Header ── */}
       <div className="pb-2 border-b border-light-border mb-4 print:hidden">
         {/* Row 1: Title + Action Buttons */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
           <div>
             <h3 className="text-xl sm:text-xl font-extrabold text-dark-primary flex items-center gap-2">
-              <i className={`fas ${viewObj.icon} text-brand-primary`}></i>
-              {lockedClassId
-                ? `Class Schedule — ${getClassName(selectedId)}`
-                : `${viewObj.label} View`}
+              <i
+                className={`fas ${myTab === 'my' ? 'fa-user-clock' : viewObj.icon} text-brand-primary`}
+              ></i>
+              {myTab === 'my'
+                ? myTeacher
+                  ? `My Timetable — ${myTeacher.name}`
+                  : 'My Timetable'
+                : lockedClassId
+                  ? `Class Schedule — ${getClassName(selectedId)}`
+                  : `${viewObj.label}`}
             </h3>
             <p className="text-sm mt-0.5 text-dark-soft">
-              {lockedClassId
-                ? 'Weekly class schedule.'
-                : viewType === 'scheduler'
-                  ? `Schedule completed: ${getCompletionPercentage(selectedId)}% (${
-                      slots.filter(
-                        (s) =>
-                          String(s.class_id) === String(selectedId) &&
-                          s.subject_id &&
-                          !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
-                      ).length
-                    } / ${days.length * periods.filter((p) => !p.is_break).length} slots assigned)`
-                  : isInteractive
-                    ? `Admin view to manage timetable quickly`
-                    : 'View schedules dynamically by Class or Teacher.'}
+              {myTab === 'my'
+                ? 'Your personal timetable.'
+                : lockedClassId
+                  ? 'Weekly class schedule.'
+                  : viewType === 'scheduler'
+                    ? `${getCompletionPercentage(selectedId)}% (${
+                        slots.filter(
+                          (s) =>
+                            String(s.class_id) === String(selectedId) &&
+                            s.subject_id &&
+                            !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                        ).length
+                      } of ${days.length * periods.filter((p) => !p.is_break).length})`
+                    : isInteractive
+                      ? `Admin view`
+                      : 'View schedules dynamically by Class or Teacher.'}
             </p>
           </div>
 
           {/*Filters (only for overview views) */}
-          {isOverviewView && (
+          {myTab === 'class' && isOverviewView && (
             <div className="flex flex-wrap items-center gap-2">
-              {viewType === 'unassigned_classes' && (
+              {(viewType === 'teacher_unassigned' || viewType === 'subject_unassigned') && (
                 <MultiSelectDropdown
                   label="Classes"
                   options={classOptions}
@@ -1087,120 +1400,192 @@ const TimetableAdminView = ({
 
           {!lockedClassId && (
             <div className="flex flex-wrap items-center gap-2">
-              {/* Entity selector — only for grid views */}
-              {(viewType === 'class' || viewType === 'scheduler') && (
-                <SingleSelectDropdown
-                  label="Select Class"
-                  selected={selectedId}
-                  onChange={setSelectedId}
-                  options={[...classes]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((cls) => {
-                      const pct = getCompletionPercentage(cls.id);
-                      const assigned = slots.filter(
-                        (s) =>
-                          String(s.class_id) === String(cls.id) &&
-                          s.subject_id &&
-                          !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
-                      ).length;
-                      const total = days.length * periods.filter((p) => !p.is_break).length;
-                      return {
-                        value: String(cls.id),
-                        label: cls.name,
-                        subLabel:
-                          viewType === 'scheduler'
-                            ? `${pct}% completed - ${assigned} of ${total}`
-                            : null,
-                      };
-                    })}
-                />
-              )}
-              {viewType === 'teacher' && (
-                <SingleSelectDropdown
-                  label="Select Teacher"
-                  selected={selectedId}
-                  onChange={setSelectedId}
-                  options={[...teachers]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map((t) => ({
-                      value: String(t.id),
-                      label: t.name,
-                    }))}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Row 3: Tab switcher + entity selector */}
-          {!lockedClassId && (
-            <div className="flex flex-wrap items-center gap-2">
-              {/* 6-mode view switcher */}
-              {showTabSwitcher && (
-                <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
+              {myTab === 'my' && myTeacher ? (
+                <div className="bg-light-lbg border border-light-border rounded-xl p-1 flex gap-1">
                   {[
-                    { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
-                    { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
-                    { id: 'unassigned_classes', label: 'Unassigned Classes', icon: 'fa-school' },
-                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
-                    {
-                      id: 'assigned_teachers',
-                      label: 'Assigned Teachers',
-                      icon: 'fa-chalkboard-teacher',
-                    },
-                  ]
-                    .filter((v) => filteredViews.includes(v.id))
-                    .map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => {
-                          setViewType(v.id);
-                        }}
-                        title={v.label}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
-                          viewType === v.id
-                            ? 'text-white bg-brand-primary shadow-sm'
-                            : 'text-dark-soft hover:text-dark-primary'
-                        }`}
-                      >
-                        <i className={`fas ${v.icon} text-[10px]`} />
-                        {v.label}
-                      </button>
-                    ))}
+                    { id: 'today', label: 'Today', icon: 'fa-sun' },
+                    { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
+                  ].map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setMyView(v.id)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        myView === v.id
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-dark-soft hover:text-dark-primary'
+                      }`}
+                    >
+                      <i className={`fas ${v.icon} text-[10px]`} />
+                      {v.label}
+                    </button>
+                  ))}
                 </div>
-              )}
+              ) : myTab === 'class' ? (
+                <>
+                  {/* Entity selector — only for grid views */}
+                  {(viewType === 'class' || viewType === 'scheduler') && (
+                    <SingleSelectDropdown
+                      label="Select Class"
+                      selected={selectedId}
+                      onChange={setSelectedId}
+                      options={[...classes]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((cls) => {
+                          const pct = getCompletionPercentage(cls.id);
+                          const assigned = slots.filter(
+                            (s) =>
+                              String(s.class_id) === String(cls.id) &&
+                              s.subject_id &&
+                              !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                          ).length;
+                          const total = days.length * periods.filter((p) => !p.is_break).length;
+                          return {
+                            value: String(cls.id),
+                            label: cls.name,
+                            subLabel:
+                              viewType === 'scheduler'
+                                ? `${pct}% completed - ${assigned} of ${total}`
+                                : null,
+                          };
+                        })}
+                    />
+                  )}
+                  {viewType === 'teacher' && (
+                    <SingleSelectDropdown
+                      label="Select Teacher"
+                      selected={selectedId}
+                      onChange={setSelectedId}
+                      options={[...teachers]
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((t) => ({
+                          value: String(t.id),
+                          label: t.name,
+                        }))}
+                    />
+                  )}
+                </>
+              ) : null}
             </div>
           )}
+          {/* Row 3: Tab switcher + action buttons */}
+          <div className="flex flex-wrap items-center gap-4">
+            {!lockedClassId && myTab === 'class' && (
+              <div className="flex flex-wrap items-center gap-2">
+                {showTabSwitcher && (
+                  <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
+                    {[
+                      { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
+                      { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
+                      { id: 'teacher_unassigned', label: 'Teacher Unassigned', icon: 'fa-school' },
+                      {
+                        id: 'subject_unassigned',
+                        label: 'Subject Unassigned',
+                        icon: 'fa-book-open',
+                      },
+                      { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+                      {
+                        id: 'assigned_teachers',
+                        label: 'Assigned Teachers',
+                        icon: 'fa-chalkboard-teacher',
+                      },
+                    ]
+                      .filter((v) => filteredViews.includes(v.id))
+                      .map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => {
+                            setViewType(v.id);
+                          }}
+                          title={v.label}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
+                            viewType === v.id
+                              ? 'text-white bg-brand-primary shadow-sm'
+                              : 'text-dark-soft hover:text-dark-primary'
+                          }`}
+                        >
+                          <i className={`fas ${v.icon} text-[10px]`} />
+                          {v.label}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Icon-only action buttons */}
-          <div className="flex items-center gap-1 shrink-0">
+            {/* Icon-only action buttons */}
+            <div className="flex items-center gap-1 shrink-0"></div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {showMyTimetable && (
+              <div className="bg-light-lbg border border-light-border rounded-xl p-0.5 flex gap-0.5 mr-2">
+                {[
+                  {
+                    id: 'my',
+                    label: 'My Timetable',
+                    mobileLabel: 'Mine',
+                    icon: 'fa-user-clock',
+                  },
+                  {
+                    id: 'class',
+                    label: 'Class Timetable',
+                    mobileLabel: 'Class',
+                    icon: 'fa-th-large',
+                  },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMyTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      myTab === tab.id
+                        ? 'text-white bg-brand-primary shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className={`fas ${tab.icon} text-[10px]`} />
+
+                    {/* Mobile */}
+                    <span className="sm:hidden">{tab.mobileLabel}</span>
+
+                    {/* Tablet/Desktop */}
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Show Breaks — icon toggle, only for grid views */}
-            <button
-              onClick={() => setShowBreaks((v) => !v)}
-              title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
-              className={`p-2 rounded-lg border transition-all ${
-                showBreaks
-                  ? 'bg-brand-primary border-brand-primary text-white'
-                  : 'bg-light-bg border-light-border text-dark-soft hover:bg-light-ui hover:text-dark-primary'
-              }`}
-            >
-              <i className="fas fa-coffee text-sm" />
-            </button>
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={() => setShowBreaks((v) => !v)}
+                title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
+                className={`p-2 rounded-lg border transition-all ${
+                  showBreaks
+                    ? 'bg-brand-primary border-brand-primary text-white'
+                    : 'bg-light-bg border-light-border text-dark-soft hover:bg-light-ui hover:text-dark-primary'
+                }`}
+              >
+                <i className="fas fa-coffee text-sm" />
+              </button>
+            )}
 
             {/* Print — for all views */}
-            <button
-              onClick={handlePrint}
-              disabled={
-                (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
-                !selectedId
-              }
-              title="Print / Save as PDF"
-              className="p-2 rounded-lg border border-light-border bg-light-bg text-dark-soft hover:bg-light-ui hover:text-dark-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <i className="fas fa-print text-sm" />
-            </button>
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={handlePrint}
+                disabled={
+                  myTab === 'class' &&
+                  (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                  !selectedId
+                }
+                title="Print / Save as PDF"
+                className="p-2 rounded-lg border border-light-border bg-light-bg text-dark-soft hover:bg-light-ui hover:text-dark-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-print text-sm" />
+              </button>
+            )}
 
             {/* Clear Multiple Slots — only for class schedule / scheduler views */}
-            {(viewType === 'class' || viewType === 'scheduler') &&
+            {myTab === 'class' &&
+              (viewType === 'class' || viewType === 'scheduler') &&
               selectedId &&
               typeof onClearSlots === 'function' && (
                 <button
@@ -1219,344 +1604,394 @@ const TimetableAdminView = ({
       <div className="hidden print:block mb-6 text-center">
         <h2 className="text-2xl font-bold text-black mb-1">JAMIA ZAYTOONAH VELLORE</h2>
         <h3 className="text-lg font-bold text-gray-800">
-          Weekly Timetable — {viewType === 'class' ? 'Class' : 'Teacher'}: {selectedEntityName}
+          {myTab === 'my'
+            ? `My Timetable — ${myTeacher?.name || ''}`
+            : `Weekly Timetable — ${viewType === 'class' ? 'Class' : 'Teacher'}: ${selectedEntityName}`}
         </h3>
         <p className="text-xs text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
       </div>
 
-      {/* ── Overview sub-views ── */}
-      {isOverviewView && (
-        <TimetableOverview
-          view={viewType}
-          showBreaks={showBreaks}
-          classes={classes}
-          teachers={teachers}
-          subjects={subjects}
-          periods={periods}
-          slots={slots}
-          assignments={assignments}
-          selClasses={selClasses}
-          selTeachers={selTeachers}
-          selAssignedTeachers={selAssignedTeachers}
-          selAssignedClasses={selAssignedClasses}
-          freeTeachersGender={freeTeachersGender}
-          assignedTeachersGender={assignedTeachersGender}
-        />
-      )}
-
-      {/* ── Grid views ── */}
-      {isGridView && !selectedId ? (
-        <div className="text-center py-12">
-          <div className="text-4xl text-light-muted mb-3">
-            <i className="fas fa-calendar-times"></i>
+      {myTab === 'my' ? (
+        !myTeacher ? (
+          <div className="flex flex-col items-center justify-center py-16 bg-white border border-light-border rounded-3xl gap-3">
+            <i className="fas fa-user-slash text-3xl text-dark-muted" />
+            <p className="text-dark-soft font-semibold text-sm">
+              Your account is not linked to a teacher record.
+            </p>
+            <p className="text-dark-muted text-xs">
+              Please contact the administrator to link your profile.
+            </p>
           </div>
-          <p className="text-dark-soft text-lg font-semibold">No data selected to display</p>
-          <p className="text-dark-muted text-sm mt-1">
-            Please configure and select a class or teacher.
-          </p>
-        </div>
-      ) : isGridView && visiblePeriods.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="text-4xl text-light-muted mb-3">
-            <i className="fas fa-cogs"></i>
-          </div>
-          <p className="text-dark-soft text-lg font-semibold">No periods configured</p>
-          <p className="text-dark-muted text-sm mt-1">Please set up periods in the setup tabs.</p>
-        </div>
-      ) : isGridView ? (
+        ) : myView === 'today' ? (
+          <MyTimetableToday
+            teacherId={myTeacher.id}
+            slots={slots}
+            periods={periods}
+            classes={classes}
+            subjects={subjects}
+          />
+        ) : (
+          <MyTimetableWeekly
+            teacherId={myTeacher.id}
+            slots={slots}
+            periods={periods}
+            classes={classes}
+            subjects={subjects}
+          />
+        )
+      ) : (
         <>
-          <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
-            <table className="w-full border-collapse min-w-[900px] print:min-w-full">
-              <thead className="table-sticky-header">
-                <tr className="bg-light-lbg print:bg-gray-100 border-b border-light-border">
-                  <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black table-sticky-col table-sticky-intersection bg-light-lbg">
-                    Day
-                  </th>
-                  {visiblePeriods.map((period) => (
-                    <th
-                      key={period.id || period.period_number}
-                      className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black bg-light-lbg"
-                    >
-                      <div className="font-extrabold text-sm text-dark-deepblue">
-                        {period.name || `Period ${period.period_number}`}
-                      </div>
-                      {period.start_time && period.end_time && (
-                        <div className="text-[10px] text-dark-soft font-semibold mt-0.5 print:text-gray-500">
-                          {period.start_time} - {period.end_time}
-                        </div>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((day) => {
-                  const dayType = weekdayConfig[day] || 'Weekday';
-                  const isHoliday = dayType === 'Holiday Weekend';
+          {/* ── Overview sub-views ── */}
+          {isOverviewView && (
+            <TimetableOverview
+              view={viewType}
+              showBreaks={showBreaks}
+              classes={classes}
+              teachers={teachers}
+              subjects={subjects}
+              periods={periods}
+              slots={slots}
+              assignments={assignments}
+              selClasses={selClasses}
+              selTeachers={selTeachers}
+              selAssignedTeachers={selAssignedTeachers}
+              selAssignedClasses={selAssignedClasses}
+              freeTeachersGender={freeTeachersGender}
+              assignedTeachersGender={assignedTeachersGender}
+            />
+          )}
 
-                  return (
-                    <tr key={day} className="border-b border-light-border last:border-b-0 bg-white">
-                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px] table-sticky-col bg-white">
-                        {day}
-                      </td>
-                      {isHoliday ? (
-                        <td
-                          colSpan={visiblePeriods.length}
-                          className="p-2 bg-gray-100/50 text-center text-xs font-bold text-dark-soft italic select-none"
+          {/* ── Grid views ── */}
+          {isGridView && !selectedId ? (
+            <div className="text-center py-12">
+              <div className="text-4xl text-light-muted mb-3">
+                <i className="fas fa-calendar-times"></i>
+              </div>
+              <p className="text-dark-soft text-lg font-semibold">No data selected to display</p>
+              <p className="text-dark-muted text-sm mt-1">
+                Please configure and select a class or teacher.
+              </p>
+            </div>
+          ) : isGridView && visiblePeriods.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-4xl text-light-muted mb-3">
+                <i className="fas fa-cogs"></i>
+              </div>
+              <p className="text-dark-soft text-lg font-semibold">No periods configured</p>
+              <p className="text-dark-muted text-sm mt-1">
+                Please set up periods in the setup tabs.
+              </p>
+            </div>
+          ) : isGridView ? (
+            <>
+              <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
+                <table className="w-full border-collapse min-w-[900px] print:min-w-full">
+                  <thead className="table-sticky-header">
+                    <tr className="bg-light-lbg print:bg-gray-100 border-b border-light-border">
+                      <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] print:text-black table-sticky-col table-sticky-intersection bg-light-lbg">
+                        Day
+                      </th>
+                      {visiblePeriods.map((period) => (
+                        <th
+                          key={period.id || period.period_number}
+                          className="py-3 px-3 text-center border-r border-light-border last:border-r-0 print:text-black bg-light-lbg"
                         >
-                          <div className="w-full py-4 border border-dashed border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center gap-2">
-                            <i className="fas fa-umbrella-beach text-gray-400"></i>
-                            <span>Holiday (Weekend)</span>
+                          <div className="font-extrabold text-sm text-dark-deepblue">
+                            {period.name || `Period ${period.period_number}`}
                           </div>
-                        </td>
-                      ) : (
-                        visiblePeriods.map((period) => {
-                          const isBreak = period.is_break;
-                          const isWorkingWeekend = dayType === 'Working Weekend';
-                          const isWeekendApplicable = period.applicable_on_weekends;
-                          const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
-
-                          if (isPeriodDisabled) {
-                            return (
-                              <td
-                                key={period.id || period.period_number}
-                                className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
-                              >
-                                <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                                  <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
-                                  Not Applicable
-                                </div>
-                              </td>
-                            );
-                          }
-
-                          const slot = getSlotDetails(day, period.id);
-                          const isAssigned = slot && slot.subject_id;
-                          const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
-                          const isTeacherAssigned = slot && slot.teacher_id;
-                          const teacher = isTeacherAssigned
-                            ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
-                            : null;
-                          const isFemale = teacher && teacher.is_male === false;
-                          const subjectObj = isAssigned
-                            ? subjects.find((s) => String(s.id) === String(slot.subject_id))
-                            : null;
-                          const requiresTeacher = subjectObj
-                            ? subjectObj.requires_teacher !== false
-                            : true;
-
-                          const clsObj =
-                            subjectObj && subjectObj.classification_id
-                              ? classifications.find(
-                                  (c) => String(c.id) === String(subjectObj.classification_id)
-                                )
-                              : null;
-                          const themeStr = clsObj ? clsObj.theme : null;
-                          const themeStyles =
-                            themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
-
-                          let colorClass = '';
-                          if (isAssigned) {
-                            if (themeStyles) {
-                              colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
-                            } else if (!isTeacherAssigned) {
-                              colorClass = getSubjectColor(subjectName);
-                            } else if (isFemale) {
-                              colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
-                            } else {
-                              colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
-                            }
-                          }
-
-                          const cellKey = `${day}-${period.id}`;
-                          const isPopoverOpen = popover && popover.cellKey === cellKey;
-                          const isClickable =
-                            isInteractive &&
-                            !isBreak &&
-                            ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
-                              (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
-                              (viewType === 'teacher' && isAssigned));
-
-                          if (isBreak) {
-                            const nameLower = (period.name || 'Break').toLowerCase();
-                            const breakIcon =
-                              period.icon ||
-                              (nameLower.includes('salah') ||
-                              nameLower.includes('prayer') ||
-                              nameLower.includes('namaz') ||
-                              nameLower.includes('zohr') ||
-                              nameLower.includes('asr')
-                                ? 'fa-mosque'
-                                : nameLower.includes('lunch') ||
-                                    nameLower.includes('breakfast') ||
-                                    nameLower.includes('recess') ||
-                                    nameLower.includes('tea') ||
-                                    nameLower.includes('snack') ||
-                                    nameLower.includes('food') ||
-                                    nameLower.includes('tiffin')
-                                  ? 'fa-utensils'
-                                  : 'fa-coffee');
-
-                            return (
-                              <td
-                                key={period.id || period.period_number}
-                                className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
-                              >
-                                <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                                  <i
-                                    className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}
-                                  ></i>
-                                  {period.name || 'Break'}
-                                </div>
-                              </td>
-                            );
-                          }
-
-                          return (
-                            <td
-                              key={period.id || period.period_number}
-                              className={`p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] relative ${
-                                isClickable ? 'cursor-pointer hover:bg-light-bg/30' : ''
-                              } ${isPopoverOpen ? 'bg-brand-lbg/10' : ''}`}
-                              onClick={() => isClickable && handleCellClick(day, period, slot)}
-                            >
-                              {isAssigned ? (
-                                <div
-                                  className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${colorClass} ${themeStyles ? `${themeStyles.color.replace('bg-', 'border-l-')} border-l-[6px]` : ''} ${isClickable ? 'hover:scale-95 hover:shadow-md' : ''} ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                                >
-                                  <span className="font-extrabold text-xs tracking-wide uppercase truncate">
-                                    {subjectName}
-                                  </span>
-                                  {viewType === 'class' ? (
-                                    !isTeacherAssigned && requiresTeacher ? (
-                                      <p className="text-[10px] font-bold text-red-primary flex items-center justify-center gap-1 truncate">
-                                        <i className="fas fa-exclamation-triangle text-[9px] animate-pulse"></i>
-                                        {isInteractive ? 'Click to assign teacher' : 'Not Assigned'}
-                                      </p>
-                                    ) : isTeacherAssigned ? (
-                                      <p
-                                        className={`text-[10px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}
-                                      >
-                                        {isFemale && (
-                                          <i className="fas fa-female mr-1 text-[9px]"></i>
-                                        )}
-                                        {getTeacherName(slot.teacher_id)}
-                                      </p>
-                                    ) : (
-                                      <p className="text-[10px] opacity-90 font-bold truncate text-dark-muted">
-                                        No Teacher Required
-                                      </p>
-                                    )
-                                  ) : (
-                                    <span className="text-[10px] opacity-90 font-bold truncate">
-                                      <i className="fas fa-school mr-1 text-[9px]"></i>
-                                      {getClassName(slot.class_id)}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div
-                                  className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
-                                    isClickable
-                                      ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
-                                      : 'border-light-border text-dark-muted bg-light-bg/20'
-                                  } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
-                                >
-                                  {isClickable ? (
-                                    <span className="flex items-center gap-1">
-                                      <i className="fas fa-plus text-[9px]" />
-                                      Schedule
-                                    </span>
-                                  ) : (
-                                    'Free'
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Inline Popover */}
-                              {isPopoverOpen && (
-                                <AssignPopover
-                                  popover={popover}
-                                  teachers={teachers}
-                                  subjects={subjects}
-                                  classifications={classifications}
-                                  classes={classes}
-                                  slots={slots}
-                                  days={days.filter((d) => {
-                                    const dType = weekdayConfig[d] || 'Weekday';
-                                    if (dType === 'Holiday Weekend') return false;
-                                    if (dType === 'Working Weekend') {
-                                      const currentPeriodObj = periods.find(
-                                        (p) => String(p.id) === String(period.id)
-                                      );
-                                      return currentPeriodObj?.applicable_on_weekends;
-                                    }
-                                    return true;
-                                  })}
-                                  assignments={assignments}
-                                  onAssign={handleAssign}
-                                  onClose={() => setPopover(null)}
-                                />
-                              )}
-                            </td>
-                          );
-                        })
-                      )}
+                          {period.start_time && period.end_time && (
+                            <div className="text-[10px] text-dark-soft font-semibold mt-0.5 print:text-gray-500">
+                              {period.start_time} - {period.end_time}
+                            </div>
+                          )}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {selectedId && (
-            <div className="mt-6 print:hidden">
-              <AllocationSummaryTable
-                viewType={viewType}
-                selectedId={selectedId}
-                slots={slots}
-                subjects={subjects}
-                teachers={teachers}
+                  </thead>
+                  <tbody>
+                    {days.map((day) => {
+                      const dayType = weekdayConfig[day] || 'Weekday';
+                      const isHoliday = dayType === 'Holiday Weekend';
+
+                      return (
+                        <tr
+                          key={day}
+                          className="border-b border-light-border last:border-b-0 bg-white"
+                        >
+                          <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border print:bg-gray-50 print:text-black w-[120px] table-sticky-col bg-white">
+                            {day}
+                          </td>
+                          {isHoliday ? (
+                            <td
+                              colSpan={visiblePeriods.length}
+                              className="p-2 bg-gray-100/50 text-center text-xs font-bold text-dark-soft italic select-none"
+                            >
+                              <div className="w-full py-4 border border-dashed border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center gap-2">
+                                <i className="fas fa-umbrella-beach text-gray-400"></i>
+                                <span>Holiday (Weekend)</span>
+                              </div>
+                            </td>
+                          ) : (
+                            visiblePeriods.map((period) => {
+                              const isBreak = period.is_break;
+                              const isWorkingWeekend = dayType === 'Working Weekend';
+                              const isWeekendApplicable = period.applicable_on_weekends;
+                              const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+
+                              if (isPeriodDisabled) {
+                                return (
+                                  <td
+                                    key={period.id || period.period_number}
+                                    className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
+                                  >
+                                    <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                      <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
+                                      Not Applicable
+                                    </div>
+                                  </td>
+                                );
+                              }
+
+                              const slot = getSlotDetails(day, period.id);
+                              const isAssigned = slot && slot.subject_id;
+                              const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
+                              const isTeacherAssigned = slot && slot.teacher_id;
+                              const teacher = isTeacherAssigned
+                                ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
+                                : null;
+                              const isFemale = teacher && teacher.is_male === false;
+                              const subjectObj = isAssigned
+                                ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+                                : null;
+                              const requiresTeacher = subjectObj
+                                ? subjectObj.requires_teacher !== false
+                                : true;
+
+                              const clsObj =
+                                subjectObj && subjectObj.classification_id
+                                  ? classifications.find(
+                                      (c) => String(c.id) === String(subjectObj.classification_id)
+                                    )
+                                  : null;
+                              const themeStr = clsObj ? clsObj.theme : null;
+                              const themeStyles =
+                                themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+                              let colorClass = '';
+                              if (isAssigned) {
+                                if (themeStyles) {
+                                  colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
+                                } else if (!isTeacherAssigned) {
+                                  colorClass = getSubjectColor(subjectName);
+                                } else if (isFemale) {
+                                  colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
+                                } else {
+                                  colorClass =
+                                    'bg-light-lbg text-dark-charcoal border-light-border';
+                                }
+                              }
+
+                              const cellKey = `${day}-${period.id}`;
+                              const isPopoverOpen = popover && popover.cellKey === cellKey;
+                              const isClickable =
+                                isInteractive &&
+                                !isBreak &&
+                                ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
+                                  (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
+                                  (viewType === 'teacher' && isAssigned));
+
+                              if (isBreak) {
+                                const nameLower = (period.name || 'Break').toLowerCase();
+                                const breakIcon =
+                                  period.icon ||
+                                  (nameLower.includes('salah') ||
+                                  nameLower.includes('prayer') ||
+                                  nameLower.includes('namaz') ||
+                                  nameLower.includes('zohr') ||
+                                  nameLower.includes('asr')
+                                    ? 'fa-mosque'
+                                    : nameLower.includes('lunch') ||
+                                        nameLower.includes('breakfast') ||
+                                        nameLower.includes('recess') ||
+                                        nameLower.includes('tea') ||
+                                        nameLower.includes('snack') ||
+                                        nameLower.includes('food') ||
+                                        nameLower.includes('tiffin')
+                                      ? 'fa-utensils'
+                                      : 'fa-coffee');
+
+                                return (
+                                  <td
+                                    key={period.id || period.period_number}
+                                    className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
+                                  >
+                                    <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+                                      <i
+                                        className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}
+                                      ></i>
+                                      <span className="uppercase tracking-wider">
+                                        {period.name || 'Break'}
+                                      </span>
+                                    </div>
+                                  </td>
+                                );
+                              }
+
+                              return (
+                                <td
+                                  key={period.id || period.period_number}
+                                  className={`p-1.5 border-r border-light-border last:border-r-0 relative min-w-[120px] h-[80px] transition-all duration-200 align-middle ${
+                                    isPopoverOpen ? 'bg-light-lbg' : ''
+                                  }`}
+                                  onClick={() => isClickable && handleCellClick(day, period, slot)}
+                                >
+                                  {isAssigned ? (
+                                    <div
+                                      className={`w-full h-full p-2 rounded-xl border text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
+                                        isClickable
+                                          ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md'
+                                          : ''
+                                      } ${
+                                        isPopoverOpen
+                                          ? 'ring-2 ring-brand-primary ring-offset-1'
+                                          : ''
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between min-w-0">
+                                        <h5 className="font-extrabold text-[10px] truncate leading-tight flex-1">
+                                          {subjectName}
+                                        </h5>
+                                        {requiresTeacher && !isTeacherAssigned && (
+                                          <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full bg-amber-500/20 text-amber-600 text-[8px]">
+                                            <i className="fas fa-exclamation-triangle"></i>
+                                          </span>
+                                        )}
+                                      </div>
+                                      {viewType === 'class' || viewType === 'scheduler' ? (
+                                        requiresTeacher ? (
+                                          <p className="text-[10px] opacity-90 font-bold truncate mt-0.5">
+                                            {isFemale && (
+                                              <i className="fas fa-female mr-1 text-[9px]"></i>
+                                            )}
+                                            {getTeacherName(slot.teacher_id)}
+                                          </p>
+                                        ) : (
+                                          <p className="text-[10px] opacity-90 font-bold truncate text-dark-muted">
+                                            No Teacher Required
+                                          </p>
+                                        )
+                                      ) : (
+                                        <span className="text-[10px] opacity-90 font-bold truncate">
+                                          <i className="fas fa-school mr-1 text-[9px]"></i>
+                                          {getClassName(slot.class_id)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+                                        isClickable
+                                          ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
+                                          : 'border-light-border text-dark-muted bg-light-bg/20'
+                                      } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+                                    >
+                                      {isClickable ? (
+                                        <span className="flex items-center gap-1">
+                                          <i className="fas fa-plus text-[9px]" />
+                                          Schedule
+                                        </span>
+                                      ) : (
+                                        'Free'
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Inline Popover */}
+                                  {isPopoverOpen && (
+                                    <AssignPopover
+                                      popover={popover}
+                                      teachers={teachers}
+                                      subjects={subjects}
+                                      classifications={classifications}
+                                      classes={classes}
+                                      slots={slots}
+                                      days={days.filter((d) => {
+                                        const dType = weekdayConfig[d] || 'Weekday';
+                                        if (dType === 'Holiday Weekend') return false;
+                                        if (dType === 'Working Weekend') {
+                                          const currentPeriodObj = periods.find(
+                                            (p) => String(p.id) === String(period.id)
+                                          );
+                                          return currentPeriodObj?.applicable_on_weekends;
+                                        }
+                                        return true;
+                                      })}
+                                      assignments={assignments}
+                                      onAssign={handleAssign}
+                                      onClose={() => setPopover(null)}
+                                    />
+                                  )}
+                                </td>
+                              );
+                            })
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {selectedId && (
+                <div className="mt-6 print:hidden">
+                  <AllocationSummaryTable
+                    viewType={viewType}
+                    selectedId={selectedId}
+                    slots={slots}
+                    subjects={subjects}
+                    teachers={teachers}
+                    classes={classes}
+                    assignments={assignments}
+                  />
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {/* ── Scheduler Grid View ── */}
+          {viewType === 'scheduler' && (
+            <div className="w-full space-y-6">
+              <TimetableScheduler
+                classId={selectedId}
                 classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                classifications={classifications}
+                periods={periods}
+                slots={slots}
                 assignments={assignments}
+                onUpdateSlot={onUpdateSlot}
+                onMoveSlot={onMoveSlot}
+                onClearSlots={onClearSlots}
+                onMoveColumn={onMoveColumn}
+                showBreaks={showBreaks}
+                seasonsConfig={seasonsConfig}
               />
+              {selectedId && (
+                <div className="print:hidden">
+                  <AllocationSummaryTable
+                    viewType={viewType}
+                    selectedId={selectedId}
+                    slots={slots}
+                    subjects={subjects}
+                    teachers={teachers}
+                    classes={classes}
+                    assignments={assignments}
+                  />
+                </div>
+              )}
             </div>
           )}
         </>
-      ) : null}
-
-      {/* ── Scheduler Grid View ── */}
-      {viewType === 'scheduler' && (
-        <div className="w-full space-y-6">
-          <TimetableScheduler
-            classId={selectedId}
-            classes={classes}
-            teachers={teachers}
-            subjects={subjects}
-            classifications={classifications}
-            periods={periods}
-            slots={slots}
-            assignments={assignments}
-            onUpdateSlot={onUpdateSlot}
-            onMoveSlot={onMoveSlot}
-            onClearSlots={onClearSlots}
-            onMoveColumn={onMoveColumn}
-            showBreaks={showBreaks}
-            seasonsConfig={seasonsConfig}
-          />
-          {selectedId && (
-            <div className="print:hidden">
-              <AllocationSummaryTable
-                viewType={viewType}
-                selectedId={selectedId}
-                slots={slots}
-                subjects={subjects}
-                teachers={teachers}
-                classes={classes}
-                assignments={assignments}
-              />
-            </div>
-          )}
-        </div>
       )}
 
       {/* Clear Slots Modal */}

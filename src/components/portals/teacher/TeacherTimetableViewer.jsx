@@ -12,9 +12,7 @@ import {
   MOCK_TIMETABLE_STATE,
 } from '../../../data/mockTimetable';
 
-const generateMockSlots = () => MOCK_SLOTS;
-
-const TeacherTimetableViewer = () => {
+const TeacherTimetableViewer = ({ user }) => {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -41,7 +39,6 @@ const TeacherTimetableViewer = () => {
         console.error('Failed to parse local storage in teacher view', e);
       }
     }
-    // Seed from centralized mock data
     setSubjects(DEFAULT_MOCK_SUBJECTS);
     setTeachers(DEFAULT_MOCK_TEACHERS);
     setClasses(DEFAULT_MOCK_CLASSES);
@@ -57,7 +54,6 @@ const TeacherTimetableViewer = () => {
       setRefreshing(true);
     }
     try {
-      // Test if supabase tables exist
       const { data: testClass, error: testErr } = await supabase
         .from('classes')
         .select('id')
@@ -67,7 +63,6 @@ const TeacherTimetableViewer = () => {
         throw new Error('Supabase tables not found. Loading local data.');
       }
 
-      // Fetch from Supabase
       const [
         { data: dbSubjects },
         { data: dbTeachers },
@@ -84,7 +79,6 @@ const TeacherTimetableViewer = () => {
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
 
-      // Trigger fallback if data is empty (due to empty tables or RLS filter returning empty arrays)
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
         throw new Error('No classes or slots found in database. Loading mock data.');
       }
@@ -129,6 +123,8 @@ const TeacherTimetableViewer = () => {
 
   return (
     <TimetableAdminView
+      user={user}
+      showMyTimetable={true}
       classes={classes}
       teachers={teachers}
       subjects={subjects}

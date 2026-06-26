@@ -1,11 +1,10 @@
 // src/components/portals/admin/timetable/TimetableScheduler.jsx
-import React, { useState, useEffect } from "react";
-import { showToast } from "../../../../utils/toast";
-import ConfirmModal from "../../../ConfirmModal";
-import { getSubjectColor } from "./TimetableAdminView";
-import { renderSubjectOptionsGroupedByClassification } from "./TimetableSetupTabs";
-import { CARD_THEMES } from "../../../../utils/cardTheme";
-
+import React, { useState, useEffect } from 'react';
+import { showToast } from '../../../../utils/toast';
+import ConfirmModal from '../../../ConfirmModal';
+import { getSubjectColor } from './TimetableAdminView';
+import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTabs';
+import { CARD_THEMES } from '../../../../utils/cardTheme';
 
 const TimetableScheduler = ({
   classId,
@@ -24,8 +23,8 @@ const TimetableScheduler = ({
   seasonsConfig = null,
 }) => {
   const [editingSlot, setEditingSlot] = useState(null); // { day, periodId, periodNumber, subjectId, teacherId }
-  const [selectedSubjectId, setSelectedSubjectId] = useState("");
-  const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [selectedDays, setSelectedDays] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
   const [popover, setPopover] = useState(null); // { type, cellKey, targetElement, currentAssignData }
@@ -34,14 +33,13 @@ const TimetableScheduler = ({
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && editingSlot) {
+      if (e.key === 'Escape' && editingSlot) {
         setEditingSlot(null);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editingSlot]);
-
 
   const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
   const weekdayConfig = seasonsConfig?.seasons?.[activeSeasonId]?.weekday_config || {
@@ -51,10 +49,10 @@ const TimetableScheduler = ({
     Thursday: 'Weekday',
     Friday: 'Weekday',
     Saturday: 'Working Weekend',
-    Sunday: 'Holiday Weekend'
+    Sunday: 'Holiday Weekend',
   };
 
-  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const currentClass = classes.find((c) => String(c.id) === String(classId));
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
 
@@ -76,12 +74,14 @@ const TimetableScheduler = ({
     );
   };
 
-  const getSubjectName = (subId) => subjects.find((s) => String(s.id) === String(subId))?.name || "Unknown";
+  const getSubjectName = (subId) =>
+    subjects.find((s) => String(s.id) === String(subId))?.name || 'Unknown';
   const getTeacherName = (tId) => {
-    if (!tId) return "Not Assigned";
-    return teachers.find((t) => String(t.id) === String(tId))?.name || "Not Assigned";
+    if (!tId) return 'Not Assigned';
+    return teachers.find((t) => String(t.id) === String(tId))?.name || 'Not Assigned';
   };
-  const getClassName = (cId) => classes.find((c) => String(c.id) === String(cId))?.name || "Unknown";
+  const getClassName = (cId) =>
+    classes.find((c) => String(c.id) === String(cId))?.name || 'Unknown';
 
   const handleStartMove = (day, periodId, slot) => {
     setMovingSlot({
@@ -90,7 +90,7 @@ const TimetableScheduler = ({
       subjectId: slot.subject_id,
       teacherId: slot.teacher_id,
     });
-    showToast("Move mode active. Click any target cell in the grid to place the slot.", "info");
+    showToast('Move mode active. Click any target cell in the grid to place the slot.', 'info');
   };
 
   const handleCompleteMove = (targetDay, targetPeriodId) => {
@@ -107,7 +107,7 @@ const TimetableScheduler = ({
 
     // Check teacher conflicts
     let teacherConflicted = false;
-    let conflictClassName = "";
+    let conflictClassName = '';
     if (movingSlot.teacherId) {
       const conflict = slots.find(
         (s) =>
@@ -124,13 +124,7 @@ const TimetableScheduler = ({
 
     const executeMove = () => {
       if (onMoveSlot) {
-        onMoveSlot(
-          classId,
-          movingSlot.day,
-          movingSlot.periodId,
-          targetDay,
-          targetPeriodId
-        );
+        onMoveSlot(classId, movingSlot.day, movingSlot.periodId, targetDay, targetPeriodId);
       }
       setMovingSlot(null);
     };
@@ -139,10 +133,10 @@ const TimetableScheduler = ({
       if (teacherConflicted) {
         const teacherName = getTeacherName(movingSlot.teacherId);
         setConfirmConfig({
-          title: "Teacher Conflict Warning",
+          title: 'Teacher Conflict Warning',
           message: `Warning: Teacher ${teacherName} is already occupied in ${conflictClassName} on ${targetDay} at this period. Do you want to proceed anyway?`,
-          confirmText: "Proceed",
-          type: "warning",
+          confirmText: 'Proceed',
+          type: 'warning',
           onConfirm: () => {
             setConfirmConfig(null);
             executeMove();
@@ -150,7 +144,7 @@ const TimetableScheduler = ({
           onCancel: () => {
             setConfirmConfig(null);
             setMovingSlot(null);
-          }
+          },
         });
       } else {
         executeMove();
@@ -160,10 +154,10 @@ const TimetableScheduler = ({
     if (hasAssignedSubject) {
       const targetSubName = getSubjectName(targetSlot.subject_id);
       setConfirmConfig({
-        title: "Override Target Slot?",
+        title: 'Override Target Slot?',
         message: `The target slot is already assigned to "${targetSubName}". Are you sure you want to override it?`,
-        confirmText: "Override",
-        type: "danger",
+        confirmText: 'Override',
+        type: 'danger',
         onConfirm: () => {
           setConfirmConfig(null);
           checkTeacherConflictThenProceed();
@@ -171,7 +165,7 @@ const TimetableScheduler = ({
         onCancel: () => {
           setConfirmConfig(null);
           setMovingSlot(null);
-        }
+        },
       });
     } else {
       checkTeacherConflictThenProceed();
@@ -192,32 +186,32 @@ const TimetableScheduler = ({
       day,
       periodId: period.id,
       periodNumber: period.period_number,
-      subjectId: slot?.subject_id || "",
-      teacherId: slot?.teacher_id || "",
+      subjectId: slot?.subject_id || '',
+      teacherId: slot?.teacher_id || '',
     });
-    setSelectedSubjectId(slot?.subject_id || "");
-    setSelectedTeacherId(slot?.teacher_id || "");
+    setSelectedSubjectId(slot?.subject_id || '');
+    setSelectedTeacherId(slot?.teacher_id || '');
     setSelectedDays([day]);
   };
 
   const handleSubjectChange = (subjectId) => {
     setSelectedSubjectId(subjectId);
-    setSelectedTeacherId(""); // Reset teacher selection when subject changes
+    setSelectedTeacherId(''); // Reset teacher selection when subject changes
   };
 
   const handleSaveSlot = () => {
     if (!editingSlot) return;
 
     if (selectedDays.length === 0) {
-      showToast("Please select at least one day to assign.", "error");
+      showToast('Please select at least one day to assign.', 'error');
       return;
     }
 
     // Validate (double check validation in logic)
     if (selectedTeacherId && selectedSubjectId) {
       const teacher = teachers.find((t) => String(t.id) === String(selectedTeacherId));
-      if (!teacher || !teacher.subjects.some(sid => String(sid) === String(selectedSubjectId))) {
-        showToast("Selected teacher is not qualified to teach this subject.", "error");
+      if (!teacher || !teacher.subjects.some((sid) => String(sid) === String(selectedSubjectId))) {
+        showToast('Selected teacher is not qualified to teach this subject.', 'error');
         return;
       }
 
@@ -239,10 +233,10 @@ const TimetableScheduler = ({
       if (conflicts.length > 0) {
         const conflictMessages = conflicts
           .map((c) => `${c.day} (Busy in ${c.className})`)
-          .join("\n");
+          .join('\n');
         showToast(
           `Conflict Detected: Teacher ${teacher.name} is already assigned on:\n${conflictMessages}`,
-          "error"
+          'error'
         );
         return;
       }
@@ -263,8 +257,8 @@ const TimetableScheduler = ({
     if (!selectedSubjectId || !editingSlot) return [];
 
     // 1. Filter teachers who are qualified for this subject
-    const qualified = teachers.filter((t) =>
-      t.subjects && t.subjects.some((sid) => String(sid) === String(selectedSubjectId))
+    const qualified = teachers.filter(
+      (t) => t.subjects && t.subjects.some((sid) => String(sid) === String(selectedSubjectId))
     );
 
     // 2. Map and identify busy conflicts
@@ -288,7 +282,7 @@ const TimetableScheduler = ({
       return {
         ...t,
         isConflicted: !!conflictingSlot,
-        conflictingClassName: conflictingSlot ? getClassName(conflictingSlot.class_id) : "",
+        conflictingClassName: conflictingSlot ? getClassName(conflictingSlot.class_id) : '',
         isAssignedToThisClass,
       };
     });
@@ -315,10 +309,17 @@ const TimetableScheduler = ({
             </div>
             <div>
               <div className="text-xs font-bold text-dark-primary">
-                Moving slot: <span className="text-brand-primary uppercase font-extrabold">{getSubjectName(movingSlot.subjectId)}</span> ({getTeacherName(movingSlot.teacherId)})
+                Moving slot:{' '}
+                <span className="text-brand-primary uppercase font-extrabold">
+                  {getSubjectName(movingSlot.subjectId)}
+                </span>{' '}
+                ({getTeacherName(movingSlot.teacherId)})
               </div>
               <p className="text-[10px] text-dark-soft font-semibold mt-0.5">
-                From {movingSlot.day}, Period {periods.find(p => String(p.id) === String(movingSlot.periodId))?.name || 'Unknown'}. Click any cell in the grid to place it.
+                From {movingSlot.day}, Period{' '}
+                {periods.find((p) => String(p.id) === String(movingSlot.periodId))?.name ||
+                  'Unknown'}
+                . Click any cell in the grid to place it.
               </p>
             </div>
           </div>
@@ -341,7 +342,11 @@ const TimetableScheduler = ({
             </div>
             <div>
               <div className="text-xs font-bold text-dark-primary">
-                Moving Column: <span className="text-brand-primary uppercase font-extrabold">{periods.find(p => String(p.id) === String(movingColumnPeriodId))?.name || 'Unknown'}</span>
+                Moving Column:{' '}
+                <span className="text-brand-primary uppercase font-extrabold">
+                  {periods.find((p) => String(p.id) === String(movingColumnPeriodId))?.name ||
+                    'Unknown'}
+                </span>
               </div>
               <p className="text-[10px] text-dark-soft font-semibold mt-0.5">
                 Click another period column header to move all assignments to it.
@@ -361,7 +366,9 @@ const TimetableScheduler = ({
       {/* Grid view */}
       {visiblePeriods.length === 0 ? (
         <div className="text-center py-12 bg-white border border-light-border rounded-3xl">
-          <p className="text-dark-muted font-bold text-sm">Please set up periods in Settings first.</p>
+          <p className="text-dark-muted font-bold text-sm">
+            Please set up periods in Settings first.
+          </p>
         </div>
       ) : (
         <div className="w-full overflow-x-auto rounded-2xl border border-light-border bg-white shadow-sm">
@@ -371,7 +378,7 @@ const TimetableScheduler = ({
                 <th className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border w-[120px] table-sticky-col table-sticky-intersection bg-light-lbg">
                   Day
                 </th>
-                 {visiblePeriods.map((period) => (
+                {visiblePeriods.map((period) => (
                   <th
                     key={period.id || period.period_number}
                     className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 group relative select-none ${movingColumnPeriodId === period.id ? 'ring-2 ring-brand-primary bg-brand-lbg/20 z-10' : 'bg-light-lbg'} ${!isReadOnly && onMoveColumn ? 'cursor-pointer hover:bg-light-bg/20' : ''}`}
@@ -381,12 +388,16 @@ const TimetableScheduler = ({
                           onMoveColumn(classId, movingColumnPeriodId, period.id);
                           setMovingColumnPeriodId(null);
                         } else {
-                          setMovingColumnPeriodId(prev => prev === period.id ? null : period.id);
+                          setMovingColumnPeriodId((prev) =>
+                            prev === period.id ? null : period.id
+                          );
                         }
                       }
                     }}
                   >
-                    <div className="font-extrabold text-sm text-dark-deepblue">{period.name || `Period ${period.period_number}`}</div>
+                    <div className="font-extrabold text-sm text-dark-deepblue">
+                      {period.name || `Period ${period.period_number}`}
+                    </div>
                     {period.start_time && period.end_time && (
                       <div className="text-[10px] text-dark-soft font-semibold mt-0.5">
                         {period.start_time} - {period.end_time}
@@ -394,7 +405,10 @@ const TimetableScheduler = ({
                     )}
                     {!isReadOnly && onMoveColumn && !movingColumnPeriodId && (
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button title="Move Column" className="text-brand-primary hover:text-brand-dark p-1 pointer-events-none">
+                        <button
+                          title="Move Column"
+                          className="text-brand-primary hover:text-brand-dark p-1 pointer-events-none"
+                        >
                           <i className="fas fa-arrows-alt-h text-[10px]"></i>
                         </button>
                       </div>
@@ -449,19 +463,31 @@ const TimetableScheduler = ({
 
                         const slot = getSlotDetails(day, period.id);
                         const isAssigned = slot && slot.subject_id;
-                        const subjectName = isAssigned ? getSubjectName(slot.subject_id) : "";
+                        const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
                         const isTeacherAssigned = slot && slot.teacher_id;
-                        const teacher = isTeacherAssigned ? teachers.find(t => String(t.id) === String(slot.teacher_id)) : null;
+                        const teacher = isTeacherAssigned
+                          ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
+                          : null;
                         const isFemale = teacher && teacher.is_male === false;
-                        const subjectObj = isAssigned ? subjects.find(s => String(s.id) === String(slot.subject_id)) : null;
-                        const requiresTeacher = subjectObj ? subjectObj.requires_teacher !== false : true;
-                        
-                        const clsObj = subjectObj && subjectObj.classification_id ? classifications.find(c => String(c.id) === String(subjectObj.classification_id)) : null;
-                        const themeStr = clsObj ? clsObj.theme : null;
-                        const themeStyles = themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+                        const subjectObj = isAssigned
+                          ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+                          : null;
+                        const requiresTeacher = subjectObj
+                          ? subjectObj.requires_teacher !== false
+                          : true;
 
-                        let colorClass = "";
-                        let borderClass = "";
+                        const clsObj =
+                          subjectObj && subjectObj.classification_id
+                            ? classifications.find(
+                                (c) => String(c.id) === String(subjectObj.classification_id)
+                              )
+                            : null;
+                        const themeStr = clsObj ? clsObj.theme : null;
+                        const themeStyles =
+                          themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+                        let colorClass = '';
+                        let borderClass = '';
                         if (isAssigned) {
                           if (themeStyles) {
                             colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
@@ -475,14 +501,24 @@ const TimetableScheduler = ({
                         }
 
                         if (isBreak) {
-                          const nameLower = (period.name || "Break").toLowerCase();
-                          const breakIcon = period.icon || (
-                            nameLower.includes("salah") || nameLower.includes("prayer") || nameLower.includes("namaz") || nameLower.includes("zohr") || nameLower.includes("asr")
-                              ? "fa-mosque"
-                              : nameLower.includes("lunch") || nameLower.includes("breakfast") || nameLower.includes("recess") || nameLower.includes("tea") || nameLower.includes("snack") || nameLower.includes("food") || nameLower.includes("tiffin")
-                              ? "fa-utensils"
-                              : "fa-coffee"
-                          );
+                          const nameLower = (period.name || 'Break').toLowerCase();
+                          const breakIcon =
+                            period.icon ||
+                            (nameLower.includes('salah') ||
+                            nameLower.includes('prayer') ||
+                            nameLower.includes('namaz') ||
+                            nameLower.includes('zohr') ||
+                            nameLower.includes('asr')
+                              ? 'fa-mosque'
+                              : nameLower.includes('lunch') ||
+                                  nameLower.includes('breakfast') ||
+                                  nameLower.includes('recess') ||
+                                  nameLower.includes('tea') ||
+                                  nameLower.includes('snack') ||
+                                  nameLower.includes('food') ||
+                                  nameLower.includes('tiffin')
+                                ? 'fa-utensils'
+                                : 'fa-coffee');
 
                           return (
                             <td
@@ -491,13 +527,16 @@ const TimetableScheduler = ({
                             >
                               <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
                                 <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
-                                {period.name || "Break"}
+                                {period.name || 'Break'}
                               </div>
                             </td>
                           );
                         }
 
-                        const isSourceCell = movingSlot && movingSlot.day === day && String(movingSlot.periodId) === String(period.id);
+                        const isSourceCell =
+                          movingSlot &&
+                          movingSlot.day === day &&
+                          String(movingSlot.periodId) === String(period.id);
 
                         return (
                           <td
@@ -505,22 +544,22 @@ const TimetableScheduler = ({
                             onClick={() => !isReadOnly && handleCellClick(day, period)}
                             className={`p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] ${
                               isReadOnly
-                                ? ""
-                                : "cursor-pointer group hover:bg-light-bg/40 transition-colors"
-                            } ${
-                              movingSlot ? "hover:bg-brand-lbg/10" : ""
-                            }`}
+                                ? ''
+                                : 'cursor-pointer group hover:bg-light-bg/40 transition-colors'
+                            } ${movingSlot ? 'hover:bg-brand-lbg/10' : ''}`}
                           >
                             {isAssigned ? (
                               <div
                                 className={`w-full h-full rounded-xl p-2 border flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
-                                  isSourceCell ? "opacity-40 border-dashed border-brand-primary bg-brand-lbg/10" : colorClass
+                                  isSourceCell
+                                    ? 'opacity-40 border-dashed bg-brand-lbg/10'
+                                    : colorClass
                                 } ${themeStyles ? `${themeStyles.color.replace('bg-', 'border-l-')} border-l-[6px]` : ''} ${
                                   !isReadOnly && !movingSlot
-                                    ? "group-hover:scale-95"
+                                    ? 'group-hover:scale-95'
                                     : !isReadOnly && movingSlot
-                                    ? "group-hover:scale-95 group-hover:border-brand-primary"
-                                    : ""
+                                      ? 'group-hover:scale-95 group-hover:border-brand-primary'
+                                      : ''
                                 } relative`}
                               >
                                 <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
@@ -532,7 +571,9 @@ const TimetableScheduler = ({
                                     Not Assigned
                                   </span>
                                 ) : isTeacherAssigned ? (
-                                  <span className={`text-[9px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}>
+                                  <span
+                                    className={`text-[9px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}
+                                  >
                                     {isFemale && <i className="fas fa-female mr-1 text-[8px]"></i>}
                                     {getTeacherName(slot.teacher_id)}
                                   </span>
@@ -558,21 +599,23 @@ const TimetableScheduler = ({
                                 )}
                               </div>
                             ) : (
-                              <div className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
-                                !isReadOnly && movingSlot
-                                  ? "border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer"
-                                  : !isReadOnly
-                                  ? "border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10"
-                                  : "border-light-border bg-light-bg/5"
-                              }`}>
+                              <div
+                                className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
+                                  !isReadOnly && movingSlot
+                                    ? 'border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer'
+                                    : !isReadOnly
+                                      ? 'border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10'
+                                      : 'border-light-border bg-light-bg/5'
+                                }`}
+                              >
                                 {isReadOnly ? (
-                                  "Free"
+                                  'Free'
                                 ) : movingSlot ? (
                                   <span className="flex items-center gap-1">
                                     <i className="fas fa-check text-[9px]"></i> Place here
                                   </span>
                                 ) : (
-                                  "+ Assign"
+                                  '+ Assign'
                                 )}
                               </div>
                             )}
@@ -621,12 +664,19 @@ const TimetableScheduler = ({
                   className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                 >
                   <option value="">-- Free Period (None) --</option>
-                  {renderSubjectOptionsGroupedByClassification(subjects, classifications, (sub) => {
-                    const isMapped = assignments.some(
-                      (a) => String(a.class_id) === String(classId) && String(a.subject_id) === String(sub.id)
-                    );
-                    return isMapped ? `${sub.name} (Assigned to Class)` : sub.name;
-                  }, selectedSubjectId)}
+                  {renderSubjectOptionsGroupedByClassification(
+                    subjects,
+                    classifications,
+                    (sub) => {
+                      const isMapped = assignments.some(
+                        (a) =>
+                          String(a.class_id) === String(classId) &&
+                          String(a.subject_id) === String(sub.id)
+                      );
+                      return isMapped ? `${sub.name} (Assigned to Class)` : sub.name;
+                    },
+                    selectedSubjectId
+                  )}
                 </select>
               </div>
 
@@ -645,7 +695,7 @@ const TimetableScheduler = ({
                   {sortedTeacherOptions.map((t) => {
                     let label = t.name;
                     if (t.isAssignedToThisClass) {
-                      label += " (Assigned to Class)";
+                      label += ' (Assigned to Class)';
                     }
                     if (t.isConflicted) {
                       label += ` (Busy in ${t.conflictingClassName})`;
@@ -674,11 +724,13 @@ const TimetableScheduler = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const validDaysForPeriod = days.filter(d => {
+                      const validDaysForPeriod = days.filter((d) => {
                         const dType = weekdayConfig[d] || 'Weekday';
                         if (dType === 'Holiday Weekend') return false;
                         if (dType === 'Working Weekend') {
-                          const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
+                          const currentPeriod = periods.find(
+                            (p) => String(p.id) === String(editingSlot.periodId)
+                          );
                           return currentPeriod?.applicable_on_weekends;
                         }
                         return true;
@@ -692,51 +744,57 @@ const TimetableScheduler = ({
                     className="text-[10px] font-extrabold text-brand-primary hover:text-brand-dark transition-all hover:underline uppercase tracking-wide"
                   >
                     {(() => {
-                      const validDaysForPeriod = days.filter(d => {
+                      const validDaysForPeriod = days.filter((d) => {
                         const dType = weekdayConfig[d] || 'Weekday';
                         if (dType === 'Holiday Weekend') return false;
                         if (dType === 'Working Weekend') {
-                          const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
+                          const currentPeriod = periods.find(
+                            (p) => String(p.id) === String(editingSlot.periodId)
+                          );
                           return currentPeriod?.applicable_on_weekends;
                         }
                         return true;
                       });
-                      return selectedDays.length === validDaysForPeriod.length ? "Reset to single day" : "Select All Days";
+                      return selectedDays.length === validDaysForPeriod.length
+                        ? 'Reset to single day'
+                        : 'Select All Days';
                     })()}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {days.filter(d => {
-                    const dType = weekdayConfig[d] || 'Weekday';
-                    if (dType === 'Holiday Weekend') return false;
-                    if (dType === 'Working Weekend') {
-                      const currentPeriod = periods.find(p => String(p.id) === String(editingSlot.periodId));
-                      return currentPeriod?.applicable_on_weekends;
-                    }
-                    return true;
-                  }).map((d) => {
-                    const isSelected = selectedDays.includes(d);
-                    return (
-                      <button
-                        type="button"
-                        key={d}
-                        onClick={() => {
-                          setSelectedDays(prev =>
-                            prev.includes(d)
-                              ? prev.filter(day => day !== d)
-                              : [...prev, d]
-                          );
-                        }}
-                        className={`px-3 py-2 rounded-xl border text-xs font-bold select-none transition-all ${
-                          isSelected
-                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
-                            : "bg-white border-light-border text-dark-soft hover:bg-light-bg/40"
-                        }`}
-                      >
-                        {d.substring(0, 3)}
-                      </button>
-                    );
-                  })}
+                  {days
+                    .filter((d) => {
+                      const dType = weekdayConfig[d] || 'Weekday';
+                      if (dType === 'Holiday Weekend') return false;
+                      if (dType === 'Working Weekend') {
+                        const currentPeriod = periods.find(
+                          (p) => String(p.id) === String(editingSlot.periodId)
+                        );
+                        return currentPeriod?.applicable_on_weekends;
+                      }
+                      return true;
+                    })
+                    .map((d) => {
+                      const isSelected = selectedDays.includes(d);
+                      return (
+                        <button
+                          type="button"
+                          key={d}
+                          onClick={() => {
+                            setSelectedDays((prev) =>
+                              prev.includes(d) ? prev.filter((day) => day !== d) : [...prev, d]
+                            );
+                          }}
+                          className={`px-3 py-2 rounded-xl border text-xs font-bold select-none transition-all ${
+                            isSelected
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                              : 'bg-white border-light-border text-dark-soft hover:bg-light-bg/40'
+                          }`}
+                        >
+                          {d.substring(0, 3)}
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -746,26 +804,20 @@ const TimetableScheduler = ({
                 type="button"
                 onClick={() => {
                   if (selectedDays.length === 0) {
-                    showToast("Please select at least one day to clear.", "error");
+                    showToast('Please select at least one day to clear.', 'error');
                     return;
                   }
-                  const dayNames = selectedDays.join(", ");
+                  const dayNames = selectedDays.join(', ');
                   setConfirmConfig({
-                    title: "Clear Slots",
+                    title: 'Clear Slots',
                     message: `Are you sure you want to clear assignments for ${dayNames}?`,
-                    confirmText: "Clear",
-                    type: "danger",
+                    confirmText: 'Clear',
+                    type: 'danger',
                     onConfirm: () => {
                       setConfirmConfig(null);
-                      onUpdateSlot(
-                        classId,
-                        selectedDays,
-                        editingSlot.periodId,
-                        null,
-                        null
-                      );
+                      onUpdateSlot(classId, selectedDays, editingSlot.periodId, null, null);
                       setEditingSlot(null);
-                    }
+                    },
                   });
                 }}
                 className="text-red-primary hover:text-red-dark hover:bg-red-lbg/50 px-4 py-2 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-red-soft"

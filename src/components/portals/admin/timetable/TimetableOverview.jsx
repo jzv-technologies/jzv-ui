@@ -36,7 +36,7 @@ const getTeacherPalette = (teacherId) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const TimetableOverview = ({
-  view = 'unassigned_classes',
+  view = 'teacher_unassigned',
   showBreaks = true,
   setShowBreaks,
   classes = [],
@@ -76,6 +76,17 @@ const TimetableOverview = ({
         const subjectObj = subjects.find((s) => String(s.id) === String(slot.subject_id));
         if (subjectObj && subjectObj.requires_teacher === false) return [];
         return [{ class: cls, subjectName: getSubjectName(slot.subject_id) }];
+      }
+      return [];
+    });
+
+  // Returns classes that have NO subject set for this day+period slot
+  const getSubjectUnassignedClasses = (day, periodId) =>
+    classes.flatMap((cls) => {
+      const slot = getSlot(cls.id, day, periodId);
+      // No slot at all, or slot exists but has no subject
+      if (!slot || !slot.subject_id) {
+        return [{ class: cls }];
       }
       return [];
     });
@@ -126,14 +137,23 @@ const TimetableOverview = ({
 
   // ─── View meta ────────────────────────────────────────────────────────────
   const VIEW_META = {
-    unassigned_classes: {
+    teacher_unassigned: {
       icon: 'fa-school',
-      label: 'Unassigned Classes',
+      label: 'Teacher Unassigned',
       desc: 'Classes with a subject set but no teacher',
       stripBg: 'bg-amber-50',
       stripBorder: 'border-amber-200',
       stripIcon: 'text-amber-600',
       stripText: 'text-amber-800',
+    },
+    subject_unassigned: {
+      icon: 'fa-book-open',
+      label: 'Subject Unassigned',
+      desc: 'Classes with no subject assigned for this slot',
+      stripBg: 'bg-red-50',
+      stripBorder: 'border-red-200',
+      stripIcon: 'text-red-600',
+      stripText: 'text-red-800',
     },
     free_teachers: {
       icon: 'fa-user-clock',
@@ -154,7 +174,7 @@ const TimetableOverview = ({
       stripText: 'text-blue-800',
     },
   };
-  const meta = VIEW_META[view] || VIEW_META.unassigned_classes;
+  const meta = VIEW_META[view] || VIEW_META.teacher_unassigned;
 
   // ─── Per-teacher swatches for legend (assigned view) ─────────────────────
   const uniqueTeachersInSlots = [
@@ -177,7 +197,8 @@ const TimetableOverview = ({
     })
     .filter(Boolean)
     .filter((t) => {
-      if (selAssignedTeachers.length > 0 && !selAssignedTeachers.includes(String(t.id))) return false;
+      if (selAssignedTeachers.length > 0 && !selAssignedTeachers.includes(String(t.id)))
+        return false;
       if (assignedTeachersGender === 'male' && t.isFemale) return false;
       if (assignedTeachersGender === 'female' && !t.isFemale) return false;
       return true;
@@ -208,8 +229,8 @@ const TimetableOverview = ({
       );
     }
 
-    // ── Unassigned Classes ──
-    if (view === 'unassigned_classes') {
+    // ── Teacher Unassigned ──
+    if (view === 'teacher_unassigned') {
       const raw = getUnassignedClasses(day, period.id);
       const items =
         selClasses.length > 0
@@ -249,6 +270,51 @@ const TimetableOverview = ({
                     <div className="text-[8px] font-semibold text-amber-700 truncate leading-tight opacity-80">
                       {item.subjectName}
                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </td>
+      );
+    }
+
+    // ── Subject Unassigned ──
+    if (view === 'subject_unassigned') {
+      const raw = getSubjectUnassignedClasses(day, period.id);
+      const items =
+        selClasses.length > 0
+          ? raw.filter((item) => selClasses.includes(String(item.class.id)))
+          : raw;
+      const allGood = raw.length === 0;
+
+      return (
+        <td
+          key={period.id}
+          className="p-2 border-r border-light-border last:border-r-0 align-top"
+          style={{ minWidth: 130, verticalAlign: 'top' }}
+        >
+          {allGood ? (
+            <div className="flex flex-col items-center justify-center gap-1 min-h-[56px] rounded-xl bg-emerald-50 border border-emerald-200">
+              <i className="fas fa-check-circle text-emerald-500 text-base" />
+              <span className="text-[9px] font-bold text-emerald-700 uppercase tracking-wide">
+                All Scheduled
+              </span>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex items-center justify-center min-h-[56px] rounded-xl border border-dashed border-red-200 bg-red-50/30">
+              <span className="text-[9px] text-red-400 font-semibold italic">filtered out</span>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1 min-h-[56px]">
+              {items.map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1"
+                >
+                  <i className="fas fa-book-open text-red-400 text-[9px] shrink-0" />
+                  <div className="font-extrabold text-[9px] text-red-900 truncate leading-tight">
+                    {item.class.name}
                   </div>
                 </div>
               ))}
@@ -448,7 +514,7 @@ const TimetableOverview = ({
 
           {/* ── Legend footer ── */}
           <div className="px-5 py-3 border-t border-light-border bg-light-bg/20 flex flex-wrap gap-3 items-center">
-            {view === 'unassigned_classes' && (
+            {view === 'teacher_unassigned' && (
               <>
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold text-dark-soft">
                   <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
@@ -457,6 +523,18 @@ const TimetableOverview = ({
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold text-dark-soft">
                   <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
                   Subject set, no teacher
+                </div>
+              </>
+            )}
+            {view === 'subject_unassigned' && (
+              <>
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-dark-soft">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                  All classes scheduled
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-dark-soft">
+                  <span className="w-3 h-3 rounded-full bg-red-400 inline-block" />
+                  No subject assigned
                 </div>
               </>
             )}

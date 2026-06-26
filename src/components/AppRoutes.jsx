@@ -277,7 +277,7 @@ export const AppRoutes = ({
                 openModal={openModal}
               >
                 {teacherSubView === "timetable" && (
-                  <TeacherTimetableViewer />
+                  <TeacherTimetableViewer user={user} />
                 )}
                 {teacherSubView === "students" && (
                   <TeacherStudentsViewer />
