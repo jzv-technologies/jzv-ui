@@ -7,6 +7,12 @@ import SyllabusCsvMappingModal from './SyllabusCsvMappingModal';
 
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
 
+const getComplexityBadgeClass = (comp) => {
+  if (comp === 'Complex') return 'bg-red-100 text-red-700 border-red-200';
+  if (comp === 'Moderate') return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+  return 'bg-green-100 text-green-700 border-green-200';
+};
+
 const SyllabusManager = ({ role }) => {
   const isAdmin = role === 'admin';
   const isTeacher = role === 'teacher';
@@ -735,33 +741,81 @@ const SyllabusManager = ({ role }) => {
   const renderSubjectSelector = (title, subs, isUnclassified = false) => {
     if (!subs || subs.length === 0) return null;
     const isCollapsed = collapsedClassifications[title];
+    const hasActive = subs.some((s) => String(s.id) === String(activeSubjectId));
     return (
       <div key={title} className="mb-4">
         <button
           onClick={() => toggleClassificationCollapse(title)}
-          className="w-full flex items-center justify-between text-left py-2 px-3 bg-light-lbg/10 hover:bg-light-lbg rounded-lg transition-colors group focus:outline-none"
+          className={`w-full flex items-center justify-between text-left py-2 px-3 rounded-lg transition-colors group focus:outline-none ${hasActive ? 'bg-brand-lbg/20 text-brand-primary border border-brand-soft/20' : 'bg-light-lbg/10 hover:bg-light-lbg border border-light-border/40'}`}
         >
-          <span className="text-xs font-bold text-dark-soft uppercase tracking-wider group-hover:text-dark-primary transition-colors">
-            {title}
+          <span className="flex items-center gap-2 text-xs font-bold text-dark-soft uppercase tracking-wider group-hover:text-dark-primary transition-colors truncate">
+            <i
+              className={`fas ${isCollapsed ? 'fa-folder' : 'fa-folder-open'} ${hasActive ? 'text-brand-primary' : 'text-orange-primary'}`}
+            />
+            <span className="truncate">{title}</span>
+            <span className="text-[9px] text-dark-muted bg-white px-1.5 py-0.2 rounded-full border border-light-border ml-1">
+              {subs.length}
+            </span>
           </span>
           <i
             className={`fas fa-chevron-${isCollapsed ? 'right' : 'down'} text-[10px] text-dark-muted`}
           />
         </button>
         {!isCollapsed && (
-          <div className="mt-2 space-y-1 pl-2 border-l-2 border-light-border/40 ml-2">
-            {subs.map((sub) => (
-              <button
-                key={sub.id}
-                onClick={() => setActiveSubjectId(sub.id)}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold transition-all flex justify-between items-center ${String(activeSubjectId) === String(sub.id) ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/20 scale-[1.02]' : 'text-dark-secondary hover:bg-white hover:shadow hover:text-brand-primary'}`}
-              >
-                <span className="truncate">{sub.name}</span>
-                {String(activeSubjectId) === String(sub.id) && (
-                  <i className="fas fa-check-circle text-white/90"></i>
-                )}
-              </button>
-            ))}
+          <div className="mt-2 space-y-1 pl-4 border-l border-light-border border-dashed ml-3">
+            {subs.map((sub) => {
+              const isSelected = String(activeSubjectId) === String(sub.id);
+              return (
+                <div
+                  key={sub.id}
+                  onClick={() => setActiveSubjectId(sub.id)}
+                  className={`group w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex justify-between items-center cursor-pointer ${isSelected ? 'bg-brand-primary text-white font-bold' : 'text-dark-soft hover:bg-light-ui hover:text-dark-primary'}`}
+                >
+                  <span className="flex items-center gap-2 truncate">
+                    <i
+                      className={`fas fa-book-open text-[10px] ${isSelected ? 'text-white' : 'text-blue-primary'}`}
+                    />
+                    <span className="truncate">{sub.name}</span>
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                    {(isAdmin || isTeacher) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModal({
+                            type: 'edit',
+                            level: 'subject',
+                            node: sub,
+                            name: sub.name,
+                          });
+                        }}
+                        className={`p-1 rounded transition-colors ${isSelected ? 'text-white/80 hover:text-white hover:bg-white/20' : 'text-blue-500 hover:bg-blue-50'}`}
+                        title="Rename Subject"
+                      >
+                        <i className="fas fa-edit text-[10px]"></i>
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteNode('subject', sub.id);
+                        }}
+                        className={`p-1 rounded transition-colors ${isSelected ? 'text-white/80 hover:text-white hover:bg-white/20' : 'text-red-primary hover:bg-red-50'}`}
+                        title="Delete Subject"
+                      >
+                        <i className="fas fa-trash-alt text-[10px]"></i>
+                      </button>
+                    )}
+                  </div>
+                  {isSelected && (
+                    <span className="group-hover:hidden">
+                      <i className="fas fa-check-circle text-white/95 text-[10px]"></i>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -854,8 +908,10 @@ const SyllabusManager = ({ role }) => {
                       className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[9px] text-dark-soft`}
                     />
                     <i className="fas fa-folder-open text-orange-primary text-xs" />
-                    <span className="font-extrabold text-xs text-dark-deepblue truncate">
-                      {l1Name}: {l1}
+                    <span className="font-extrabold text-xs text-dark-deepblue truncate">{l1}</span>
+                    <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                      {Object.keys(l2Groups).filter((k) => k !== '_direct_lessons').length} {l2Name}
+                      s
                     </span>
                   </button>
                   <div className="flex items-center gap-1.5">
@@ -917,12 +973,18 @@ const SyllabusManager = ({ role }) => {
                               className="flex justify-between items-center bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
                             >
                               <div className="flex items-center gap-2">
-                                <i className="fas fa-file-alt text-emerald-600 text-[10px]" />
+                                <i className="fas fa-file-alt text-dark-soft text-[10px]" />
                                 <span>{node.level3}</span>
                               </div>
                               <div className="flex gap-2 items-center">
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                  <i className="far fa-file-lines mr-1" />
                                   {node.page_count} pages
+                                </span>
+                                <span
+                                  className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
+                                >
+                                  {node.complexity}
                                 </span>
                                 <button
                                   onClick={() =>
@@ -974,16 +1036,28 @@ const SyllabusManager = ({ role }) => {
                                 />
                                 <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
                                 <span className="font-extrabold text-xs text-dark-primary truncate">
-                                  {l2Name}: {l2}
+                                  {l2}
                                 </span>
+                                {l3Nodes.lessons.length > 0 ? (
+                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                    {l3Nodes.lessons.length} {l3Name}s
+                                  </span>
+                                ) : !l3Nodes.hasPlaceholder ? (
+                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                    No {l3Name}s
+                                  </span>
+                                ) : null}
                               </button>
 
                               {l3Nodes.lessons.length === 0 && l3Nodes.hasPlaceholder && (
                                 <div className="flex gap-2 items-center shrink-0">
                                   <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full bg-white text-dark-soft">
+                                    <i className="far fa-file-lines mr-1" />
                                     {l3Nodes.page_count} pages
                                   </span>
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full bg-white text-dark-soft">
+                                  <span
+                                    className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(l3Nodes.complexity)}`}
+                                  >
                                     {l3Nodes.complexity}
                                   </span>
                                 </div>
@@ -1056,16 +1130,17 @@ const SyllabusManager = ({ role }) => {
                                       className="flex justify-between items-center bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
                                     >
                                       <div className="flex items-center gap-2">
-                                        <i className="fas fa-file-alt text-emerald-600 text-[10px]" />
-                                        <span>
-                                          {l3Name}: {node.level3}
-                                        </span>
+                                        <i className="fas fa-file-alt text-dark-soft text-[10px]" />
+                                        <span>{node.level3}</span>
                                       </div>
                                       <div className="flex gap-2 items-center">
                                         <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                          <i className="far fa-file-lines mr-1" />
                                           {node.page_count} pages
                                         </span>
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 bg-white">
+                                        <span
+                                          className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
+                                        >
                                           {node.complexity}
                                         </span>
                                         <button
@@ -1121,35 +1196,32 @@ const SyllabusManager = ({ role }) => {
   return (
     <div className="flex h-[calc(100vh-64px)] bg-light-bg overflow-hidden font-sans">
       <div className="w-80 bg-white border-r border-light-border flex flex-col h-full shadow-sm z-10 shrink-0">
-        <div className="p-5 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
+        <div className="p-2 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-xl font-black text-dark-primary flex items-center gap-2 tracking-tight">
+            <h2 className="text-xl font-black text-brand-primary flex items-center gap-2 tracking-tight">
               <i className="fas fa-layer-group text-brand-primary"></i> Curriculum
             </h2>
-            {loading && <i className="fas fa-circle-notch fa-spin text-brand-primary text-sm"></i>}
-          </div>
-          <p className="text-xs font-semibold text-dark-muted leading-relaxed">
-            Manage your educational taxonomy, subjects, and complete syllabus structures.
-          </p>
-        </div>
-        {(isAdmin || isTeacher) && (
-          <div className="p-4 border-t border-light-border/50 bg-white flex gap-2">
-            {isAdmin && (
-              <button
-                onClick={() => setIsClassificationsModalOpen(true)}
-                className="flex-1 bg-green-lbg hover:bg-green-lbg/80 text-green-primary py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2"
-              >
-                <i className="fas fa-tags text-green-primary"></i>
-              </button>
+            {(isAdmin || isTeacher) && (
+              <div className="p-4 border-t border-light-border/50 bg-white flex gap-2">
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsClassificationsModalOpen(true)}
+                    className="flex-1  text-green-primary font-bold text-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <i className="fas fa-sliders text-green-primary"></i>
+                  </button>
+                )}
+                <button
+                  onClick={() => setModal({ type: 'add', level: 'subject' })}
+                  className="flex-1 text-blue-primary font-bold text-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <i className="fas fa-book-open"></i>
+                </button>
+              </div>
             )}
-            <button
-              onClick={() => setModal({ type: 'add', level: 'subject' })}
-              className="flex-1 bg-blue-primary hover:bg-blue-primary/90 text-white shadow-md shadow-blue-primary/20 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-            >
-              <i className="fas fa-book-open"></i>
-            </button>
           </div>
-        )}
+        </div>
+
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
           {renderSubjectSelector('Unclassified', unclassifiedSubjects, true)}
           {groupedSubjects.map((cls) => renderSubjectSelector(cls.name, cls.subjects))}
@@ -1157,7 +1229,7 @@ const SyllabusManager = ({ role }) => {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 bg-light-bg overflow-y-auto custom-scrollbar relative">
-        <div className="max-w-5xl mx-auto w-full p-8">
+        <div className=" mx-auto w-full p-4">
           {!activeSubject ? (
             <div className="text-center py-20 px-4">
               <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
@@ -1169,72 +1241,40 @@ const SyllabusManager = ({ role }) => {
               </p>
             </div>
           ) : (
-            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex justify-between items-start flex-wrap gap-4 bg-white p-6 rounded-2xl border border-light-border shadow-sm">
+            <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex justify-between items-start flex-wrap gap-4 bg-white p-4 rounded-2xl border border-light-border shadow-sm">
                 <div>
                   <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-3xl font-black text-dark-primary tracking-tight">
+                    <h1 className="text-xl font-black text-dark-primary tracking-tight">
                       {activeSubject.name}
                     </h1>
-                    <span className="px-2.5 py-1 bg-brand-lbg text-brand-primary text-[10px] font-extrabold uppercase tracking-widest rounded-md border border-brand-soft/30">
-                      Subject
-                    </span>
                   </div>
                   <p className="text-xs font-bold text-dark-muted">
-                    Classification:{' '}
-                    <span className="text-dark-secondary">
+                    Syllabus for{' '}
+                    <span className="text-dark-secondary uppercase">
                       {classifications.find(
                         (c) => String(c.id) === String(activeSubject.classification_id)
                       )?.name || 'Unclassified'}
                     </span>
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  {(isAdmin || isTeacher) && (
-                    <button
-                      onClick={() =>
-                        setModal({
-                          type: 'edit',
-                          level: 'subject',
-                          node: activeSubject,
-                          name: activeSubject.name,
-                        })
-                      }
-                      className="px-4 py-2 bg-white border-2 border-light-border hover:border-brand-soft hover:bg-brand-lbg/30 text-dark-primary rounded-xl text-xs font-bold transition-all shadow-sm"
-                    >
-                      <i className="fas fa-edit mr-1.5"></i> Edit
-                    </button>
-                  )}
-                  {isAdmin && (
-                    <button
-                      onClick={() => handleDeleteNode('subject', activeSubject.id)}
-                      className="px-4 py-2 bg-white border-2 border-light-border hover:border-red-200 hover:bg-red-50 text-red-600 rounded-xl text-xs font-bold transition-all shadow-sm"
-                    >
-                      <i className="fas fa-trash-alt mr-1.5"></i> Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center px-2">
-                <h2 className="text-lg font-black text-dark-primary flex items-center gap-2">
-                  <i className="fas fa-books text-brand-primary"></i> Subject Books & Syllabi
-                </h2>
                 {(isAdmin || isTeacher) && (
                   <button
                     onClick={() =>
                       setModal({ type: 'add', level: 'book', parentId: activeSubject.id })
                     }
-                    className="bg-dark-primary hover:bg-dark-deepblue text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98]"
+                    className="bg-brand-primary hover:bg-brand-primary/80 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98]"
                   >
                     <i className="fas fa-plus mr-1.5"></i> Add Book
                   </button>
                 )}
               </div>
 
+              <div className="flex justify-between items-center px-2"></div>
+
               {activeBooks.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-light-border border-dashed p-12 text-center">
-                  <i className="fas fa-book text-3xl text-dark-soft/30 mb-4"></i>
+                  <i className="fas fa-book text-3xl text-blue-primary mb-4"></i>
                   <h3 className="text-sm font-bold text-dark-primary mb-1">No Books Found</h3>
                   <p className="text-xs font-semibold text-dark-muted">
                     Add a book to start structuring the syllabus.
@@ -1248,6 +1288,11 @@ const SyllabusManager = ({ role }) => {
                       .split(',')
                       .map((s) => s.trim());
                     const bookL1Name = bookLevels[0] || 'Level 1';
+                    const bookData = syllabusData.filter(
+                      (d) => String(d.book_id) === String(book.id)
+                    );
+                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1)));
+                    const bookL1Count = l1Keys.length;
                     return (
                       <div
                         key={book.id}
@@ -1267,7 +1312,11 @@ const SyllabusManager = ({ role }) => {
                             </div>
                             <div>
                               <h3 className="font-extrabold text-base text-dark-primary flex items-center gap-2">
+                                <i className="fas fa-book text-blue-primary text-sm" />
                                 {book.name}
+                                <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                                  {bookL1Count} {bookL1Name}s
+                                </span>
                               </h3>
                               <div className="flex items-center gap-3 mt-1">
                                 <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider">
@@ -1295,10 +1344,10 @@ const SyllabusManager = ({ role }) => {
                                 </button>
                                 <button
                                   onClick={() => initiateCsvImport(book.id)}
-                                  className="px-3 py-1.5 bg-white border border-light-border hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 rounded-lg text-[10px] font-bold transition-all"
-                                  title="Import from CSV"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                  title="Import CSV"
                                 >
-                                  <i className="fas fa-file-import mr-1"></i> Import CSV
+                                  <i className="fas fa-file-import text-xl"></i>
                                 </button>
                                 <button
                                   onClick={() =>
@@ -1309,18 +1358,20 @@ const SyllabusManager = ({ role }) => {
                                       name: book.name,
                                     })
                                   }
-                                  className="px-3 py-1.5 bg-white border border-light-border hover:bg-light-lbg rounded-lg text-[10px] font-bold text-dark-primary transition-all"
+                                  className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                  title="Edit Book"
                                 >
-                                  Edit Book
+                                  <i className="fas fa-edit text-xl"></i>
                                 </button>
                               </>
                             )}
                             {isAdmin && (
                               <button
                                 onClick={() => handleDeleteNode('book', book.id)}
-                                className="p-1.5 text-dark-soft hover:bg-red-50 hover:text-red-primary rounded-lg transition-colors"
+                                className="p-2 text-red-600 hover:bg-red-50 hover:border-red-200 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                title="Delete Book"
                               >
-                                <i className="fas fa-trash-alt text-xs"></i>
+                                <i className="fas fa-trash-alt text-xl"></i>
                               </button>
                             )}
                           </div>
