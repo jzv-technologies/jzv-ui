@@ -477,7 +477,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         title: config.display_name || config.form_name,
         description: config.description || `Fill out the ${config.display_name || config.form_name} form.`,
         icon: config.icon || "fa-clipboard-list",
-        buttonColor: `${theme.color} text-white`,
+        buttonColor: theme.color ? `bg-${theme.color} text-white` : 'bg-orange-dark text-white',
         shadow: shadowClass,
         onClick: () => openModal(config.form_name),
       };

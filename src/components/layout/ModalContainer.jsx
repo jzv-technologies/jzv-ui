@@ -63,7 +63,7 @@ const ModalContainer = ({
 
         {/* ── Modal header ─────────────────────────────────────────────── */}
         <div
-          className={`flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-light-border shrink-0 gap-3 ${activeCard.bgcontent}`}
+          className={`flex items-center justify-between p-2 sm:p-3 lg:p-4 border-b border-light-border shrink-0 gap-3 bg-${activeCard.bg}`}
         >
           {isTabbed ? (
             <div className="flex flex-col w-full">
@@ -90,8 +90,8 @@ const ModalContainer = ({
                           transition-all duration-150 text-white
                           ${
                             isActive
-                              ? `${tabCard.color} shadow-inner py-3 sm:py-4 rounded-b-lg`
-                              : `${tabCard.color} opacity-50 py-2 sm:py-3`
+                              ? `bg-${tabCard.color} shadow-inner py-3 sm:py-4 rounded-b-lg`
+                              : `bg-${tabCard.color} opacity-50 py-2 sm:py-3`
                           }
                         `}
                         >
@@ -99,7 +99,7 @@ const ModalContainer = ({
                             className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center shrink-0 ${isActive ? "bg-white/20" : "bg-light-soft"}`}
                           >
                             <i
-                              className={`fas ${tabCard.icon} text-xs ${!isActive ? tabCard.textColor : ""}`}
+                              className={`fas ${tabCard.icon} text-xs ${!isActive ? `text-${tabCard.color}` : ""}`}
                             />
                           </span>
                           <span>
@@ -123,7 +123,7 @@ const ModalContainer = ({
               <div className="flex sm:hidden items-center justify-between gap-3 w-full">
                 <div className="flex items-center gap-3 flex-1 min-w-0 pr-12">
                   <div
-                    className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white ${groupCard?.color || activeCard.color}`}
+                    className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white bg-${groupCard?.color || activeCard.color}`}
                   >
                     <i
                       className={`fas ${groupCard?.icon || activeCard.icon}`}
@@ -150,7 +150,7 @@ const ModalContainer = ({
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 pr-12 sm:pr-0">
                   <div
-                    className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white ${activeCard.color}`}
+                    className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white bg-${activeCard.color}`}
                   >
                     <i className={`fas ${activeCard.icon}`} />
                   </div>
@@ -183,7 +183,7 @@ const ModalContainer = ({
 
         {/* ── Modal content ────────────────────────────────────────────── */}
         <div
-          className={`p-2 sm:p-4 lg:p-6 overflow-y-auto flex-1 ${activeCard.bgcontent}`}
+          className={`p-2 sm:p-4 lg:p-6 overflow-y-auto flex-1 bg-${activeCard.bg}`}
         >
           {isTabbed ? (
             <>
@@ -213,7 +213,7 @@ const ModalContainer = ({
                           onClick={() => handleAccordionToggle(tabId)}
                           className={`w-full flex items-center justify-between p-4 font-bold text-sm transition-all duration-300 select-none ${
                             isExpanded
-                              ? `${tabCard.color} text-white`
+                              ? `bg-${tabCard.color} text-white`
                               : "bg-white text-gray-800 hover:bg-gray-50"
                           }`}
                         >
@@ -222,7 +222,7 @@ const ModalContainer = ({
                               className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
                                 isExpanded
                                   ? "bg-white/20 text-white"
-                                  : `${tabCard.color} text-white`
+                                  : `bg-${tabCard.color} text-white`
                               }`}
                             >
                               <i className={`fas ${tabCard.icon} text-xs`} />
@@ -241,7 +241,7 @@ const ModalContainer = ({
                         {/* Accordion content */}
                         {isExpanded && (
                           <div
-                            className={`p-4 border-t border-gray-150/50 ${tabCard.bgcontent || "bg-light-soft"}`}
+                            className={`p-4 border-t border-gray-150/50 bg-${tabCard.bg || "light-soft"}`}
                           >
                             {tabCard.content}
                           </div>

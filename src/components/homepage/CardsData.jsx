@@ -273,7 +273,7 @@ export const getCards = ({
     content: (
       <DynamicForm
         uuid="complaint"
-        textColor={CARD_THEMES.orange.textColor}
+        textColor={`text-${CARD_THEMES.orange.color}`}
         additionalData={{ email: currentUser?.email }}
         userRoles={userRoles}
       />
@@ -297,7 +297,7 @@ export const getCards = ({
     ...CARD_THEMES.blueDark,
     showAtHome: false,
     content: (
-      <DynamicForm uuid="career" textColor={CARD_THEMES.blueDark.textColor} userRoles={userRoles} />
+      <DynamicForm uuid="career" textColor={`text-${CARD_THEMES.blueDark.color}`} userRoles={userRoles} />
     ),
   },
   {

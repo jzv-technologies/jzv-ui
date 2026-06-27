@@ -72,7 +72,7 @@ export const useModal = (user, userRoles = []) => {
       showAtHome: false,
       content: React.createElement(DynamicForm, {
         uuid: config.form_name,
-        textColor: theme.textColor,
+        textColor: theme.color ? `text-${theme.color}` : '',
         additionalData: { email: user?.email },
         userRoles: userRoles,
       }),

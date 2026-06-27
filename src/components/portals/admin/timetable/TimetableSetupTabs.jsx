@@ -214,7 +214,7 @@ const GroupedSubjectMultiSelect = ({
                   <div key={group.id} className="space-y-1.5">
                     {/* Header */}
                     <div className="flex items-center gap-1.5 px-1.5 shrink-0">
-                      <span className={`w-2.5 h-2.5 rounded-full ${groupTheme.color}`} />
+                      <span className={`w-2.5 h-2.5 rounded-full bg-${groupTheme.color}`} />
                       <span className="text-[10px] font-extrabold text-dark-deepblue uppercase tracking-wider">
                         {group.name} ({group.items.length})
                       </span>

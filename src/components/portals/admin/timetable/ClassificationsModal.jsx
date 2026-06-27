@@ -31,7 +31,7 @@ const ThemeSelect = ({ value, onChange, className = '', dropdownPosition = 'bott
       >
         <div className="flex items-center gap-1.5 truncate">
           <span
-            className={`w-3.5 h-3.5 rounded-full shrink-0 border border-black/10 ${currentTheme.color}`}
+            className={`w-3.5 h-3.5 rounded-full shrink-0 border border-black/10 bg-${currentTheme.color}`}
           />
           <span className="truncate">{value}</span>
         </div>
@@ -63,7 +63,7 @@ const ThemeSelect = ({ value, onChange, className = '', dropdownPosition = 'bott
                 }`}
               >
                 <span
-                  className={`w-3 h-3 rounded-full shrink-0 border border-black/10 ${theme.color}`}
+                  className={`w-3 h-3 rounded-full shrink-0 border border-black/10 bg-${theme.color}`}
                 />
                 <span className="truncate flex-1">{t}</span>
                 {isSelected && (
@@ -374,7 +374,7 @@ const ClassificationsModal = ({
                           ) : (
                             <div className="truncate flex items-center gap-1.5">
                               <span
-                                className={`w-2 h-2 rounded-full ${cls.theme ? CARD_THEMES[cls.theme]?.color : 'bg-blue-500'}`}
+                                className={`w-2 h-2 rounded-full ${cls.theme ? `bg-${CARD_THEMES[cls.theme]?.color}` : 'bg-blue-500'}`}
                               />
                               <i className="fas fa-folder text-[10px]"></i>
                               <span>{cls.name}</span>

@@ -23,10 +23,10 @@ const HomeGrid = ({ gridCards, openModal }) => {
               }}
             >
               <div
-                className={`absolute top-0 left-0 right-0 h-2 ${card.color}`}
+                className={`absolute top-0 left-0 right-0 h-2 bg-${card.color}`}
               />
               <div
-                className={`text-3xl sm:text-4xl mb-3 sm:mb-4 mt-2 group-hover:scale-110 transition-transform origin-center ${card.textColor} group-hover:text-pine-900 duration-200 ease-out`}
+                className={`text-3xl sm:text-4xl mb-3 sm:mb-4 mt-2 group-hover:scale-110 transition-transform origin-center text-${card.color} group-hover:text-pine-900 duration-200 ease-out`}
               >
                 <i className={`fas ${card.icon}`} />
               </div>

@@ -128,7 +128,7 @@ const SyllabusManager = ({ role }) => {
     setLoading(true);
     try {
       const [
-        { data: dbClassifications },
+        { data: dbClassifications, error: clsErr },
         { data: dbSubjects },
         { data: dbBooks },
         { data: dbSyllabusData },
@@ -139,7 +139,23 @@ const SyllabusManager = ({ role }) => {
         supabase.from('syllabus_book_lessons').select('*'),
       ]);
 
-      setClassifications(dbClassifications || []);
+      // If classifications came back empty (e.g. due to RLS), try fetching by IDs referenced in subjects
+      let resolvedClassifications = dbClassifications || [];
+      if ((!resolvedClassifications || resolvedClassifications.length === 0) && dbSubjects && dbSubjects.length > 0) {
+        const referencedIds = [...new Set(
+          dbSubjects.filter((s) => s.classification_id).map((s) => String(s.classification_id))
+        )];
+        if (referencedIds.length > 0) {
+          const { data: fallbackCls } = await supabase
+            .from('subject_classifications')
+            .select('*')
+            .in('id', referencedIds)
+            .order('name', { ascending: true });
+          resolvedClassifications = fallbackCls || [];
+        }
+      }
+
+      setClassifications(resolvedClassifications);
       setSubjects(dbSubjects || []);
       setBooks(dbBooks || []);
       setSyllabusData(dbSyllabusData || []);
@@ -855,12 +871,35 @@ const SyllabusManager = ({ role }) => {
 
   // Grouping subjects by classifications
   const unclassifiedSubjects = subjects.filter((s) => !s.classification_id);
-  const groupedSubjects = classifications
-    .map((cls) => ({
-      ...cls,
-      subjects: subjects.filter((s) => String(s.classification_id) === String(cls.id)),
-    }))
-    .filter((cls) => cls.subjects.length > 0);
+  const groupedSubjects = (() => {
+    // Build groups from known classifications
+    const knownGroups = classifications
+      .map((cls) => ({
+        ...cls,
+        subjects: subjects.filter((s) => String(s.classification_id) === String(cls.id)),
+      }))
+      .filter((cls) => cls.subjects.length > 0);
+
+    // Find subjects with a classification_id that doesn't match any loaded classification
+    // (happens when classifications table is partially visible via RLS)
+    const knownClsIds = new Set(classifications.map((c) => String(c.id)));
+    const orphanedSubjects = subjects.filter(
+      (s) => s.classification_id && !knownClsIds.has(String(s.classification_id))
+    );
+
+    if (orphanedSubjects.length > 0) {
+      // Group orphaned subjects by their classification_id, labelling as "Group <id>"
+      const orphanGroups = {};
+      orphanedSubjects.forEach((s) => {
+        const key = String(s.classification_id);
+        if (!orphanGroups[key]) orphanGroups[key] = { id: key, name: `Classification #${key}`, subjects: [] };
+        orphanGroups[key].subjects.push(s);
+      });
+      return [...knownGroups, ...Object.values(orphanGroups)];
+    }
+
+    return knownGroups;
+  })();
 
   const renderSubjectSelector = (title, subs, isUnclassified = false) => {
     if (!subs || subs.length === 0) return null;

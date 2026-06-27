@@ -1780,7 +1780,7 @@ const TimetableAdminView = ({
                               let colorClass = '';
                               if (isAssigned) {
                                 if (themeStyles) {
-                                  colorClass = `${themeStyles.bgcontent} ${themeStyles.textColor} border-l-4 border-l-[${themeStyles.color.replace('bg-', '')}]`;
+                                  colorClass = `bg-${themeStyles.bg} text-${themeStyles.color} border-l-4 border-${themeStyles.color}`;
                                 } else if (!isTeacherAssigned) {
                                   colorClass = getSubjectColor(subjectName);
                                 } else if (isFemale) {
