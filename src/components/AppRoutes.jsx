@@ -283,7 +283,7 @@ export const AppRoutes = ({
                   <TeacherStudentsViewer />
                 )}
                 {teacherSubView === "syllabus" && (
-                  <SyllabusManager role="teacher" />
+                  <SyllabusManager role="teacher" user={user} />
                 )}
                 {teacherSubView === "syllabus-tracker" && (
                   <SyllabusTracker user={user} />

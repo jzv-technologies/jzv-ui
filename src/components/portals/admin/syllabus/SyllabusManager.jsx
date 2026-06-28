@@ -13,7 +13,7 @@ const getComplexityBadgeClass = (comp) => {
   return 'bg-green-100 text-green-700 border-green-200';
 };
 
-const SyllabusManager = ({ role }) => {
+const SyllabusManager = ({ role, user }) => {
   const isAdmin = role === 'admin';
   const isTeacher = role === 'teacher';
 
@@ -21,6 +21,7 @@ const SyllabusManager = ({ role }) => {
   const [subjects, setSubjects] = useState([]);
   const [books, setBooks] = useState([]);
   const [syllabusData, setSyllabusData] = useState([]);
+  const [allocatedSubjectIds, setAllocatedSubjectIds] = useState([]);
 
   const [collapsedNodes, setCollapsedNodes] = useState({});
   const [collapsedClassifications, setCollapsedClassifications] = useState({});
@@ -155,14 +156,36 @@ const SyllabusManager = ({ role }) => {
         }
       }
 
+      let teacherAllocatedIds = [];
+      if (isTeacher && user?.id) {
+        const { data: teacherData } = await supabase
+          .from('teachers')
+          .select('id')
+          .eq('auth_id', user.id)
+          .maybeSingle();
+
+        if (teacherData) {
+          const { data: dbAssignments } = await supabase
+            .from('class_assignments')
+            .select('subject_id')
+            .eq('teacher_id', teacherData.id);
+          teacherAllocatedIds = (dbAssignments || []).map((a) => String(a.subject_id));
+        }
+      }
+      setAllocatedSubjectIds(teacherAllocatedIds);
+
       setClassifications(resolvedClassifications);
       setSubjects(dbSubjects || []);
       setBooks(dbBooks || []);
       setSyllabusData(dbSyllabusData || []);
       setIsSupabaseMode(true);
 
-      if (dbSubjects && dbSubjects.length > 0 && !activeSubjectId) {
-        setActiveSubjectId(dbSubjects[0].id);
+      let initialSubjectList = dbSubjects || [];
+      if (isTeacher) {
+        initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
+      }
+      if (initialSubjectList.length > 0 && !activeSubjectId) {
+        setActiveSubjectId(initialSubjectList[0].id);
       }
     } catch (err) {
       console.warn('DB error, using LocalStorage:', err.message);
@@ -182,8 +205,34 @@ const SyllabusManager = ({ role }) => {
         setSubjects(parsed.subjects || []);
         setBooks(parsed.books || []);
         setSyllabusData(parsed.syllabusData || []);
-        if (parsed.subjects && parsed.subjects.length > 0 && !activeSubjectId) {
-          setActiveSubjectId(parsed.subjects[0].id);
+        
+        let teacherAllocatedIds = [];
+        if (isTeacher && user?.id) {
+          const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
+          if (rawTimetable) {
+            try {
+              const parsedTimetable = JSON.parse(rawTimetable);
+              const matchedTeacher = (parsedTimetable.teachers || []).find(
+                (t) => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id)
+              );
+              if (matchedTeacher) {
+                teacherAllocatedIds = (parsedTimetable.assignments || [])
+                  .filter((a) => String(a.teacher_id) === String(matchedTeacher.id))
+                  .map((a) => String(a.subject_id));
+              }
+            } catch (e) {
+              console.warn('Error parsing timetable local data:', e);
+            }
+          }
+        }
+        setAllocatedSubjectIds(teacherAllocatedIds);
+
+        let initialSubjectList = parsed.subjects || [];
+        if (isTeacher) {
+          initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
+        }
+        if (initialSubjectList.length > 0 && !activeSubjectId) {
+          setActiveSubjectId(initialSubjectList[0].id);
         }
       } catch (e) {
         initializeMockData();
@@ -220,7 +269,14 @@ const SyllabusManager = ({ role }) => {
     setSubjects(mockSubjects);
     setBooks(mockBooks);
     setSyllabusData(mockSyllabusData);
-    setActiveSubjectId(mockSubjects[0].id);
+    
+    let initialSubjectList = mockSubjects;
+    if (isTeacher) {
+      initialSubjectList = initialSubjectList.filter((s) => allocatedSubjectIds.includes(String(s.id)));
+    }
+    if (initialSubjectList.length > 0) {
+      setActiveSubjectId(initialSubjectList[0].id);
+    }
     saveState({
       classifications: mockClassifications,
       subjects: mockSubjects,
@@ -255,7 +311,7 @@ const SyllabusManager = ({ role }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user, role]);
 
   const toggleCollapse = (id) => setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
   const toggleClassificationCollapse = (name) =>
@@ -870,20 +926,24 @@ const SyllabusManager = ({ role }) => {
   };
 
   // Grouping subjects by classifications
-  const unclassifiedSubjects = subjects.filter((s) => !s.classification_id);
+  const teacherFilteredSubjects = isTeacher
+    ? subjects.filter((s) => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)))
+    : subjects;
+
+  const unclassifiedSubjects = teacherFilteredSubjects.filter((s) => !s.classification_id);
   const groupedSubjects = (() => {
     // Build groups from known classifications
     const knownGroups = classifications
       .map((cls) => ({
         ...cls,
-        subjects: subjects.filter((s) => String(s.classification_id) === String(cls.id)),
+        subjects: teacherFilteredSubjects.filter((s) => String(s.classification_id) === String(cls.id)),
       }))
       .filter((cls) => cls.subjects.length > 0);
 
     // Find subjects with a classification_id that doesn't match any loaded classification
     // (happens when classifications table is partially visible via RLS)
     const knownClsIds = new Set(classifications.map((c) => String(c.id)));
-    const orphanedSubjects = subjects.filter(
+    const orphanedSubjects = teacherFilteredSubjects.filter(
       (s) => s.classification_id && !knownClsIds.has(String(s.classification_id))
     );
 

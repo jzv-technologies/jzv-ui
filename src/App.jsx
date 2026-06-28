@@ -108,10 +108,18 @@ const App = () => {
   // Prepare grid cards for homepage
   const gridCards = cards
     .filter(
-      (c) =>
-        c.showAtHome === true ||
-        c.isGroupEntry === true ||
-        (user && c.id === "my-portal"),
+      (c) => {
+        if (c.id === "useful-links") {
+          if (!user && !userRoles.includes("parent")) {
+            return false;
+          }
+        }
+        return (
+          c.showAtHome === true ||
+          c.isGroupEntry === true ||
+          (user && c.id === "my-portal")
+        );
+      },
     )
     .sort((a, b) => {
       const indexA = HOME_CARD_SEQUENCE.indexOf(a.id);
