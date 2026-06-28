@@ -1067,13 +1067,13 @@ const ALL_VIEWS = [
 ];
 
 const viewOptionsMap = {
-  scheduler: { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
-  class: { id: 'class', label: 'Class Schedule', icon: 'fa-building' },
-  teacher: { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
-  teacher_unassigned: { id: 'teacher_unassigned', label: 'Teacher Unassigned', icon: 'fa-school' },
+  scheduler: { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
+  class: { id: 'class', label: 'Class', icon: 'fa-building' },
+  teacher: { id: 'teacher', label: 'Teacher', icon: 'fa-user' },
+  teacher_unassigned: { id: 'teacher_unassigned', label: 'Teachers Pending', icon: 'fa-school' },
   subject_unassigned: {
     id: 'subject_unassigned',
-    label: 'Subject Unassigned',
+    label: 'Subjects Pending',
     icon: 'fa-book-open',
   },
   free_teachers: { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
@@ -1474,12 +1474,12 @@ const TimetableAdminView = ({
                 {showTabSwitcher && (
                   <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
                     {[
-                      { id: 'scheduler', label: 'Scheduler Grid', icon: 'fa-th-large' },
-                      { id: 'teacher', label: 'Teacher Schedule', icon: 'fa-user' },
-                      { id: 'teacher_unassigned', label: 'Teacher Unassigned', icon: 'fa-school' },
+                      { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
+                      { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+                      { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
                       {
                         id: 'subject_unassigned',
-                        label: 'Subject Unassigned',
+                        label: 'Subject Pending',
                         icon: 'fa-book-open',
                       },
                       { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
@@ -1766,7 +1766,6 @@ const TimetableAdminView = ({
                               const requiresTeacher = subjectObj
                                 ? subjectObj.requires_teacher !== false
                                 : true;
-
                               const clsObj =
                                 subjectObj && subjectObj.classification_id
                                   ? classifications.find(
@@ -1780,7 +1779,7 @@ const TimetableAdminView = ({
                               let colorClass = '';
                               if (isAssigned) {
                                 if (themeStyles) {
-                                  colorClass = `bg-${themeStyles.bg} text-${themeStyles.color} border-l-4 border-${themeStyles.color}`;
+                                  colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
                                 } else if (!isTeacherAssigned) {
                                   colorClass = getSubjectColor(subjectName);
                                 } else if (isFemale) {
@@ -1847,7 +1846,11 @@ const TimetableAdminView = ({
                                 >
                                   {isAssigned ? (
                                     <div
-                                      className={`w-full h-full p-2 rounded-xl border text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
+                                      className={`w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
+                                        themeStyles
+                                          ? `border-l-[6px] border-l-${themeStyles.color}`
+                                          : 'border'
+                                      } ${
                                         isClickable
                                           ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md'
                                           : ''

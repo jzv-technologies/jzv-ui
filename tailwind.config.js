@@ -1,5 +1,11 @@
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
+  safelist: [
+    {
+      pattern: /^(bg|text|border|border-l)-(pink|blue|teal|green|orange|red|dark|light|pine|olive|yellow|indigo|purple|amber|emerald|rose|cyan|sample)(-(primary|secondary|dark|bright|light|soft|deep|burnt|lbg|medium|gold|google|almostblack|deepblue|charcoal|50|100|200|300|400|500|600|700|800|900))?$/,
+    },
+    "border-l-[6px]",
+  ],
   theme: {
     extend: {
       colors: {

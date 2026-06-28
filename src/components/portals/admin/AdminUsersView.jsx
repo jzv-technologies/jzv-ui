@@ -1,17 +1,119 @@
 // src/components/portals/admin/AdminUsersView.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+
+const ROLES = [
+  { id: 1, name: "Guest" },
+  { id: 2, name: "Parents" },
+  { id: 4, name: "Staff" },
+  { id: 8, name: "Teacher" },
+  { id: 16, name: "Management" },
+  { id: 32, name: "Administrator" },
+];
+
+const getInitialRolesSum = (roleIds) => {
+  if (!roleIds) return "0";
+  const sumValue = parseInt(roleIds, 10);
+  if (!isNaN(sumValue)) return String(sumValue);
+
+  // Parse legacy format (e.g. "A,T")
+  const roleMap = {
+    A: 32, // admin
+    M: 16, // management
+    T: 8,  // teacher
+    S: 4,  // staff
+    P: 2,  // parent
+    G: 1,  // guest
+  };
+  const legacySum = roleIds
+    .split(",")
+    .map((code) => roleMap[code.trim().toUpperCase()] || 0)
+    .reduce((acc, val) => acc + val, 0);
+
+  return String(legacySum);
+};
+
+const MultiSelectRolesDropdown = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const currentSum = parseInt(value, 10) || 0;
+  const selectedRoles = ROLES.filter((r) => (currentSum & r.id) !== 0);
+
+  const handleToggle = (roleId) => {
+    let nextSum;
+    if ((currentSum & roleId) !== 0) {
+      nextSum = currentSum - roleId;
+    } else {
+      nextSum = currentSum + roleId;
+    }
+    onChange(String(nextSum));
+  };
+
+  const displayText = selectedRoles.length > 0
+    ? selectedRoles.map((r) => `${r.name} (${r.id})`).join(", ")
+    : "Select roles...";
+
+  return (
+    <div className="relative w-full min-w-[200px]" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2 bg-white border border-light-border rounded-xl focus:border-orange-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all font-semibold text-xs text-dark-primary text-left shadow-sm"
+      >
+        <span className="truncate pr-2">{displayText}</span>
+        <i className={`fas fa-chevron-${open ? "up" : "down"} text-[9px] text-dark-muted`}></i>
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 mt-1 p-1 bg-white border border-light-border rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in fade-in slide-in-from-top-1 duration-100">
+          <div className="space-y-0.5">
+            {ROLES.map((role) => {
+              const isChecked = (currentSum & role.id) !== 0;
+              return (
+                <label
+                  key={role.id}
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-bold transition-all ${
+                    isChecked
+                      ? "bg-orange-50 text-orange-primary"
+                      : "text-dark-soft hover:bg-light-lbg/50 hover:text-dark-primary"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggle(role.id)}
+                    className="rounded text-orange-primary focus:ring-orange-soft w-3.5 h-3.5 border-light-border"
+                  />
+                  <span className="truncate flex-1">{role.name} ({role.id})</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const UserRow = ({ user, onSave, saving, teachers = [] }) => {
-  const [roles, setRoles] = useState(user.role_ids || "");
-  const [students, setStudents] = useState(user.student_ids || "");
+  const [roles, setRoles] = useState(() => getInitialRolesSum(user.role));
   
   // Find which teacher is currently linked to this user's user_id
   const initiallyLinkedTeacher = teachers.find((t) => String(t.auth_id) === String(user.user_id));
   const [selectedTeacherId, setSelectedTeacherId] = useState(initiallyLinkedTeacher?.id || "");
 
+  const initialSum = getInitialRolesSum(user.role);
   const hasChanges =
-    roles !== (user.role_ids || "") ||
-    students !== (user.student_ids || "") ||
+    roles !== initialSum ||
     String(selectedTeacherId) !== String(initiallyLinkedTeacher?.id || "");
 
   return (
@@ -23,12 +125,9 @@ const UserRow = ({ user, onSave, saving, teachers = [] }) => {
         <div className="text-sm text-dark-muted">{user.email}</div>
       </td>
       <td className="p-4">
-        <input
-          type="text"
+        <MultiSelectRolesDropdown
           value={roles}
-          onChange={(e) => setRoles(e.target.value.toUpperCase())}
-          placeholder="e.g. A,M,T,P"
-          className="w-28 px-3 py-2 border border-light-border rounded-xl text-center focus:border-orange-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all font-bold"
+          onChange={setRoles}
         />
       </td>
       <td className="p-4">
@@ -52,18 +151,9 @@ const UserRow = ({ user, onSave, saving, teachers = [] }) => {
           })}
         </select>
       </td>
-      <td className="p-4">
-        <input
-          type="text"
-          value={students}
-          onChange={(e) => setStudents(e.target.value)}
-          placeholder="e.g. 101, 102"
-          className="w-full min-w-[150px] px-4 py-2 border border-light-border rounded-xl focus:border-orange-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all"
-        />
-      </td>
       <td className="p-4 text-right">
         <button
-          onClick={() => onSave(roles, students, selectedTeacherId)}
+          onClick={() => onSave(roles, selectedTeacherId)}
           disabled={saving || !hasChanges}
           className="bg-orange-primary text-white px-6 py-2 rounded-xl font-bold text-sm hover:bg-orange-600 disabled:opacity-20 transition-all active:scale-95 shadow-lg shadow-orange-100"
         >
@@ -89,7 +179,7 @@ const AdminUsersView = ({ users, loading, onUpdateUser, saving, teachers = [] })
       <div className="p-5 border-b border-light-border bg-gray-50/50">
         <h3 className="text-2xl font-bold text-dark-deepblue">Manage Users</h3>
         <p className="text-sm text-dark-muted">
-          Assign role shorthand (A=admin, M=management, T=teacher, P=parent), map teachers, and set student IDs.
+          Assign user roles using multi-select and map teachers.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -97,9 +187,8 @@ const AdminUsersView = ({ users, loading, onUpdateUser, saving, teachers = [] })
           <thead>
             <tr className="bg-gray-50/50 text-dark-deepblue uppercase text-xs font-bold tracking-wider">
               <th className="p-5 border-b">Name & Email</th>
-              <th className="p-5 border-b">Roles (A,M,T,P)</th>
+              <th className="p-5 border-b">Roles</th>
               <th className="p-5 border-b">Linked Teacher</th>
-              <th className="p-5 border-b">Student IDs</th>
               <th className="p-5 border-b text-right">Actions</th>
             </tr>
           </thead>
@@ -109,8 +198,8 @@ const AdminUsersView = ({ users, loading, onUpdateUser, saving, teachers = [] })
                 key={u.user_id}
                 user={u}
                 teachers={teachers}
-                onSave={(roles, students, teacherId) =>
-                  onUpdateUser(u.user_id, roles, students, teacherId)
+                onSave={(roles, teacherId) =>
+                  onUpdateUser(u.user_id, roles, teacherId)
                 }
                 saving={saving}
               />

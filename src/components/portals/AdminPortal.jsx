@@ -1,15 +1,15 @@
 // src/components/portals/AdminPortal.jsx
-import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../../utils/supabase";
-import RolePortal from "./RolePortal";
-import AdminUsersView from "./admin/AdminUsersView";
-import AdminFormConfigsView from "./admin/AdminFormConfigsView";
-import TimetableManager from "./admin/timetable/TimetableManager";
-import AdminStudentsView from "./admin/AdminStudentsView";
-import SyllabusManager from "./admin/syllabus/SyllabusManager";
-import SyllabusProgressReport from "./admin/syllabus/SyllabusProgressReport";
-import ConfirmModal from "../ConfirmModal";
-import { showToast } from "../../utils/toast";
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../utils/supabase';
+import RolePortal from './RolePortal';
+import AdminUsersView from './admin/AdminUsersView';
+import AdminFormConfigsView from './admin/AdminFormConfigsView';
+import TimetableManager from './admin/timetable/TimetableManager';
+import AdminStudentsView from './admin/AdminStudentsView';
+import SyllabusManager from './admin/syllabus/SyllabusManager';
+import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
+import ConfirmModal from '../ConfirmModal';
+import { showToast } from '../../utils/toast';
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -22,7 +22,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   // Form configs state
   const [configs, setConfigs] = useState([]);
   const [dbTableMissing, setDbTableMissing] = useState(false);
-  const [appsScriptError, setAppsScriptError] = useState("");
+  const [appsScriptError, setAppsScriptError] = useState('');
   const [configsLoading, setConfigsLoading] = useState(false);
   const [sheetMappings, setSheetMappings] = useState([]);
 
@@ -33,11 +33,14 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   // ----- User Management -----
   const fetchTeachers = async () => {
     try {
-      const { data, error } = await supabase.from("teachers").select("*");
+      const { data, error } = await supabase.from('teachers').select('*');
       if (error) throw error;
       setTeachers(data || []);
     } catch (err) {
-      console.warn("Error fetching teachers from Supabase, loading from LocalStorage:", err.message);
+      console.warn(
+        'Error fetching teachers from Supabase, loading from LocalStorage:',
+        err.message
+      );
       const raw = localStorage.getItem('jzv_timetable_data');
       if (raw) {
         try {
@@ -55,47 +58,41 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     fetchingRef.current = true;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("admin_users_view")
-        .select("*");
+      const { data, error } = await supabase.from('admin_users_view').select('*');
       if (error) throw error;
       setUsers(data || []);
     } catch (err) {
-      console.error("Error fetching users:", err);
-      showToast("Failed to load users.", "error");
+      console.error('Error fetching users:', err);
+      showToast('Failed to load users.', 'error');
     } finally {
       setLoading(false);
       fetchingRef.current = false;
     }
   };
 
-  const handleUpdateUser = async (userId, roleIds, studentIds, teacherId) => {
+  const handleUpdateUser = async (userId, role, teacherId) => {
     setSaving(true);
     try {
       // 1. Upsert roles and students
-      const { error: roleErr } = await supabase.from("user_roles").upsert(
+      const { error: roleErr } = await supabase.from('user_roles').upsert(
         {
           user_id: userId,
-          role_ids: roleIds,
-          student_ids: studentIds,
+          role: role,
         },
-        { onConflict: "user_id" },
+        { onConflict: 'user_id' }
       );
       if (roleErr) throw roleErr;
 
       // 2. Map teacher auth_id
       // Clear previous mapping for this user
-      await supabase
-        .from("teachers")
-        .update({ auth_id: null })
-        .eq("auth_id", userId);
+      await supabase.from('teachers').update({ auth_id: null }).eq('auth_id', userId);
 
       // Link new mapping if selected
       if (teacherId) {
         const { error: teachErr } = await supabase
-          .from("teachers")
+          .from('teachers')
           .update({ auth_id: userId })
-          .eq("id", teacherId);
+          .eq('id', teacherId);
         if (teachErr) throw teachErr;
       }
 
@@ -104,7 +101,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          const nextTeachers = (parsed.teachers || []).map(t => {
+          const nextTeachers = (parsed.teachers || []).map((t) => {
             if (String(t.auth_id) === String(userId)) {
               return { ...t, auth_id: null };
             }
@@ -120,11 +117,11 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
         }
       }
 
-      showToast("User updated successfully!", "success");
+      showToast('User updated successfully!', 'success');
       fetchAllUsers(); // refresh
       fetchTeachers(); // refresh mapping state
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -136,21 +133,21 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     fetchingRef.current = true;
     setConfigsLoading(true);
     setDbTableMissing(false);
-    setAppsScriptError("");
+    setAppsScriptError('');
     try {
       // 1. Fetch form configs from Supabase
       const { data: supabaseConfigs, error: configsError } = await supabase
-        .from("dynamic_form_configs")
-        .select("*");
+        .from('dynamic_form_configs')
+        .select('*');
       if (configsError) {
-        if (configsError.code === "42P01") setDbTableMissing(true);
+        if (configsError.code === '42P01') setDbTableMissing(true);
         throw configsError;
       }
 
       // 2. Fetch sheet mappings from Supabase
       const { data: sheetMappingsData, error: mappingsError } = await supabase
-        .from("google_sheet_mappings")
-        .select("*");
+        .from('google_sheet_mappings')
+        .select('*');
       if (mappingsError) {
         throw mappingsError;
       }
@@ -158,41 +155,51 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       setConfigs(supabaseConfigs || []);
       setSheetMappings(sheetMappingsData || []);
     } catch (err) {
-      console.error("fetchConfigs error:", err);
-      showToast("Failed to load form configurations and sheet mappings: " + err.message, "error");
+      console.error('fetchConfigs error:', err);
+      showToast('Failed to load form configurations and sheet mappings: ' + err.message, 'error');
     } finally {
       setConfigsLoading(false);
       fetchingRef.current = false;
     }
   };
 
-  const handleSaveConfig = async (formName, displayName, fields, dataId, idPattern, description, icon, formVisibility, dataVisibility, conversationVisibility, cardTheme) => {
+  const handleSaveConfig = async (
+    formName,
+    displayName,
+    fields,
+    dataId,
+    idPattern,
+    description,
+    icon,
+    formVisibility,
+    dataVisibility,
+    conversationVisibility,
+    cardTheme
+  ) => {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("dynamic_form_configs")
-        .upsert(
-          {
-            form_name: formName.trim(),
-            display_name: displayName || null,
-            fields,
-            data_id: dataId || null,
-            id_pattern: idPattern || "ID-XXXXX",
-            description: description || null,
-            icon: icon || null,
-            form_visibility: formVisibility || null,
-            data_visibility: dataVisibility || null,
-            conversation_visibility: conversationVisibility || null,
-            card_theme: cardTheme || "orange",
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: "form_name" }
-        );
+      const { error } = await supabase.from('dynamic_form_configs').upsert(
+        {
+          form_name: formName.trim(),
+          display_name: displayName || null,
+          fields,
+          data_id: dataId || null,
+          id_pattern: idPattern || 'ID-XXXXX',
+          description: description || null,
+          icon: icon || null,
+          form_visibility: formVisibility || null,
+          data_visibility: dataVisibility || null,
+          conversation_visibility: conversationVisibility || null,
+          card_theme: cardTheme || 'orange',
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'form_name' }
+      );
       if (error) throw error;
-      showToast(`Form schema "${formName}" saved.`, "success");
+      showToast(`Form schema "${formName}" saved.`, 'success');
       fetchConfigs();
     } catch (err) {
-      showToast("Failed to save config: " + err.message, "error");
+      showToast('Failed to save config: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -200,49 +207,47 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
 
   const handleDeleteConfig = (config) => {
     setConfirmConfig({
-      title: "Delete Configuration",
+      title: 'Delete Configuration',
       message: `Delete "${config.form_name}" from database?`,
-      confirmText: "Delete",
-      type: "danger",
+      confirmText: 'Delete',
+      type: 'danger',
       onConfirm: async () => {
         setConfirmConfig(null);
         setSaving(true);
         try {
           const { error } = await supabase
-            .from("dynamic_form_configs")
+            .from('dynamic_form_configs')
             .delete()
-            .eq("form_name", config.form_name);
+            .eq('form_name', config.form_name);
           if (error) throw error;
-          showToast(`Form schema "${config.form_name}" removed.`, "success");
+          showToast(`Form schema "${config.form_name}" removed.`, 'success');
           fetchConfigs();
         } catch (err) {
-          showToast("Failed to delete config: " + err.message, "error");
+          showToast('Failed to delete config: ' + err.message, 'error');
         } finally {
           setSaving(false);
         }
-      }
+      },
     });
   };
 
   const handleSaveMapping = async (mapping) => {
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("google_sheet_mappings")
-        .upsert(
-          {
-            id: mapping.id || undefined,
-            data_id: mapping.data_id.trim(),
-            google_sheet_id: mapping.google_sheet_id.trim(),
-            data_sheet_name: mapping.data_sheet_name.trim(),
-          },
-          { onConflict: "id" }
-        );
+      const { error } = await supabase.from('google_sheet_mappings').upsert(
+        {
+          id: mapping.id || undefined,
+          data_id: mapping.data_id.trim(),
+          google_sheet_id: mapping.google_sheet_id.trim(),
+          data_sheet_name: mapping.data_sheet_name.trim(),
+        },
+        { onConflict: 'id' }
+      );
       if (error) throw error;
-      showToast(`Google Sheet Mapping "${mapping.data_id}" saved.`, "success");
+      showToast(`Google Sheet Mapping "${mapping.data_id}" saved.`, 'success');
       fetchConfigs();
     } catch (err) {
-      showToast("Failed to save mapping: " + err.message, "error");
+      showToast('Failed to save mapping: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -250,27 +255,27 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
 
   const handleDeleteMapping = (mapping) => {
     setConfirmConfig({
-      title: "Delete Mapping",
+      title: 'Delete Mapping',
       message: `Delete Google Sheet Mapping "${mapping.data_id}"? This will unlink it from any forms.`,
-      confirmText: "Delete",
-      type: "danger",
+      confirmText: 'Delete',
+      type: 'danger',
       onConfirm: async () => {
         setConfirmConfig(null);
         setSaving(true);
         try {
           const { error } = await supabase
-            .from("google_sheet_mappings")
+            .from('google_sheet_mappings')
             .delete()
-            .eq("id", mapping.id);
+            .eq('id', mapping.id);
           if (error) throw error;
-          showToast(`Google Sheet Mapping "${mapping.data_id}" removed.`, "success");
+          showToast(`Google Sheet Mapping "${mapping.data_id}" removed.`, 'success');
           fetchConfigs();
         } catch (err) {
-          showToast("Failed to delete mapping: " + err.message, "error");
+          showToast('Failed to delete mapping: ' + err.message, 'error');
         } finally {
           setSaving(false);
         }
-      }
+      },
     });
   };
 
@@ -278,10 +283,10 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   useEffect(() => {
     if (subView === lastSubViewRef.current) return;
     lastSubViewRef.current = subView;
-    if (subView === "users") {
+    if (subView === 'users') {
       fetchAllUsers();
       fetchTeachers();
-    } else if (subView === "configs") {
+    } else if (subView === 'configs') {
       fetchConfigs();
     }
   }, [subView]);
@@ -289,59 +294,58 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
   // Admin tiles (same as before, but "Clear cache" removed – can be re-added if needed)
   const adminTiles = [
     {
-      id: "users",
-      title: "User Management",
-      description: "Manage roles and permissions for all users.",
-      icon: "fa-users",
-      buttonColor: "bg-orange-primary text-white",
-      shadow: "shadow-orange-200",
-      onClick: () => onSetSubView("users"),
+      id: 'users',
+      title: 'User Management',
+      description: 'Manage roles and permissions for all users.',
+      icon: 'fa-users',
+      buttonColor: 'bg-orange-primary text-white',
+      shadow: 'shadow-orange-200',
+      onClick: () => onSetSubView('users'),
     },
     {
-      id: "configs",
-      title: "Form Configurations",
-      description:
-        "Configure fields, validation, and overrides in the database.",
-      icon: "fa-sliders-h",
-      buttonColor: "bg-blue-600 text-white",
-      shadow: "shadow-blue-200",
-      onClick: () => onSetSubView("configs"),
+      id: 'configs',
+      title: 'Form Configurations',
+      description: 'Configure fields, validation, and overrides in the database.',
+      icon: 'fa-sliders-h',
+      buttonColor: 'bg-blue-600 text-white',
+      shadow: 'shadow-blue-200',
+      onClick: () => onSetSubView('configs'),
     },
     {
-      id: "students",
-      title: "Student Database",
-      description: "View and assign student records to parents.",
-      icon: "fa-user-graduate",
-      buttonColor: "bg-green-dark text-white",
-      shadow: "shadow-green-200",
-      onClick: () => onSetSubView("students"),
+      id: 'students',
+      title: 'Student Database',
+      description: 'View and assign student records to parents.',
+      icon: 'fa-user-graduate',
+      buttonColor: 'bg-green-dark text-white',
+      shadow: 'shadow-green-200',
+      onClick: () => onSetSubView('students'),
     },
     {
-      id: "timetable",
-      title: "Timetable Planner",
-      description: "Manage classes, teachers, subjects, and schedule conflict-free timetables.",
-      icon: "fa-calendar-alt",
-      buttonColor: "bg-brand-primary text-white",
-      shadow: "shadow-brand-lbg",
-      onClick: () => onSetSubView("timetable"),
+      id: 'timetable',
+      title: 'Timetable Planner',
+      description: 'Manage classes, teachers, subjects, and schedule conflict-free timetables.',
+      icon: 'fa-calendar-alt',
+      buttonColor: 'bg-brand-primary text-white',
+      shadow: 'shadow-brand-lbg',
+      onClick: () => onSetSubView('timetable'),
     },
     {
-      id: "syllabus",
-      title: "Syllabus Manager",
-      description: "Manage curriculum nodes, subjects, books, units, chapters, and lessons.",
-      icon: "fa-book-open",
-      buttonColor: "bg-emerald-600 text-white",
-      shadow: "shadow-emerald-200",
-      onClick: () => onSetSubView("syllabus"),
+      id: 'syllabus',
+      title: 'Syllabus Manager',
+      description: 'Manage curriculum nodes, subjects, books, units, chapters, and lessons.',
+      icon: 'fa-book-open',
+      buttonColor: 'bg-emerald-600 text-white',
+      shadow: 'shadow-emerald-200',
+      onClick: () => onSetSubView('syllabus'),
     },
     {
-      id: "syllabus-report",
-      title: "Syllabus Progress Reports",
-      description: "View coverage percentages, average class days spent, and revision metrics.",
-      icon: "fa-chart-line",
-      buttonColor: "bg-blue-600 text-white",
-      shadow: "shadow-blue-200",
-      onClick: () => onSetSubView("syllabus-report"),
+      id: 'syllabus-report',
+      title: 'Syllabus Progress Reports',
+      description: 'View coverage percentages, average class days spent, and revision metrics.',
+      icon: 'fa-chart-line',
+      buttonColor: 'bg-blue-600 text-white',
+      shadow: 'shadow-blue-200',
+      onClick: () => onSetSubView('syllabus-report'),
     },
   ];
 
@@ -353,9 +357,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       subView={subView}
       onSetSubView={onSetSubView}
     >
-
       {/* Users view (now using DataGrid + Modal) */}
-      {subView === "users" && (
+      {subView === 'users' && (
         <AdminUsersView
           users={users}
           loading={loading}
@@ -366,7 +369,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       )}
 
       {/* Form configs view (kept as before) */}
-      {subView === "configs" && (
+      {subView === 'configs' && (
         <AdminFormConfigsView
           configs={configs}
           sheetMappings={sheetMappings}
@@ -383,24 +386,16 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       )}
 
       {/* Timetable Planner view */}
-      {subView === "timetable" && (
-        <TimetableManager />
-      )}
+      {subView === 'timetable' && <TimetableManager />}
 
       {/* Student Database view */}
-      {subView === "students" && (
-        <AdminStudentsView />
-      )}
+      {subView === 'students' && <AdminStudentsView />}
 
       {/* Syllabus Manager view */}
-      {subView === "syllabus" && (
-        <SyllabusManager role="admin" />
-      )}
+      {subView === 'syllabus' && <SyllabusManager role="admin" />}
 
       {/* Syllabus Progress Report view */}
-      {subView === "syllabus-report" && (
-        <SyllabusProgressReport />
-      )}
+      {subView === 'syllabus-report' && <SyllabusProgressReport />}
 
       <ConfirmModal
         isOpen={confirmConfig !== null}

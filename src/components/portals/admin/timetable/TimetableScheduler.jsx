@@ -490,7 +490,7 @@ const TimetableScheduler = ({
                         let borderClass = '';
                         if (isAssigned) {
                           if (themeStyles) {
-                            colorClass = `bg-${themeStyles.bg} text-${themeStyles.color} border-l-4 border-${themeStyles.color}`;
+                            colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
                           } else if (!isTeacherAssigned) {
                             colorClass = getSubjectColor(subjectName);
                           } else if (isFemale) {
@@ -553,7 +553,7 @@ const TimetableScheduler = ({
                                 className={`w-full h-full rounded-xl p-2 flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
                                   isSourceCell
                                     ? 'opacity-40 border border-dashed bg-brand-lbg/10'
-                                    : `${colorClass} ${themeStyles ? `border-l-[6px] ${themeStyles.color.replace('bg-', 'border-l-')}` : 'border'}`
+                                    : `${colorClass} ${themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'}`
                                 } ${
                                   !isReadOnly && !movingSlot
                                     ? 'group-hover:scale-95'
