@@ -35,17 +35,72 @@ const SyllabusProgressReport = () => {
 
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
-        setBooks(dbBooks || []);
-        setSyllabusData(dbSyllabusData || []);
+
+        if (dbBooks && dbBooks.length > 0) {
+          setBooks(dbBooks);
+          setSyllabusData(dbSyllabusData || []);
+        } else {
+          const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
+          if (rawSyllabus) {
+            try {
+              const parsed = JSON.parse(rawSyllabus);
+              setBooks(parsed.books || []);
+              setSyllabusData(parsed.syllabusData || []);
+            } catch (e) {
+              setBooks([]);
+              setSyllabusData([]);
+            }
+          } else {
+            setBooks([]);
+            setSyllabusData([]);
+          }
+        }
 
         if (dbClasses && dbClasses.length > 0) setSelectedClassId(String(dbClasses[0].id));
         if (dbSubjects && dbSubjects.length > 0) setSelectedSubjectId(String(dbSubjects[0].id));
       } catch (err) {
-        showToast(err.message, 'error');
+        console.warn('SyllabusProgressReport DB fetchBase failed, using LocalStorage fallback:', err.message);
+        loadLocalBaseData();
       } finally {
         setLoading(false);
       }
     };
+
+    const loadLocalBaseData = () => {
+      // Load syllabus data (books, lessons, subjects)
+      const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
+      let localBooks = [];
+      let localSyllabusData = [];
+      let localSubjects = [];
+      if (rawSyllabus) {
+        try {
+          const parsed = JSON.parse(rawSyllabus);
+          localBooks = parsed.books || [];
+          localSyllabusData = parsed.syllabusData || [];
+          localSubjects = parsed.subjects || [];
+        } catch (e) {}
+      }
+
+      // Load timetable data (classes)
+      const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
+      let localClasses = [];
+      if (rawTimetable) {
+        try {
+          const parsed = JSON.parse(rawTimetable);
+          localClasses = parsed.classes || [];
+        } catch (e) {}
+      }
+
+      setClasses(localClasses);
+      setSubjects(localSubjects.length > 0 ? localSubjects : (localClasses.length > 0 ? [{ id: '1', name: 'General' }] : []));
+      setBooks(localBooks);
+      setSyllabusData(localSyllabusData);
+
+      if (localClasses.length > 0) setSelectedClassId(String(localClasses[0].id));
+      const activeSubjects = localSubjects.length > 0 ? localSubjects : (localClasses.length > 0 ? [{ id: '1', name: 'General' }] : []);
+      if (activeSubjects.length > 0) setSelectedSubjectId(String(activeSubjects[0].id));
+    };
+
     fetchBase();
   }, []);
 
@@ -60,8 +115,8 @@ const SyllabusProgressReport = () => {
     if (!selectedClassId || !selectedSubjectId) return;
     try {
       const [
-        { data: progressData },
-        { data: logsData }
+        resProg,
+        resLogs
       ] = await Promise.all([
         supabase.from('syllabus_node_progress').select('*').eq('class_id', selectedClassId),
         supabase
@@ -71,9 +126,56 @@ const SyllabusProgressReport = () => {
           .eq('subject_id', selectedSubjectId)
           .order('date', { ascending: false })
       ]);
-      setProgressList(progressData || []);
-      setHistoryLogs(logsData || []);
-    } catch (err) {}
+      if (resProg.error) throw resProg.error;
+      if (resLogs.error) throw resLogs.error;
+
+      setProgressList(resProg.data || []);
+      setHistoryLogs(resLogs.data || []);
+    } catch (err) {
+      console.warn("DB report fetch failed, falling back to LocalStorage:", err.message);
+      
+      const localProgress = localStorage.getItem('jzv_syllabus_node_progress');
+      if (localProgress) {
+        try {
+          const parsed = JSON.parse(localProgress);
+          setProgressList(parsed.filter(p => String(p.class_id) === String(selectedClassId)));
+        } catch (e) {
+          setProgressList([]);
+        }
+      } else {
+        setProgressList([]);
+      }
+
+      const localLogs = localStorage.getItem('jzv_syllabus_tracker_logs');
+      if (localLogs) {
+        try {
+          const parsed = JSON.parse(localLogs);
+          
+          const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
+          let localTeachers = [];
+          if (rawTimetable) {
+            try { localTeachers = JSON.parse(rawTimetable).teachers || []; } catch (e) {}
+          }
+          const formattedLogs = parsed
+            .filter(log => 
+              String(log.class_id) === String(selectedClassId) && 
+              String(log.subject_id) === String(selectedSubjectId)
+            )
+            .map(log => {
+              const tName = localTeachers.find(t => String(t.id) === String(log.teacher_id))?.name || 'Local Teacher';
+              return {
+                ...log,
+                teacher: { name: tName }
+              };
+            });
+          setHistoryLogs(formattedLogs);
+        } catch (e) {
+          setHistoryLogs([]);
+        }
+      } else {
+        setHistoryLogs([]);
+      }
+    }
   };
 
   useEffect(() => { fetchReportData(); }, [selectedClassId, selectedSubjectId]);
@@ -86,7 +188,10 @@ const SyllabusProgressReport = () => {
   const renderTree = () => {
     if (!activeBook) return <div className="p-8 text-center bg-white rounded-xl shadow-sm text-gray-500">No books found for this subject.</div>;
 
-    const completedNodes = bookData.filter(n => getNodeProgress(n.id)?.status === 'completed');
+    const completedNodes = bookData.filter(n => {
+      const status = getNodeProgress(n.id)?.status;
+      return status === 'completed' || status === '100%';
+    });
     const totalNodes = bookData.length;
     const pct = totalNodes === 0 ? 0 : Math.round((completedNodes.length / totalNodes) * 100);
 
@@ -112,8 +217,13 @@ const SyllabusProgressReport = () => {
               const title = [node.level1, node.level2, node.level3].filter(Boolean).join(' > ');
               
               let statusBadge = <span className="text-gray-500 bg-gray-100 px-2 py-1 rounded text-xs font-bold">Not Started</span>;
-              if (status === 'completed') statusBadge = <span className="text-emerald-700 bg-emerald-100 px-2 py-1 rounded text-xs font-bold">Completed</span>;
-              else if (status === 'in_progress') statusBadge = <span className="text-blue-700 bg-blue-100 px-2 py-1 rounded text-xs font-bold">In Progress</span>;
+              if (status === 'completed' || status === '100%') {
+                statusBadge = <span className="text-emerald-700 bg-emerald-100 px-2 py-1 rounded text-xs font-bold">Completed (100%)</span>;
+              } else if (status === 'in_progress') {
+                statusBadge = <span className="text-blue-700 bg-blue-100 px-2 py-1 rounded text-xs font-bold">In Progress</span>;
+              } else if (status && status !== 'not_started' && status !== '0%') {
+                statusBadge = <span className="text-blue-700 bg-blue-100 px-2 py-1 rounded text-xs font-bold">In Progress ({status})</span>;
+              }
 
               return (
                 <div key={node.id} className="flex justify-between items-center p-3 border rounded-xl hover:bg-gray-50">
@@ -139,7 +249,7 @@ const SyllabusProgressReport = () => {
         <h1 className="text-3xl font-black mb-6">Class Progress Report</h1>
         <div className="flex gap-4">
           <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px]">
-            {classes.map(c => <option key={c.id} value={c.id}>{c.class_name}</option>)}
+            {classes.map(c => <option key={c.id} value={c.id}>{c.name || c.class_name}</option>)}
           </select>
           <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px]">
             {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
