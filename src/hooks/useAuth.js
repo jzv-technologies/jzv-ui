@@ -89,7 +89,7 @@ export const useAuth = () => {
       try {
         const { data, error } = await supabase
           .from("admin_users_view")
-          .select("role, student_ids")
+          .select("role")
           .eq("user_id", userId)
           .single();
 
@@ -109,7 +109,6 @@ export const useAuth = () => {
         }
 
         let roles = [];
-        let studentIdsValue = data?.student_ids || "";
         if (data?.role) {
           const sumValue = parseInt(data.role, 10);
           if (!isNaN(sumValue)) {
@@ -143,7 +142,7 @@ export const useAuth = () => {
         }
 
         // Save to cookie
-        setUserDataCookie(userId, { roles, studentIds: studentIdsValue });
+        setUserDataCookie(userId, { roles });
 
         // Validate against initial cookie roles (if provided)
         if (initialRolesFromCookie.length > 0) {
@@ -164,12 +163,12 @@ export const useAuth = () => {
         }
 
         updateRoles(roles);
-        updateStudentIds(studentIdsValue);
+        updateStudentIds("");
         setRolesLoading(false);
         rolesFetchedRef.current = true;
         currentUserIdRef.current = userId;
         fetchingRef.current = false;
-        return { success: true, roles, studentIds: studentIdsValue };
+        return { success: true, roles, studentIds: "" };
       } catch (err) {
         console.error("[fetchRoles] Error:", err);
         showToast(
@@ -183,18 +182,24 @@ export const useAuth = () => {
     },
     [forceLogout],
   );
-
   const handleLogout = useCallback(async () => {
     localStorage.removeItem("jzv_parent_session");
     localStorage.removeItem("jzv_admin_session");
-    if (user && !user.parentMode) clearUserDataCookie(user.id);
-    rolesFetchedRef.current = false;
-    fetchingRef.current = false;
-    currentUserIdRef.current = null;
+    if (supabase.rest.headers) {
+      delete supabase.rest.headers['x-parent-mobile'];
+    }
+    if (user && !user.parentMode) {
+      clearUserDataCookie(user.id);
+    }
     await supabase.auth.signOut();
+    setUser(null);
+    updateRoles([]);
+    updateStudentIds("");
+    setFullName("");
+    currentUserIdRef.current = null;
   }, [user]);
-
   const loginAsParent = useCallback((student, students = []) => {
+    const parentMobile = (student.mobile1 || student.mobile2 || "").replace(/\D/g, "");
     const parentSession = {
       user: {
         id: "parent-" + student.admission_no,
@@ -203,11 +208,16 @@ export const useAuth = () => {
         parentMode: true,
         student,
         students: students.length > 0 ? students : [student],
+        parentMobile,
       },
       fullName: student.student_name,
       studentIds: student.admission_no,
     };
     localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
+    if (parentMobile) {
+      if (!supabase.rest.headers) supabase.rest.headers = {};
+      supabase.rest.headers['x-parent-mobile'] = parentMobile;
+    }
     setUser(parentSession.user);
     updateRoles(["parent"]);
     updateStudentIds(parentSession.studentIds);
@@ -216,6 +226,7 @@ export const useAuth = () => {
   }, []);
 
   const switchParentStudent = useCallback((student, allStudents) => {
+    const parentMobile = (student.mobile1 || student.mobile2 || "").replace(/\D/g, "");
     const parentSession = {
       user: {
         id: "parent-" + student.admission_no,
@@ -224,11 +235,16 @@ export const useAuth = () => {
         parentMode: true,
         student,
         students: allStudents || (user && user.students) || [student],
+        parentMobile,
       },
       fullName: student.student_name,
       studentIds: student.admission_no,
     };
     localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
+    if (parentMobile) {
+      if (!supabase.rest.headers) supabase.rest.headers = {};
+      supabase.rest.headers['x-parent-mobile'] = parentMobile;
+    }
     setUser(parentSession.user);
     updateRoles(["parent"]);
     updateStudentIds(parentSession.studentIds);
@@ -242,6 +258,11 @@ export const useAuth = () => {
     if (savedParent) {
       try {
         const parsed = JSON.parse(savedParent);
+        const parentMobile = parsed.user?.parentMobile || parsed.user?.student?.mobile1 || parsed.user?.student?.mobile2 || "";
+        if (parentMobile) {
+          if (!supabase.rest.headers) supabase.rest.headers = {};
+          supabase.rest.headers['x-parent-mobile'] = parentMobile.replace(/\D/g, "");
+        }
         setUser(parsed.user);
         updateRoles(["parent"]);
         updateStudentIds(parsed.studentIds);

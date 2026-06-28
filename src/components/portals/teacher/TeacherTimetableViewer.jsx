@@ -18,6 +18,7 @@ const TeacherTimetableViewer = ({ user }) => {
   const [classes, setClasses] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [slots, setSlots] = useState([]);
+  const [classifications, setClassifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,6 +34,7 @@ const TeacherTimetableViewer = ({ user }) => {
           setClasses(parsed.classes || []);
           setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
           setSlots(parsed.slots || []);
+          setClassifications(parsed.classifications || []);
           return;
         }
       } catch (e) {
@@ -44,6 +46,7 @@ const TeacherTimetableViewer = ({ user }) => {
     setClasses(DEFAULT_MOCK_CLASSES);
     setPeriods(DEFAULT_MOCK_PERIODS);
     setSlots(MOCK_SLOTS);
+    setClassifications([]);
     localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(MOCK_TIMETABLE_STATE));
   };
 
@@ -70,6 +73,7 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: dbClasses },
         { data: dbSlots },
         { data: dbPeriods },
+        { data: dbClassifications },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
         supabase.from('teachers').select('*'),
@@ -77,6 +81,7 @@ const TeacherTimetableViewer = ({ user }) => {
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
+        supabase.from('subject_classifications').select('*'),
       ]);
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
@@ -94,6 +99,7 @@ const TeacherTimetableViewer = ({ user }) => {
       setTeachers(teachersWithSubjects);
       setClasses(dbClasses || []);
       setSlots(dbSlots || []);
+      setClassifications(dbClassifications || []);
 
       if (dbPeriods && dbPeriods.length > 0) {
         setPeriods(dbPeriods);
@@ -130,6 +136,7 @@ const TeacherTimetableViewer = ({ user }) => {
       subjects={subjects}
       periods={periods}
       slots={slots}
+      classifications={classifications}
       onRefresh={() => fetchTimetableData(false)}
       refreshing={refreshing}
       allowedViews={['scheduler']}

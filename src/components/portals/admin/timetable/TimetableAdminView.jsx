@@ -793,7 +793,7 @@ const formatTime = (t) => {
 };
 
 // ─── Today view: vertical period cards ───────────────────────────────────────
-const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
+const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classifications = [], showBreaks = true }) => {
   const today = getTodayName();
   const nonBreaks = periods.filter((p) => !p.is_break);
 
@@ -845,10 +845,32 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
             return nonBreaksBefore === idx;
           });
 
+        const subjectObj = hasClass
+          ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+          : null;
+        const clsObj =
+          subjectObj && subjectObj.classification_id
+            ? classifications.find(
+                (c) => String(c.id) === String(subjectObj.classification_id)
+              )
+            : null;
+        const themeStr = clsObj ? clsObj.theme : null;
+        const themeStyles =
+          themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+        let colorClass = '';
+        if (hasClass) {
+          if (themeStyles) {
+            colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
+          } else {
+            colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
+          }
+        }
+
         return (
           <React.Fragment key={period.id}>
             {/* Inline break card between periods */}
-            {breakBefore &&
+            {showBreaks && breakBefore &&
               (() => {
                 const bNl = (breakBefore.name || '').toLowerCase();
                 const bIcon =
@@ -875,28 +897,32 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
 
             {/* Period card */}
             <div
-              className={`relative flex gap-4 items-stretch bg-white border rounded-2xl overflow-hidden shadow-sm transition-all ${
+              className={`relative flex gap-4 items-stretch border rounded-2xl overflow-hidden shadow-sm transition-all ${
                 hasClass
-                  ? 'border-brand-soft border-l-4 border-l-brand-primary'
-                  : 'border-light-border border-dashed'
+                  ? `${colorClass} ${themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border-brand-soft border-l-4 border-l-brand-primary'}`
+                  : 'bg-white border-light-border border-dashed'
               }`}
             >
               {/* Left accent / period number */}
               <div
                 className={`flex flex-col items-center justify-center px-4 py-4 min-w-[68px] ${
-                  hasClass ? 'bg-brand-primary/5' : 'bg-light-bg/40'
+                  hasClass
+                    ? themeStyles
+                      ? `bg-${themeStyles.color}/5`
+                      : 'bg-brand-primary/5'
+                    : 'bg-light-bg/40'
                 }`}
               >
-                <span className="text-[10px] font-extrabold text-dark-muted uppercase tracking-wider">
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-muted'}`}>
                   P{period.period_number}
                 </span>
                 {period.start_time && (
                   <>
-                    <span className="text-[11px] font-bold text-dark-deepblue mt-1">
+                    <span className={`text-[11px] font-bold mt-1 ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}>
                       {formatTime(period.start_time)}
                     </span>
                     {period.end_time && (
-                      <span className="text-[9px] text-dark-muted font-semibold">
+                      <span className={`text-[9px] font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-75` : 'text-dark-muted'}`}>
                         {formatTime(period.end_time)}
                       </span>
                     )}
@@ -909,14 +935,14 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
                 {hasClass ? (
                   <>
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <i className="fas fa-book text-brand-primary text-[10px]" />
-                      <span className="text-sm font-extrabold text-dark-deepblue">
+                      <i className={`fas fa-book text-[10px] ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`} />
+                      <span className={`text-sm font-extrabold ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}>
                         {getSubjectName(slot.subject_id)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <i className="fas fa-building text-dark-muted text-[9px]" />
-                      <span className="text-xs font-semibold text-dark-soft">
+                      <i className={`fas fa-building text-[9px] ${themeStyles ? `text-${themeStyles.color} opacity-70` : 'text-dark-muted'}`} />
+                      <span className={`text-xs font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}>
                         {getClassName(slot.class_id)}
                       </span>
                     </div>
@@ -933,7 +959,11 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
               <div className="flex items-center pr-4">
                 <span
                   className={`w-2.5 h-2.5 rounded-full ${
-                    hasClass ? 'bg-brand-primary' : 'bg-light-border'
+                    hasClass
+                      ? themeStyles
+                        ? `bg-${themeStyles.color}`
+                        : 'bg-brand-primary'
+                      : 'bg-light-border'
                   }`}
                 />
               </div>
@@ -946,8 +976,8 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects }) => {
 };
 
 // ─── Weekly view: horizontal day × period grid ────────────────────────────────
-const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects }) => {
-  const visiblePeriods = periods.filter((p) => !p.is_break);
+const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects, classifications = [], showBreaks = true }) => {
+  const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
 
   const getSlot = (day, periodId) =>
     slots.find(
@@ -1016,8 +1046,65 @@ const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects }) => 
                     </div>
                   </td>
                   {visiblePeriods.map((period) => {
+                    const isBreak = period.is_break;
+                    if (isBreak) {
+                      const nameLower = (period.name || 'Break').toLowerCase();
+                      const breakIcon =
+                        period.icon ||
+                        (nameLower.includes('salah') ||
+                        nameLower.includes('prayer') ||
+                        nameLower.includes('namaz') ||
+                        nameLower.includes('zohr') ||
+                        nameLower.includes('asr')
+                          ? 'fa-mosque'
+                          : nameLower.includes('lunch') ||
+                              nameLower.includes('breakfast') ||
+                              nameLower.includes('recess') ||
+                              nameLower.includes('tea') ||
+                              nameLower.includes('snack') ||
+                              nameLower.includes('food') ||
+                              nameLower.includes('tiffin')
+                            ? 'fa-utensils'
+                            : 'fa-coffee');
+                      return (
+                        <td
+                          key={period.id}
+                          className="p-2 border-r border-light-border last:border-r-0 align-top"
+                          style={{ minWidth: 130 }}
+                        >
+                          <div className="flex flex-col items-center justify-center min-h-[54px] rounded-xl border border-light-border bg-light-bg/10 text-dark-muted text-[10px] font-bold">
+                            <i className={`fas ${breakIcon} mb-1 text-brand-soft text-xs`} />
+                            <span>{period.name || 'Break'}</span>
+                          </div>
+                        </td>
+                      );
+                    }
+
                     const slot = getSlot(day, period.id);
                     const hasClass = slot?.subject_id;
+
+                    const subjectObj = hasClass
+                      ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+                      : null;
+                    const clsObj =
+                      subjectObj && subjectObj.classification_id
+                        ? classifications.find(
+                            (c) => String(c.id) === String(subjectObj.classification_id)
+                          )
+                        : null;
+                    const themeStr = clsObj ? clsObj.theme : null;
+                    const themeStyles =
+                      themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+                    let colorClass = '';
+                    if (hasClass) {
+                      if (themeStyles) {
+                        colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
+                      } else {
+                        colorClass = 'bg-brand-lbg/20 text-brand-primary';
+                      }
+                    }
+
                     return (
                       <td
                         key={period.id}
@@ -1025,15 +1112,21 @@ const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects }) => 
                         style={{ minWidth: 130, verticalAlign: 'top' }}
                       >
                         {hasClass ? (
-                          <div className="flex flex-col gap-0.5 bg-brand-lbg/20 border border-brand-soft/40 rounded-xl px-2 py-2 min-h-[54px]">
+                          <div
+                            className={`flex flex-col gap-0.5 rounded-xl px-2 py-2 min-h-[54px] transition-all shadow-sm ${colorClass} ${
+                              themeStyles
+                                ? `border-l-[4px] border-l-${themeStyles.color}`
+                                : 'border border-brand-soft/40'
+                            }`}
+                          >
                             <div className="flex items-center gap-1">
-                              <i className="fas fa-book text-brand-primary text-[8px] shrink-0" />
-                              <span className="font-extrabold text-[10px] text-brand-primary truncate leading-tight">
+                              <i className={`fas fa-book text-[8px] shrink-0 ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`} />
+                              <span className={`font-extrabold text-[10px] truncate leading-tight ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}>
                                 {getSubjectName(slot.subject_id)}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 pl-3">
-                              <span className="text-[9px] font-semibold text-dark-soft truncate">
+                              <span className={`text-[9px] font-semibold truncate ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}>
                                 {getClassName(slot.class_id)}
                               </span>
                             </div>
@@ -1629,6 +1722,8 @@ const TimetableAdminView = ({
             periods={periods}
             classes={classes}
             subjects={subjects}
+            classifications={classifications}
+            showBreaks={showBreaks}
           />
         ) : (
           <MyTimetableWeekly
@@ -1637,6 +1732,8 @@ const TimetableAdminView = ({
             periods={periods}
             classes={classes}
             subjects={subjects}
+            classifications={classifications}
+            showBreaks={showBreaks}
           />
         )
       ) : (
