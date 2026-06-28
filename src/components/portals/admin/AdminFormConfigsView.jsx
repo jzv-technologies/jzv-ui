@@ -4,6 +4,7 @@ import AdminFormConfigList from './AdminFormConfigList';
 import AdminFormSchemaEditor from './AdminFormSchemaEditor';
 import ConfirmModal from '../../ConfirmModal';
 import { showToast } from '../../../utils/toast';
+import AdminLinksView from './AdminLinksView';
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
@@ -21,6 +22,8 @@ const AdminFormConfigsView = ({
   onBack,
 }) => {
   const [activeTab, setActiveTab] = useState('configs');
+  const [addLinkTrigger, setAddLinkTrigger] = useState(0);
+  const [linksSearchQuery, setLinksSearchQuery] = useState('');
 
   // Form Config Editor states
   const [isEditing, setIsEditing] = useState(false);
@@ -58,6 +61,26 @@ const AdminFormConfigsView = ({
   const [testingMappingId, setTestingMappingId] = useState(null);
   const [testResult, setTestResult] = useState(null); // { success: boolean, message: string }
   const [inlineTesting, setInlineTesting] = useState(false);
+
+  const handleCreateNewForm = () => {
+    setIsNewForm(true);
+    setEditorUuid('');
+    setEditorDisplayName('');
+    setEditorDataId('');
+    setEditorIdPattern('ID-XXXXX');
+    setEditorDescription('');
+    setEditorIcon('');
+    setEditorFormVisibility('');
+    setEditorDataVisibility('');
+    setEditorConversationVisibility('');
+    setEditorCardTheme('orange');
+    setJsonError('');
+    setJsonMode(false);
+    setEditorFields([]);
+    setJsonText('[]');
+    setSelectedConfig(null);
+    setIsEditing(true);
+  };
 
   const handleEditConfig = (config) => {
     setIsNewForm(false);
@@ -533,14 +556,74 @@ const AdminFormConfigsView = ({
             >
               Google Sheet Mappings
             </button>
+            <button
+              onClick={() => {
+                setActiveTab('links');
+                setTestResult(null);
+              }}
+              className={`py-4 px-2 border-b-2 font-bold text-sm transition-all ${
+                activeTab === 'links'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-dark-muted hover:text-dark-deepblue'
+              }`}
+            >
+              Useful Links
+            </button>
           </div>
           {activeTab === 'configs' && (
-            <button
-              onClick={onBack}
-              className="bg-white border border-light-border text-dark-deepblue px-4 py-1.5 rounded-xl font-bold text-xs hover:bg-gray-50 transition-all"
-            >
-              Go Back
-            </button>
+            <div className="flex gap-2">
+              {!isEditing && (
+                <>
+                  <button
+                    onClick={onRefresh}
+                    className="bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <i className="fas fa-sync-alt"></i> Refresh
+                  </button>
+                  <button
+                    onClick={handleCreateNewForm}
+                    disabled={dbTableMissing}
+                    className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                  >
+                    <i className="fas fa-plus"></i> Add New Form
+                  </button>
+                </>
+              )}
+              <button
+                onClick={onBack}
+                className="bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+              >
+                Go Back
+              </button>
+            </div>
+          )}
+          {activeTab === 'links' && (
+            <div className="flex gap-3 items-center">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-dark-muted text-sm">
+                  <i className="fas fa-search"></i>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search links..."
+                  value={linksSearchQuery}
+                  onChange={(e) => setLinksSearchQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 border border-light-border rounded-xl focus:border-blue-500 outline-none text-xs font-semibold text-dark-primary shadow-sm w-48 sm:w-64 transition-all bg-white"
+                />
+              </div>
+              <button
+                onClick={() => setAddLinkTrigger((prev) => prev + 1)}
+                className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100"
+              >
+                <i className="fas fa-plus"></i> Add Link
+              </button>
+              <button
+                onClick={onBack}
+                className="bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
+              >
+                Go Back
+              </button>
+            </div>
           )}
           {activeTab === 'mappings' && (
             <div className="flex gap-2">
@@ -549,7 +632,7 @@ const AdminFormConfigsView = ({
                   <button
                     onClick={handleClearCache}
                     disabled={clearingCache}
-                    className="bg-amber-600 text-white px-4 py-1.5 rounded-xl font-bold text-xs hover:bg-amber-700 transition-all flex items-center gap-1.5 shadow-md shadow-amber-100 disabled:opacity-50"
+                    className="bg-amber-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-amber-700 transition-all flex items-center gap-2 shadow-lg shadow-amber-100 disabled:opacity-50"
                   >
                     {clearingCache ? (
                       <>
@@ -563,7 +646,7 @@ const AdminFormConfigsView = ({
                   </button>
                   <button
                     onClick={handleCreateMapping}
-                    className="bg-blue-600 text-white px-4 py-1.5 rounded-xl font-bold text-xs hover:bg-blue-700 transition-all flex items-center gap-1.5 shadow-md shadow-blue-100"
+                    className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100"
                   >
                     <i className="fas fa-plus"></i> Add Sheet Mapping
                   </button>
@@ -571,7 +654,7 @@ const AdminFormConfigsView = ({
               )}
               <button
                 onClick={onBack}
-                className="bg-white border border-light-border text-dark-deepblue px-4 py-1.5 rounded-xl font-bold text-xs hover:bg-gray-50 transition-all"
+                className="bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all shadow-sm"
               >
                 Go Back
               </button>
@@ -613,14 +696,8 @@ const AdminFormConfigsView = ({
               setIsEditing(true);
             }}
           />
-        ) : (
+        ) : activeTab === 'mappings' ? (
           <div className="p-8">
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold text-dark-deepblue">Google Sheet Mappings</h3>
-              <p className="text-sm text-dark-muted">
-                Configure connections to target spreadsheets and worksheets.
-              </p>
-            </div>
 
             {/* Inline Mapping Editor */}
             {isEditingMapping && (
@@ -792,7 +869,7 @@ const AdminFormConfigsView = ({
                                   )
                                 }
                                 disabled={testingMappingId !== null}
-                                className="bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100/70 px-3 py-1.5 rounded-xl font-bold text-xs transition-all disabled:opacity-50 flex items-center gap-1.5"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-md shadow-blue-100 flex items-center gap-1.5 disabled:opacity-30 cursor-pointer"
                                 title="Verify Google Sheet connection"
                               >
                                 {isTestingThis ? (
@@ -801,7 +878,7 @@ const AdminFormConfigsView = ({
                                   </>
                                 ) : (
                                   <>
-                                    <i className="fas fa-plug text-[10px]"></i> Test
+                                    <i className="fas fa-plug"></i> Test
                                   </>
                                 )}
                               </button>
@@ -814,7 +891,7 @@ const AdminFormConfigsView = ({
                                   )
                                 }
                                 disabled={creatingMappingId !== null || testingMappingId !== null}
-                                className="bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100/70 px-3 py-1.5 rounded-xl font-bold text-xs transition-all disabled:opacity-50 flex items-center gap-1.5"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-md shadow-emerald-100 flex items-center gap-1.5 disabled:opacity-30 cursor-pointer"
                                 title="Create sheet tab if not available"
                               >
                                 {creatingMappingId === mapping.id ? (
@@ -823,21 +900,23 @@ const AdminFormConfigsView = ({
                                   </>
                                 ) : (
                                   <>
-                                    <i className="fas fa-plus-square text-[10px]"></i> Create Sheet
+                                    <i className="fas fa-plus-square"></i> Create Sheet
                                   </>
                                 )}
                               </button>
                               <button
                                 onClick={() => handleEditMapping(mapping)}
-                                className="bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 px-3 py-1.5 rounded-xl font-bold text-xs transition-all"
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-md shadow-green-100 flex items-center gap-1.5 cursor-pointer"
+                                title="Edit mapping"
                               >
-                                Edit
+                                <i className="fas fa-edit"></i> Edit
                               </button>
                               <button
                                 onClick={() => onDeleteMapping(mapping)}
-                                className="bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded-xl font-bold text-xs transition-all"
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-md shadow-red-100 flex items-center gap-1.5 cursor-pointer"
+                                title="Delete mapping"
                               >
-                                Delete
+                                <i className="fas fa-trash-alt"></i> Delete
                               </button>
                             </div>
                           </td>
@@ -848,6 +927,10 @@ const AdminFormConfigsView = ({
                 </table>
               </div>
             )}
+          </div>
+        ) : (
+          <div className="p-8 flex flex-col">
+            <AdminLinksView addLinkTrigger={addLinkTrigger} searchQuery={linksSearchQuery} />
           </div>
         )}
       </div>

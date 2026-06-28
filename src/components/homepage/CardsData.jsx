@@ -18,6 +18,7 @@ import ContactUs from "./ContactUs";
 import DynamicForm from "../DynamicForm";
 import OpeningsModal from "./Openings";
 import { CARD_THEMES } from "../../utils/cardTheme";
+import UsefulLinksModal from "./UsefulLinksModal";
 
 // ─── Tab groups ────────────────────────────────────────────────────────────────
 export const TAB_GROUPS = [
@@ -53,6 +54,7 @@ export const HOME_CARD_SEQUENCE = [
   "__campus__life",
   "policies",
   "__entry__admission",
+  "useful-links",
   "gallery",
   "careers",
   "complaint-register",
@@ -76,6 +78,15 @@ export const getCards = ({
   userRoles = [],
 }) => [
   // ── Standalone ──────────────────────────────────────────────────────────
+  {
+    id: "useful-links",
+    title: "Useful Links",
+    titleKey: "cards.useful_links",
+    icon: "fa-link",
+    ...CARD_THEMES.blue,
+    showAtHome: true,
+    content: <UsefulLinksModal user={currentUser} userRoles={userRoles} />,
+  },
   {
     id: "why-jzv",
     title: "Why JZV",

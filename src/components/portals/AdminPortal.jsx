@@ -397,6 +397,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       {/* Syllabus Progress Report view */}
       {subView === 'syllabus-report' && <SyllabusProgressReport />}
 
+
       <ConfirmModal
         isOpen={confirmConfig !== null}
         title={confirmConfig?.title}

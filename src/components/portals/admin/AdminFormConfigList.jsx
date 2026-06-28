@@ -19,31 +19,6 @@ const AdminFormConfigList = ({
 }) => {
   return (
     <div className="bg-white border-0 overflow-hidden">
-      <div className="p-8 border-b border-light-border flex flex-col md:flex-row justify-between items-start md:items-center bg-gray-50/50 gap-4">
-        <div>
-          <h3 className="text-2xl font-bold text-dark-deepblue">
-            Form Schemas
-          </h3>
-          <p className="text-sm text-dark-muted">
-            Manage UI structures, validations, and field parameters for dynamic forms.
-          </p>
-        </div>
-        <div className="flex gap-3 w-full md:w-auto">
-          <button
-            onClick={onCreateNew}
-            disabled={dbTableMissing}
-            className="flex-1 md:flex-initial bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
-          >
-            <i className="fas fa-plus"></i> Add New Form
-          </button>
-          <button
-            onClick={onRefresh}
-            className="flex-1 md:flex-initial bg-white border border-light-border text-dark-deepblue px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
-          >
-            <i className="fas fa-sync-alt"></i> Refresh
-          </button>
-        </div>
-      </div>
 
       {dbTableMissing && (
         <div className="m-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm flex items-start gap-3">
