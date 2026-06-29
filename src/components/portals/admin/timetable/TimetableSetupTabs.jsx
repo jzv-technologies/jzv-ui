@@ -299,7 +299,7 @@ export const TeachersSetup = ({
     } else {
       newSubjects = [...currentSubjects, subjectId];
     }
-    onUpdateTeacher(teacher.id, teacher.name, teacher.is_male, newSubjects);
+    onUpdateTeacher(teacher.id, teacher.name, newSubjects, teacher.is_male !== false);
   };
 
   const handleSubmit = (e) => {
