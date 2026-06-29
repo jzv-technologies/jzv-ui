@@ -74,7 +74,7 @@ const PortalLayout = ({
         w-full bg-gradient-to-r ${styles.bgGradient}
         border-b ${styles.borderColor}
         px-6 py-4 flex items-center text-sm
-        shadow-md sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95
+        shadow-md sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95 print:hidden
       `}
     >
       <div

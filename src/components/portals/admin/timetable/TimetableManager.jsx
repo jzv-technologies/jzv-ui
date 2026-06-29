@@ -7,12 +7,7 @@ import ConfirmModal from '../../../ConfirmModal';
 import TimetableCompareModal from './TimetableCompareModal';
 import { TimetableTools } from './TimetableTools';
 
-import {
-  TeachersSetup,
-  ClassesSetup,
-  PeriodsSetup,
-  generateLocalId,
-} from './TimetableSetupTabs';
+import { TeachersSetup, ClassesSetup, PeriodsSetup, generateLocalId } from './TimetableSetupTabs';
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -402,8 +397,6 @@ const TimetableManager = () => {
     if (updates.slots !== undefined) setSlots(updates.slots);
   };
 
-
-
   // TEACHER ACTION HANDLERS
   const handleAddTeacher = async (name, qualifiedSubjects, isMale = true) => {
     const newTeacher = {
@@ -657,8 +650,8 @@ const TimetableManager = () => {
       const classIdsSet = new Set(classIds.map(String));
 
       // Get teacher qualifications
-      const teacherA = teachers.find(t => String(t.id) === String(teacherAId));
-      const teacherB = teachers.find(t => String(t.id) === String(teacherBId));
+      const teacherA = teachers.find((t) => String(t.id) === String(teacherAId));
+      const teacherB = teachers.find((t) => String(t.id) === String(teacherBId));
       if (!teacherA || !teacherB) throw new Error('Selected teachers not found.');
 
       const qualifiedA = new Set((teacherA.subjects || []).map(String));
@@ -670,12 +663,13 @@ const TimetableManager = () => {
       const slotsToUpsert = [];
 
       // Swap in slots
-      updatedSlots = updatedSlots.map(s => {
+      updatedSlots = updatedSlots.map((s) => {
         if (!classIdsSet.has(String(s.class_id))) return s;
 
         if (String(s.teacher_id) === String(teacherAId)) {
           // Swap to B
-          const isQualified = qualifiedB.has(String(s.subject_id)) || newQualificationsB.has(String(s.subject_id));
+          const isQualified =
+            qualifiedB.has(String(s.subject_id)) || newQualificationsB.has(String(s.subject_id));
           if (isQualified) {
             slotsToUpsert.push({ ...s, teacher_id: teacherBId });
             return { ...s, teacher_id: teacherBId };
@@ -686,7 +680,8 @@ const TimetableManager = () => {
           }
         } else if (String(s.teacher_id) === String(teacherBId)) {
           // Swap to A
-          const isQualified = qualifiedA.has(String(s.subject_id)) || newQualificationsA.has(String(s.subject_id));
+          const isQualified =
+            qualifiedA.has(String(s.subject_id)) || newQualificationsA.has(String(s.subject_id));
           if (isQualified) {
             slotsToUpsert.push({ ...s, teacher_id: teacherAId });
             return { ...s, teacher_id: teacherAId };
@@ -702,66 +697,86 @@ const TimetableManager = () => {
       // Database sync for qualifications
       if (isSupabaseMode) {
         if (newQualificationsA.size > 0) {
-          const relationPayload = Array.from(newQualificationsA).map(subId => ({
+          const relationPayload = Array.from(newQualificationsA).map((subId) => ({
             teacher_id: teacherAId,
-            subject_id: subId
+            subject_id: subId,
           }));
-          const { error } = await supabase.from('teacher_subjects').upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
+          const { error } = await supabase
+            .from('teacher_subjects')
+            .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
           if (error) throw error;
         }
         if (newQualificationsB.size > 0) {
-          const relationPayload = Array.from(newQualificationsB).map(subId => ({
+          const relationPayload = Array.from(newQualificationsB).map((subId) => ({
             teacher_id: teacherBId,
-            subject_id: subId
+            subject_id: subId,
           }));
-          const { error } = await supabase.from('teacher_subjects').upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
+          const { error } = await supabase
+            .from('teacher_subjects')
+            .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
           if (error) throw error;
         }
       }
 
       // Update local teachers qualifications
-      updatedTeachers = updatedTeachers.map(t => {
+      updatedTeachers = updatedTeachers.map((t) => {
         if (String(t.id) === String(teacherAId) && newQualificationsA.size > 0) {
-          return { ...t, subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsA)])] };
+          return {
+            ...t,
+            subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsA)])],
+          };
         }
         if (String(t.id) === String(teacherBId) && newQualificationsB.size > 0) {
-          return { ...t, subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsB)])] };
+          return {
+            ...t,
+            subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsB)])],
+          };
         }
         return t;
       });
 
       // Database sync for slots
       if (isSupabaseMode && slotsToUpsert.length > 0) {
-        const upsertPayload = slotsToUpsert.map(s => ({
+        const upsertPayload = slotsToUpsert.map((s) => ({
           class_id: s.class_id,
           day: s.day,
           period_id: s.period_id,
           subject_id: s.subject_id,
-          teacher_id: s.teacher_id
+          teacher_id: s.teacher_id,
         }));
-        const { error } = await supabase.from('timetable_slots').upsert(upsertPayload, { onConflict: 'class_id,day,period_id' });
+        const { error } = await supabase
+          .from('timetable_slots')
+          .upsert(upsertPayload, { onConflict: 'class_id,day,period_id' });
         if (error) throw error;
       }
 
       // Update class assignments
       const neededAssignments = new Map();
-      updatedSlots.forEach(s => {
+      updatedSlots.forEach((s) => {
         if (s.teacher_id && s.subject_id) {
           const key = `${s.class_id}-${s.teacher_id}-${s.subject_id}`;
-          neededAssignments.set(key, { class_id: s.class_id, teacher_id: s.teacher_id, subject_id: s.subject_id });
+          neededAssignments.set(key, {
+            class_id: s.class_id,
+            teacher_id: s.teacher_id,
+            subject_id: s.subject_id,
+          });
         }
       });
 
-      const otherAssignments = assignments.filter(a => {
+      const otherAssignments = assignments.filter((a) => {
         const isTargetClass = classIdsSet.has(String(a.class_id));
-        const isTargetTeacher = String(a.teacher_id) === String(teacherAId) || String(a.teacher_id) === String(teacherBId);
+        const isTargetTeacher =
+          String(a.teacher_id) === String(teacherAId) ||
+          String(a.teacher_id) === String(teacherBId);
         return !(isTargetClass && isTargetTeacher);
       });
 
       const newAssignmentsForTargets = [];
-      neededAssignments.forEach(val => {
+      neededAssignments.forEach((val) => {
         const isTargetClass = classIdsSet.has(String(val.class_id));
-        const isTargetTeacher = String(val.teacher_id) === String(teacherAId) || String(val.teacher_id) === String(teacherBId);
+        const isTargetTeacher =
+          String(val.teacher_id) === String(teacherAId) ||
+          String(val.teacher_id) === String(teacherBId);
         if (isTargetClass && isTargetTeacher) {
           newAssignmentsForTargets.push(val);
         }
@@ -778,7 +793,13 @@ const TimetableManager = () => {
         if (newAssignmentsForTargets.length > 0) {
           const { data: insertedData, error: insErr } = await supabase
             .from('class_assignments')
-            .insert(newAssignmentsForTargets.map(a => ({ class_id: a.class_id, teacher_id: a.teacher_id, subject_id: a.subject_id })))
+            .insert(
+              newAssignmentsForTargets.map((a) => ({
+                class_id: a.class_id,
+                teacher_id: a.teacher_id,
+                subject_id: a.subject_id,
+              }))
+            )
             .select();
           if (insErr) throw insErr;
           updatedAssignments = [...otherAssignments, ...(insertedData || [])];
@@ -786,9 +807,9 @@ const TimetableManager = () => {
           updatedAssignments = otherAssignments;
         }
       } else {
-        const localNewAssignments = newAssignmentsForTargets.map(a => ({
+        const localNewAssignments = newAssignmentsForTargets.map((a) => ({
           id: generateLocalId(),
-          ...a
+          ...a,
         }));
         updatedAssignments = [...otherAssignments, ...localNewAssignments];
       }
@@ -796,7 +817,7 @@ const TimetableManager = () => {
       saveState({
         slots: updatedSlots,
         assignments: updatedAssignments,
-        teachers: updatedTeachers
+        teachers: updatedTeachers,
       });
 
       showToast('Teachers swapped successfully!', 'success');
@@ -817,7 +838,7 @@ const TimetableManager = () => {
 
       const classIdsSet = new Set(classIds.map(String));
 
-      const newTeacher = teachers.find(t => String(t.id) === String(newTeacherId));
+      const newTeacher = teachers.find((t) => String(t.id) === String(newTeacherId));
       if (!newTeacher) throw new Error('New teacher not found.');
 
       const qualifiedNew = new Set((newTeacher.subjects || []).map(String));
@@ -825,11 +846,13 @@ const TimetableManager = () => {
 
       const slotsToUpsert = [];
 
-      updatedSlots = updatedSlots.map(s => {
+      updatedSlots = updatedSlots.map((s) => {
         if (!classIdsSet.has(String(s.class_id))) return s;
 
         if (String(s.teacher_id) === String(existingTeacherId)) {
-          const isQualified = qualifiedNew.has(String(s.subject_id)) || newQualificationsNew.has(String(s.subject_id));
+          const isQualified =
+            qualifiedNew.has(String(s.subject_id)) ||
+            newQualificationsNew.has(String(s.subject_id));
           if (isQualified) {
             slotsToUpsert.push({ ...s, teacher_id: newTeacherId });
             return { ...s, teacher_id: newTeacherId };
@@ -843,51 +866,66 @@ const TimetableManager = () => {
       });
 
       if (isSupabaseMode && newQualificationsNew.size > 0) {
-        const relationPayload = Array.from(newQualificationsNew).map(subId => ({
+        const relationPayload = Array.from(newQualificationsNew).map((subId) => ({
           teacher_id: newTeacherId,
-          subject_id: subId
+          subject_id: subId,
         }));
-        const { error } = await supabase.from('teacher_subjects').upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
+        const { error } = await supabase
+          .from('teacher_subjects')
+          .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
         if (error) throw error;
       }
 
-      updatedTeachers = updatedTeachers.map(t => {
+      updatedTeachers = updatedTeachers.map((t) => {
         if (String(t.id) === String(newTeacherId) && newQualificationsNew.size > 0) {
-          return { ...t, subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsNew)])] };
+          return {
+            ...t,
+            subjects: [...new Set([...(t.subjects || []), ...Array.from(newQualificationsNew)])],
+          };
         }
         return t;
       });
 
       if (isSupabaseMode && slotsToUpsert.length > 0) {
-        const upsertPayload = slotsToUpsert.map(s => ({
+        const upsertPayload = slotsToUpsert.map((s) => ({
           class_id: s.class_id,
           day: s.day,
           period_id: s.period_id,
           subject_id: s.subject_id,
-          teacher_id: s.teacher_id
+          teacher_id: s.teacher_id,
         }));
-        const { error } = await supabase.from('timetable_slots').upsert(upsertPayload, { onConflict: 'class_id,day,period_id' });
+        const { error } = await supabase
+          .from('timetable_slots')
+          .upsert(upsertPayload, { onConflict: 'class_id,day,period_id' });
         if (error) throw error;
       }
 
       const neededAssignments = new Map();
-      updatedSlots.forEach(s => {
+      updatedSlots.forEach((s) => {
         if (s.teacher_id && s.subject_id) {
           const key = `${s.class_id}-${s.teacher_id}-${s.subject_id}`;
-          neededAssignments.set(key, { class_id: s.class_id, teacher_id: s.teacher_id, subject_id: s.subject_id });
+          neededAssignments.set(key, {
+            class_id: s.class_id,
+            teacher_id: s.teacher_id,
+            subject_id: s.subject_id,
+          });
         }
       });
 
-      const otherAssignments = assignments.filter(a => {
+      const otherAssignments = assignments.filter((a) => {
         const isTargetClass = classIdsSet.has(String(a.class_id));
-        const isTargetTeacher = String(a.teacher_id) === String(existingTeacherId) || String(a.teacher_id) === String(newTeacherId);
+        const isTargetTeacher =
+          String(a.teacher_id) === String(existingTeacherId) ||
+          String(a.teacher_id) === String(newTeacherId);
         return !(isTargetClass && isTargetTeacher);
       });
 
       const newAssignmentsForTargets = [];
-      neededAssignments.forEach(val => {
+      neededAssignments.forEach((val) => {
         const isTargetClass = classIdsSet.has(String(val.class_id));
-        const isTargetTeacher = String(val.teacher_id) === String(existingTeacherId) || String(val.teacher_id) === String(newTeacherId);
+        const isTargetTeacher =
+          String(val.teacher_id) === String(existingTeacherId) ||
+          String(val.teacher_id) === String(newTeacherId);
         if (isTargetClass && isTargetTeacher) {
           newAssignmentsForTargets.push(val);
         }
@@ -904,7 +942,13 @@ const TimetableManager = () => {
         if (newAssignmentsForTargets.length > 0) {
           const { data: insertedData, error: insErr } = await supabase
             .from('class_assignments')
-            .insert(newAssignmentsForTargets.map(a => ({ class_id: a.class_id, teacher_id: a.teacher_id, subject_id: a.subject_id })))
+            .insert(
+              newAssignmentsForTargets.map((a) => ({
+                class_id: a.class_id,
+                teacher_id: a.teacher_id,
+                subject_id: a.subject_id,
+              }))
+            )
             .select();
           if (insErr) throw insErr;
           updatedAssignments = [...otherAssignments, ...(insertedData || [])];
@@ -912,9 +956,9 @@ const TimetableManager = () => {
           updatedAssignments = otherAssignments;
         }
       } else {
-        const localNewAssignments = newAssignmentsForTargets.map(a => ({
+        const localNewAssignments = newAssignmentsForTargets.map((a) => ({
           id: generateLocalId(),
-          ...a
+          ...a,
         }));
         updatedAssignments = [...otherAssignments, ...localNewAssignments];
       }
@@ -922,7 +966,7 @@ const TimetableManager = () => {
       saveState({
         slots: updatedSlots,
         assignments: updatedAssignments,
-        teachers: updatedTeachers
+        teachers: updatedTeachers,
       });
 
       showToast('Teacher reassigned successfully!', 'success');
@@ -1419,26 +1463,40 @@ const TimetableManager = () => {
   // MOVE COLUMN HANDLER (Move all slots for a class from one period to another)
   const handleMoveColumn = async (classId, sourcePeriodId, targetPeriodId) => {
     let updatedSlots = [...slots];
-    const slotsToMove = updatedSlots.filter(s => String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId));
-    
+    const slotsToMove = updatedSlots.filter(
+      (s) =>
+        String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId)
+    );
+
     if (slotsToMove.length === 0) {
       showToast('No slots to move in this column.', 'info');
       return;
     }
 
-    const existingTargetSlots = updatedSlots.filter(s => String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId));
+    const existingTargetSlots = updatedSlots.filter(
+      (s) =>
+        String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId)
+    );
     if (existingTargetSlots.length > 0) {
-      const confirmMove = window.confirm('The target column already has assignments for this class. They will be overwritten. Proceed?');
+      const confirmMove = window.confirm(
+        'The target column already has assignments for this class. They will be overwritten. Proceed?'
+      );
       if (!confirmMove) return;
     }
 
     // Remove source slots
-    updatedSlots = updatedSlots.filter(s => !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId)));
+    updatedSlots = updatedSlots.filter(
+      (s) =>
+        !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId))
+    );
 
     // Remove old target slots (overwrite)
-    updatedSlots = updatedSlots.filter(s => !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId)));
+    updatedSlots = updatedSlots.filter(
+      (s) =>
+        !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId))
+    );
 
-    const newSlotsVal = slotsToMove.map(s => ({
+    const newSlotsVal = slotsToMove.map((s) => ({
       class_id: classId,
       day: s.day,
       period_id: targetPeriodId,
@@ -1446,7 +1504,7 @@ const TimetableManager = () => {
       teacher_id: s.teacher_id,
     }));
 
-    newSlotsVal.forEach(ns => {
+    newSlotsVal.forEach((ns) => {
       updatedSlots.push({ id: generateLocalId(), ...ns });
     });
 
@@ -1462,12 +1520,17 @@ const TimetableManager = () => {
           .from('timetable_slots')
           .upsert(newSlotsVal, { onConflict: 'class_id,day,period_id' })
           .select();
-        
+
         if (error) throw error;
-        
+
         if (data && data.length > 0) {
-          data.forEach(dbSlot => {
-            const idx = updatedSlots.findIndex(s => String(s.class_id) === String(dbSlot.class_id) && s.day === dbSlot.day && String(s.period_id) === String(dbSlot.period_id));
+          data.forEach((dbSlot) => {
+            const idx = updatedSlots.findIndex(
+              (s) =>
+                String(s.class_id) === String(dbSlot.class_id) &&
+                s.day === dbSlot.day &&
+                String(s.period_id) === String(dbSlot.period_id)
+            );
             if (idx > -1) updatedSlots[idx] = dbSlot;
           });
         }
@@ -1616,7 +1679,7 @@ const TimetableManager = () => {
   return (
     <div className="flex flex-col min-h-[500px]">
       {/* Top Banner Control Panel */}
-      <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2">
+      <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2 print:hidden">
         {/* Title & Actions Row */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
           <div>
@@ -1642,24 +1705,24 @@ const TimetableManager = () => {
           </div>
 
           {/* Workspace Tabs (Inside the Top Banner Card) */}
-          <div className="flex border-b border-light-border overflow-x-auto scrollbar-hide gap-1">
+          <div className="bg-light-bg/40 p-1 rounded-xl border border-light-border flex flex-wrap gap-1 w-full md:w-auto">
             {[
               { id: 'view', label: 'Admin View', icon: 'fa-eye' },
               { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
               { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
               { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
-              { id: 'tools', label: 'Timetable Tools', icon: 'fa-exchange-alt' },
+              { id: 'tools', label: 'Switch Teacher', icon: 'fa-exchange-alt' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap pb-3 -mb-[2px] ${
+                className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-brand-primary text-brand-primary'
-                    : 'border-transparent text-white-50 hover:text-dark-primary hover:border-light-border'
+                    ? 'text-white bg-brand-primary shadow-sm'
+                    : 'text-dark-soft hover:text-dark-primary'
                 }`}
               >
-                <i className={`fas ${tab.icon}`}></i>
+                <i className={`fas ${tab.icon} text-[10px]`}></i>
                 {tab.label}
               </button>
             ))}
@@ -1743,8 +1806,6 @@ const TimetableManager = () => {
               onMoveColumn={handleMoveColumn}
             />
           )}
-
-
 
           {activeTab === 'teachers' && (
             <TeachersSetup

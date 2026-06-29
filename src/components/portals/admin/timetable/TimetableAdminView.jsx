@@ -793,7 +793,15 @@ const formatTime = (t) => {
 };
 
 // ─── Today view: vertical period cards ───────────────────────────────────────
-const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classifications = [], showBreaks = true }) => {
+const MyTimetableToday = ({
+  teacherId,
+  slots,
+  periods,
+  classes,
+  subjects,
+  classifications = [],
+  showBreaks = true,
+}) => {
   const today = getTodayName();
   const nonBreaks = periods.filter((p) => !p.is_break);
 
@@ -850,13 +858,10 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classi
           : null;
         const clsObj =
           subjectObj && subjectObj.classification_id
-            ? classifications.find(
-                (c) => String(c.id) === String(subjectObj.classification_id)
-              )
+            ? classifications.find((c) => String(c.id) === String(subjectObj.classification_id))
             : null;
         const themeStr = clsObj ? clsObj.theme : null;
-        const themeStyles =
-          themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+        const themeStyles = themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
 
         let colorClass = '';
         if (hasClass) {
@@ -870,7 +875,8 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classi
         return (
           <React.Fragment key={period.id}>
             {/* Inline break card between periods */}
-            {showBreaks && breakBefore &&
+            {showBreaks &&
+              breakBefore &&
               (() => {
                 const bNl = (breakBefore.name || '').toLowerCase();
                 const bIcon =
@@ -913,16 +919,22 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classi
                     : 'bg-light-bg/40'
                 }`}
               >
-                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-muted'}`}>
+                <span
+                  className={`text-[10px] font-extrabold uppercase tracking-wider ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-muted'}`}
+                >
                   P{period.period_number}
                 </span>
                 {period.start_time && (
                   <>
-                    <span className={`text-[11px] font-bold mt-1 ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}>
+                    <span
+                      className={`text-[11px] font-bold mt-1 ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}
+                    >
                       {formatTime(period.start_time)}
                     </span>
                     {period.end_time && (
-                      <span className={`text-[9px] font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-75` : 'text-dark-muted'}`}>
+                      <span
+                        className={`text-[9px] font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-75` : 'text-dark-muted'}`}
+                      >
                         {formatTime(period.end_time)}
                       </span>
                     )}
@@ -935,14 +947,22 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classi
                 {hasClass ? (
                   <>
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <i className={`fas fa-book text-[10px] ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`} />
-                      <span className={`text-sm font-extrabold ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}>
+                      <i
+                        className={`fas fa-book text-[10px] ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}
+                      />
+                      <span
+                        className={`text-sm font-extrabold ${themeStyles ? `text-${themeStyles.color}` : 'text-dark-deepblue'}`}
+                      >
                         {getSubjectName(slot.subject_id)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <i className={`fas fa-building text-[9px] ${themeStyles ? `text-${themeStyles.color} opacity-70` : 'text-dark-muted'}`} />
-                      <span className={`text-xs font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}>
+                      <i
+                        className={`fas fa-building text-[9px] ${themeStyles ? `text-${themeStyles.color} opacity-70` : 'text-dark-muted'}`}
+                      />
+                      <span
+                        className={`text-xs font-semibold ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}
+                      >
                         {getClassName(slot.class_id)}
                       </span>
                     </div>
@@ -976,7 +996,16 @@ const MyTimetableToday = ({ teacherId, slots, periods, classes, subjects, classi
 };
 
 // ─── Weekly view: horizontal day × period grid ────────────────────────────────
-const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects, classifications = [], showBreaks = true }) => {
+const MyTimetableWeekly = ({
+  teacherId,
+  slots,
+  periods,
+  classes,
+  subjects,
+  classifications = [],
+  showBreaks = true,
+  isTransposed = false,
+}) => {
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
 
   const getSlot = (day, periodId) =>
@@ -991,6 +1020,162 @@ const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects, class
   const getSubjectName = (id) => subjects.find((s) => String(s.id) === String(id))?.name || '—';
 
   const today = getTodayName();
+
+  if (isTransposed) {
+    return (
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+        <div className="w-full overflow-x-auto">
+          <table className="w-full border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-light-lbg border-b border-light-border">
+                <th
+                  className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border"
+                  style={{ minWidth: 140 }}
+                >
+                  Period / Day
+                </th>
+                {DAYS.map((day) => (
+                  <th
+                    key={day}
+                    className="py-3 px-3 text-center border-r border-light-border last:border-r-0"
+                    style={{ minWidth: 120 }}
+                  >
+                    <div className="font-extrabold text-sm text-dark-deepblue">{day}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visiblePeriods.map((period) => {
+                const isBreak = period.is_break;
+                return (
+                  <tr
+                    key={period.id}
+                    className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 bg-white"
+                  >
+                    <td
+                      className="py-3 px-4 font-bold text-sm border-r border-light-border text-dark-deepblue"
+                      style={{ minWidth: 140 }}
+                    >
+                      <div className="font-extrabold text-sm text-dark-deepblue">
+                        {period.name || `Period ${period.period_number}`}
+                      </div>
+                      {period.start_time && period.end_time && (
+                        <div className="text-[10px] text-dark-soft font-semibold mt-0.5">
+                          {formatTime(period.start_time)} – {formatTime(period.end_time)}
+                        </div>
+                      )}
+                    </td>
+                    {isBreak ? (
+                      <td colSpan={DAYS.length} className="p-2 text-center align-top">
+                        <div className="flex flex-col items-center justify-center min-h-[54px] rounded-xl border border-light-border bg-light-bg/10 text-dark-muted text-[10px] font-bold">
+                          {(() => {
+                            const nameLower = (period.name || 'Break').toLowerCase();
+                            const breakIcon =
+                              period.icon ||
+                              (nameLower.includes('salah') ||
+                              nameLower.includes('prayer') ||
+                              nameLower.includes('namaz') ||
+                              nameLower.includes('zohr') ||
+                              nameLower.includes('asr')
+                                ? 'fa-mosque'
+                                : nameLower.includes('lunch') ||
+                                    nameLower.includes('breakfast') ||
+                                    nameLower.includes('recess') ||
+                                    nameLower.includes('tea') ||
+                                    nameLower.includes('snack') ||
+                                    nameLower.includes('food') ||
+                                    nameLower.includes('tiffin')
+                                  ? 'fa-utensils'
+                                  : 'fa-coffee');
+                            return (
+                              <>
+                                <i className={`fas ${breakIcon} mb-1 text-brand-soft text-xs`} />
+                                <span>{period.name || 'Break'}</span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </td>
+                    ) : (
+                      DAYS.map((day) => {
+                        const slot = getSlot(day, period.id);
+                        const hasClass = slot?.subject_id;
+
+                        const subjectObj = hasClass
+                          ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+                          : null;
+                        const clsObj =
+                          subjectObj && subjectObj.classification_id
+                            ? classifications.find(
+                                (c) => String(c.id) === String(subjectObj.classification_id)
+                              )
+                            : null;
+                        const themeStr = clsObj ? clsObj.theme : null;
+                        const themeStyles =
+                          themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+                        let colorClass = '';
+                        if (hasClass) {
+                          if (themeStyles) {
+                            colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
+                          } else {
+                            colorClass = 'bg-brand-lbg/20 text-brand-primary';
+                          }
+                        }
+
+                        return (
+                          <td
+                            key={day}
+                            className="p-2 border-r border-light-border last:border-r-0 align-top"
+                            style={{ minWidth: 120, verticalAlign: 'top' }}
+                          >
+                            {hasClass ? (
+                              <div
+                                className={`flex flex-col gap-0.5 rounded-xl px-2 py-2 min-h-[54px] transition-all shadow-sm ${colorClass} ${
+                                  themeStyles
+                                    ? `border-l-[4px] border-l-${themeStyles.color}`
+                                    : 'border border-brand-soft/40'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1">
+                                  <i
+                                    className={`fas fa-book text-[8px] shrink-0 ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}
+                                  />
+                                  <span
+                                    className={`font-extrabold text-[10px] truncate leading-tight ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}
+                                  >
+                                    {getSubjectName(slot.subject_id)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1 pl-3">
+                                  <span
+                                    className={`text-[9px] font-semibold truncate ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}
+                                  >
+                                    {getClassName(slot.class_id)}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center min-h-[54px] rounded-xl border border-dashed border-light-border">
+                                <span className="text-[9px] text-dark-muted font-semibold">
+                                  Free
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
@@ -1120,13 +1305,19 @@ const MyTimetableWeekly = ({ teacherId, slots, periods, classes, subjects, class
                             }`}
                           >
                             <div className="flex items-center gap-1">
-                              <i className={`fas fa-book text-[8px] shrink-0 ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`} />
-                              <span className={`font-extrabold text-[10px] truncate leading-tight ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}>
+                              <i
+                                className={`fas fa-book text-[8px] shrink-0 ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}
+                              />
+                              <span
+                                className={`font-extrabold text-[10px] truncate leading-tight ${themeStyles ? `text-${themeStyles.color}` : 'text-brand-primary'}`}
+                              >
                                 {getSubjectName(slot.subject_id)}
                               </span>
                             </div>
                             <div className="flex items-center gap-1 pl-3">
-                              <span className={`text-[9px] font-semibold truncate ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}>
+                              <span
+                                className={`text-[9px] font-semibold truncate ${themeStyles ? `text-${themeStyles.color} opacity-80` : 'text-dark-soft'}`}
+                              >
                                 {getClassName(slot.class_id)}
                               </span>
                             </div>
@@ -1209,6 +1400,7 @@ const TimetableAdminView = ({
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [freeTeachersGender, setFreeTeachersGender] = useState('all');
   const [assignedTeachersGender, setAssignedTeachersGender] = useState('all');
+  const [isTransposed, setIsTransposed] = useState(false);
 
   const selectedId = viewType === 'teacher' ? selectedTeacherId : selectedClassId;
   const setSelectedId = (id) => {
@@ -1330,7 +1522,7 @@ const TimetableAdminView = ({
 
   const getSlotDetails = (day, periodId) => {
     if (!selectedId) return null;
-    if (viewType === 'class') {
+    if (viewType === 'class' || viewType === 'scheduler') {
       return slots.find(
         (s) =>
           String(s.class_id) === String(selectedId) &&
@@ -1348,7 +1540,328 @@ const TimetableAdminView = ({
   };
 
   const selectedEntityName =
-    viewType === 'class' ? getClassName(selectedId) : getTeacherName(selectedId);
+    viewType === 'class' || viewType === 'scheduler'
+      ? getClassName(selectedId)
+      : getTeacherName(selectedId);
+
+  const handleExportCSV = () => {
+    let headers = [];
+    let rows = [];
+    let filename = 'timetable.csv';
+
+    const localDays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+
+    if (myTab === 'my' && myTeacher) {
+      filename = `My_Timetable_${myTeacher.name.replace(/\s+/g, '_')}.csv`;
+      headers = ['Day', ...periods.map((p) => p.name || `Period ${p.period_number}`)];
+
+      rows = localDays.map((day) => {
+        const rowData = [day];
+        periods.forEach((p) => {
+          if (p.is_break) {
+            rowData.push(p.name || 'Break');
+          } else {
+            const slot = slots.find(
+              (s) =>
+                String(s.teacher_id) === String(myTeacher.id) &&
+                s.day === day &&
+                String(s.period_id) === String(p.id)
+            );
+            if (slot && slot.subject_id) {
+              const sub =
+                subjects.find((s_obj) => String(s_obj.id) === String(slot.subject_id))?.name ||
+                'Unknown';
+              const cls =
+                classes.find((c_obj) => String(c_obj.id) === String(slot.class_id))?.name ||
+                'Unknown';
+              rowData.push(`${sub} (${cls})`);
+            } else {
+              rowData.push('Free');
+            }
+          }
+        });
+        return rowData;
+      });
+    } else if (viewType === 'class' || viewType === 'scheduler') {
+      const clsName = getClassName(selectedId);
+      filename = `Class_Timetable_${clsName.replace(/\s+/g, '_')}.csv`;
+      headers = ['Day', ...periods.map((p) => p.name || `Period ${p.period_number}`)];
+
+      rows = localDays.map((day) => {
+        const rowData = [day];
+        periods.forEach((p) => {
+          if (p.is_break) {
+            rowData.push(p.name || 'Break');
+          } else {
+            const slot = slots.find(
+              (s) =>
+                String(s.class_id) === String(selectedId) &&
+                s.day === day &&
+                String(s.period_id) === String(p.id)
+            );
+            if (slot && slot.subject_id) {
+              const sub =
+                subjects.find((s_obj) => String(s_obj.id) === String(slot.subject_id))?.name ||
+                'Unknown';
+              const tchr =
+                teachers.find((t_obj) => String(t_obj.id) === String(slot.teacher_id))?.name ||
+                'Not Assigned';
+              rowData.push(`${sub} (${tchr})`);
+            } else {
+              rowData.push('Free');
+            }
+          }
+        });
+        return rowData;
+      });
+    } else if (viewType === 'teacher') {
+      const teacherName = getTeacherName(selectedId);
+      filename = `Teacher_Timetable_${teacherName.replace(/\s+/g, '_')}.csv`;
+      headers = ['Day', ...periods.map((p) => p.name || `Period ${p.period_number}`)];
+
+      rows = localDays.map((day) => {
+        const rowData = [day];
+        periods.forEach((p) => {
+          if (p.is_break) {
+            rowData.push(p.name || 'Break');
+          } else {
+            const slot = slots.find(
+              (s) =>
+                String(s.teacher_id) === String(selectedId) &&
+                s.day === day &&
+                String(s.period_id) === String(p.id)
+            );
+            if (slot && slot.subject_id) {
+              const sub =
+                subjects.find((s_obj) => String(s_obj.id) === String(slot.subject_id))?.name ||
+                'Unknown';
+              const cls =
+                classes.find((c_obj) => String(c_obj.id) === String(slot.class_id))?.name ||
+                'Unknown';
+              rowData.push(`${sub} (${cls})`);
+            } else {
+              rowData.push('Free');
+            }
+          }
+        });
+        return rowData;
+      });
+    }
+
+    const csvContent = [
+      headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+      ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const renderCell = (day, period, key) => {
+    const dayType = weekdayConfig[day] || 'Weekday';
+    const isBreak = period.is_break;
+    const isWorkingWeekend = dayType === 'Working Weekend';
+    const isWeekendApplicable = period.applicable_on_weekends;
+    const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+
+    if (isPeriodDisabled) {
+      return (
+        <td
+          key={key}
+          className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
+        >
+          <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+            <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
+            Not Applicable
+          </div>
+        </td>
+      );
+    }
+
+    const slot = getSlotDetails(day, period.id);
+    const isAssigned = slot && slot.subject_id;
+    const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
+    const isTeacherAssigned = slot && slot.teacher_id;
+    const teacher = isTeacherAssigned
+      ? teachers.find((t) => String(t.id) === String(slot.teacher_id))
+      : null;
+    const isFemale = teacher && teacher.is_male === false;
+    const subjectObj = isAssigned
+      ? subjects.find((s) => String(s.id) === String(slot.subject_id))
+      : null;
+    const requiresTeacher = subjectObj ? subjectObj.requires_teacher !== false : true;
+    const clsObj =
+      subjectObj && subjectObj.classification_id
+        ? classifications.find((c) => String(c.id) === String(subjectObj.classification_id))
+        : null;
+    const themeStr = clsObj ? clsObj.theme : null;
+    const themeStyles = themeStr && CARD_THEMES[themeStr] ? CARD_THEMES[themeStr] : null;
+
+    let colorClass = '';
+    if (isAssigned) {
+      if (themeStyles) {
+        colorClass = `bg-${themeStyles.bg} text-${themeStyles.color}`;
+      } else if (!isTeacherAssigned) {
+        colorClass = getSubjectColor(subjectName);
+      } else if (isFemale) {
+        colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
+      } else {
+        colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
+      }
+    }
+
+    const cellKey = `${day}-${period.id}`;
+    const isPopoverOpen = popover && popover.cellKey === cellKey;
+    const isClickable =
+      isInteractive &&
+      !isBreak &&
+      ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
+        (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
+        (viewType === 'teacher' && isAssigned));
+
+    if (isBreak) {
+      const nameLower = (period.name || 'Break').toLowerCase();
+      const breakIcon =
+        period.icon ||
+        (nameLower.includes('salah') ||
+        nameLower.includes('prayer') ||
+        nameLower.includes('namaz') ||
+        nameLower.includes('zohr') ||
+        nameLower.includes('asr')
+          ? 'fa-mosque'
+          : nameLower.includes('lunch') ||
+              nameLower.includes('breakfast') ||
+              nameLower.includes('recess') ||
+              nameLower.includes('tea') ||
+              nameLower.includes('snack') ||
+              nameLower.includes('food') ||
+              nameLower.includes('tiffin')
+            ? 'fa-utensils'
+            : 'fa-coffee');
+
+      return (
+        <td
+          key={key}
+          className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
+        >
+          <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+            <i className="fas fa-coffee mb-1 text-xs text-brand-soft" />
+            <span className="uppercase tracking-wider">{period.name || 'Break'}</span>
+          </div>
+        </td>
+      );
+    }
+
+    return (
+      <td
+        key={key}
+        className={`p-1.5 border-r border-light-border last:border-r-0 relative min-w-[120px] h-[80px] transition-all duration-200 align-middle ${
+          isPopoverOpen ? 'bg-light-lbg' : ''
+        }`}
+        onClick={() => isClickable && handleCellClick(day, period, slot)}
+      >
+        {isAssigned ? (
+          <div
+            className={`w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
+              themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'
+            } ${
+              isClickable ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md' : ''
+            } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+          >
+            <div className="flex items-center justify-between min-w-0">
+              <h5 className="font-extrabold text-[10px] truncate leading-tight flex-1">
+                {subjectName}
+              </h5>
+              {requiresTeacher && !isTeacherAssigned && (
+                <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded-full bg-amber-500/20 text-amber-600 text-[8px]">
+                  <i className="fas fa-exclamation-triangle animate-pulse"></i>
+                </span>
+              )}
+            </div>
+            {viewType === 'class' || viewType === 'scheduler' ? (
+              requiresTeacher && !isTeacherAssigned ? (
+                <p className="text-[9px] text-red-500 font-extrabold mt-0.5 truncate flex items-center gap-1">
+                  Teacher Missing
+                </p>
+              ) : isTeacherAssigned ? (
+                <p
+                  className={`text-[9px] font-bold mt-0.5 truncate ${isFemale ? 'text-pink-600' : 'text-gray-500'}`}
+                >
+                  {isFemale && <i className="fas fa-female mr-1"></i>}
+                  {getTeacherName(slot.teacher_id)}
+                </p>
+              ) : (
+                <p className="text-[9px] text-gray-400 font-semibold mt-0.5 italic">
+                  No Teacher Required
+                </p>
+              )
+            ) : (
+              <span className="text-[10px] opacity-90 font-bold truncate">
+                <i className="fas fa-school mr-1 text-[9px]"></i>
+                {getClassName(slot.class_id)}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div
+            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+              isClickable
+                ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
+                : 'border-light-border text-dark-muted bg-light-bg/20'
+            } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
+          >
+            {isClickable ? (
+              <span className="flex items-center gap-1">
+                <i className="fas fa-plus text-[9px]" />
+                Schedule
+              </span>
+            ) : (
+              'Free'
+            )}
+          </div>
+        )}
+
+        {/* Inline Popover */}
+        {isPopoverOpen && (
+          <AssignPopover
+            popover={popover}
+            teachers={teachers}
+            subjects={subjects}
+            classifications={classifications}
+            classes={classes}
+            slots={slots}
+            days={days.filter((d) => {
+              const dType = weekdayConfig[d] || 'Weekday';
+              if (dType === 'Holiday Weekend') return false;
+              if (dType === 'Working Weekend') {
+                const currentPeriodObj = periods.find((p) => String(p.id) === String(period.id));
+                return currentPeriodObj?.applicable_on_weekends;
+              }
+              return true;
+            })}
+            assignments={assignments}
+            onAssign={handleAssign}
+            onClose={() => setPopover(null)}
+          />
+        )}
+      </td>
+    );
+  };
 
   const handleCellClick = (day, period, slot) => {
     if (!isInteractive) return;
@@ -1416,39 +1929,54 @@ const TimetableAdminView = ({
       <div className="pb-2 border-b border-light-border mb-4 print:hidden">
         {/* Row 1: Title + Action Buttons */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-          <div>
-            <h3 className="text-xl sm:text-xl font-extrabold text-dark-primary flex items-center gap-2">
-              <i
-                className={`fas ${myTab === 'my' ? 'fa-user-clock' : viewObj.icon} text-brand-primary`}
-              ></i>
-              {myTab === 'my'
-                ? myTeacher
-                  ? `My Timetable — ${myTeacher.name}`
-                  : 'My Timetable'
-                : lockedClassId
-                  ? `Class Schedule — ${getClassName(selectedId)}`
-                  : `${viewObj.label}`}
-            </h3>
-            <p className="text-sm mt-0.5 text-dark-soft">
-              {myTab === 'my'
-                ? 'Your personal timetable.'
-                : lockedClassId
-                  ? 'Weekly class schedule.'
-                  : viewType === 'scheduler'
-                    ? `${getCompletionPercentage(selectedId)}% (${
-                        slots.filter(
-                          (s) =>
-                            String(s.class_id) === String(selectedId) &&
-                            s.subject_id &&
-                            !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
-                        ).length
-                      } of ${days.length * periods.filter((p) => !p.is_break).length})`
-                    : isInteractive
-                      ? `Admin view`
-                      : 'View schedules dynamically by Class or Teacher.'}
-            </p>
-          </div>
+          {/* Row 3: Tab switcher + action buttons */}
+          <div className="flex flex-wrap items-center gap-4">
+            {!lockedClassId && myTab === 'class' && (
+              <div className="flex flex-wrap items-center gap-2">
+                {showTabSwitcher && (
+                  <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
+                    {[
+                      { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
+                      { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+                      { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
+                      {
+                        id: 'subject_unassigned',
+                        label: 'Subject Pending',
+                        icon: 'fa-book-open',
+                      },
+                      { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+                      {
+                        id: 'assigned_teachers',
+                        label: 'Assigned Teachers',
+                        icon: 'fa-chalkboard-teacher',
+                      },
+                    ]
+                      .filter((v) => filteredViews.includes(v.id))
+                      .map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => {
+                            setViewType(v.id);
+                          }}
+                          title={v.label}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
+                            viewType === v.id
+                              ? 'text-white bg-brand-primary shadow-sm'
+                              : 'text-dark-soft hover:text-dark-primary'
+                          }`}
+                        >
+                          <i className={`fas ${v.icon} text-[10px]`} />
+                          {v.label}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
 
+            {/* Icon-only action buttons */}
+            <div className="flex items-center gap-1 shrink-0"></div>
+          </div>
           {/*Filters (only for overview views) */}
           {myTab === 'class' && isOverviewView && (
             <div className="flex flex-wrap items-center gap-2">
@@ -1490,7 +2018,6 @@ const TimetableAdminView = ({
               )}
             </div>
           )}
-
           {!lockedClassId && (
             <div className="flex flex-wrap items-center gap-2">
               {myTab === 'my' && myTeacher ? (
@@ -1560,54 +2087,6 @@ const TimetableAdminView = ({
               ) : null}
             </div>
           )}
-          {/* Row 3: Tab switcher + action buttons */}
-          <div className="flex flex-wrap items-center gap-4">
-            {!lockedClassId && myTab === 'class' && (
-              <div className="flex flex-wrap items-center gap-2">
-                {showTabSwitcher && (
-                  <div className="bg-light-lbg p-1 rounded-xl flex flex-wrap border border-light-border gap-0.5">
-                    {[
-                      { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
-                      { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
-                      { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
-                      {
-                        id: 'subject_unassigned',
-                        label: 'Subject Pending',
-                        icon: 'fa-book-open',
-                      },
-                      { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
-                      {
-                        id: 'assigned_teachers',
-                        label: 'Assigned Teachers',
-                        icon: 'fa-chalkboard-teacher',
-                      },
-                    ]
-                      .filter((v) => filteredViews.includes(v.id))
-                      .map((v) => (
-                        <button
-                          key={v.id}
-                          onClick={() => {
-                            setViewType(v.id);
-                          }}
-                          title={v.label}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 whitespace-nowrap ${
-                            viewType === v.id
-                              ? 'text-white bg-brand-primary shadow-sm'
-                              : 'text-dark-soft hover:text-dark-primary'
-                          }`}
-                        >
-                          <i className={`fas ${v.icon} text-[10px]`} />
-                          {v.label}
-                        </button>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Icon-only action buttons */}
-            <div className="flex items-center gap-1 shrink-0"></div>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
             {showMyTimetable && (
               <div className="bg-light-lbg border border-light-border rounded-xl p-0.5 flex gap-0.5 mr-2">
@@ -1646,6 +2125,24 @@ const TimetableAdminView = ({
               </div>
             )}
             {/* Show Breaks — icon toggle, only for grid views */}
+
+            {/* Transpose View Toggle — for all views */}
+            {!(myTab === 'my' && !myTeacher) &&
+              (myTab === 'my'
+                ? myView === 'weekly'
+                : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
+                <button
+                  onClick={() => setIsTransposed((v) => !v)}
+                  title={isTransposed ? 'Original View' : 'Transpose View'}
+                  className={`p-2 rounded-lg border transition-all ${
+                    isTransposed
+                      ? 'bg-brand-primary border-brand-primary text-white'
+                      : 'bg-light-bg border-light-border text-dark-soft hover:bg-light-ui hover:text-dark-primary'
+                  }`}
+                >
+                  <i className="fa-solid fa-retweet text-sm" />
+                </button>
+              )}
             {!(myTab === 'my' && !myTeacher) && (
               <button
                 onClick={() => setShowBreaks((v) => !v)}
@@ -1675,7 +2172,20 @@ const TimetableAdminView = ({
                 <i className="fas fa-print text-sm" />
               </button>
             )}
-
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={handleExportCSV}
+                disabled={
+                  myTab === 'class' &&
+                  (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                  !selectedId
+                }
+                title="Export to CSV / Excel"
+                className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-file-excel text-sm" />
+              </button>
+            )}
             {/* Clear Multiple Slots — only for class schedule / scheduler views */}
             {myTab === 'class' &&
               (viewType === 'class' || viewType === 'scheduler') &&
@@ -1734,6 +2244,7 @@ const TimetableAdminView = ({
             subjects={subjects}
             classifications={classifications}
             showBreaks={showBreaks}
+            isTransposed={isTransposed}
           />
         )
       ) : (
@@ -2051,6 +2562,7 @@ const TimetableAdminView = ({
                     teachers={teachers}
                     classes={classes}
                     assignments={assignments}
+                    classifications={classifications}
                   />
                 </div>
               )}
@@ -2075,6 +2587,7 @@ const TimetableAdminView = ({
                 onMoveColumn={onMoveColumn}
                 showBreaks={showBreaks}
                 seasonsConfig={seasonsConfig}
+                isTransposed={isTransposed}
               />
               {selectedId && (
                 <div className="print:hidden">
@@ -2086,6 +2599,7 @@ const TimetableAdminView = ({
                     teachers={teachers}
                     classes={classes}
                     assignments={assignments}
+                    classifications={classifications}
                   />
                 </div>
               )}
@@ -2121,6 +2635,7 @@ const AllocationSummaryTable = ({
   teachers,
   classes,
   assignments,
+  classifications = [],
 }) => {
   const getSubjectName = (subId) =>
     subjects.find((s) => String(s.id) === String(subId))?.name || 'Unknown';
@@ -2140,48 +2655,99 @@ const AllocationSummaryTable = ({
       ]),
     ];
 
-    const rows = uniqueSubIds
-      .map((subId) => {
-        const subject = subjects.find((s) => String(s.id) === String(subId));
-        if (!subject) return null;
+    // Group rows by classification
+    const groupedRows = {};
 
-        const count = classSlots.filter((s) => String(s.subject_id) === String(subId)).length;
+    classifications.forEach((c) => {
+      groupedRows[c.id] = {
+        name: c.name,
+        theme: c.theme,
+        items: [],
+      };
+    });
 
-        return {
-          id: subId,
-          subjectName: subject.name,
-          count,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.subjectName.localeCompare(b.subjectName));
+    const unclassifiedKey = 'unclassified';
+    groupedRows[unclassifiedKey] = {
+      name: 'Unclassified',
+      theme: 'charcoal',
+      items: [],
+    };
+
+    uniqueSubIds.forEach((subId) => {
+      const subject = subjects.find((s) => String(s.id) === String(subId));
+      if (!subject) return;
+
+      const count = classSlots.filter((s) => String(s.subject_id) === String(subId)).length;
+      const key =
+        subject.classification_id && groupedRows[subject.classification_id]
+          ? subject.classification_id
+          : unclassifiedKey;
+
+      groupedRows[key].items.push({
+        id: subId,
+        subjectName: subject.name,
+        count,
+      });
+    });
+
+    const activeGroups = Object.keys(groupedRows)
+      .map((id) => ({ id, ...groupedRows[id] }))
+      .filter((g) => g.items.length > 0);
 
     return (
-      <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 animate-in fade-in duration-300 print:hidden">
-        <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wider mb-3 flex items-center gap-1.5">
+      <div className="bg-white border border-light-border rounded-2xl shadow-sm p-5 animate-in fade-in duration-300 print:hidden space-y-4">
+        <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wider mb-2 flex items-center gap-1.5">
           <i className="fas fa-chart-pie text-brand-primary"></i>
           Weekly Period Allocations per Subject
         </h4>
-        {rows.length === 0 ? (
+        {activeGroups.length === 0 ? (
           <div className="text-xs italic text-dark-muted py-2">
             No subjects assigned or scheduled.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {rows.map((row) => (
-              <div
-                key={row.id}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl border border-light-border/60 hover:bg-light-lbg/60 transition-colors"
-              >
-                <span className="text-xs text-dark-primary truncate">
-                  {row.subjectName} (
-                  <span className="text-pink-primary">
-                    {row.count} {row.count === 1 ? 'period' : 'periods'}
-                  </span>
-                  )
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+            {activeGroups.map((group) => {
+              const themeStyles = CARD_THEMES[group.theme] || {
+                bg: 'light-lbg',
+                color: 'dark-soft',
+                border: 'border-light-border',
+              };
+
+              return (
+                <div
+                  key={group.id}
+                  className="bg-light-lbg/30 border border-light-border/60 rounded-2xl p-4 flex flex-col gap-3 h-full"
+                >
+                  <div className="flex items-center gap-2 border-b border-light-border/60 pb-2">
+                    <span
+                      className={`w-2.5 h-2.5 rounded-full bg-${themeStyles.color || 'brand-primary'}`}
+                    />
+                    <span className="text-xs font-extrabold text-dark-deepblue uppercase tracking-wide">
+                      {group.name}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {group.items
+                      .sort((a, b) => a.subjectName.localeCompare(b.subjectName))
+                      .map((row) => (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between px-3 py-2 rounded-xl border border-light-border bg-white transition-all hover:bg-light-lbg/20 shadow-sm"
+                        >
+                          <span className="text-xs text-dark-primary font-semibold truncate">
+                            {row.subjectName}
+                          </span>
+                          <span
+                            className={`text-xs font-extrabold text-${themeStyles.color || 'brand-primary'} shrink-0 ml-1.5`}
+                          >
+                            {row.count} {row.count === 1 ? 'pd' : 'pds'}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

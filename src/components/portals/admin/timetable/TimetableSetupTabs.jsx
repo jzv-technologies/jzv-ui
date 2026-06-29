@@ -1,17 +1,23 @@
 // src/components/portals/admin/timetable/TimetableSetupTabs.jsx
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import ConfirmModal from "../../../ConfirmModal";
-import { CARD_THEMES } from "../../../../utils/cardTheme";
-
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ConfirmModal from '../../../ConfirmModal';
+import { CARD_THEMES } from '../../../../utils/cardTheme';
 
 // Helper to generate UUIDs locally when offline
 export const generateLocalId = () => {
-  return "local-" + Math.random().toString(36).substr(2, 9);
+  return 'local-' + Math.random().toString(36).substr(2, 9);
 };
 
-export const renderSubjectOptionsGroupedByClassification = (subjectsList, classificationsList, getOptionLabel = (sub) => sub.name, currentSelectedSubjectId = null) => {
-  const sortedClassifications = [...classificationsList].sort((a, b) => a.name.localeCompare(b.name));
-  
+export const renderSubjectOptionsGroupedByClassification = (
+  subjectsList,
+  classificationsList,
+  getOptionLabel = (sub) => sub.name,
+  currentSelectedSubjectId = null
+) => {
+  const sortedClassifications = [...classificationsList].sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
+
   const grouped = {};
   const unclassified = [];
 
@@ -67,10 +73,6 @@ export const renderSubjectOptionsGroupedByClassification = (subjectsList, classi
   return elements;
 };
 
-
-
-
-
 // ==========================================
 // 2. TEACHERS SETUP
 // ==========================================
@@ -80,10 +82,10 @@ const GroupedSubjectMultiSelect = ({
   classifications = [],
   selectedIds = [],
   onChange,
-  placeholder = "Select qualified subjects..."
+  placeholder = 'Select qualified subjects...',
 }) => {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const containerRef = useRef(null);
   const [controlWidth, setControlWidth] = useState(0);
 
@@ -93,8 +95,8 @@ const GroupedSubjectMultiSelect = ({
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -109,15 +111,15 @@ const GroupedSubjectMultiSelect = ({
   }, []);
 
   const colsClass = useMemo(() => {
-    if (controlWidth < 250) return "grid-cols-1";
-    if (controlWidth < 450) return "grid-cols-2";
-    if (controlWidth < 650) return "grid-cols-3";
-    if (controlWidth < 850) return "grid-cols-4";
-    return "grid-cols-5";
+    if (controlWidth < 250) return 'grid-cols-1';
+    if (controlWidth < 450) return 'grid-cols-2';
+    if (controlWidth < 650) return 'grid-cols-3';
+    if (controlWidth < 850) return 'grid-cols-4';
+    return 'grid-cols-5';
   }, [controlWidth]);
 
   // Filter subjects based on search query
-  const filteredSubjects = subjects.filter(s =>
+  const filteredSubjects = subjects.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -126,39 +128,40 @@ const GroupedSubjectMultiSelect = ({
     const groups = {};
 
     // Initialize groups for classifications to preserve classification order/existence
-    classifications.forEach(c => {
+    classifications.forEach((c) => {
       groups[c.id] = {
         name: c.name,
         theme: c.theme,
-        items: []
+        items: [],
       };
     });
 
-    const unclassifiedKey = "unclassified";
+    const unclassifiedKey = 'unclassified';
     groups[unclassifiedKey] = {
-      name: "Unclassified Subjects",
-      theme: "charcoal",
-      items: []
+      name: 'Unclassified Subjects',
+      theme: 'charcoal',
+      items: [],
     };
 
-    filteredSubjects.forEach(s => {
-      const key = s.classification_id && groups[s.classification_id] ? s.classification_id : unclassifiedKey;
+    filteredSubjects.forEach((s) => {
+      const key =
+        s.classification_id && groups[s.classification_id] ? s.classification_id : unclassifiedKey;
       groups[key].items.push(s);
     });
 
     return Object.keys(groups)
-      .map(id => ({ id, ...groups[id] }))
-      .filter(g => g.items.length > 0);
+      .map((id) => ({ id, ...groups[id] }))
+      .filter((g) => g.items.length > 0);
   }, [filteredSubjects, classifications]);
 
   const selectedCount = selectedIds.length;
-  
+
   const handleToggleSubject = (subId) => {
     const current = selectedIds.map(String);
     const subStr = String(subId);
     let updated;
     if (current.includes(subStr)) {
-      updated = selectedIds.filter(id => String(id) !== subStr);
+      updated = selectedIds.filter((id) => String(id) !== subStr);
     } else {
       updated = [...selectedIds, subId];
     }
@@ -173,9 +176,9 @@ const GroupedSubjectMultiSelect = ({
         className="w-full flex items-center justify-between gap-2 bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft hover:bg-light-lbg/10 transition-all text-left"
       >
         <span className="truncate">
-          {selectedCount === 0 
-            ? placeholder 
-            : `${selectedCount} subject${selectedCount > 1 ? "s" : ""} selected`}
+          {selectedCount === 0
+            ? placeholder
+            : `${selectedCount} subject${selectedCount > 1 ? 's' : ''} selected`}
         </span>
         <span className="flex items-center gap-1.5 shrink-0 text-dark-muted">
           {selectedCount > 0 && (
@@ -183,7 +186,7 @@ const GroupedSubjectMultiSelect = ({
               {selectedCount}
             </span>
           )}
-          <i className={`fas fa-chevron-${open ? "up" : "down"} text-xs`}></i>
+          <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-xs`}></i>
         </span>
       </button>
 
@@ -223,14 +226,14 @@ const GroupedSubjectMultiSelect = ({
                     {/* Group Items Grid */}
                     <div className={`grid gap-1.5 pl-3.5 ${colsClass}`}>
                       {group.items.map((sub) => {
-                        const isChecked = selectedIds.some(sid => String(sid) === String(sub.id));
+                        const isChecked = selectedIds.some((sid) => String(sid) === String(sub.id));
                         return (
                           <label
                             key={sub.id}
                             className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border transition-all cursor-pointer text-xs font-semibold ${
                               isChecked
-                                ? "bg-brand-lbg/10 border-brand-soft text-brand-primary"
-                                : "bg-white border-light-border/40 hover:bg-light-lbg/20 text-dark-primary"
+                                ? 'bg-brand-lbg/10 border-brand-soft text-brand-primary'
+                                : 'bg-white border-light-border/40 hover:bg-light-lbg/20 text-dark-primary'
                             }`}
                           >
                             <input
@@ -263,14 +266,14 @@ export const TeachersSetup = ({
   onUpdateTeacher,
   onDeleteTeacher,
   slots,
-  assignments
+  assignments,
 }) => {
-  const [name, setName] = useState("");
+  const [name, setName] = useState('');
   const [isMale, setIsMale] = useState(true);
   const [selectedSubjects, setSelectedSubjects] = useState([]);
-  
+
   const [editingTeacher, setEditingTeacher] = useState(null);
-  const [editName, setEditName] = useState("");
+  const [editName, setEditName] = useState('');
   const [editIsMale, setEditIsMale] = useState(true);
   const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -284,15 +287,15 @@ export const TeachersSetup = ({
         setActiveSubjectDropdownId(null);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleInlineSubjectToggle = (teacher, subjectId) => {
     const currentSubjects = teacher.subjects || [];
     let newSubjects;
-    if (currentSubjects.some(sid => String(sid) === String(subjectId))) {
-      newSubjects = currentSubjects.filter(id => String(id) !== String(subjectId));
+    if (currentSubjects.some((sid) => String(sid) === String(subjectId))) {
+      newSubjects = currentSubjects.filter((id) => String(id) !== String(subjectId));
     } else {
       newSubjects = [...currentSubjects, subjectId];
     }
@@ -303,22 +306,22 @@ export const TeachersSetup = ({
     e.preventDefault();
     if (!name.trim()) return;
     onAddTeacher(name.trim(), selectedSubjects, isMale);
-    setName("");
+    setName('');
     setSelectedSubjects([]);
     setIsMale(true);
   };
 
   const handleSubjectToggle = (subId, isEdit = false) => {
     if (isEdit) {
-      setEditSelectedSubjects(prev =>
-        prev.some(sid => String(sid) === String(subId))
-          ? prev.filter(sid => String(sid) !== String(subId))
+      setEditSelectedSubjects((prev) =>
+        prev.some((sid) => String(sid) === String(subId))
+          ? prev.filter((sid) => String(sid) !== String(subId))
           : [...prev, subId]
       );
     } else {
-      setSelectedSubjects(prev =>
-        prev.some(sid => String(sid) === String(subId))
-          ? prev.filter(sid => String(sid) !== String(subId))
+      setSelectedSubjects((prev) =>
+        prev.some((sid) => String(sid) === String(subId))
+          ? prev.filter((sid) => String(sid) !== String(subId))
           : [...prev, subId]
       );
     }
@@ -347,24 +350,27 @@ export const TeachersSetup = ({
     }
 
     setConfirmConfig({
-      title: "Delete Teacher",
+      title: 'Delete Teacher',
       message: warning,
-      confirmText: "Delete",
-      type: "danger",
+      confirmText: 'Delete',
+      type: 'danger',
       onConfirm: () => {
         setConfirmConfig(null);
         onDeleteTeacher(teacherId);
-      }
+      },
     });
   };
 
   const getSubjectNamesStr = (subjectIds = []) => {
-    if (subjectIds.length === 0) return <span className="text-red-primary font-semibold italic text-xs">No qualifications set</span>;
+    if (subjectIds.length === 0)
+      return (
+        <span className="text-red-primary font-semibold italic text-xs">No qualifications set</span>
+      );
     return subjectIds
-      .map(id => subjects.find(s => String(s.id) === String(id))?.name)
+      .map((id) => subjects.find((s) => String(s.id) === String(id))?.name)
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b))
-      .join(", ");
+      .join(', ');
   };
 
   return (
@@ -372,11 +378,15 @@ export const TeachersSetup = ({
       {/* Add form */}
       {!editingTeacher && (
         <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl">
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-3">Add New Teacher</h4>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-3">
+            Add New Teacher
+          </h4>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-end gap-3">
               <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Teacher Name</label>
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                  Teacher Name
+                </label>
                 <input
                   type="text"
                   required
@@ -389,8 +399,8 @@ export const TeachersSetup = ({
               <div className="w-full md:w-32">
                 <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
                 <select
-                  value={isMale ? "male" : "female"}
-                  onChange={(e) => setIsMale(e.target.value === "male")}
+                  value={isMale ? 'male' : 'female'}
+                  onChange={(e) => setIsMale(e.target.value === 'male')}
                   className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                 >
                   <option value="male">Male</option>
@@ -398,9 +408,13 @@ export const TeachersSetup = ({
                 </select>
               </div>
               <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Qualified Subjects</label>
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                  Qualified Subjects
+                </label>
                 {subjects.length === 0 ? (
-                  <p className="text-xs text-dark-muted italic py-2.5">Please add subjects first.</p>
+                  <p className="text-xs text-dark-muted italic py-2.5">
+                    Please add subjects first.
+                  </p>
                 ) : (
                   <GroupedSubjectMultiSelect
                     subjects={subjects}
@@ -425,11 +439,15 @@ export const TeachersSetup = ({
       {/* Edit Overlay / Panel */}
       {editingTeacher && (
         <div className="bg-blue-50/50 border border-blue-200 p-5 rounded-2xl animate-in fade-in duration-300">
-          <h4 className="text-sm font-bold text-blue-dark uppercase tracking-wide mb-3">Edit Teacher: {editingTeacher.name}</h4>
+          <h4 className="text-sm font-bold text-blue-dark uppercase tracking-wide mb-3">
+            Edit Teacher: {editingTeacher.name}
+          </h4>
           <div className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-end gap-3">
               <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Teacher Name</label>
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                  Teacher Name
+                </label>
                 <input
                   type="text"
                   required
@@ -441,8 +459,8 @@ export const TeachersSetup = ({
               <div className="w-full md:w-32">
                 <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
                 <select
-                  value={editIsMale ? "male" : "female"}
-                  onChange={(e) => setEditIsMale(e.target.value === "male")}
+                  value={editIsMale ? 'male' : 'female'}
+                  onChange={(e) => setEditIsMale(e.target.value === 'male')}
                   className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                 >
                   <option value="male">Male</option>
@@ -450,9 +468,13 @@ export const TeachersSetup = ({
                 </select>
               </div>
               <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Qualified Subjects</label>
+                <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                  Qualified Subjects
+                </label>
                 {subjects.length === 0 ? (
-                  <p className="text-xs text-dark-muted italic py-2.5">Please add subjects first.</p>
+                  <p className="text-xs text-dark-muted italic py-2.5">
+                    Please add subjects first.
+                  </p>
                 ) : (
                   <GroupedSubjectMultiSelect
                     subjects={subjects}
@@ -487,10 +509,18 @@ export const TeachersSetup = ({
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-light-lbg border-b border-light-border">
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Teacher Name</th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Gender</th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">Qualified Subjects</th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">Actions</th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
+                Teacher Name
+              </th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
+                Gender
+              </th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
+                Qualified Subjects
+              </th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-light-border">
@@ -504,86 +534,108 @@ export const TeachersSetup = ({
               [...teachers]
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((teacher) => (
-                <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
-                  <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
-                    {teacher.name}
-                  </td>
-                  <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
-                    {teacher.is_male !== false ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                        <i className="fas fa-mars text-[10px]"></i> Male
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
-                        <i className="fas fa-venus text-[10px]"></i> Female
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-xs font-semibold text-dark-soft max-w-md">
-                    {getSubjectNamesStr(teacher.subjects)}
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <div className="relative" ref={activeSubjectDropdownId === teacher.id ? dropdownRef : null}>
+                  <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
+                    <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
+                      {teacher.name}
+                    </td>
+                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
+                      {teacher.is_male !== false ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                          <i className="fas fa-mars text-[10px]"></i> Male
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
+                          <i className="fas fa-venus text-[10px]"></i> Female
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft max-w-md">
+                      {getSubjectNamesStr(teacher.subjects)}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <div
+                          className="relative"
+                          ref={activeSubjectDropdownId === teacher.id ? dropdownRef : null}
+                        >
+                          <button
+                            onClick={() =>
+                              setActiveSubjectDropdownId(
+                                activeSubjectDropdownId === teacher.id ? null : teacher.id
+                              )
+                            }
+                            className="text-brand-primary hover:text-brand-dark p-2 rounded-lg hover:bg-brand-lbg transition-all"
+                            title="Assign Subjects"
+                            disabled={!!editingTeacher}
+                          >
+                            <i className="fas fa-book-medical"></i>
+                          </button>
+                          {activeSubjectDropdownId === teacher.id && (
+                            <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-light-border rounded-xl shadow-xl z-50 p-2 max-h-60 overflow-y-auto">
+                              <h5 className="text-xs font-bold text-dark-deepblue mb-2 px-1 border-b border-light-border pb-1">
+                                Assign Subjects to {teacher.name}
+                              </h5>
+                              <div className="flex flex-col gap-1">
+                                {subjects.length === 0 ? (
+                                  <span className="text-[10px] text-dark-muted px-1">
+                                    No subjects available
+                                  </span>
+                                ) : (
+                                  [...subjects]
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map((sub) => (
+                                      <label
+                                        key={sub.id}
+                                        className="flex items-center gap-2 p-1.5 hover:bg-light-lbg rounded cursor-pointer transition-colors"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5 border-light-border"
+                                          checked={(teacher.subjects || []).some(
+                                            (sid) => String(sid) === String(sub.id)
+                                          )}
+                                          onChange={() =>
+                                            handleInlineSubjectToggle(teacher, sub.id)
+                                          }
+                                        />
+                                        <span className="text-xs font-semibold text-dark-primary truncate">
+                                          {sub.name}
+                                        </span>
+                                      </label>
+                                    ))
+                                )}
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-light-border text-right">
+                                <button
+                                  onClick={() => setActiveSubjectDropdownId(null)}
+                                  className="bg-brand-primary hover:bg-brand-dark text-white px-3 py-1 rounded-md text-[10px] font-bold"
+                                >
+                                  Done
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <button
-                          onClick={() => setActiveSubjectDropdownId(activeSubjectDropdownId === teacher.id ? null : teacher.id)}
-                          className="text-brand-primary hover:text-brand-dark p-2 rounded-lg hover:bg-brand-lbg transition-all"
-                          title="Assign Subjects"
+                          onClick={() => handleStartEdit(teacher)}
+                          className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
+                          title="Edit Teacher"
                           disabled={!!editingTeacher}
                         >
-                          <i className="fas fa-book-medical"></i>
+                          <i className="fas fa-edit"></i>
                         </button>
-                        {activeSubjectDropdownId === teacher.id && (
-                          <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-light-border rounded-xl shadow-xl z-50 p-2 max-h-60 overflow-y-auto">
-                            <h5 className="text-xs font-bold text-dark-deepblue mb-2 px-1 border-b border-light-border pb-1">Assign Subjects to {teacher.name}</h5>
-                            <div className="flex flex-col gap-1">
-                              {subjects.length === 0 ? (
-                                <span className="text-[10px] text-dark-muted px-1">No subjects available</span>
-                              ) : (
-                                [...subjects].sort((a,b) => a.name.localeCompare(b.name)).map(sub => (
-                                  <label key={sub.id} className="flex items-center gap-2 p-1.5 hover:bg-light-lbg rounded cursor-pointer transition-colors">
-                                    <input 
-                                      type="checkbox" 
-                                      className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5 border-light-border"
-                                      checked={(teacher.subjects || []).some(sid => String(sid) === String(sub.id))}
-                                      onChange={() => handleInlineSubjectToggle(teacher, sub.id)}
-                                    />
-                                    <span className="text-xs font-semibold text-dark-primary truncate">{sub.name}</span>
-                                  </label>
-                                ))
-                              )}
-                            </div>
-                            <div className="mt-2 pt-2 border-t border-light-border text-right">
-                              <button
-                                onClick={() => setActiveSubjectDropdownId(null)}
-                                className="bg-brand-primary hover:bg-brand-dark text-white px-3 py-1 rounded-md text-[10px] font-bold"
-                              >
-                                Done
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => handleDelete(teacher.id, teacher.name)}
+                          className="text-red-primary hover:text-red-dark p-2 rounded-lg hover:bg-red-lbg transition-all"
+                          title="Delete"
+                          disabled={!!editingTeacher}
+                        >
+                          <i className="fas fa-trash-alt"></i>
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleStartEdit(teacher)}
-                        className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
-                        title="Edit Teacher"
-                        disabled={!!editingTeacher}
-                      >
-                        <i className="fas fa-edit"></i>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(teacher.id, teacher.name)}
-                        className="text-red-primary hover:text-red-dark p-2 rounded-lg hover:bg-red-lbg transition-all"
-                        title="Delete"
-                        disabled={!!editingTeacher}
-                      >
-                        <i className="fas fa-trash-alt"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    </td>
+                  </tr>
+                ))
             )}
           </tbody>
         </table>
@@ -602,7 +654,6 @@ export const TeachersSetup = ({
   );
 };
 
-
 // ==========================================
 // 3. CLASSES SETUP (CRUD + Teacher assignments)
 // ==========================================
@@ -617,18 +668,17 @@ export const ClassesSetup = ({
   onDeleteClass,
   onAddAssignment,
   onRemoveAssignment,
-  slots
+  slots,
 }) => {
-  const [classNameInput, setClassNameInput] = useState("");
+  const [classNameInput, setClassNameInput] = useState('');
   const [editingClassId, setEditingClassId] = useState(null);
-  const [editClassName, setEditClassName] = useState("");
-  const [selectedClassId, setSelectedClassId] = useState("");
+  const [editClassName, setEditClassName] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
 
   // Assignment states
-  const [newSubId, setNewSubId] = useState("");
-  const [newTeacherId, setNewTeacherId] = useState("");
+  const [newSubId, setNewSubId] = useState('');
+  const [newTeacherId, setNewTeacherId] = useState('');
   const [confirmConfig, setConfirmConfig] = useState(null);
-
 
   React.useEffect(() => {
     if (classes.length > 0 && !selectedClassId) {
@@ -640,7 +690,7 @@ export const ClassesSetup = ({
     e.preventDefault();
     if (!classNameInput.trim()) return;
     onAddClass(classNameInput.trim());
-    setClassNameInput("");
+    setClassNameInput('');
   };
 
   const handleStartEdit = (cls) => {
@@ -664,17 +714,17 @@ export const ClassesSetup = ({
     }
 
     setConfirmConfig({
-      title: "Delete Class",
+      title: 'Delete Class',
       message: warning,
-      confirmText: "Delete",
-      type: "danger",
+      confirmText: 'Delete',
+      type: 'danger',
       onConfirm: () => {
         setConfirmConfig(null);
         onDeleteClass(clsId);
         if (String(selectedClassId) === String(clsId)) {
-          setSelectedClassId(classes.find((c) => String(c.id) !== String(clsId))?.id || "");
+          setSelectedClassId(classes.find((c) => String(c.id) !== String(clsId))?.id || '');
         }
-      }
+      },
     });
   };
 
@@ -682,25 +732,28 @@ export const ClassesSetup = ({
   const getQualifiedTeachers = (subjectId) => {
     if (!subjectId) return [];
     return teachers
-      .filter(t => t.subjects && t.subjects.some(sid => String(sid) === String(subjectId)))
+      .filter((t) => t.subjects && t.subjects.some((sid) => String(sid) === String(subjectId)))
       .sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const handleAddAssignment = (e) => {
     e.preventDefault();
     if (!selectedClassId || !newSubId || !newTeacherId) return;
-    
+
     // Add mapping
     onAddAssignment(selectedClassId, newTeacherId, newSubId);
-    setNewSubId("");
-    setNewTeacherId("");
+    setNewSubId('');
+    setNewTeacherId('');
   };
 
   const handleRemoveAssignment = (assId, subjectName, teacherName) => {
     // Check if slot assignments are scheduled in timetable with this mapping
-    const ass = assignments.find(a => String(a.id) === String(assId));
+    const ass = assignments.find((a) => String(a.id) === String(assId));
     const isScheduled = slots.some(
-      s => String(s.class_id) === String(selectedClassId) && String(s.subject_id) === String(ass.subject_id) && String(s.teacher_id) === String(ass.teacher_id)
+      (s) =>
+        String(s.class_id) === String(selectedClassId) &&
+        String(s.subject_id) === String(ass.subject_id) &&
+        String(s.teacher_id) === String(ass.teacher_id)
     );
 
     let warning = `Remove "${teacherName}" teaching "${subjectName}" from this class?`;
@@ -709,27 +762,30 @@ export const ClassesSetup = ({
     }
 
     setConfirmConfig({
-      title: "Remove Assignment",
+      title: 'Remove Assignment',
       message: warning,
-      confirmText: "Remove",
-      type: "danger",
+      confirmText: 'Remove',
+      type: 'danger',
       onConfirm: () => {
         setConfirmConfig(null);
         onRemoveAssignment(assId);
-      }
+      },
     });
   };
 
-  const activeClass = classes.find(c => String(c.id) === String(selectedClassId));
-  const activeAssignments = assignments.filter(a => String(a.class_id) === String(selectedClassId));
+  const activeClass = classes.find((c) => String(c.id) === String(selectedClassId));
+  const activeAssignments = assignments.filter(
+    (a) => String(a.class_id) === String(selectedClassId)
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      
       {/* Left Column: Manage Classes (CRUD) */}
       <div className="space-y-4 lg:col-span-1 border-r border-light-border pr-0 lg:pr-6">
         <div className="bg-light-lbg/50 border border-light-border p-4 rounded-xl">
-          <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wide mb-2">Create Class</h4>
+          <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wide mb-2">
+            Create Class
+          </h4>
           <form onSubmit={handleCreateClass} className="flex gap-2">
             <input
               type="text"
@@ -762,8 +818,8 @@ export const ClassesSetup = ({
                   onClick={() => setSelectedClassId(cls.id)}
                   className={`flex items-center justify-between px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${
                     String(selectedClassId) === String(cls.id)
-                      ? "bg-brand-lbg/50 border-l-4 border-brand-primary font-bold text-brand-primary"
-                      : "text-dark-primary hover:bg-light-bg/40"
+                      ? 'bg-brand-lbg/50 border-l-4 border-brand-primary font-bold text-brand-primary'
+                      : 'text-dark-primary hover:bg-light-bg/40'
                   }`}
                 >
                   {editingClassId === cls.id ? (
@@ -824,39 +880,55 @@ export const ClassesSetup = ({
       <div className="lg:col-span-2 space-y-6">
         {activeClass ? (
           <>
-            <div>
+            <div className="bg-light-lbg border border-light-border p-4 rounded-xl">
               <h3 className="text-lg font-bold text-dark-deepblue mb-1">
-                Configure Mappings for: <span className="text-brand-primary">{activeClass.name}</span>
+                Configure Mappings for:{' '}
+                <span className="text-brand-primary">{activeClass.name}</span>
               </h3>
               <p className="text-xs text-dark-soft">
-                Assign teachers to specific subjects for this class. (Only qualified teachers can teach each subject).
+                Assign teachers to specific subjects for this class. (Only qualified teachers can
+                teach each subject).
               </p>
             </div>
 
             {/* Add Assignment form */}
             <div className="bg-light-lbg/50 border border-light-border p-4 rounded-xl">
-              <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wide mb-2.5">Assign Teacher to Subject</h4>
-              <form onSubmit={handleAddAssignment} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wide mb-2.5">
+                Assign Teacher to Subject
+              </h4>
+              <form
+                onSubmit={handleAddAssignment}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end"
+              >
                 {/* Subject selection */}
                 <div>
-                  <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">Select Subject</label>
+                  <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                    Select Subject
+                  </label>
                   <select
                     value={newSubId}
                     onChange={(e) => {
                       setNewSubId(e.target.value);
-                      setNewTeacherId(""); // reset teacher
+                      setNewTeacherId(''); // reset teacher
                     }}
                     className="w-full bg-white border border-light-border rounded-lg px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                     required
                   >
                     <option value="">-- Choose Subject --</option>
-                    {renderSubjectOptionsGroupedByClassification(subjects, classifications, undefined, newSubId)}
+                    {renderSubjectOptionsGroupedByClassification(
+                      subjects,
+                      classifications,
+                      undefined,
+                      newSubId
+                    )}
                   </select>
                 </div>
 
                 {/* Teacher selection */}
                 <div>
-                  <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">Select Qualified Teacher</label>
+                  <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                    Select Qualified Teacher
+                  </label>
                   <select
                     value={newTeacherId}
                     onChange={(e) => setNewTeacherId(e.target.value)}
@@ -865,8 +937,10 @@ export const ClassesSetup = ({
                     required
                   >
                     <option value="">-- Choose Teacher --</option>
-                    {getQualifiedTeachers(newSubId).map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                    {getQualifiedTeachers(newSubId).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -891,20 +965,29 @@ export const ClassesSetup = ({
                   <tr className="border-b border-light-border bg-light-bg/20">
                     <th className="py-2.5 px-4 font-bold text-dark-soft uppercase">Subject</th>
                     <th className="py-2.5 px-4 font-bold text-dark-soft uppercase">Teacher</th>
-                    <th className="py-2.5 px-4 font-bold text-dark-soft uppercase text-right w-[80px]">Remove</th>
+                    <th className="py-2.5 px-4 font-bold text-dark-soft uppercase text-right w-[80px]">
+                      Remove
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-light-border">
                   {activeAssignments.length === 0 ? (
                     <tr>
-                      <td colSpan="3" className="py-6 text-center text-dark-muted font-medium italic">
+                      <td
+                        colSpan="3"
+                        className="py-6 text-center text-dark-muted font-medium italic"
+                      >
                         No subject assignments mapped for this class. Add one above!
                       </td>
                     </tr>
                   ) : (
                     activeAssignments.map((ass) => {
-                      const subName = subjects.find(s => String(s.id) === String(ass.subject_id))?.name || "Unknown Subject";
-                      const tName = teachers.find(t => String(t.id) === String(ass.teacher_id))?.name || "Unknown Teacher";
+                      const subName =
+                        subjects.find((s) => String(s.id) === String(ass.subject_id))?.name ||
+                        'Unknown Subject';
+                      const tName =
+                        teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name ||
+                        'Unknown Teacher';
                       return (
                         <tr key={ass.id} className="hover:bg-light-bg/10">
                           <td className="py-2.5 px-4 font-bold text-dark-primary">{subName}</td>
@@ -946,7 +1029,6 @@ export const ClassesSetup = ({
   );
 };
 
-
 // ==========================================
 // 4. PERIODS CONFIGURATION
 // ==========================================
@@ -956,7 +1038,7 @@ export const PeriodsSetup = ({
   slots,
   seasonsConfig,
   onSaveSeasonsConfig,
-  onCopySeason
+  onCopySeason,
 }) => {
   const [periodCount, setPeriodCount] = useState(periods.length || 11);
   const [periodList, setPeriodList] = useState(periods);
@@ -1007,7 +1089,7 @@ export const PeriodsSetup = ({
     Thursday: 'Weekday',
     Friday: 'Weekday',
     Saturday: 'Working Weekend',
-    Sunday: 'Holiday Weekend'
+    Sunday: 'Holiday Weekend',
   };
 
   const handleCountChange = (newCount) => {
@@ -1023,11 +1105,11 @@ export const PeriodsSetup = ({
           id: generateLocalId(),
           period_number: i,
           name: `Period ${i}`,
-          start_time: "08:00",
-          end_time: "08:45",
+          start_time: '08:00',
+          end_time: '08:45',
           is_break: false,
           icon: null,
-          applicable_on_weekends: false
+          applicable_on_weekends: false,
         });
       }
     } else if (count < newList.length) {
@@ -1040,30 +1122,30 @@ export const PeriodsSetup = ({
     const newList = [...periodList];
     newList[index] = {
       ...newList[index],
-      [field]: value
+      [field]: value,
     };
     setPeriodList(newList);
   };
 
   const handleSavePeriodsConfig = () => {
     // Check if slots would be truncated and lost
-    const remainingPeriodIds = periodList.map(p => p.id);
-    const truncatedSlots = slots.filter(s => !remainingPeriodIds.includes(s.period_id));
-    
+    const remainingPeriodIds = periodList.map((p) => p.id);
+    const truncatedSlots = slots.filter((s) => !remainingPeriodIds.includes(s.period_id));
+
     let warning = `Save period configuration changes for the active season (${activeSeason.name})?`;
     if (truncatedSlots.length > 0) {
       warning += `\n\nWARNING: You are reducing the number of periods! Doing so will PERMANENTLY DELETE ${truncatedSlots.length} scheduled slots from the timetable!`;
     }
 
     setConfirmConfig({
-      title: "Save Periods",
+      title: 'Save Periods',
       message: warning,
-      confirmText: "Save",
-      type: truncatedSlots.length > 0 ? "danger" : "warning",
+      confirmText: 'Save',
+      type: truncatedSlots.length > 0 ? 'danger' : 'warning',
       onConfirm: () => {
         setConfirmConfig(null);
         onSavePeriods(periodList);
-      }
+      },
     });
   };
 
@@ -1074,37 +1156,37 @@ export const PeriodsSetup = ({
         ...localSeasonsConfig.seasons,
         [seasonId]: {
           ...localSeasonsConfig.seasons[seasonId],
-          name: newName
-        }
-      }
+          name: newName,
+        },
+      },
     };
     setLocalSeasonsConfig(updated);
   };
 
   const handleSaveSeasonSettings = () => {
     setConfirmConfig({
-      title: "Save Season Settings",
-      message: "Are you sure you want to save the season names and weekday configuration?",
-      confirmText: "Save Settings",
-      type: "primary",
+      title: 'Save Season Settings',
+      message: 'Are you sure you want to save the season names and weekday configuration?',
+      confirmText: 'Save Settings',
+      type: 'primary',
       onConfirm: () => {
         setConfirmConfig(null);
         onSaveSeasonsConfig(localSeasonsConfig);
-      }
+      },
     });
   };
 
   const handleSwitchSeason = (seasonId) => {
     const targetSeasonName = localSeasonsConfig.seasons[seasonId]?.name || seasonId;
     setConfirmConfig({
-      title: "Switch Active Season",
+      title: 'Switch Active Season',
       message: `Are you sure you want to switch the active season to "${targetSeasonName}"? The timetable grid will load this season's configuration and scheduled slots.`,
-      confirmText: "Switch Season",
-      type: "warning",
+      confirmText: 'Switch Season',
+      type: 'warning',
       onConfirm: () => {
         setConfirmConfig(null);
         onSaveSeasonsConfig(localSeasonsConfig, seasonId);
-      }
+      },
     });
   };
 
@@ -1117,31 +1199,31 @@ export const PeriodsSetup = ({
           ...localSeasonsConfig.seasons[activeSeasonId],
           weekday_config: {
             ...weekdayConfig,
-            [day]: type
-          }
-        }
-      }
+            [day]: type,
+          },
+        },
+      },
     };
     setLocalSeasonsConfig(updated);
   };
 
   const handleTriggerCopy = () => {
     if (copySource === copyTarget) {
-      alert("Source and target seasons must be different.");
+      alert('Source and target seasons must be different.');
       return;
     }
     const srcName = localSeasonsConfig.seasons[copySource]?.name || copySource;
     const tgtName = localSeasonsConfig.seasons[copyTarget]?.name || copyTarget;
 
     setConfirmConfig({
-      title: "Copy Season Configuration",
+      title: 'Copy Season Configuration',
       message: `WARNING: This will overwrite settings in "${tgtName}" with data from "${srcName}". Are you sure you want to copy?`,
-      confirmText: "Perform Copy",
-      type: "danger",
+      confirmText: 'Perform Copy',
+      type: 'danger',
       onConfirm: () => {
         setConfirmConfig(null);
         onCopySeason(copySource, copyTarget, copyType);
-      }
+      },
     });
   };
 
@@ -1150,8 +1232,12 @@ export const PeriodsSetup = ({
       {/* 1. Seasons Switcher & Names */}
       <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
         <div>
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">Season Setup</h4>
-          <p className="text-xs text-dark-soft">Manage 4 different seasonal configurations. Rename seasons or swap active timetables.</p>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
+            Season Setup
+          </h4>
+          <p className="text-xs text-dark-soft">
+            Manage 4 different seasonal configurations. Rename seasons or swap active timetables.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1167,9 +1253,11 @@ export const PeriodsSetup = ({
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
-                    isActive ? 'bg-brand-lbg text-brand-primary' : 'bg-light-bg text-dark-soft'
-                  }`}>
+                  <span
+                    className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
+                      isActive ? 'bg-brand-lbg text-brand-primary' : 'bg-light-bg text-dark-soft'
+                    }`}
+                  >
                     {isActive ? 'Active' : 'Inactive'}
                   </span>
                   <span className="text-[10px] text-dark-soft font-bold">
@@ -1177,7 +1265,9 @@ export const PeriodsSetup = ({
                   </span>
                 </div>
                 <div>
-                  <label className="block text-[8px] font-extrabold text-dark-soft uppercase mb-1">Season Label</label>
+                  <label className="block text-[8px] font-extrabold text-dark-soft uppercase mb-1">
+                    Season Label
+                  </label>
                   <input
                     type="text"
                     value={season.name}
@@ -1218,48 +1308,53 @@ export const PeriodsSetup = ({
             Weekday & Weekend configuration ({activeSeason.name})
           </h4>
           <p className="text-xs text-dark-soft">
-            Define working days and holidays. On "Working Weekend" days, only weekend-applicable periods will run.
+            Define working days and holidays. On "Working Weekend" days, only weekend-applicable
+            periods will run.
           </p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
-            const value = weekdayConfig[day] || 'Weekday';
-            return (
-              <div
-                key={day}
-                className={`border p-3.5 rounded-2xl flex flex-col justify-between gap-3 transition-all ${
-                  value === 'Weekday'
-                    ? 'bg-blue-50/10 border-blue-100/60'
-                    : value === 'Working Weekend'
-                    ? 'bg-orange-50/10 border-orange-100/60'
-                    : 'bg-gray-50/50 border-gray-200'
-                }`}
-              >
-                <div>
-                  <span className="block text-xs font-extrabold text-dark-primary">{day}</span>
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${
+          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(
+            (day) => {
+              const value = weekdayConfig[day] || 'Weekday';
+              return (
+                <div
+                  key={day}
+                  className={`border p-3.5 rounded-2xl flex flex-col justify-between gap-3 transition-all ${
                     value === 'Weekday'
-                      ? 'text-brand-primary'
+                      ? 'bg-blue-50/10 border-blue-100/60'
                       : value === 'Working Weekend'
-                      ? 'text-orange-500'
-                      : 'text-dark-soft'
-                  }`}>
-                    {value}
-                  </span>
-                </div>
-                <select
-                  value={value}
-                  onChange={(e) => handleWeekdayChange(day, e.target.value)}
-                  className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-[10px] font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+                        ? 'bg-orange-50/10 border-orange-100/60'
+                        : 'bg-gray-50/50 border-gray-200'
+                  }`}
                 >
-                  <option value="Weekday">Weekday</option>
-                  <option value="Working Weekend">Working Weekend</option>
-                  <option value="Holiday Weekend">Holiday Weekend</option>
-                </select>
-              </div>
-            );
-          })}
+                  <div>
+                    <span className="block text-xs font-extrabold text-dark-primary">{day}</span>
+                    <span
+                      className={`text-[9px] font-bold uppercase tracking-wider ${
+                        value === 'Weekday'
+                          ? 'text-brand-primary'
+                          : value === 'Working Weekend'
+                            ? 'text-orange-500'
+                            : 'text-dark-soft'
+                      }`}
+                    >
+                      {value}
+                    </span>
+                  </div>
+                  <select
+                    value={value}
+                    onChange={(e) => handleWeekdayChange(day, e.target.value)}
+                    className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-[10px] font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
+                  >
+                    <option value="Weekday">Weekday</option>
+                    <option value="Working Weekend">Working Weekend</option>
+                    <option value="Holiday Weekend">Holiday Weekend</option>
+                  </select>
+                </div>
+              );
+            }
+          )}
         </div>
 
         <div className="flex justify-end pt-2">
@@ -1279,12 +1374,17 @@ export const PeriodsSetup = ({
             <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
               Period Labels and Details ({activeSeason.name})
             </h4>
-            <p className="text-xs text-dark-soft">Configure names, break toggles, weekend availability, and FontAwesome icons for each period.</p>
+            <p className="text-xs text-dark-soft">
+              Configure names, break toggles, weekend availability, and FontAwesome icons for each
+              period.
+            </p>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
             <div>
-              <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">Periods Count</label>
+              <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">
+                Periods Count
+              </label>
               <input
                 type="number"
                 min="1"
@@ -1318,9 +1418,9 @@ export const PeriodsSetup = ({
                 <div className="flex-1">
                   <input
                     type="text"
-                    value={period.name || ""}
+                    value={period.name || ''}
                     placeholder={`Period ${period.period_number}`}
-                    onChange={(e) => handleFieldChange(idx, "name", e.target.value)}
+                    onChange={(e) => handleFieldChange(idx, 'name', e.target.value)}
                     className="w-full bg-white border border-light-border rounded-xl px-3 py-1 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
                   />
                 </div>
@@ -1328,22 +1428,26 @@ export const PeriodsSetup = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">Start Time</label>
+                  <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">
+                    Start Time
+                  </label>
                   <input
                     type="text"
-                    value={period.start_time || ""}
+                    value={period.start_time || ''}
                     placeholder="e.g. 08:30"
-                    onChange={(e) => handleFieldChange(idx, "start_time", e.target.value)}
+                    onChange={(e) => handleFieldChange(idx, 'start_time', e.target.value)}
                     className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
                   />
                 </div>
                 <div>
-                  <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">End Time</label>
+                  <label className="block text-[8px] font-bold text-dark-soft uppercase mb-0.5">
+                    End Time
+                  </label>
                   <input
                     type="text"
-                    value={period.end_time || ""}
+                    value={period.end_time || ''}
                     placeholder="e.g. 09:15"
-                    onChange={(e) => handleFieldChange(idx, "end_time", e.target.value)}
+                    onChange={(e) => handleFieldChange(idx, 'end_time', e.target.value)}
                     className="w-full bg-white border border-light-border rounded-lg px-2 py-1 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft text-center"
                   />
                 </div>
@@ -1355,7 +1459,7 @@ export const PeriodsSetup = ({
                     <input
                       type="checkbox"
                       checked={period.is_break || false}
-                      onChange={(e) => handleFieldChange(idx, "is_break", e.target.checked)}
+                      onChange={(e) => handleFieldChange(idx, 'is_break', e.target.checked)}
                       className="rounded border-light-border text-brand-primary focus:ring-brand-soft"
                     />
                     Is Break
@@ -1364,7 +1468,9 @@ export const PeriodsSetup = ({
                     <input
                       type="checkbox"
                       checked={period.applicable_on_weekends || false}
-                      onChange={(e) => handleFieldChange(idx, "applicable_on_weekends", e.target.checked)}
+                      onChange={(e) =>
+                        handleFieldChange(idx, 'applicable_on_weekends', e.target.checked)
+                      }
                       className="rounded border-light-border text-brand-primary focus:ring-brand-soft"
                     />
                     Weekend Applicable
@@ -1374,14 +1480,16 @@ export const PeriodsSetup = ({
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-1.5">
                     <label className="text-[8px] font-bold text-dark-soft uppercase">Icon</label>
-                    {period.icon && <i className={`fas ${period.icon} text-brand-primary text-xs`}></i>}
+                    {period.icon && (
+                      <i className={`fas ${period.icon} text-brand-primary text-xs`}></i>
+                    )}
                   </div>
                   <div className="flex gap-1.5 items-center">
                     <input
                       type="text"
                       placeholder="e.g. fa-coffee"
-                      value={period.icon || ""}
-                      onChange={(e) => handleFieldChange(idx, "icon", e.target.value)}
+                      value={period.icon || ''}
+                      onChange={(e) => handleFieldChange(idx, 'icon', e.target.value)}
                       className="flex-1 bg-white border border-light-border rounded-lg px-2 py-1 text-[10px] font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
                     />
                     <div className="flex gap-1">
@@ -1390,14 +1498,16 @@ export const PeriodsSetup = ({
                         { icon: 'fa-mosque', text: '🕌' },
                         { icon: 'fa-utensils', text: '🍽️' },
                         { icon: 'fa-book', text: '📖' },
-                        { icon: 'fa-volleyball-ball', text: '⚽' }
+                        { icon: 'fa-volleyball-ball', text: '⚽' },
                       ].map((item) => (
                         <button
                           key={item.icon}
-                          onClick={() => handleFieldChange(idx, "icon", item.icon)}
+                          onClick={() => handleFieldChange(idx, 'icon', item.icon)}
                           title={item.icon}
                           className={`px-1.5 py-0.5 rounded border text-xs hover:bg-light-ui transition-all ${
-                            period.icon === item.icon ? 'border-brand-primary bg-brand-lbg' : 'border-light-border bg-white'
+                            period.icon === item.icon
+                              ? 'border-brand-primary bg-brand-lbg'
+                              : 'border-light-border bg-white'
                           }`}
                         >
                           {item.text}
@@ -1405,7 +1515,7 @@ export const PeriodsSetup = ({
                       ))}
                       {period.icon && (
                         <button
-                          onClick={() => handleFieldChange(idx, "icon", null)}
+                          onClick={() => handleFieldChange(idx, 'icon', null)}
                           title="Clear icon"
                           className="px-1.5 py-0.5 rounded border border-light-border bg-white text-red-500 hover:bg-red-50 text-[10px] font-bold"
                         >
@@ -1424,36 +1534,51 @@ export const PeriodsSetup = ({
       {/* 4. Copy Season Panel */}
       <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
         <div>
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">Copy / Map Season Configurations</h4>
-          <p className="text-xs text-dark-soft">Replicate period setups, daily schedules, or complete structures from one season to another to save configuration time.</p>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
+            Copy / Map Season Configurations
+          </h4>
+          <p className="text-xs text-dark-soft">
+            Replicate period setups, daily schedules, or complete structures from one season to
+            another to save configuration time.
+          </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Source Season</label>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">
+              Source Season
+            </label>
             <select
               value={copySource}
               onChange={(e) => setCopySource(e.target.value)}
               className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
             >
-              {Object.values(localSeasonsConfig.seasons).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              {Object.values(localSeasonsConfig.seasons).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Target Season</label>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">
+              Target Season
+            </label>
             <select
               value={copyTarget}
               onChange={(e) => setCopyTarget(e.target.value)}
               className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft cursor-pointer"
             >
-              {Object.values(localSeasonsConfig.seasons).map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              {Object.values(localSeasonsConfig.seasons).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Configuration to Copy</label>
+            <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">
+              Configuration to Copy
+            </label>
             <select
               value={copyType}
               onChange={(e) => setCopyType(e.target.value)}
