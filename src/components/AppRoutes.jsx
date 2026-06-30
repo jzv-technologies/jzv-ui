@@ -15,6 +15,7 @@ import ParentTimetableViewer from "./portals/parent/ParentTimetableViewer";
 import SyllabusManager from "./portals/admin/syllabus/SyllabusManager";
 import SyllabusTracker from "./portals/teacher/SyllabusTracker";
 import ReporterTicketsView from "./portals/ReporterTicketsView";
+import ParentSyllabusView from "./portals/parent/ParentSyllabusView";
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -194,6 +195,15 @@ export const AppRoutes = ({
                     shadow: "shadow-indigo-200",
                     onClick: () => setParentSubView("tickets"),
                   },
+                  {
+                    id: "syllabus-coverage",
+                    title: "Syllabus Coverage",
+                    description: "View syllabus progress and coverage for your child's class.",
+                    icon: "fa-book-reader",
+                    buttonColor: "bg-purple-600 text-white",
+                    shadow: "shadow-purple-200",
+                    onClick: () => setParentSubView("syllabus-coverage"),
+                  },
                 ])}
                 subView={parentSubView}
                 onSetSubView={setParentSubView}
@@ -204,6 +214,9 @@ export const AppRoutes = ({
                 )}
                 {parentSubView === "tickets" && (
                   <ReporterTicketsView user={user} fullName={fullName} />
+                )}
+                {parentSubView === "syllabus-coverage" && (
+                  <ParentSyllabusView student={user?.student} />
                 )}
               </RolePortal>
             ) : (

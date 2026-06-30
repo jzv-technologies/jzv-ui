@@ -9,6 +9,7 @@ import { supabase } from "../../utils/supabase";
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../data/mockStudents";
 import TimetableAdminView from "./admin/timetable/TimetableAdminView";
 import SyllabusProgressReport from "./admin/syllabus/SyllabusProgressReport";
+import SyllabusManager from "./admin/syllabus/SyllabusManager";
 import { CARD_THEMES } from "../../utils/cardTheme";
 import {
   TIMETABLE_STORAGE_KEY,
@@ -450,6 +451,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       buttonColor: "bg-blue-600 text-white",
       shadow: "shadow-blue-200",
       onClick: () => onSetSubView("syllabus-report"),
+    },
+    {
+      id: "syllabus-manager",
+      title: "Syllabus Manager",
+      description: "Add and manage books, lessons, and syllabus structure.",
+      icon: "fa-book-open",
+      buttonColor: "bg-purple-600 text-white",
+      shadow: "shadow-purple-200",
+      onClick: () => onSetSubView("syllabus-manager"),
     },
   ];
 
@@ -996,6 +1006,9 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === "take-test" ? renderTakeTestView() : null}
       {subView === "syllabus-report" && (
         <SyllabusProgressReport />
+      )}
+      {subView === "syllabus-manager" && (
+        <SyllabusManager role="management" user={user} />
       )}
       {subView === "timetable" && (
         ttLoading ? (

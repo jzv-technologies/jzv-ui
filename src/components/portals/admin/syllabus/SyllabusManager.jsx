@@ -14,7 +14,7 @@ const getComplexityBadgeClass = (comp) => {
 };
 
 const SyllabusManager = ({ role, user }) => {
-  const isAdmin = role === 'admin';
+  const isAdmin = role === 'admin' || role === 'management';
   const isTeacher = role === 'teacher';
 
   const [classifications, setClassifications] = useState([]);

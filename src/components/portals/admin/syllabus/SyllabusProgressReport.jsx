@@ -4,18 +4,22 @@ import { showToast } from '../../../../utils/toast';
 
 const SyllabusProgressReport = () => {
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [books, setBooks] = useState([]);
   const [syllabusData, setSyllabusData] = useState([]);
-  
+
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedBookId, setSelectedBookId] = useState('');
 
-  const [progressList, setProgressList] = useState([]);
-  const [historyLogs, setHistoryLogs] = useState([]);
+  // Redesigned data states
+  const [bookTracker, setBookTracker] = useState(null);
+  const [lessonLogs, setLessonLogs] = useState([]);
+  const [logItems, setLogItems] = useState({}); // { [ltLogId]: items }
+  const [expandedLogs, setExpandedLogs] = useState({});
 
   useEffect(() => {
     const fetchBase = async () => {
@@ -35,72 +39,17 @@ const SyllabusProgressReport = () => {
 
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
-
-        if (dbBooks && dbBooks.length > 0) {
-          setBooks(dbBooks);
-          setSyllabusData(dbSyllabusData || []);
-        } else {
-          const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
-          if (rawSyllabus) {
-            try {
-              const parsed = JSON.parse(rawSyllabus);
-              setBooks(parsed.books || []);
-              setSyllabusData(parsed.syllabusData || []);
-            } catch (e) {
-              setBooks([]);
-              setSyllabusData([]);
-            }
-          } else {
-            setBooks([]);
-            setSyllabusData([]);
-          }
-        }
+        setBooks(dbBooks || []);
+        setSyllabusData(dbSyllabusData || []);
 
         if (dbClasses && dbClasses.length > 0) setSelectedClassId(String(dbClasses[0].id));
         if (dbSubjects && dbSubjects.length > 0) setSelectedSubjectId(String(dbSubjects[0].id));
       } catch (err) {
-        console.warn('SyllabusProgressReport DB fetchBase failed, using LocalStorage fallback:', err.message);
-        loadLocalBaseData();
+        console.warn('SyllabusProgressReport init base failed:', err.message);
       } finally {
         setLoading(false);
       }
     };
-
-    const loadLocalBaseData = () => {
-      // Load syllabus data (books, lessons, subjects)
-      const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
-      let localBooks = [];
-      let localSyllabusData = [];
-      let localSubjects = [];
-      if (rawSyllabus) {
-        try {
-          const parsed = JSON.parse(rawSyllabus);
-          localBooks = parsed.books || [];
-          localSyllabusData = parsed.syllabusData || [];
-          localSubjects = parsed.subjects || [];
-        } catch (e) {}
-      }
-
-      // Load timetable data (classes)
-      const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
-      let localClasses = [];
-      if (rawTimetable) {
-        try {
-          const parsed = JSON.parse(rawTimetable);
-          localClasses = parsed.classes || [];
-        } catch (e) {}
-      }
-
-      setClasses(localClasses);
-      setSubjects(localSubjects.length > 0 ? localSubjects : (localClasses.length > 0 ? [{ id: '1', name: 'General' }] : []));
-      setBooks(localBooks);
-      setSyllabusData(localSyllabusData);
-
-      if (localClasses.length > 0) setSelectedClassId(String(localClasses[0].id));
-      const activeSubjects = localSubjects.length > 0 ? localSubjects : (localClasses.length > 0 ? [{ id: '1', name: 'General' }] : []);
-      if (activeSubjects.length > 0) setSelectedSubjectId(String(activeSubjects[0].id));
-    };
-
     fetchBase();
   }, []);
 
@@ -112,126 +61,246 @@ const SyllabusProgressReport = () => {
   }, [selectedSubjectId]);
 
   const fetchReportData = async () => {
-    if (!selectedClassId || !selectedSubjectId) return;
+    if (!selectedClassId || !selectedBookId) {
+      setBookTracker(null);
+      setLessonLogs([]);
+      return;
+    }
     try {
-      const [
-        resProg,
-        resLogs
-      ] = await Promise.all([
-        supabase.from('syllabus_node_progress').select('*').eq('class_id', selectedClassId),
-        supabase
-          .from('syllabus_tracker_logs')
-          .select(`id, date, teacher:teachers(name), syllabus_tracker_log_items (id, item_type, item_id, adhoc_name, status)`)
-          .eq('class_id', selectedClassId)
-          .eq('subject_id', selectedSubjectId)
-          .order('date', { ascending: false })
+      const [resBT, resLogs] = await Promise.all([
+        supabase.from('book_tracker').select('*').eq('class_id', selectedClassId).eq('book_id', selectedBookId).maybeSingle(),
+        supabase.from('lesson_tracker_log').select('*').eq('class_id', selectedClassId)
       ]);
-      if (resProg.error) throw resProg.error;
+
+      if (resBT.error) throw resBT.error;
       if (resLogs.error) throw resLogs.error;
 
-      setProgressList(resProg.data || []);
-      setHistoryLogs(resLogs.data || []);
+      setBookTracker(resBT.data || null);
+      setLessonLogs(resLogs.data || []);
     } catch (err) {
-      console.warn("DB report fetch failed, falling back to LocalStorage:", err.message);
-      
-      const localProgress = localStorage.getItem('jzv_syllabus_node_progress');
-      if (localProgress) {
-        try {
-          const parsed = JSON.parse(localProgress);
-          setProgressList(parsed.filter(p => String(p.class_id) === String(selectedClassId)));
-        } catch (e) {
-          setProgressList([]);
-        }
-      } else {
-        setProgressList([]);
-      }
-
-      const localLogs = localStorage.getItem('jzv_syllabus_tracker_logs');
-      if (localLogs) {
-        try {
-          const parsed = JSON.parse(localLogs);
-          
-          const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
-          let localTeachers = [];
-          if (rawTimetable) {
-            try { localTeachers = JSON.parse(rawTimetable).teachers || []; } catch (e) {}
-          }
-          const formattedLogs = parsed
-            .filter(log => 
-              String(log.class_id) === String(selectedClassId) && 
-              String(log.subject_id) === String(selectedSubjectId)
-            )
-            .map(log => {
-              const tName = localTeachers.find(t => String(t.id) === String(log.teacher_id))?.name || 'Local Teacher';
-              return {
-                ...log,
-                teacher: { name: tName }
-              };
-            });
-          setHistoryLogs(formattedLogs);
-        } catch (e) {
-          setHistoryLogs([]);
-        }
-      } else {
-        setHistoryLogs([]);
-      }
+      console.warn('Failed to fetch report progress data:', err.message);
+      setBookTracker(null);
+      setLessonLogs([]);
     }
   };
 
-  useEffect(() => { fetchReportData(); }, [selectedClassId, selectedSubjectId]);
+  const fetchLogItemsForLog = async (ltLogId) => {
+    try {
+      const { data, error } = await supabase
+        .from('lesson_tracker_log_items')
+        .select('*, teacher:teachers(name)')
+        .eq('lt_log_id', ltLogId)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      setLogItems(prev => ({ ...prev, [ltLogId]: data || [] }));
+    } catch (err) {
+      console.warn('Failed to fetch log items:', err.message);
+    }
+  };
 
-  const getNodeProgress = (id) => progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(id));
+  const toggleLogExpand = async (ltLogId) => {
+    const isExpanded = expandedLogs[ltLogId];
+    setExpandedLogs(prev => ({ ...prev, [ltLogId]: !isExpanded }));
+    if (!isExpanded && !logItems[ltLogId]) {
+      await fetchLogItemsForLog(ltLogId);
+    }
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (!window.confirm('Are you sure you want to delete this lesson log? This will delete all logged daily entries/items for this lesson.')) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('lesson_tracker_log').delete().eq('id', logId);
+      if (error) throw error;
+      showToast('Lesson log deleted successfully!', 'success');
+      await fetchReportData();
+    } catch (err) {
+      showToast('Failed to delete log: ' + err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteItem = async (itemId, ltLogId) => {
+    if (!window.confirm('Are you sure you want to delete this specific daily log entry?')) return;
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('lesson_tracker_log_items').delete().eq('id', itemId);
+      if (error) throw error;
+      showToast('Daily log entry deleted successfully!', 'success');
+      await fetchReportData();
+      await fetchLogItemsForLog(ltLogId);
+    } catch (err) {
+      showToast('Failed to delete log entry: ' + err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReportData();
+  }, [selectedClassId, selectedBookId]);
+
+  const getStatusBadge = (status) => {
+    if (status === 'completed') return <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">Completed</span>;
+    if (status === 'in_progress') return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">In Progress</span>;
+    return <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">Not Started</span>;
+  };
 
   const activeBook = filteredBooks.find(b => String(b.id) === String(selectedBookId));
   const bookData = syllabusData.filter(d => String(d.book_id) === String(selectedBookId));
 
+  const getBookLessons = () => {
+    return bookData.filter(n => {
+      if (n.level3) return true;
+      if (n.level2 && !n.level3) {
+        const hasL3 = bookData.some(o => o.level1 === n.level1 && (o.level2 || 'General') === n.level2 && o.level3);
+        return !hasL3;
+      }
+      if (n.level1 && !n.level2 && !n.level3) {
+        const hasL2orL3 = bookData.some(o => o.level1 === n.level1 && (o.level2 || o.level3));
+        return !hasL2orL3;
+      }
+      return false;
+    });
+  };
+
   const renderTree = () => {
     if (!activeBook) return <div className="p-8 text-center bg-white rounded-xl shadow-sm text-gray-500">No books found for this subject.</div>;
 
-    const completedNodes = bookData.filter(n => {
-      const status = getNodeProgress(n.id)?.status;
-      return status === 'completed' || status === '100%';
-    });
-    const totalNodes = bookData.length;
-    const pct = totalNodes === 0 ? 0 : Math.round((completedNodes.length / totalNodes) * 100);
+    const bookLessons = getBookLessons();
+    const total = bookTracker?.total_lessons || bookLessons.length;
+    const completed = bookTracker?.completed || 0;
+    const inProgress = bookTracker?.in_progress || 0;
+    const notStarted = bookTracker?.not_started || total;
+    const pct = bookTracker ? Number(bookTracker.completion_percentage).toFixed(0) : '0';
 
     return (
       <div className="space-y-6">
+        {/* Book Summary Card */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-light-border flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold">{activeBook.name}</h2>
-            <p className="text-sm text-gray-500">Overall Progress</p>
+            <h2 className="text-xl font-bold text-dark-primary">{activeBook.name}</h2>
+            <div className="flex gap-4 text-xs font-semibold text-gray-500 mt-2">
+              <span>Completed: <strong className="text-emerald-700">{completed}</strong></span>
+              <span>In Progress: <strong className="text-blue-700">{inProgress}</strong></span>
+              <span>Not Started: <strong className="text-gray-500">{notStarted}</strong></span>
+              <span>Total Lessons: <strong className="text-dark-primary">{total}</strong></span>
+            </div>
           </div>
           <div className="text-right">
             <span className="text-3xl font-black text-brand-primary">{pct}%</span>
-            <p className="text-xs font-bold text-gray-400">{completedNodes.length} / {totalNodes} Completed</p>
+            <p className="text-xs font-bold text-gray-400">Coverage Completed</p>
           </div>
         </div>
 
+        {/* Progress Bar */}
+        <div className="bg-white p-3 border rounded-xl shadow-sm">
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              className="h-2.5 rounded-full transition-all duration-500"
+              style={{
+                width: `${pct}%`,
+                backgroundColor: Number(pct) >= 70 ? '#10b981' : Number(pct) >= 30 ? '#f59e0b' : '#ef4444'
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Detailed Lessons */}
         <div className="bg-white rounded-2xl shadow-sm border border-light-border overflow-hidden">
-          <div className="p-4 border-b bg-gray-50"><h3 className="font-bold">Syllabus Details</h3></div>
+          <div className="p-4 border-b bg-gray-50"><h3 className="font-bold">Lessons Coverage Tracker</h3></div>
           <div className="p-4 space-y-3">
-            {bookData.map(node => {
-              const progress = getNodeProgress(node.id);
-              const status = progress?.status || 'not_started';
-              const title = [node.level1, node.level2, node.level3].filter(Boolean).join(' > ');
-              
-              let statusBadge = <span className="text-gray-500 bg-gray-100 px-2 py-1 rounded text-xs font-bold">Not Started</span>;
-              if (status === 'completed' || status === '100%') {
-                statusBadge = <span className="text-emerald-700 bg-emerald-100 px-2 py-1 rounded text-xs font-bold">Completed (100%)</span>;
-              } else if (status === 'in_progress') {
-                statusBadge = <span className="text-blue-700 bg-blue-100 px-2 py-1 rounded text-xs font-bold">In Progress</span>;
-              } else if (status && status !== 'not_started' && status !== '0%') {
-                statusBadge = <span className="text-blue-700 bg-blue-100 px-2 py-1 rounded text-xs font-bold">In Progress ({status})</span>;
-              }
+            {bookLessons.map(node => {
+              const log = lessonLogs.find(l => String(l.lesson_id) === String(node.id));
+              const status = log?.current_status || 'not_started';
+              const title = node.level3 || node.level2 || node.level1;
+              const isExpanded = log && expandedLogs[log.id];
 
               return (
-                <div key={node.id} className="flex justify-between items-center p-3 border rounded-xl hover:bg-gray-50">
-                  <div>
-                    <span className="font-semibold text-sm">{title}</span>
-                    {progress?.completed_at && <p className="text-xs text-emerald-600 mt-1">Completed on {new Date(progress.completed_at).toLocaleDateString()}</p>}
+                <div key={node.id} className="border rounded-xl p-3 hover:bg-gray-50/50 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-semibold text-sm text-dark-primary">{title}</span>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        {getStatusBadge(status)}
+                        {log && (
+                          <>
+                            <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
+                              {Number(log.completion_percentage).toFixed(0)}% Progress
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded">
+                              Days Logged: {log.days_taken}
+                            </span>
+                            {log.revision_counter > 0 && (
+                              <span className="text-[10px] text-purple-600 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                Revisions: {log.revision_counter}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {log && (
+                        <>
+                          <button
+                            onClick={() => toggleLogExpand(log.id)}
+                            className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <i className={`fas fa-${isExpanded ? 'eye-slash' : 'eye'} mr-1`}></i>
+                            {isExpanded ? 'Hide' : 'View'} Entries
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            disabled={submitting}
+                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold border border-red-100 transition-colors cursor-pointer"
+                            title="Delete log and items"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div>{statusBadge}</div>
+
+                  {/* Log Items entries detail */}
+                  {isExpanded && log && (
+                    <div className="mt-3 space-y-2 border-t pt-3 pl-4">
+                      <p className="text-[10px] font-extrabold text-dark-soft uppercase">Logged Daily Entries</p>
+                      {(logItems[log.id] || []).length === 0 ? (
+                        <p className="text-xs text-gray-400">Loading details...</p>
+                      ) : (
+                        (logItems[log.id] || []).map(item => (
+                          <div key={item.id} className="flex justify-between items-start p-2 bg-gray-50 rounded-lg border border-gray-100 text-xs">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-gray-700">{new Date(item.date).toLocaleDateString()}</span>
+                                {getStatusBadge(item.current_status)}
+                                <span className="text-gray-500 font-semibold">{Number(item.progress).toFixed(0)}%</span>
+                                {item.teacher?.name && <span className="text-gray-400 font-semibold">by {item.teacher.name}</span>}
+                                {item.is_revision === 'Y' && (
+                                  <span className="text-purple-600 font-bold bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[9px]">Revision</span>
+                                )}
+                                {item.late_reporting === 'Y' && (
+                                  <span className="text-red-600 font-bold bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[9px]">Late Reporting</span>
+                                )}
+                              </div>
+                              {item.comments && <p className="text-gray-500 mt-1">{item.comments}</p>}
+                            </div>
+                            <button
+                              onClick={() => handleDeleteItem(item.id, log.id)}
+                              disabled={submitting}
+                              className="text-red-500 hover:text-red-700 p-1"
+                              title="Delete daily entry"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -248,42 +317,23 @@ const SyllabusProgressReport = () => {
       <div className="mb-8">
         <h1 className="text-3xl font-black mb-6">Class Progress Report</h1>
         <div className="flex gap-4">
-          <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px]">
+          <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px] outline-none">
             {classes.map(c => <option key={c.id} value={c.id}>{c.name || c.class_name}</option>)}
           </select>
-          <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px]">
+          <select value={selectedSubjectId} onChange={(e) => setSelectedSubjectId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px] outline-none">
             {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <select value={selectedBookId} onChange={(e) => setSelectedBookId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px]">
+          <select value={selectedBookId} onChange={(e) => setSelectedBookId(e.target.value)} className="border p-2 rounded-xl bg-white min-w-[200px] outline-none">
             {filteredBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2">
-          {renderTree()}
-        </div>
-        <div className="col-span-1 space-y-6">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-light-border">
-            <h3 className="font-bold border-b pb-2 mb-4">Activity Logs</h3>
-            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
-              {historyLogs.length === 0 ? <p className="text-xs text-gray-500">No activity logged.</p> : historyLogs.map(log => (
-                <div key={log.id} className="border-l-2 border-brand-primary pl-3">
-                  <p className="text-xs font-bold text-gray-500 mb-1">{new Date(log.date).toLocaleDateString()} - {log.teacher?.name || 'Teacher'}</p>
-                  {log.syllabus_tracker_log_items.map(item => (
-                    <div key={item.id} className="text-sm bg-gray-50 p-2 rounded mb-1">
-                      {item.item_type === 'adhoc' ? item.adhoc_name : syllabusData.find(d => String(d.id) === String(item.item_id))?.level3 || 'Unknown Node'}
-                      <span className="ml-2 font-bold text-[10px] text-brand-primary">[{item.status}]</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="max-w-5xl">
+        {renderTree()}
       </div>
     </div>
   );
 };
+
 export default SyllabusProgressReport;

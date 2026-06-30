@@ -1,88 +1,61 @@
 // src/components/portals/teacher/SyllabusTracker.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 
 const SyllabusTracker = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [teacher, setTeacher] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_timetable_local_data');
-      if (raw && user?.id) {
-        const parsed = JSON.parse(raw);
-        return (parsed.teachers || []).find(t => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id)) || null;
-      }
-    } catch (e) {}
-    return null;
-  });
+  const [teacher, setTeacher] = useState(null);
 
-  const [classes, setClasses] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_timetable_local_data');
-      return raw ? (JSON.parse(raw).classes || []) : [];
-    } catch(e) { return []; }
-  });
+  const [classes, setClasses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [syllabusData, setSyllabusData] = useState([]);
+  const [classifications, setClassifications] = useState([]);
 
-  const [subjects, setSubjects] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_syllabus_data');
-      return raw ? (JSON.parse(raw).subjects || []) : [];
-    } catch(e) { return []; }
-  });
-
-  const [assignments, setAssignments] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_timetable_local_data');
-      if (raw && user?.id) {
-        const parsed = JSON.parse(raw);
-        const matchedTeacher = (parsed.teachers || []).find(t => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id));
-        if (matchedTeacher) {
-          return (parsed.assignments || []).filter(a => String(a.teacher_id) === String(matchedTeacher.id));
-        }
-      }
-    } catch(e) {}
-    return [];
-  });
-
-  const [books, setBooks] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_syllabus_data');
-      return raw ? (JSON.parse(raw).books || []) : [];
-    } catch(e) { return []; }
-  });
-
-  const [syllabusData, setSyllabusData] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_syllabus_data');
-      return raw ? (JSON.parse(raw).syllabusData || []) : [];
-    } catch(e) { return []; }
-  });
-
-  const [selectedClassId, setSelectedClassId] = useState(() => {
-    try {
-      const raw = localStorage.getItem('jzv_timetable_local_data');
-      if (raw && user?.id) {
-        const parsed = JSON.parse(raw);
-        const matchedTeacher = (parsed.teachers || []).find(t => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id));
-        if (matchedTeacher) {
-          const ass = (parsed.assignments || []).filter(a => String(a.teacher_id) === String(matchedTeacher.id));
-          if (ass.length > 0) return String(ass[0].class_id);
-        }
-      }
-    } catch(e) {}
-    return '';
-  });
-
+  // Filter selections (persisted per teacher)
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedClassificationId, setSelectedClassificationId] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedBookId, setSelectedBookId] = useState('');
-  
-  // Custom addition states for classifications, favorites and add levels modal
-  const [classifications, setClassifications] = useState([]);
-  const [selectedClassificationId, setSelectedClassificationId] = useState('');
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // New data model state
+  const [lessonLogs, setLessonLogs] = useState([]); // lesson_tracker_log entries
+  const [logItems, setLogItems] = useState({}); // { [lt_log_id]: [...items] }
+  const [bookTrackers, setBookTrackers] = useState([]); // book_tracker entries
+  const [expandedLogItems, setExpandedLogItems] = useState({}); // { [lt_log_id]: true/false }
+
+  // Favorites & Recently Updated
   const [favorites, setFavorites] = useState([]);
+  const [recentBooks, setRecentBooks] = useState([]);
+
+  // UI state
+  const [coverMode, setCoverMode] = useState(false);
+  const [activeTab, setActiveTab] = useState('curriculum');
+  const [expandedLvl1, setExpandedLvl1] = useState({});
+  const [expandedLvl2, setExpandedLvl2] = useState({});
+  const [selectedNodes, setSelectedNodes] = useState([]);
+
+  // Bulk log entry modal
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState('in_progress');
+  const [bulkProgress, setBulkProgress] = useState(50);
+  const [bulkComments, setBulkComments] = useState('');
+
+  // Single log entry modal
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [logModalLessonId, setLogModalLessonId] = useState(null);
+  const [logModalStatus, setLogModalStatus] = useState('in_progress');
+  const [logModalProgress, setLogModalProgress] = useState(50);
+  const [logModalComments, setLogModalComments] = useState('');
+  const [logModalIsRevision, setLogModalIsRevision] = useState(false);
+
+  // Add syllabus item modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [addType, setAddType] = useState('level3'); // 'level1' | 'level2' | 'level3'
+  const [addType, setAddType] = useState('level3');
   const [addLevel1Name, setAddLevel1Name] = useState('');
   const [addLevel2Name, setAddLevel2Name] = useState('');
   const [addLevel3Name, setAddLevel3Name] = useState('');
@@ -91,37 +64,82 @@ const SyllabusTracker = ({ user }) => {
   const [selectedAddLevel1, setSelectedAddLevel1] = useState('');
   const [selectedAddLevel2, setSelectedAddLevel2] = useState('');
 
-  const [progressList, setProgressList] = useState([]);
-  
-  const getStatusVal = (status) => {
-    if (!status || status === '0%' || status === 'not_started') return 0;
-    if (status === '100%' || status === 'completed') return 100;
-    return parseInt(status, 10) || 0;
-  };
-  const [activeTab, setActiveTab] = useState('curriculum');
-  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  // ─── Persistence Helpers ──────────────────────────────────────────────────
 
-  const [historyLogs, setHistoryLogs] = useState([]);
-  const [adhocName, setAdhocName] = useState('');
-  const [coverMode, setCoverMode] = useState(false);
+  const getFilterKey = useCallback(() => {
+    return teacher?.id ? `jzv_syllabus_filters_${teacher.id}` : 'jzv_syllabus_filters';
+  }, [teacher]);
 
-  // Accordion and Multi-Select states
-  const [expandedLvl1, setExpandedLvl1] = useState({});
-  const [expandedLvl2, setExpandedLvl2] = useState({});
-  const [selectedNodes, setSelectedNodes] = useState([]);
+  const getFavoritesKey = useCallback(() => {
+    return teacher?.id ? `jzv_syllabus_favorites_${teacher.id}` : 'jzv_syllabus_favorites';
+  }, [teacher]);
+
+  const getRecentKey = useCallback(() => {
+    return teacher?.id ? `jzv_syllabus_recent_${teacher.id}` : 'jzv_syllabus_recent';
+  }, [teacher]);
+
+  const persistFilters = useCallback((classId, classificationId, subjectId, bookId) => {
+    try {
+      localStorage.setItem(getFilterKey(), JSON.stringify({
+        classId, classificationId, subjectId, bookId
+      }));
+    } catch (e) { /* ignore */ }
+  }, [getFilterKey]);
+
+  const restoreFilters = useCallback(() => {
+    try {
+      const raw = localStorage.getItem(getFilterKey());
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }, [getFilterKey]);
+
+  const updateRecentBooks = useCallback((classId, subjectId, bookId) => {
+    try {
+      const key = getRecentKey();
+      const raw = localStorage.getItem(key);
+      let recent = raw ? JSON.parse(raw) : [];
+
+      const cName = classes.find(c => String(c.id) === String(classId))?.name || 'Class';
+      const sName = subjects.find(s => String(s.id) === String(subjectId))?.name || 'Subject';
+      const bName = books.find(b => String(b.id) === String(bookId))?.name || 'Book';
+
+      // Remove existing entry for same combo
+      recent = recent.filter(r =>
+        !(String(r.classId) === String(classId) &&
+          String(r.subjectId) === String(subjectId) &&
+          String(r.bookId) === String(bookId))
+      );
+
+      // Add to front
+      recent.unshift({
+        classId, subjectId, bookId,
+        className: cName, subjectName: sName, bookName: bName,
+        lastUpdated: new Date().toISOString()
+      });
+
+      // Keep last 10 (as requested: "10")
+      recent = recent.slice(0, 10);
+      localStorage.setItem(key, JSON.stringify(recent));
+      setRecentBooks(recent);
+    } catch (e) { /* ignore */ }
+  }, [getRecentKey, classes, subjects, books]);
+
+  // ─── Data Loading ──────────────────────────────────────────────────
 
   useEffect(() => {
     const initData = async () => {
       setLoading(true);
       try {
         if (!user || !user.id) throw new Error('User session not found.');
-        const { data: teacherData, error: teachErr } = await supabase.from('teachers').select('*').eq('auth_id', user.id).maybeSingle();
+        const { data: teacherData, error: teachErr } = await supabase
+          .from('teachers').select('*').eq('auth_id', user.id).maybeSingle();
         if (teachErr) throw teachErr;
         if (!teacherData) throw new Error('User not mapped to Teacher record.');
         setTeacher(teacherData);
 
         const [
-          { data: dbClasses }, { data: dbSubjects }, { data: dbAssignments }, { data: dbBooks }, { data: dbSyllabusData }, { data: dbClassifications }
+          { data: dbClasses }, { data: dbSubjects }, { data: dbAssignments },
+          { data: dbBooks }, { data: dbSyllabusData }, { data: dbClassifications }
         ] = await Promise.all([
           supabase.from('classes').select('*'),
           supabase.from('subjects').select('*'),
@@ -130,120 +148,118 @@ const SyllabusTracker = ({ user }) => {
           supabase.from('syllabus_book_lessons').select('*'),
           supabase.from('classifications').select('*')
         ]);
- 
+
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
         setAssignments(dbAssignments || []);
         setClassifications(dbClassifications || []);
- 
-        if (dbBooks && dbBooks.length > 0) {
-          setBooks(dbBooks);
-          setSyllabusData(dbSyllabusData || []);
-        } else {
-          const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
-          if (rawSyllabus) {
-            try {
-              const parsed = JSON.parse(rawSyllabus);
-              setBooks(parsed.books || []);
-              setSyllabusData(parsed.syllabusData || []);
-            } catch (e) {
-              setBooks([]);
-              setSyllabusData([]);
-            }
-          } else {
-            setBooks([]);
-            setSyllabusData([]);
-          }
-        }
- 
+        setBooks(dbBooks || []);
+        setSyllabusData(dbSyllabusData || []);
+
+        // Restore persisted filters or auto-select
+        const savedFilters = restoreFilters();
         const assignedClassIds = (dbAssignments || []).map(a => String(a.class_id));
         const filteredClasses = (dbClasses || []).filter(c => assignedClassIds.includes(String(c.id)));
-        if (filteredClasses.length > 0 && !selectedClassId) setSelectedClassId(String(filteredClasses[0].id));
+
+        if (savedFilters?.classId && (dbClasses || []).some(c => String(c.id) === String(savedFilters.classId))) {
+          setSelectedClassId(savedFilters.classId);
+          setSelectedClassificationId(savedFilters.classificationId || '');
+          setSelectedSubjectId(savedFilters.subjectId || '');
+          setSelectedBookId(savedFilters.bookId || '');
+        } else if (filteredClasses.length > 0) {
+          setSelectedClassId(String(filteredClasses[0].id));
+        }
+
+        // Load favorites
+        try {
+          const favKey = teacherData.id ? `jzv_syllabus_favorites_${teacherData.id}` : 'jzv_syllabus_favorites';
+          const stored = localStorage.getItem(favKey);
+          setFavorites(stored ? JSON.parse(stored) : []);
+        } catch (e) { setFavorites([]); }
+
+        // Load recent books
+        try {
+          const recKey = teacherData.id ? `jzv_syllabus_recent_${teacherData.id}` : 'jzv_syllabus_recent';
+          const stored = localStorage.getItem(recKey);
+          setRecentBooks(stored ? JSON.parse(stored) : []);
+        } catch (e) { setRecentBooks([]); }
+
       } catch (err) {
-        console.warn('SyllabusTracker DB init failed, using LocalStorage fallback:', err.message);
-        loadLocalTrackerData();
+        console.warn('SyllabusTracker init failed:', err.message);
+        loadLocalFallback();
       } finally {
         setLoading(false);
       }
     };
- 
-    const loadLocalTrackerData = () => {
+
+    const loadLocalFallback = () => {
       const rawSyllabus = localStorage.getItem('jzv_syllabus_data');
-      let localBooks = [];
-      let localSyllabusData = [];
-      let localSubjects = [];
       if (rawSyllabus) {
         try {
           const parsed = JSON.parse(rawSyllabus);
-          localBooks = parsed.books || [];
-          localSyllabusData = parsed.syllabusData || [];
-          localSubjects = parsed.subjects || [];
+          setBooks(parsed.books || []);
+          setSyllabusData(parsed.syllabusData || []);
+          setSubjects(parsed.subjects || []);
         } catch (e) {}
       }
- 
       const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
-      let localClasses = [];
-      let localClassifications = [];
-      let localAssignments = [];
-      let matchedTeacher = null;
- 
       if (rawTimetable) {
         try {
-          const parsedTimetable = JSON.parse(rawTimetable);
-          localClasses = parsedTimetable.classes || [];
-          localClassifications = parsedTimetable.classifications || [];
- 
-          matchedTeacher = (parsedTimetable.teachers || []).find(
-            (t) => String(t.auth_id) === String(user?.id) || String(t.id) === String(user?.id)
+          const parsed = JSON.parse(rawTimetable);
+          setClasses(parsed.classes || []);
+          setClassifications(parsed.classifications || []);
+          const matchedTeacher = (parsed.teachers || []).find(
+            t => String(t.auth_id) === String(user?.id) || String(t.id) === String(user?.id)
           );
           if (matchedTeacher) {
             setTeacher(matchedTeacher);
-            localAssignments = (parsedTimetable.assignments || []).filter(
-              (a) => String(a.teacher_id) === String(matchedTeacher.id)
+            const localAssignments = (parsed.assignments || []).filter(
+              a => String(a.teacher_id) === String(matchedTeacher.id)
             );
+            setAssignments(localAssignments);
+            const assignedClassIds = localAssignments.map(a => String(a.class_id));
+            const filteredClasses = (parsed.classes || []).filter(c => assignedClassIds.includes(String(c.id)));
+            if (filteredClasses.length > 0) setSelectedClassId(String(filteredClasses[0].id));
           }
         } catch (e) {}
-      }
- 
-      setClasses(localClasses);
-      setClassifications(localClassifications);
-      setSubjects(localSubjects.length > 0 ? localSubjects : (localClasses.length > 0 ? [{ id: '1', name: 'General' }] : []));
-      setAssignments(localAssignments);
-      setBooks(localBooks);
-      setSyllabusData(localSyllabusData);
- 
-      const assignedClassIds = localAssignments.map((a) => String(a.class_id));
-      const filteredClasses = localClasses.filter((c) => assignedClassIds.includes(String(c.id)));
-      if (filteredClasses.length > 0 && !selectedClassId) {
-        setSelectedClassId(String(filteredClasses[0].id));
-      } else if (localClasses.length > 0 && !selectedClassId) {
-        setSelectedClassId(String(localClasses[0].id));
       }
     };
 
     initData();
   }, [user]);
 
-  // Handle active lists dynamically depending on coverMode
+  // ─── Persist filters on change ──────────────────────────────────────
+
+  useEffect(() => {
+    if (teacher && selectedClassId) {
+      persistFilters(selectedClassId, selectedClassificationId, selectedSubjectId, selectedBookId);
+    }
+  }, [selectedClassId, selectedClassificationId, selectedSubjectId, selectedBookId, teacher, persistFilters]);
+
+  // ─── Dynamic filter lists ──────────────────────────────────────────
+
   const activeClasses = coverMode
     ? classes
     : classes.filter(c => assignments.some(a => String(a.class_id) === String(c.id)));
 
   const filteredSubjects = coverMode
     ? subjects
-    : subjects.filter(s => assignments.some(a => String(a.class_id) === String(selectedClassId) && String(a.subject_id) === String(s.id)));
+    : subjects.filter(s => assignments.some(a =>
+        String(a.class_id) === String(selectedClassId) && String(a.subject_id) === String(s.id)
+      ));
 
-  // Active classifications based on class assignments / filtered subjects
-  const activeClassifications = classifications.filter(c => 
+  const activeClassifications = classifications.filter(c =>
     filteredSubjects.some(s => String(s.classification_id) === String(c.id))
   );
 
-  // Filter subjects based on classification selection
   const activeSubjects = selectedClassificationId
     ? filteredSubjects.filter(s => String(s.classification_id) === String(selectedClassificationId))
     : filteredSubjects;
 
-  // Auto-selections
+  const filteredBooks = books.filter(b => String(b.subject_id) === String(selectedSubjectId));
+
+  // ─── Auto-selection cascades ──────────────────────────────────────
+
   useEffect(() => {
     if (activeClasses.length > 0) {
       if (!activeClasses.some(c => String(c.id) === String(selectedClassId))) {
@@ -254,18 +270,6 @@ const SyllabusTracker = ({ user }) => {
     }
   }, [coverMode, classes, assignments]);
 
-  // Load favorites for this teacher when teacher state resolves
-  useEffect(() => {
-    const key = teacher?.id ? `jzv_syllabus_favorites_${teacher.id}` : 'jzv_syllabus_favorites';
-    try {
-      const stored = localStorage.getItem(key);
-      setFavorites(stored ? JSON.parse(stored) : []);
-    } catch (e) {
-      setFavorites([]);
-    }
-  }, [teacher]);
-
-  // Reset classification selection if it is no longer valid for the selected class/subjects
   useEffect(() => {
     if (selectedClassificationId && !filteredSubjects.some(s => String(s.classification_id) === String(selectedClassificationId))) {
       setSelectedClassificationId('');
@@ -282,891 +286,243 @@ const SyllabusTracker = ({ user }) => {
     }
   }, [selectedClassId, coverMode, selectedClassificationId, assignments, subjects, activeSubjects]);
 
-  const filteredBooks = books.filter(b => String(b.subject_id) === String(selectedSubjectId));
-
   useEffect(() => {
     if (filteredBooks.length > 0) {
-      setSelectedBookId(String(filteredBooks[0].id));
+      if (!filteredBooks.some(b => String(b.id) === String(selectedBookId))) {
+        setSelectedBookId(String(filteredBooks[0].id));
+      }
     } else {
       setSelectedBookId('');
     }
-    // Clear check selections when switching books
     setSelectedNodes([]);
   }, [selectedSubjectId, books]);
 
-  const fetchProgress = async () => {
+  // ─── Fetch lesson logs & book tracker ──────────────────────────────
+
+  const fetchLessonLogs = async () => {
     if (!selectedClassId) return;
     try {
-      const { data, error } = await supabase.from('syllabus_node_progress').select('*').eq('class_id', selectedClassId);
+      const { data, error } = await supabase
+        .from('lesson_tracker_log')
+        .select('*')
+        .eq('class_id', selectedClassId);
       if (error) throw error;
-      setProgressList(data || []);
+      setLessonLogs(data || []);
     } catch (err) {
-      console.warn("DB syllabus_node_progress fetch failed, using LocalStorage fallback:", err.message);
-      const localProgress = localStorage.getItem('jzv_syllabus_node_progress');
-      if (localProgress) {
-        try {
-          const parsed = JSON.parse(localProgress);
-          setProgressList(parsed.filter(p => String(p.class_id) === String(selectedClassId)));
-        } catch (e) {
-          setProgressList([]);
-        }
-      } else {
-        setProgressList([]);
-      }
+      console.warn('Failed to fetch lesson logs:', err.message);
+      setLessonLogs([]);
     }
   };
 
-  const fetchHistory = async () => {
-    if (!selectedClassId || !selectedSubjectId) return;
+  const fetchBookTrackers = async () => {
+    if (!selectedClassId) return;
     try {
       const { data, error } = await supabase
-        .from('syllabus_tracker_logs')
-        .select(`id, date, syllabus_tracker_log_items (id, item_type, item_id, adhoc_name, status)`)
-        .eq('class_id', selectedClassId)
-        .eq('subject_id', selectedSubjectId)
+        .from('book_tracker')
+        .select('*')
+        .eq('class_id', selectedClassId);
+      if (error) throw error;
+      setBookTrackers(data || []);
+    } catch (err) {
+      console.warn('Failed to fetch book trackers:', err.message);
+      setBookTrackers([]);
+    }
+  };
+
+  const fetchLogItemsForLog = async (ltLogId) => {
+    try {
+      const { data, error } = await supabase
+        .from('lesson_tracker_log_items')
+        .select('*, teacher:teachers(name)')
+        .eq('lt_log_id', ltLogId)
         .order('date', { ascending: false });
       if (error) throw error;
-      setHistoryLogs(data || []);
+      setLogItems(prev => ({ ...prev, [ltLogId]: data || [] }));
     } catch (err) {
-      console.warn("DB syllabus_tracker_logs fetch failed, using LocalStorage fallback:", err.message);
-      const localLogs = localStorage.getItem('jzv_syllabus_tracker_logs');
-      if (localLogs) {
-        try {
-          const parsed = JSON.parse(localLogs);
-          setHistoryLogs(parsed.filter(log => 
-            String(log.class_id) === String(selectedClassId) && 
-            String(log.subject_id) === String(selectedSubjectId)
-          ));
-        } catch (e) {
-          setHistoryLogs([]);
-        }
-      } else {
-        setHistoryLogs([]);
-      }
+      console.warn('Failed to fetch log items:', err.message);
     }
   };
 
   useEffect(() => {
-    if (selectedClassId) fetchProgress();
-    if (selectedClassId && selectedSubjectId) fetchHistory();
-  }, [selectedClassId, selectedSubjectId]);
-
-  const getNodeProgress = (id) => progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(id));
-
-  // Distinct dates worked calculation logic (roll-up core)
-  const getNodeDates = (nodeId) => {
-    const dates = [];
-    historyLogs.forEach(log => {
-      if (log.syllabus_tracker_log_items.some(item => String(item.item_id) === String(nodeId) && item.item_type === 'node')) {
-        dates.push(log.date);
-      }
-    });
-    return [...new Set(dates)];
-  };
-
-  const getNodeDays = (nodeId) => getNodeDates(nodeId).length;
-
-  const getLevel2Days = (level1Name, level2Name) => {
-    const lvl2Nodes = bookData.filter(n => n.level1 === level1Name && (n.level2 || 'General') === level2Name);
-    return lvl2Nodes.reduce((sum, node) => sum + getNodeDays(node.id), 0);
-  };
-
-  const getLevel1Days = (level1Name) => {
-    const level1Nodes = bookData.filter(n => n.level1 === level1Name);
-    const level2Names = [...new Set(level1Nodes.map(n => n.level2 || 'General'))];
-    return level2Names.reduce((sum, lvl2Name) => sum + getLevel2Days(level1Name, lvl2Name), 0);
-  };
-
-  const getBookDays = () => {
-    const level1Names = [...new Set(bookData.map(n => n.level1))].filter(Boolean);
-    return level1Names.reduce((sum, lvl1Name) => sum + getLevel1Days(lvl1Name), 0);
-  };
-
-  const getChildNodeIds = (parentType, parentItemId) => {
-    let nodesToUpdate = [];
-    if (parentType === 'book') {
-      nodesToUpdate = bookData;
-    } else if (parentType === 'level1') {
-      const matchNode = bookData.find(n => String(n.id) === String(parentItemId));
-      if (matchNode) {
-        nodesToUpdate = bookData.filter(n => n.level1 === matchNode.level1);
-      }
-    } else if (parentType === 'level2') {
-      const matchNode = bookData.find(n => String(n.id) === String(parentItemId));
-      if (matchNode) {
-        nodesToUpdate = bookData.filter(n => n.level1 === matchNode.level1 && (n.level2 || 'General') === (matchNode.level2 || 'General'));
-      }
+    if (selectedClassId) {
+      fetchLessonLogs();
+      fetchBookTrackers();
     }
-    return nodesToUpdate;
-  };
+  }, [selectedClassId]);
 
-  const cascadeCompletion = async (parentType, parentItemId) => {
-    const children = getChildNodeIds(parentType, parentItemId);
-    if (children.length === 0) return;
+  // ─── Helpers ──────────────────────────────────────────────────────
 
-    const updates = children.map(async (child) => {
-      const existing = progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(child.id));
-      if (!existing) {
-        await supabase.from('syllabus_node_progress').insert([{
-          class_id: selectedClassId,
-          item_type: 'node',
-          item_id: child.id,
-          status: '100%',
-          revision_count: 0,
-          first_worked_at: logDate,
-          completed_at: logDate
-        }]);
-      } else {
-        await supabase.from('syllabus_node_progress').update({
-          status: '100%',
-          completed_at: logDate,
-          updated_at: new Date().toISOString()
-        }).eq('id', existing.id);
-      }
-    });
+  const getLessonLog = (lessonId) =>
+    lessonLogs.find(l => String(l.lesson_id) === String(lessonId));
 
-    await Promise.all(updates);
-  };
+  const getBookTracker = (bookId) =>
+    bookTrackers.find(bt => String(bt.book_id) === String(bookId));
 
-  const cascadeCompletionLocal = (parentType, parentItemId, localProgress) => {
-    const children = getChildNodeIds(parentType, parentItemId);
-    children.forEach(child => {
-      const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === 'node' && String(p.item_id) === String(child.id));
-      if (existingIdx > -1) {
-        localProgress[existingIdx] = {
-          ...localProgress[existingIdx],
-          status: '100%',
-          completed_at: logDate,
-          updated_at: new Date().toISOString()
-        };
-      } else {
-        localProgress.push({
-          id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-          class_id: selectedClassId,
-          item_type: 'node',
-          item_id: child.id,
-          status: '100%',
-          revision_count: 0,
-          first_worked_at: logDate,
-          completed_at: logDate
-        });
-      }
-    });
-  };
+  const activeBook = filteredBooks.find(b => String(b.id) === String(selectedBookId));
+  const bookData = syllabusData.filter(d => String(d.book_id) === String(selectedBookId));
+  const rawLevels = (activeBook?.hierarchy_type || 'Unit, Chapter, Lesson')
+    .split(/[,>]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  
+  const bookLevels = (rawLevels[0] && rawLevels[0].toLowerCase().includes('book') && rawLevels.length > 1)
+    ? rawLevels.slice(1)
+    : rawLevels;
 
-  const handleStatusUpdate = async (nodeId, newStatus) => {
-    const existing = getNodeProgress(nodeId);
-    const oldStatus = existing?.status || '0%';
-    let reductionReason = null;
+  const lvl1Label = bookLevels[0] || 'Unit';
+  const lvl2Label = bookLevels[1] || 'Chapter';
+  const lvl3Label = bookLevels[2] || 'Lesson';
 
-    if (getStatusVal(newStatus) < getStatusVal(oldStatus)) {
-      const reason = window.prompt(
-        `You are reducing the progress from ${oldStatus} to ${newStatus}.\nPlease specify a reason for this change:`
-      );
-      if (reason === null) {
-        return; // Cancelled
-      }
-      if (!reason.trim()) {
-        showToast('Reason is required to reduce progress. Action cancelled.', 'warning');
-        return;
-      }
-      reductionReason = reason.trim();
-    }
-
-    setSubmitting(true);
-    try {
-      let progressId = existing?.id;
-      const isCompleted = newStatus === '100%' || newStatus === 'completed';
-
-      try {
-        if (!existing) {
-          const { data, error } = await supabase.from('syllabus_node_progress').insert([{
-            class_id: selectedClassId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            revision_count: 0,
-            first_worked_at: logDate,
-            completed_at: isCompleted ? logDate : null
-          }]).select();
-          if (error) throw error;
-          progressId = data[0].id;
-        } else {
-          const { error } = await supabase.from('syllabus_node_progress').update({
-            status: newStatus,
-            completed_at: isCompleted ? logDate : null,
-            updated_at: new Date().toISOString()
-          }).eq('id', existing.id);
-          if (error) throw error;
-        }
-
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-
-        await supabase.from('syllabus_tracker_log_items').insert([{
-          log_id: logData[0].id,
-          item_type: 'node',
-          item_id: nodeId,
-          status: newStatus,
-          adhoc_name: reductionReason ? `Reason: ${reductionReason}` : null
-        }]);
-
-        showToast('Progress logged!', 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-        
-        // Save progress locally
-        const localProgressRaw = localStorage.getItem('jzv_syllabus_node_progress') || '[]';
-        let localProgress = [];
-        try { localProgress = JSON.parse(localProgressRaw); } catch (e) {}
-
-        const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === 'node' && String(p.item_id) === String(nodeId));
-        if (existingIdx > -1) {
-          localProgress[existingIdx] = {
-            ...localProgress[existingIdx],
-            status: newStatus,
-            completed_at: isCompleted ? logDate : null,
-            updated_at: new Date().toISOString()
-          };
-        } else {
-          localProgress.push({
-            id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-            class_id: selectedClassId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            revision_count: 0,
-            first_worked_at: logDate,
-            completed_at: isCompleted ? logDate : null
-          });
-        }
-        localStorage.setItem('jzv_syllabus_node_progress', JSON.stringify(localProgress));
-
-        // Save log locally
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
-
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: [{
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            adhoc_name: reductionReason ? `Reason: ${reductionReason}` : null
-          }]
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast('Progress logged locally!', 'success');
-      }
-
-      fetchProgress();
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleStatusUpdateParent = async (itemType, itemId, newStatus, displayName) => {
-    const existing = progressList.find(p => p.item_type === itemType && String(p.item_id) === String(itemId));
-    const oldStatus = existing?.status || '0%';
-    let reductionReason = null;
-
-    if (getStatusVal(newStatus) < getStatusVal(oldStatus)) {
-      const reason = window.prompt(
-        `You are reducing the progress of ${displayName} from ${oldStatus} to ${newStatus}.\nPlease specify a reason for this change:`
-      );
-      if (reason === null) {
-        return; // Cancelled
-      }
-      if (!reason.trim()) {
-        showToast('Reason is required to reduce progress. Action cancelled.', 'warning');
-        return;
-      }
-      reductionReason = reason.trim();
-    }
-
-    setSubmitting(true);
-    try {
-      let progressId = existing?.id;
-      const isCompleted = newStatus === '100%' || newStatus === 'completed';
-
-      try {
-        if (!existing) {
-          const { data, error } = await supabase.from('syllabus_node_progress').insert([{
-            class_id: selectedClassId,
-            item_type: itemType,
-            item_id: itemId,
-            status: newStatus,
-            revision_count: 0,
-            first_worked_at: logDate,
-            completed_at: isCompleted ? logDate : null
-          }]).select();
-          if (error) throw error;
-          progressId = data[0].id;
-        } else {
-          const { error } = await supabase.from('syllabus_node_progress').update({
-            status: newStatus,
-            completed_at: isCompleted ? logDate : null,
-            updated_at: new Date().toISOString()
-          }).eq('id', existing.id);
-          if (error) throw error;
-        }
-
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-
-        const logDisplayName = reductionReason ? `${displayName} (Reason: ${reductionReason})` : displayName;
-
-        await supabase.from('syllabus_tracker_log_items').insert([{
-          log_id: logData[0].id, item_type: itemType, item_id: itemId, status: newStatus, adhoc_name: logDisplayName
-        }]);
-
-        if (isCompleted) {
-          await cascadeCompletion(itemType, itemId);
-        }
-
-        showToast(`${displayName} status updated!`, 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-
-        // Save progress locally
-        const localProgressRaw = localStorage.getItem('jzv_syllabus_node_progress') || '[]';
-        let localProgress = [];
-        try { localProgress = JSON.parse(localProgressRaw); } catch (e) {}
-
-        const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === itemType && String(p.item_id) === String(itemId));
-        if (existingIdx > -1) {
-          localProgress[existingIdx] = {
-            ...localProgress[existingIdx],
-            status: newStatus,
-            completed_at: isCompleted ? logDate : null,
-            updated_at: new Date().toISOString()
-          };
-        } else {
-          localProgress.push({
-            id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-            class_id: selectedClassId,
-            item_type: 'node',
-            item_id: itemId,
-            status: newStatus,
-            revision_count: 0,
-            first_worked_at: logDate,
-            completed_at: isCompleted ? logDate : null
-          });
-        }
-
-        if (isCompleted) {
-          cascadeCompletionLocal(itemType, itemId, localProgress);
-        }
-
-        localStorage.setItem('jzv_syllabus_node_progress', JSON.stringify(localProgress));
-
-        // Save log locally
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
-
-        const logDisplayName = reductionReason ? `${displayName} (Reason: ${reductionReason})` : displayName;
-
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: [{
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: 'item',
-            item_id: itemId,
-            status: newStatus,
-            adhoc_name: logDisplayName
-          }]
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast(`${displayName} status updated locally!`, 'success');
-      }
-
-      fetchProgress();
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleIncrementRevision = async (itemType, itemId, displayName = '') => {
-    setSubmitting(true);
-    try {
-      const existing = progressList.find(p => p.item_type === itemType && String(p.item_id) === String(itemId));
-      const currentCount = existing?.revision_count || 0;
-      const nextCount = currentCount + 1;
-
-      try {
-        if (!existing) {
-          const { error } = await supabase.from('syllabus_node_progress').insert([{
-            class_id: selectedClassId,
-            item_type: itemType,
-            item_id: itemId,
-            status: '100%',
-            revision_count: 1,
-            first_worked_at: logDate,
-            completed_at: logDate
-          }]);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from('syllabus_node_progress').update({
-            revision_count: nextCount,
-            updated_at: new Date().toISOString()
-          }).eq('id', existing.id);
-          if (error) throw error;
-        }
-
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-
-        await supabase.from('syllabus_tracker_log_items').insert([{
-          log_id: logData[0].id,
-          item_type: itemType,
-          item_id: itemId,
-          status: `revision-${nextCount}`,
-          adhoc_name: displayName || `${itemType} revision`
-        }]);
-
-        showToast(`${displayName || itemType} revision logged (#${nextCount})!`, 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-
-        // Save progress locally
-        const localProgressRaw = localStorage.getItem('jzv_syllabus_node_progress') || '[]';
-        let localProgress = [];
-        try { localProgress = JSON.parse(localProgressRaw); } catch (e) {}
-
-        const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === itemType && String(p.item_id) === String(itemId));
-        if (existingIdx > -1) {
-          localProgress[existingIdx] = {
-            ...localProgress[existingIdx],
-            revision_count: nextCount,
-            updated_at: new Date().toISOString()
-          };
-        } else {
-          localProgress.push({
-            id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-            class_id: selectedClassId,
-            item_type: itemType,
-            item_id: itemId,
-            status: '100%',
-            revision_count: 1,
-            first_worked_at: logDate,
-            completed_at: logDate
-          });
-        }
-        localStorage.setItem('jzv_syllabus_node_progress', JSON.stringify(localProgress));
-
-        // Save log locally
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
-
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: [{
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: itemType,
-            item_id: itemId,
-            status: `revision-${nextCount}`,
-            adhoc_name: displayName || `${itemType} revision`
-          }]
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast(`${displayName || itemType} revision logged locally (#${nextCount})!`, 'success');
-      }
-
-      fetchProgress();
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Bulk Updates Handlers
-  const handleBulkStatusUpdate = async (newStatus) => {
-    if (selectedNodes.length === 0) return;
-
-    // Check if any node will have its progress reduced
-    const reducedNodes = selectedNodes.filter(nodeId => {
-      const oldStatus = getNodeProgress(nodeId)?.status || '0%';
-      return getStatusVal(newStatus) < getStatusVal(oldStatus);
-    });
-
-    let reductionReason = null;
-    if (reducedNodes.length > 0) {
-      const reason = window.prompt(
-        `You are reducing progress on ${reducedNodes.length} topic(s).\nPlease specify a reason for this change:`
-      );
-      if (reason === null) {
-        return; // Cancelled
-      }
-      if (!reason.trim()) {
-        showToast('Reason is required to reduce progress. Action cancelled.', 'warning');
-        return;
-      }
-      reductionReason = reason.trim();
-    }
-
-    setSubmitting(true);
-    try {
-      const isCompleted = newStatus === '100%' || newStatus === 'completed';
-      
-      const updates = selectedNodes.map(async (nodeId) => {
-        const existing = getNodeProgress(nodeId);
-        if (!existing) {
-          await supabase.from('syllabus_node_progress').insert([{
-            class_id: selectedClassId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            revision_count: 0,
-            first_worked_at: logDate,
-            completed_at: isCompleted ? logDate : null
-          }]);
-        } else {
-          await supabase.from('syllabus_node_progress').update({
-            status: newStatus,
-            completed_at: isCompleted ? logDate : null,
-            updated_at: new Date().toISOString()
-          }).eq('id', existing.id);
-        }
+  useEffect(() => {
+    if (selectedBookId && bookData.length > 0) {
+      const lvl1s = {};
+      const lvl2s = {};
+      bookData.forEach(n => {
+        if (n.level1) lvl1s[n.level1] = true;
+        if (n.level1 && n.level2) lvl2s[`${n.level1}-${n.level2}`] = true;
       });
-
-      try {
-        await Promise.all(updates);
-
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-
-        const logItems = selectedNodes.map(nodeId => {
-          const isThisReduced = reducedNodes.includes(nodeId);
-          return {
-            log_id: logData[0].id,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            adhoc_name: isThisReduced && reductionReason ? `Reason: ${reductionReason}` : null
-          };
-        });
-        await supabase.from('syllabus_tracker_log_items').insert(logItems);
-
-        showToast(`Bulk progress updated to ${newStatus} for ${selectedNodes.length} topics!`, 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-
-        const localProgressRaw = localStorage.getItem('jzv_syllabus_node_progress') || '[]';
-        let localProgress = [];
-        try { localProgress = JSON.parse(localProgressRaw); } catch (e) {}
-
-        selectedNodes.forEach(nodeId => {
-          const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === 'node' && String(p.item_id) === String(nodeId));
-          if (existingIdx > -1) {
-            localProgress[existingIdx] = {
-              ...localProgress[existingIdx],
-              status: newStatus,
-              completed_at: isCompleted ? logDate : null,
-              updated_at: new Date().toISOString()
-            };
-          } else {
-            localProgress.push({
-              id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-              class_id: selectedClassId,
-              item_type: 'node',
-              item_id: nodeId,
-              status: newStatus,
-              revision_count: 0,
-              first_worked_at: logDate,
-              completed_at: isCompleted ? logDate : null
-            });
-          }
-        });
-        localStorage.setItem('jzv_syllabus_node_progress', JSON.stringify(localProgress));
-
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
-
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        const localLogItems = selectedNodes.map(nodeId => {
-          const isThisReduced = reducedNodes.includes(nodeId);
-          return {
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: newStatus,
-            adhoc_name: isThisReduced && reductionReason ? `Reason: ${reductionReason}` : null
-          };
-        });
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: localLogItems
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast(`Bulk progress updated locally to ${newStatus} for ${selectedNodes.length} topics!`, 'success');
-      }
-
-      setSelectedNodes([]);
-      fetchProgress();
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
+      setExpandedLvl1(lvl1s);
+      setExpandedLvl2(lvl2s);
     }
-  };
+  }, [selectedBookId, bookData]);
 
-  const handleBulkIncrementRevision = async () => {
-    if (selectedNodes.length === 0) return;
-    setSubmitting(true);
-    try {
-      const updates = selectedNodes.map(async (nodeId) => {
-        const existing = progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(nodeId));
-        const currentCount = existing?.revision_count || 0;
-        const nextCount = currentCount + 1;
+  // ─── Core Actions ──────────────────────────────────────────────────
 
-        if (!existing) {
-          await supabase.from('syllabus_node_progress').insert([{
-            class_id: selectedClassId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: '100%',
-            revision_count: 1,
-            first_worked_at: logDate,
-            completed_at: logDate
-          }]);
-        } else {
-          await supabase.from('syllabus_node_progress').update({
-            revision_count: nextCount,
-            updated_at: new Date().toISOString()
-          }).eq('id', existing.id);
-        }
-      });
-
-      try {
-        await Promise.all(updates);
-
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-
-        const logItems = selectedNodes.map(nodeId => {
-          const node = bookData.find(n => String(n.id) === String(nodeId));
-          const existing = progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(nodeId));
-          const nextCount = (existing?.revision_count || 0) + 1;
-          return {
-            log_id: logData[0].id,
-            item_type: 'node',
-            item_id: nodeId,
-            status: `revision-${nextCount}`,
-            adhoc_name: `Lesson: ${node?.level3 || 'Lesson revision'}`
-          };
-        });
-        await supabase.from('syllabus_tracker_log_items').insert(logItems);
-
-        showToast(`Logged revision for ${selectedNodes.length} topics!`, 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-
-        const localProgressRaw = localStorage.getItem('jzv_syllabus_node_progress') || '[]';
-        let localProgress = [];
-        try { localProgress = JSON.parse(localProgressRaw); } catch (e) {}
-
-        selectedNodes.forEach(nodeId => {
-          const existingIdx = localProgress.findIndex(p => String(p.class_id) === String(selectedClassId) && p.item_type === 'node' && String(p.item_id) === String(nodeId));
-          const currentCount = existingIdx > -1 ? localProgress[existingIdx].revision_count : 0;
-          const nextCount = currentCount + 1;
-
-          if (existingIdx > -1) {
-            localProgress[existingIdx] = {
-              ...localProgress[existingIdx],
-              revision_count: nextCount,
-              updated_at: new Date().toISOString()
-            };
-          } else {
-            localProgress.push({
-              id: 'local-prog-' + Math.random().toString(36).substr(2, 9),
-              class_id: selectedClassId,
-              item_type: 'node',
-              item_id: nodeId,
-              status: '100%',
-              revision_count: 1,
-              first_worked_at: logDate,
-              completed_at: logDate
-            });
-          }
-        });
-        localStorage.setItem('jzv_syllabus_node_progress', JSON.stringify(localProgress));
-
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
-
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        const localLogItems = selectedNodes.map(nodeId => {
-          const node = bookData.find(n => String(n.id) === String(nodeId));
-          const existing = progressList.find(p => p.item_type === 'node' && String(p.item_id) === String(nodeId));
-          const nextCount = (existing?.revision_count || 0) + 1;
-          return {
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: 'node',
-            item_id: nodeId,
-            status: `revision-${nextCount}`,
-            adhoc_name: `Lesson: ${node?.level3 || 'Lesson revision'}`
-          };
-        });
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: localLogItems
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast(`Logged revision locally for ${selectedNodes.length} topics!`, 'success');
-      }
-
-      setSelectedNodes([]);
-      fetchProgress();
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSelectNode = (nodeId) => {
-    if (selectedNodes.includes(nodeId)) {
-      setSelectedNodes(prev => prev.filter(id => id !== nodeId));
-    } else {
-      setSelectedNodes(prev => [...prev, nodeId]);
-    }
-  };
-
-  const handleSelectBook = (checked) => {
-    const allBookNodeIds = bookData.map(n => n.id);
-    if (checked) {
-      setSelectedNodes(allBookNodeIds);
-    } else {
-      setSelectedNodes([]);
-    }
-  };
-
-  const handleSelectLvl1 = (level1Name, checked) => {
-    const nodeIds = bookData.filter(n => n.level1 === level1Name).map(n => n.id);
-    if (checked) {
-      setSelectedNodes(prev => [...new Set([...prev, ...nodeIds])]);
-    } else {
-      setSelectedNodes(prev => prev.filter(id => !nodeIds.includes(id)));
-    }
-  };
-
-  const handleSelectLvl2 = (level1Name, level2Name, checked) => {
-    const nodeIds = bookData.filter(n => n.level1 === level1Name && (n.level2 || 'General') === level2Name).map(n => n.id);
-    if (checked) {
-      setSelectedNodes(prev => [...new Set([...prev, ...nodeIds])]);
-    } else {
-      setSelectedNodes(prev => prev.filter(id => !nodeIds.includes(id)));
-    }
-  };
-
-  const toggleLvl1 = (name) => {
-    setExpandedLvl1(prev => ({ ...prev, [name]: !prev[name] }));
-  };
-
-  const toggleLvl2 = (key) => {
-    setExpandedLvl2(prev => ({ ...prev, [key]: !prev[key] }));
-  };
- 
-  const toggleFavorite = () => {
-    if (!selectedClassId || !selectedSubjectId || !selectedBookId) return;
-    
-    const key = teacher?.id ? `jzv_syllabus_favorites_${teacher.id}` : 'jzv_syllabus_favorites';
-    const cName = classes.find(c => String(c.id) === String(selectedClassId))?.name || 'Class';
-    const sName = subjects.find(s => String(s.id) === String(selectedSubjectId))?.name || 'Subject';
-    const bName = books.find(b => String(b.id) === String(selectedBookId))?.name || 'Book';
-    
-    const existsIdx = favorites.findIndex(f => 
-      String(f.classId) === String(selectedClassId) &&
-      String(f.subjectId) === String(selectedSubjectId) &&
-      String(f.bookId) === String(selectedBookId)
+  const ensureLessonLog = async (classId, lessonId) => {
+    // Check if log already exists
+    const existing = lessonLogs.find(
+      l => String(l.class_id) === String(classId) && String(l.lesson_id) === String(lessonId)
     );
-    
-    let newFavs = [...favorites];
-    if (existsIdx > -1) {
-      newFavs.splice(existsIdx, 1);
-      showToast('Removed from Quick Access', 'info');
-    } else {
-      newFavs.push({
-        classId: selectedClassId,
-        subjectId: selectedSubjectId,
-        bookId: selectedBookId,
-        className: cName,
-        subjectName: sName,
-        bookName: bName
-      });
-      showToast('Added to Quick Access', 'success');
-    }
-    setFavorites(newFavs);
-    localStorage.setItem(key, JSON.stringify(newFavs));
+    if (existing) return existing;
+
+    const { data, error } = await supabase
+      .from('lesson_tracker_log')
+      .upsert([{
+        class_id: classId,
+        lesson_id: lessonId,
+        start_date: logDate,
+        current_status: 'not_started'
+      }], { onConflict: 'class_id,lesson_id' })
+      .select();
+    if (error) throw error;
+    return data[0];
   };
- 
+
+  const addLogItem = async (ltLogId, date, teacherId, status, progress, comments, isRevision) => {
+    const { error } = await supabase
+      .from('lesson_tracker_log_items')
+      .insert([{
+        lt_log_id: ltLogId,
+        date: date,
+        teacher_id: teacherId,
+        current_status: status,
+        progress: progress,
+        is_revision: isRevision ? 'Y' : 'N',
+        comments: comments || null
+      }]);
+    if (error) throw error;
+  };
+
+  // ─── Single Lesson Log Entry ──────────────────────────────────────
+
+  const openLogModal = (lessonId) => {
+    const log = getLessonLog(lessonId);
+    setLogModalLessonId(lessonId);
+    setLogModalStatus(log?.current_status === 'completed' ? 'completed' : 'in_progress');
+    setLogModalProgress(Number(log?.completion_percentage) || 50);
+    setLogModalComments('');
+    setLogModalIsRevision(false);
+    setIsLogModalOpen(true);
+  };
+
+  const handleLogItemSubmit = async (e) => {
+    e.preventDefault();
+    if (!logModalLessonId) return;
+    setSubmitting(true);
+    try {
+      const log = await ensureLessonLog(selectedClassId, logModalLessonId);
+      await addLogItem(
+        log.id,
+        logDate,
+        teacher?.id,
+        logModalStatus,
+        logModalProgress,
+        logModalComments,
+        logModalIsRevision
+      );
+
+      // Update recent books
+      updateRecentBooks(selectedClassId, selectedSubjectId, selectedBookId);
+
+      showToast('Log entry added!', 'success');
+      setIsLogModalOpen(false);
+      await fetchLessonLogs();
+      await fetchBookTrackers();
+
+      // Refresh items if expanded
+      if (expandedLogItems[log.id]) {
+        await fetchLogItemsForLog(log.id);
+      }
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ─── Bulk Log Entry ──────────────────────────────────────────────
+
+  const openBulkModal = () => {
+    if (selectedNodes.length === 0) return;
+    setBulkStatus('in_progress');
+    setBulkProgress(50);
+    setBulkComments('');
+    setIsBulkModalOpen(true);
+  };
+
+  const handleBulkLogSubmit = async (e) => {
+    e.preventDefault();
+    if (selectedNodes.length === 0) return;
+    setSubmitting(true);
+    try {
+      for (const lessonId of selectedNodes) {
+        const log = await ensureLessonLog(selectedClassId, lessonId);
+        await addLogItem(
+          log.id,
+          logDate,
+          teacher?.id,
+          bulkStatus,
+          bulkProgress,
+          bulkComments,
+          false // bulk entries are not revisions
+        );
+      }
+
+      // Update recent books
+      updateRecentBooks(selectedClassId, selectedSubjectId, selectedBookId);
+
+      showToast(`Log entry added for ${selectedNodes.length} lessons!`, 'success');
+      setIsBulkModalOpen(false);
+      setSelectedNodes([]);
+      await fetchLessonLogs();
+      await fetchBookTrackers();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ─── Add Syllabus Item ──────────────────────────────────────────────
+
   const handleAddSyllabusItem = async (e) => {
     e.preventDefault();
     if (!selectedBookId) return;
- 
+
     let targetLevel1 = '';
     let targetLevel2 = null;
     let targetLevel3 = null;
- 
+
     if (addType === 'level1') {
       if (!addLevel1Name.trim()) return showToast('Unit name is required.', 'warning');
       targetLevel1 = addLevel1Name.trim();
@@ -1182,7 +538,7 @@ const SyllabusTracker = ({ user }) => {
       if (!addLevel3Name.trim()) return showToast('Lesson/Topic name is required.', 'warning');
       targetLevel3 = addLevel3Name.trim();
     }
- 
+
     setSubmitting(true);
     try {
       const recordData = {
@@ -1193,11 +549,10 @@ const SyllabusTracker = ({ user }) => {
         page_count: Number(addPageCount) || 0,
         complexity: addComplexity || 'Easy',
       };
- 
+
       // Search for placeholder to update
       let placeholder = null;
       if (targetLevel3) {
-        // Adding Level 3: check if there's a placeholder row where level1 and level2 match, but level3 is null
         placeholder = syllabusData.find(
           d => String(d.book_id) === String(selectedBookId) &&
                d.level1 === targetLevel1 &&
@@ -1205,89 +560,38 @@ const SyllabusTracker = ({ user }) => {
                !d.level3
         );
       } else if (targetLevel2) {
-        // Adding Level 2: check if there's a placeholder row where level1 matches, but level2 and level3 are null
         placeholder = syllabusData.find(
           d => String(d.book_id) === String(selectedBookId) &&
                d.level1 === targetLevel1 &&
-               !d.level2 &&
-               !d.level3
+               !d.level2 && !d.level3
         );
       } else {
-        // Adding Level 1: check if level1 already exists to avoid redundant empty level1 placeholders
         const exists = syllabusData.some(
           d => String(d.book_id) === String(selectedBookId) && d.level1 === targetLevel1
         );
-        if (exists) {
-          throw new Error(`Unit "${targetLevel1}" already exists in this book.`);
-        }
+        if (exists) throw new Error(`Unit "${targetLevel1}" already exists in this book.`);
       }
- 
+
       let updatedData = [...syllabusData];
- 
-      try {
-        if (placeholder) {
-          // Update placeholder row in DB
-          const { data: updatedRes, error } = await supabase
-            .from('syllabus_book_lessons')
-            .update(recordData)
-            .eq('id', placeholder.id)
-            .select();
-          if (error) throw error;
-          
-          updatedData = updatedData.map(d => String(d.id) === String(placeholder.id) ? updatedRes[0] : d);
-        } else {
-          // Insert new row in DB
-          const { data: insertedRes, error } = await supabase
-            .from('syllabus_book_lessons')
-            .insert([recordData])
-            .select();
-          if (error) throw error;
-          
-          updatedData.push(insertedRes[0]);
-        }
-        
-        showToast('Syllabus item added successfully!', 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
-        
-        // Local fallback logic
-        const localSyllabusRaw = localStorage.getItem('jzv_syllabus_data') || '{}';
-        let localSyllabus = {};
-        try { localSyllabus = JSON.parse(localSyllabusRaw); } catch(e) {}
-        
-        let localSyllabusData = localSyllabus.syllabusData || [];
-        
-        if (placeholder) {
-          localSyllabusData = localSyllabusData.map(d => 
-            String(d.id) === String(placeholder.id) ? { ...d, ...recordData } : d
-          );
-        } else {
-          const newRow = {
-            id: 'local-node-' + Math.random().toString(36).substr(2, 9),
-            ...recordData
-          };
-          localSyllabusData.push(newRow);
-        }
-        
-        localSyllabus.syllabusData = localSyllabusData;
-        localStorage.setItem('jzv_syllabus_data', JSON.stringify(localSyllabus));
-        
-        // Sync local updated state
-        updatedData = localSyllabusData;
-        showToast('Syllabus item added locally!', 'success');
+
+      if (placeholder) {
+        const { data: updatedRes, error } = await supabase
+          .from('syllabus_book_lessons').update(recordData).eq('id', placeholder.id).select();
+        if (error) throw error;
+        updatedData = updatedData.map(d => String(d.id) === String(placeholder.id) ? updatedRes[0] : d);
+      } else {
+        const { data: insertedRes, error } = await supabase
+          .from('syllabus_book_lessons').insert([recordData]).select();
+        if (error) throw error;
+        updatedData.push(insertedRes[0]);
       }
- 
+
       setSyllabusData(updatedData);
+      showToast('Syllabus item added!', 'success');
       setIsAddModalOpen(false);
-      
-      // Reset form states
-      setAddLevel1Name('');
-      setAddLevel2Name('');
-      setAddLevel3Name('');
-      setAddPageCount(0);
-      setAddComplexity('Easy');
-      setSelectedAddLevel1('');
-      setSelectedAddLevel2('');
+      setAddLevel1Name(''); setAddLevel2Name(''); setAddLevel3Name('');
+      setAddPageCount(0); setAddComplexity('Easy');
+      setSelectedAddLevel1(''); setSelectedAddLevel2('');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -1295,76 +599,110 @@ const SyllabusTracker = ({ user }) => {
     }
   };
 
-  const handleAdhocSubmit = async (e) => {
-    e.preventDefault();
-    if (!adhocName.trim()) return showToast('Description required.', 'warning');
-    setSubmitting(true);
-    try {
-      try {
-        const { data: logData, error: logErr } = await supabase.from('syllabus_tracker_logs').insert([{
-          date: logDate, class_id: selectedClassId, subject_id: selectedSubjectId, teacher_id: teacher?.id
-        }]).select();
-        if (logErr) throw logErr;
-        
-        await supabase.from('syllabus_tracker_log_items').insert([{
-          log_id: logData[0].id, item_type: 'adhoc', item_id: null, adhoc_name: adhocName.trim(), status: 'completed'
-        }]);
-        
-        showToast('Adhoc activity logged!', 'success');
-      } catch (dbErr) {
-        console.warn("DB save failed, falling back to LocalStorage:", dbErr.message);
+  // ─── Favorites ──────────────────────────────────────────────────
 
-        // Save log locally
-        const localLogsRaw = localStorage.getItem('jzv_syllabus_tracker_logs') || '[]';
-        let localLogs = [];
-        try { localLogs = JSON.parse(localLogsRaw); } catch (e) {}
+  const toggleFavorite = () => {
+    if (!selectedClassId || !selectedSubjectId || !selectedBookId) return;
+    const key = getFavoritesKey();
+    const cName = classes.find(c => String(c.id) === String(selectedClassId))?.name || 'Class';
+    const sName = subjects.find(s => String(s.id) === String(selectedSubjectId))?.name || 'Subject';
+    const bName = books.find(b => String(b.id) === String(selectedBookId))?.name || 'Book';
 
-        const newLogId = 'local-log-' + Math.random().toString(36).substr(2, 9);
-        localLogs.unshift({
-          id: newLogId,
-          date: logDate,
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          teacher_id: teacher?.id || 'local-teacher',
-          syllabus_tracker_log_items: [{
-            id: 'local-log-item-' + Math.random().toString(36).substr(2, 9),
-            log_id: newLogId,
-            item_type: 'adhoc',
-            item_id: null,
-            adhoc_name: adhocName.trim(),
-            status: 'completed'
-          }]
-        });
-        localStorage.setItem('jzv_syllabus_tracker_logs', JSON.stringify(localLogs));
-
-        showToast('Adhoc activity logged locally!', 'success');
-      }
-
-      setAdhocName('');
-      fetchHistory();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loading && classes.length === 0) {
-    return (
-      <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
-        <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mr-3"></div>
-        Loading Tracker...
-      </div>
+    const existsIdx = favorites.findIndex(f =>
+      String(f.classId) === String(selectedClassId) &&
+      String(f.subjectId) === String(selectedSubjectId) &&
+      String(f.bookId) === String(selectedBookId)
     );
-  }
 
-  const activeBook = filteredBooks.find(b => String(b.id) === String(selectedBookId));
-  const bookData = syllabusData.filter(d => String(d.book_id) === String(selectedBookId));
+    let newFavs = [...favorites];
+    if (existsIdx > -1) {
+      newFavs.splice(existsIdx, 1);
+      showToast('Removed from Quick Access', 'info');
+    } else {
+      newFavs.push({ classId: selectedClassId, subjectId: selectedSubjectId, bookId: selectedBookId, className: cName, subjectName: sName, bookName: bName });
+      showToast('Added to Quick Access', 'success');
+    }
+    setFavorites(newFavs);
+    localStorage.setItem(key, JSON.stringify(newFavs));
+  };
 
-  const bookLevels = (activeBook?.hierarchy_type || 'Unit, Chapter, Lesson').split(',').map(s => s.trim());
-  const lvl1Label = bookLevels[0] || 'Unit';
-  const lvl2Label = bookLevels[1] || 'Chapter';
-  const lvl3Label = bookLevels[2] || 'Lesson';
+  const applyQuickAccess = (item) => {
+    setSelectedClassId(item.classId);
+    const subObj = subjects.find(s => String(s.id) === String(item.subjectId));
+    if (subObj && subObj.classification_id) {
+      setSelectedClassificationId(String(subObj.classification_id));
+    } else {
+      setSelectedClassificationId('');
+    }
+    setSelectedSubjectId(item.subjectId);
+    setSelectedBookId(item.bookId);
+  };
+
+  // ─── Selection Handlers ──────────────────────────────────────────
+
+  // Determine which book nodes are the actual leaf nodes (trackable)
+  const getBookLessons = useCallback(() => {
+    return bookData.filter(n => {
+      // If it has level3, it's a leaf node
+      if (n.level3) return true;
+      // If level2 exists but level3 is null, it's a leaf if no other node has level3 under this level1+level2
+      if (n.level2 && !n.level3) {
+        const hasL3 = bookData.some(o => o.level1 === n.level1 && (o.level2 || 'General') === n.level2 && o.level3);
+        return !hasL3;
+      }
+      // If level1 exists but level2 and level3 are null, it's a leaf if no other node has level2 or level3 under this level1
+      if (n.level1 && !n.level2 && !n.level3) {
+        const hasL2orL3 = bookData.some(o => o.level1 === n.level1 && (o.level2 || o.level3));
+        return !hasL2orL3;
+      }
+      return false;
+    });
+  }, [bookData]);
+
+  const handleSelectNode = (nodeId) => {
+    setSelectedNodes(prev => prev.includes(nodeId) ? prev.filter(id => id !== nodeId) : [...prev, nodeId]);
+  };
+
+  const handleSelectBook = (checked) => {
+    const bookLessons = getBookLessons();
+    const allIds = bookLessons.map(n => n.id);
+    setSelectedNodes(checked ? allIds : []);
+  };
+
+  const handleSelectLvl1 = (level1Name, checked) => {
+    const bookLessons = getBookLessons();
+    const ids = bookLessons.filter(n => n.level1 === level1Name).map(n => n.id);
+    if (checked) setSelectedNodes(prev => [...new Set([...prev, ...ids])]);
+    else setSelectedNodes(prev => prev.filter(id => !ids.includes(id)));
+  };
+
+  const handleSelectLvl2 = (level1Name, level2Name, checked) => {
+    const bookLessons = getBookLessons();
+    const ids = bookLessons.filter(n => n.level1 === level1Name && (n.level2 || 'General') === level2Name).map(n => n.id);
+    if (checked) setSelectedNodes(prev => [...new Set([...prev, ...ids])]);
+    else setSelectedNodes(prev => prev.filter(id => !ids.includes(id)));
+  };
+
+  const toggleLvl1 = (name) => setExpandedLvl1(prev => ({ ...prev, [name]: !prev[name] }));
+  const toggleLvl2 = (key) => setExpandedLvl2(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const toggleLogItemsExpand = async (ltLogId) => {
+    const isExpanded = expandedLogItems[ltLogId];
+    setExpandedLogItems(prev => ({ ...prev, [ltLogId]: !isExpanded }));
+    if (!isExpanded && !logItems[ltLogId]) {
+      await fetchLogItemsForLog(ltLogId);
+    }
+  };
+
+  // ─── Status Badges ──────────────────────────────────────────────
+
+  const getStatusBadge = (status) => {
+    if (status === 'completed') return <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">Completed</span>;
+    if (status === 'in_progress') return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">In Progress</span>;
+    return <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">Not Started</span>;
+  };
+
+  // ─── Render Curriculum Tab ──────────────────────────────────────
 
   const renderCurriculum = () => {
     if (activeClasses.length === 0) {
@@ -1382,19 +720,15 @@ const SyllabusTracker = ({ user }) => {
       );
     }
 
+    const bt = getBookTracker(selectedBookId);
     const level1Groups = [...new Set(bookData.map(n => n.level1))].filter(Boolean);
-
-    const bookProgress = progressList.find(p => p.item_type === 'book' && String(p.item_id) === String(selectedBookId));
-    const bookStatus = bookProgress?.status || '0%';
-    const bookRevisionCount = bookProgress?.revision_count || 0;
-    const bookDays = getBookDays();
-
-    const allBookNodeIds = bookData.map(n => n.id);
+    const bookLessons = getBookLessons();
+    const allBookNodeIds = bookLessons.map(n => n.id);
     const isAllBookChecked = allBookNodeIds.length > 0 && allBookNodeIds.every(id => selectedNodes.includes(id));
 
     return (
       <div className="space-y-6">
-        {/* Book Level progress & revision logging & checkbox root */}
+        {/* Book Level Summary */}
         <div className="bg-white p-4 border rounded-2xl shadow-sm flex items-center justify-between bg-gradient-to-r from-purple-50/70 to-indigo-50/70 border-purple-100/80">
           <div className="flex items-center gap-3">
             <input
@@ -1406,15 +740,26 @@ const SyllabusTracker = ({ user }) => {
             <div>
               <h4 className="text-sm font-black text-purple-900">{activeBook.name}</h4>
               <div className="flex items-center gap-3 text-[11px] font-semibold text-purple-700 mt-1 flex-wrap">
-                <span>Revisions: <strong className="font-black text-purple-900">{bookRevisionCount}</strong></span>
-                <span className="text-purple-300">|</span>
-                <span>Days Taken: <strong className="font-black text-purple-900">{bookDays} day(s)</strong></span>
+                {bt ? (
+                  <>
+                    <span>Completed: <strong className="font-black text-emerald-700">{bt.completed}</strong></span>
+                    <span className="text-purple-300">|</span>
+                    <span>In Progress: <strong className="font-black text-blue-700">{bt.in_progress}</strong></span>
+                    <span className="text-purple-300">|</span>
+                    <span>Not Started: <strong className="font-black text-gray-500">{bt.not_started}</strong></span>
+                    <span className="text-purple-300">|</span>
+                    <span>Total: <strong className="font-black text-purple-900">{bt.total_lessons}</strong></span>
+                  </>
+                ) : (
+                  <span className="text-gray-400">No tracking data yet</span>
+                )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="bg-purple-100 text-purple-900 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 select-none">
-              <i className="fas fa-chart-line text-[10px]" /> Progress: {bookStatus === 'completed' ? '100%' : (bookStatus === 'not_started' ? '0%' : bookStatus)}
+              <i className="fas fa-chart-line text-[10px]" />
+              {bt ? `${Number(bt.completion_percentage).toFixed(0)}%` : '0%'}
             </span>
             <button
               onClick={() => {
@@ -1424,50 +769,146 @@ const SyllabusTracker = ({ user }) => {
                   const l2Names = [...new Set(bookData.filter(n => n.level1 === l1Names[0]).map(n => n.level2 || 'General'))].filter(Boolean);
                   setSelectedAddLevel2(l2Names[0] || '');
                 } else {
-                  setSelectedAddLevel1('');
-                  setSelectedAddLevel2('');
+                  setSelectedAddLevel1(''); setSelectedAddLevel2('');
                 }
                 setIsAddModalOpen(true);
               }}
               disabled={submitting}
               className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             >
-              <i className="fas fa-plus"></i> Add {lvl1Label}/{lvl2Label}/{lvl3Label}
-            </button>
-            <button
-              onClick={() => handleIncrementRevision('book', selectedBookId, `Book: ${activeBook.name}`)}
-              disabled={submitting}
-              className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            >
-              <i className="fas fa-redo"></i> Revise Book
+              <i className="fas fa-plus"></i> Add {lvl1Label}
             </button>
           </div>
         </div>
+
+        {/* Book Progress Bar */}
+        {bt && (
+          <div className="bg-white p-3 border rounded-xl shadow-sm">
+            <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div
+                className="h-2.5 rounded-full transition-all duration-500"
+                style={{
+                  width: `${Number(bt.completion_percentage)}%`,
+                  backgroundColor: Number(bt.completion_percentage) >= 70 ? '#10b981' : Number(bt.completion_percentage) >= 30 ? '#f59e0b' : '#ef4444'
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Accordion Units & Sections */}
         <div className="space-y-4">
           {level1Groups.map(level1Name => {
             const level1Nodes = bookData.filter(n => n.level1 === level1Name);
-            const level1Id = level1Nodes[0]?.id;
-            const level1Progress = progressList.find(p => p.item_type === 'level1' && String(p.item_id) === String(level1Id));
-            const level1Status = level1Progress?.status || '0%';
-            const level1RevisionCount = level1Progress?.revision_count || 0;
-            const level1Days = getLevel1Days(level1Name);
-
             const isLvl1Expanded = !!expandedLvl1[level1Name];
-            const level2Groups = [...new Set(level1Nodes.map(n => n.level2 || 'General'))];
+            const level2Groups = [...new Set(level1Nodes.map(n => n.level2).filter(Boolean))];
 
-            const allLvl1NodeIds = level1Nodes.map(n => n.id);
-            const isAllLvl1Checked = allLvl1NodeIds.every(id => selectedNodes.includes(id));
+            // Check if level1 itself is a leaf
+            const lvl1Lessons = bookLessons.filter(n => n.level1 === level1Name);
+            const isLvl1Leaf = lvl1Lessons.length === 1 && !lvl1Lessons[0].level2 && !lvl1Lessons[0].level3;
+
+            if (isLvl1Leaf) {
+              const leafNode = lvl1Lessons[0];
+              const log = getLessonLog(leafNode.id);
+              const status = log?.current_status || 'not_started';
+              const isLogExpanded = log && expandedLogItems[log.id];
+
+              return (
+                <div key={level1Name} className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden">
+                  <div className="flex justify-between items-center p-4 bg-gray-50/50">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedNodes.includes(leafNode.id)}
+                        onChange={() => handleSelectNode(leafNode.id)}
+                        className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-sm font-bold text-dark-primary">{level1Name}</span>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          {getStatusBadge(status)}
+                          {log && (
+                            <>
+                              <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                {Number(log.completion_percentage).toFixed(0)}%
+                              </span>
+                              <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                Days: {log.days_taken}
+                              </span>
+                              {log.revision_counter > 0 && (
+                                <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                  Revised {log.revision_counter}x
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {log && (
+                        <button
+                          onClick={() => toggleLogItemsExpand(log.id)}
+                          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                        >
+                          <i className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}></i>
+                          History
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openLogModal(leafNode.id)}
+                        disabled={submitting}
+                        className="px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <i className="fas fa-plus text-[10px]"></i> Log Entry
+                      </button>
+                    </div>
+                  </div>
+                  {/* Expanded Log Items */}
+                  {isLogExpanded && log && (
+                    <div className="ml-7 mt-1 mb-2 bg-white border border-light-border rounded-xl p-3 space-y-2">
+                      <p className="text-[10px] font-extrabold text-dark-soft uppercase mb-1">Log Entries</p>
+                      {(logItems[log.id] || []).length === 0 ? (
+                        <p className="text-xs text-gray-400">No entries yet.</p>
+                      ) : (
+                        (logItems[log.id] || []).map(item => (
+                          <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100 text-xs">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-gray-700">{new Date(item.date).toLocaleDateString()}</span>
+                                {getStatusBadge(item.current_status)}
+                                <span className="text-gray-500 font-semibold">{Number(item.progress).toFixed(0)}%</span>
+                                {item.teacher?.name && <span className="text-gray-400 font-semibold">by {item.teacher.name}</span>}
+                                {item.is_revision === 'Y' && (
+                                  <span className="text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-[9px]">Revision</span>
+                                )}
+                                {item.late_reporting === 'Y' && (
+                                  <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[9px]">Late</span>
+                                )}
+                              </div>
+                              {item.comments && <p className="text-gray-500 mt-1">{item.comments}</p>}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            const allLvl1NodeIds = lvl1Lessons.map(n => n.id);
+            const isAllLvl1Checked = allLvl1NodeIds.length > 0 && allLvl1NodeIds.every(id => selectedNodes.includes(id));
+            const lvl1Completed = lvl1Lessons.filter(n => getLessonLog(n.id)?.current_status === 'completed').length;
+            const lvl1InProgress = lvl1Lessons.filter(n => getLessonLog(n.id)?.current_status === 'in_progress').length;
 
             return (
               <div key={level1Name} className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden">
-                {/* Level 1 Accordion Header */}
                 <div className="flex items-center justify-between p-4 bg-gray-50/50 border-b border-light-border select-none">
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
-                      checked={isAllLvl1Checked && allLvl1NodeIds.length > 0}
+                      checked={isAllLvl1Checked}
                       onChange={(e) => handleSelectLvl1(level1Name, e.target.checked)}
                       className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
                     />
@@ -1478,66 +919,221 @@ const SyllabusTracker = ({ user }) => {
                       </h3>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
-                          Days: {level1Days} day(s)
+                          {lvl1Completed}/{lvl1Lessons.length} completed
                         </span>
-                        {level1RevisionCount > 0 && (
-                          <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
-                            Revised {level1RevisionCount}x
+                        {lvl1InProgress > 0 && (
+                          <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                            {lvl1InProgress} in progress
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={level1Status === 'completed' ? '100%' : (level1Status === 'not_started' ? '0%' : level1Status)}
-                      disabled={submitting}
-                      onChange={(e) => handleStatusUpdateParent('level1', level1Id, e.target.value, `Unit: ${level1Name}`)}
-                      className="border border-gray-200 px-2 py-0.5 rounded-md text-[10px] font-bold outline-none focus:ring-1 focus:ring-brand-primary bg-white text-dark-primary cursor-pointer"
-                    >
-                      <option value="0%">0% (Not Started)</option>
-                      <option value="10%">10%</option>
-                      <option value="25%">25%</option>
-                      <option value="50%">50%</option>
-                      <option value="75%">75%</option>
-                      <option value="90%">90%</option>
-                      <option value="100%">100% (Completed)</option>
-                    </select>
-                    <button
-                      onClick={() => handleIncrementRevision('level1', level1Id, `Unit: ${level1Name}`)}
-                      disabled={submitting}
-                      className="px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded text-xs font-black border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      <i className="fas fa-redo text-[10px]"></i> Revise Unit
-                    </button>
-                  </div>
                 </div>
 
-                {/* Level 2 Accordions */}
+                {/* Level 2 Accordions & Direct Lessons */}
                 {isLvl1Expanded && (
                   <div className="p-4 space-y-4 bg-white pl-6">
+                    {/* Direct Lessons under Level 1 (with no level2) */}
+                    {lvl1Lessons.filter(n => !n.level2).map(node => {
+                      const log = getLessonLog(node.id);
+                      const status = log?.current_status || 'not_started';
+                      const title = node.level3 || node.level2 || node.level1;
+                      const isLogExpanded = log && expandedLogItems[log.id];
+
+                      return (
+                        <div key={node.id} className="border border-gray-150 rounded-xl overflow-hidden shadow-sm p-3 bg-gray-50/50 hover:border-brand-primary/30 transition-colors">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedNodes.includes(node.id)}
+                                onChange={() => handleSelectNode(node.id)}
+                                className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
+                              />
+                              <div>
+                                <p className="text-xs font-bold text-dark-primary">{title}</p>
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                  {getStatusBadge(status)}
+                                  {log && (
+                                    <>
+                                      <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                        {Number(log.completion_percentage).toFixed(0)}%
+                                      </span>
+                                      <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                        Days: {log.days_taken}
+                                      </span>
+                                      {log.revision_counter > 0 && (
+                                        <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                          Revised {log.revision_counter}x
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {log && (
+                                <button
+                                  onClick={() => toggleLogItemsExpand(log.id)}
+                                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                >
+                                  <i className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}></i>
+                                  History
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openLogModal(node.id)}
+                                disabled={submitting}
+                                className="px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                              >
+                                <i className="fas fa-plus text-[10px]"></i> Log Entry
+                              </button>
+                            </div>
+                          </div>
+                          {/* Expanded Log Items */}
+                          {isLogExpanded && log && (
+                            <div className="mt-2 bg-white border border-light-border rounded-xl p-3 space-y-2">
+                              <p className="text-[10px] font-extrabold text-dark-soft uppercase mb-1">Log Entries</p>
+                              {(logItems[log.id] || []).length === 0 ? (
+                                <p className="text-xs text-gray-400">No entries yet.</p>
+                              ) : (
+                                (logItems[log.id] || []).map(item => (
+                                  <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100 text-xs">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-gray-700">{new Date(item.date).toLocaleDateString()}</span>
+                                        {getStatusBadge(item.current_status)}
+                                        <span className="text-gray-500 font-semibold">{Number(item.progress).toFixed(0)}%</span>
+                                        {item.teacher?.name && <span className="text-gray-400 font-semibold">by {item.teacher.name}</span>}
+                                        {item.is_revision === 'Y' && (
+                                          <span className="text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-[9px]">Revision</span>
+                                        )}
+                                        {item.late_reporting === 'Y' && (
+                                          <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[9px]">Late</span>
+                                        )}
+                                      </div>
+                                      {item.comments && <p className="text-gray-500 mt-1">{item.comments}</p>}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     {level2Groups.map(level2Name => {
                       const level2Nodes = level1Nodes.filter(n => (n.level2 || 'General') === level2Name);
-                      const level2Id = level2Nodes[0]?.id;
-                      const level2Progress = progressList.find(p => p.item_type === 'level2' && String(p.item_id) === String(level2Id));
-                      const level2Status = level2Progress?.status || '0%';
-                      const level2RevisionCount = level2Progress?.revision_count || 0;
-                      const level2Days = getLevel2Days(level1Name, level2Name);
-
                       const lvl2Key = `${level1Name}-${level2Name}`;
                       const isLvl2Expanded = !!expandedLvl2[lvl2Key];
 
-                      const allLvl2NodeIds = level2Nodes.map(n => n.id);
-                      const isAllLvl2Checked = allLvl2NodeIds.every(id => selectedNodes.includes(id));
+                      const lvl2Lessons = bookLessons.filter(n => n.level1 === level1Name && (n.level2 || 'General') === level2Name);
+                      const isLvl2Leaf = lvl2Lessons.length === 1 && !lvl2Lessons[0].level3;
+
+                      if (isLvl2Leaf) {
+                        const leafNode = lvl2Lessons[0];
+                        const log = getLessonLog(leafNode.id);
+                        const status = log?.current_status || 'not_started';
+                        const isLogExpanded = log && expandedLogItems[log.id];
+
+                        return (
+                          <div key={level2Name} className="border border-gray-150 rounded-xl overflow-hidden shadow-sm">
+                            <div className="flex justify-between items-center p-3.5 bg-gray-50/30">
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedNodes.includes(leafNode.id)}
+                                  onChange={() => handleSelectNode(leafNode.id)}
+                                  className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
+                                />
+                                <div>
+                                  <span className="text-xs font-bold text-dark-primary">{level2Name}</span>
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    {getStatusBadge(status)}
+                                    {log && (
+                                      <>
+                                        <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                          {Number(log.completion_percentage).toFixed(0)}%
+                                        </span>
+                                        <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                          Days: {log.days_taken}
+                                        </span>
+                                        {log.revision_counter > 0 && (
+                                          <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                            Revised {log.revision_counter}x
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {log && (
+                                  <button
+                                    onClick={() => toggleLogItemsExpand(log.id)}
+                                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                  >
+                                    <i className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}></i>
+                                    History
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openLogModal(leafNode.id)}
+                                  disabled={submitting}
+                                  className="px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                                >
+                                  <i className="fas fa-plus text-[10px]"></i> Log Entry
+                                </button>
+                              </div>
+                            </div>
+                            {/* Expanded Log Items */}
+                            {isLogExpanded && log && (
+                              <div className="ml-7 mt-1 mb-2 bg-white border border-light-border rounded-xl p-3 space-y-2">
+                                <p className="text-[10px] font-extrabold text-dark-soft uppercase mb-1">Log Entries</p>
+                                {(logItems[log.id] || []).length === 0 ? (
+                                  <p className="text-xs text-gray-400">No entries yet.</p>
+                                ) : (
+                                  (logItems[log.id] || []).map(item => (
+                                    <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100 text-xs">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-bold text-gray-700">{new Date(item.date).toLocaleDateString()}</span>
+                                          {getStatusBadge(item.current_status)}
+                                          <span className="text-gray-500 font-semibold">{Number(item.progress).toFixed(0)}%</span>
+                                          {item.teacher?.name && <span className="text-gray-400 font-semibold">by {item.teacher.name}</span>}
+                                          {item.is_revision === 'Y' && (
+                                            <span className="text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-[9px]">Revision</span>
+                                          )}
+                                          {item.late_reporting === 'Y' && (
+                                            <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[9px]">Late</span>
+                                          )}
+                                        </div>
+                                        {item.comments && <p className="text-gray-500 mt-1">{item.comments}</p>}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      const allLvl2NodeIds = lvl2Lessons.map(n => n.id);
+                      const isAllLvl2Checked = allLvl2NodeIds.length > 0 && allLvl2NodeIds.every(id => selectedNodes.includes(id));
+                      const lvl2Completed = lvl2Lessons.filter(n => getLessonLog(n.id)?.current_status === 'completed').length;
+                      const lvl2InProgress = lvl2Lessons.filter(n => getLessonLog(n.id)?.current_status === 'in_progress').length;
 
                       return (
                         <div key={level2Name} className="border border-gray-150 rounded-xl overflow-hidden shadow-sm">
-                          {/* Level 2 Accordion Header */}
                           <div className="flex items-center justify-between p-3.5 bg-gray-50/30 border-b border-gray-150 select-none">
                             <div className="flex items-center gap-3">
                               <input
                                 type="checkbox"
-                                checked={isAllLvl2Checked && allLvl2NodeIds.length > 0}
+                                checked={isAllLvl2Checked}
                                 onChange={(e) => handleSelectLvl2(level1Name, level2Name, e.target.checked)}
                                 className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
                               />
@@ -1547,108 +1143,109 @@ const SyllabusTracker = ({ user }) => {
                                   <i className={`fas fa-chevron-${isLvl2Expanded ? 'down' : 'right'} text-[10px] text-gray-400`}></i>
                                 </h4>
                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                  <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.2 rounded border border-gray-200">
-                                    Days: {level2Days} day(s)
+                                  <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                    {lvl2Completed}/{lvl2Lessons.length} completed
                                   </span>
-                                  {level2RevisionCount > 0 && (
-                                    <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.2 rounded border border-purple-100">
-                                      Revised {level2RevisionCount}x
+                                  {lvl2InProgress > 0 && (
+                                    <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                      {lvl2InProgress} in progress
                                     </span>
                                   )}
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={level2Status === 'completed' ? '100%' : (level2Status === 'not_started' ? '0%' : level2Status)}
-                                disabled={submitting}
-                                onChange={(e) => handleStatusUpdateParent('level2', level2Id, e.target.value, `Section: ${level2Name}`)}
-                                className="border border-gray-200 px-1.5 py-0.5 rounded text-[10px] font-bold outline-none focus:ring-1 focus:ring-brand-primary bg-white text-dark-primary cursor-pointer"
-                              >
-                                <option value="0%">0% (Not Started)</option>
-                                <option value="10%">10%</option>
-                                <option value="25%">25%</option>
-                                <option value="50%">50%</option>
-                                <option value="75%">75%</option>
-                                <option value="90%">90%</option>
-                                <option value="100%">100% (Completed)</option>
-                              </select>
-                              <button
-                                onClick={() => handleIncrementRevision('level2', level2Id, `Section: ${level2Name}`)}
-                                disabled={submitting}
-                                className="px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded text-[10px] font-black border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
-                              >
-                                <i className="fas fa-redo text-[9px]"></i> Revise Section
-                              </button>
                             </div>
                           </div>
 
                           {/* Level 3 Node List */}
                           {isLvl2Expanded && (
                             <div className="p-3 bg-white space-y-2.5 pl-6">
-                              {level2Nodes.map(node => {
-                                const progress = getNodeProgress(node.id);
-                                const status = progress?.status || '0%';
-                                const nodeRevisionCount = progress?.revision_count || 0;
-                                const title = node.level3 || 'Lesson Details';
-                                const nodeDays = getNodeDays(node.id);
+                              {lvl2Lessons.map(node => {
+                                const log = getLessonLog(node.id);
+                                const status = log?.current_status || 'not_started';
+                                const title = node.level3;
+                                const isLogExpanded = log && expandedLogItems[log.id];
 
                                 return (
-                                  <div key={node.id} className="flex justify-between items-center p-3 bg-gray-50/50 border rounded-xl hover:border-brand-primary/30 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedNodes.includes(node.id)}
-                                        onChange={() => handleSelectNode(node.id)}
-                                        className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
-                                      />
-                                      <div>
-                                        <p className="text-xs font-bold text-dark-primary">{title}</p>
-                                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                            status === '100%' || status === 'completed'
-                                              ? 'bg-emerald-100 text-emerald-700'
-                                              : status === '0%' || status === 'not_started'
-                                              ? 'bg-gray-100 text-gray-500'
-                                              : 'bg-blue-100 text-blue-700'
-                                          }`}>
-                                            {status === 'completed' || status === '100%' ? 'Completed (100%)' : status === 'not_started' || status === '0%' ? 'Not Started (0%)' : `In Progress (${status})`}
-                                          </span>
-                                          <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
-                                            Days: {nodeDays} day(s)
-                                          </span>
-                                          {nodeRevisionCount > 0 && (
-                                            <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                                              Revised {nodeRevisionCount}x
-                                            </span>
-                                          )}
+                                  <div key={node.id}>
+                                    <div className="flex justify-between items-center p-3 bg-gray-50/50 border rounded-xl hover:border-brand-primary/30 transition-colors">
+                                      <div className="flex items-center gap-3">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedNodes.includes(node.id)}
+                                          onChange={() => handleSelectNode(node.id)}
+                                          className="w-4 h-4 rounded text-brand-primary border-light-border focus:ring-brand-primary cursor-pointer"
+                                        />
+                                        <div>
+                                          <p className="text-xs font-bold text-dark-primary">{title}</p>
+                                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                            {getStatusBadge(status)}
+                                            {log && (
+                                              <>
+                                                <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                  {Number(log.completion_percentage).toFixed(0)}%
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                  Days: {log.days_taken}
+                                                </span>
+                                                {log.revision_counter > 0 && (
+                                                  <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                                    Revised {log.revision_counter}x
+                                                  </span>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
                                         </div>
                                       </div>
+                                      <div className="flex items-center gap-2">
+                                        {log && (
+                                          <button
+                                            onClick={() => toggleLogItemsExpand(log.id)}
+                                            className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer"
+                                          >
+                                            <i className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}></i>
+                                            History
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => openLogModal(node.id)}
+                                          disabled={submitting}
+                                          className="px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                                        >
+                                          <i className="fas fa-plus text-[10px]"></i> Log Entry
+                                        </button>
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <select
-                                        value={status === 'completed' ? '100%' : (status === 'not_started' ? '0%' : status)}
-                                        disabled={submitting}
-                                        onChange={(e) => handleStatusUpdate(node.id, e.target.value)}
-                                        className="border border-gray-200 px-2 py-1 rounded-xl text-xs font-bold outline-none focus:ring-1 focus:ring-brand-primary bg-white text-dark-primary cursor-pointer"
-                                      >
-                                        <option value="0%">0% (Not Started)</option>
-                                        <option value="10%">10%</option>
-                                        <option value="25%">25%</option>
-                                        <option value="50%">50%</option>
-                                        <option value="75%">75%</option>
-                                        <option value="90%">90%</option>
-                                        <option value="100%">100% (Completed)</option>
-                                      </select>
-                                      <button
-                                        onClick={() => handleIncrementRevision('node', node.id, `Lesson: ${title}`)}
-                                        disabled={submitting}
-                                        title="Log Topic Revision"
-                                        className="px-2 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold border border-purple-200 transition-colors flex items-center justify-center cursor-pointer active:scale-95"
-                                      >
-                                        <i className="fas fa-redo"></i>
-                                      </button>
-                                    </div>
+
+                                    {/* Expanded Log Items */}
+                                    {isLogExpanded && log && (
+                                      <div className="ml-7 mt-1 mb-2 bg-white border border-light-border rounded-xl p-3 space-y-2">
+                                        <p className="text-[10px] font-extrabold text-dark-soft uppercase mb-1">Log Entries</p>
+                                        {(logItems[log.id] || []).length === 0 ? (
+                                          <p className="text-xs text-gray-400">No entries yet.</p>
+                                        ) : (
+                                          (logItems[log.id] || []).map(item => (
+                                            <div key={item.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg border border-gray-100 text-xs">
+                                              <div className="flex-1">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                  <span className="font-bold text-gray-700">{new Date(item.date).toLocaleDateString()}</span>
+                                                  {getStatusBadge(item.current_status)}
+                                                  <span className="text-gray-500 font-semibold">{Number(item.progress).toFixed(0)}%</span>
+                                                  {item.teacher?.name && <span className="text-gray-400 font-semibold">by {item.teacher.name}</span>}
+                                                  {item.is_revision === 'Y' && (
+                                                    <span className="text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 text-[9px]">Revision</span>
+                                                  )}
+                                                  {item.late_reporting === 'Y' && (
+                                                    <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded border border-red-100 text-[9px]">Late</span>
+                                                  )}
+                                                </div>
+                                                {item.comments && <p className="text-gray-500 mt-1">{item.comments}</p>}
+                                              </div>
+                                            </div>
+                                          ))
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1666,36 +1263,18 @@ const SyllabusTracker = ({ user }) => {
 
         {/* Floating Action Bar for Bulk Updates */}
         {selectedNodes.length > 0 && (
-          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900/95 text-white py-3.5 px-6 rounded-2xl shadow-xl flex items-center gap-4 z-40 border border-white/10 backdrop-blur-md animate-in slide-in-from-bottom-8 duration-200">
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900/95 text-white py-3.5 px-6 rounded-2xl shadow-xl flex items-center gap-4 z-40 border border-white/10 backdrop-blur-md">
             <span className="text-xs font-black text-white shrink-0">
-              Selected: <strong className="text-brand-primary">{selectedNodes.length}</strong> topic(s)
+              Selected: <strong className="text-brand-primary">{selectedNodes.length}</strong> lesson(s)
             </span>
             <div className="w-px h-6 bg-white/20"></div>
             <div className="flex items-center gap-2.5">
-              <select
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleBulkStatusUpdate(e.target.value);
-                    e.target.value = '';
-                  }
-                }}
-                className="bg-white/10 hover:bg-white/15 border border-white/20 px-2 py-1.5 rounded-xl text-xs font-bold outline-none cursor-pointer text-white [&>option]:text-gray-900"
-              >
-                <option value="">Set Progress...</option>
-                <option value="0%">0% (Not Started)</option>
-                <option value="10%">10%</option>
-                <option value="25%">25%</option>
-                <option value="50%">50%</option>
-                <option value="75%">75%</option>
-                <option value="90%">90%</option>
-                <option value="100%">100% (Completed)</option>
-              </select>
               <button
-                onClick={handleBulkIncrementRevision}
+                onClick={openBulkModal}
                 disabled={submitting}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+                className="px-3 py-1.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
               >
-                <i className="fas fa-redo"></i> Bulk Revise
+                <i className="fas fa-pen-to-square"></i> Bulk Log Entry
               </button>
               <button
                 onClick={() => setSelectedNodes([])}
@@ -1709,6 +1288,99 @@ const SyllabusTracker = ({ user }) => {
       </div>
     );
   };
+
+  // ─── Render History Tab ──────────────────────────────────────────
+
+  const renderHistory = () => {
+    const bookLessons = getBookLessons();
+    const bookLessonIds = bookLessons.map(n => n.id);
+    const relevantLogs = lessonLogs.filter(l => bookLessonIds.includes(Number(l.lesson_id)) || bookLessonIds.includes(String(l.lesson_id)));
+
+    if (relevantLogs.length === 0) {
+      return (
+        <div className="bg-white p-8 rounded-xl border text-center text-gray-500 text-sm font-semibold">
+          No tracking history for this book yet.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {relevantLogs.map(log => {
+          const lesson = syllabusData.find(d => String(d.id) === String(log.lesson_id));
+          const title = lesson ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ') : 'Unknown Lesson';
+          const isExpanded = expandedLogItems[log.id];
+          const items = logItems[log.id] || [];
+
+          return (
+            <div key={log.id} className="bg-white p-4 border rounded-xl">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-sm text-dark-primary">{title}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {getStatusBadge(log.current_status)}
+                    <span className="text-[10px] text-gray-500 font-semibold">
+                      Started: {new Date(log.start_date).toLocaleDateString()}
+                    </span>
+                    {log.end_date && (
+                      <span className="text-[10px] text-emerald-600 font-semibold">
+                        Ended: {new Date(log.end_date).toLocaleDateString()}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-500 font-semibold">
+                      {Number(log.completion_percentage).toFixed(0)}% | {log.days_taken} day(s) | {log.revision_counter} revision(s)
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleLogItemsExpand(log.id)}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'} mr-1`}></i>
+                  {isExpanded ? 'Hide' : 'Show'} Entries ({items.length || '...'})
+                </button>
+              </div>
+
+              {isExpanded && (
+                <div className="mt-3 space-y-2 border-t pt-3">
+                  {items.length === 0 ? (
+                    <p className="text-xs text-gray-400">Loading...</p>
+                  ) : (
+                    items.map(item => (
+                      <div key={item.id} className="text-sm p-2 border-l-2 border-brand-primary bg-gray-50 rounded-r-lg">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-gray-700 text-xs">{new Date(item.date).toLocaleDateString()}</span>
+                          {getStatusBadge(item.current_status)}
+                          <span className="text-xs text-gray-500">{Number(item.progress).toFixed(0)}%</span>
+                          {item.teacher?.name && <span className="text-xs text-gray-400">by {item.teacher.name}</span>}
+                          {item.is_revision === 'Y' && <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1 py-0.5 rounded">Revision</span>}
+                          {item.late_reporting === 'Y' && <span className="text-[9px] text-red-600 font-bold bg-red-50 px-1 py-0.5 rounded">Late</span>}
+                        </div>
+                        {item.comments && <p className="text-xs text-gray-500 mt-1">{item.comments}</p>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ─── Loading State ──────────────────────────────────────────────
+
+  if (loading && classes.length === 0) {
+    return (
+      <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
+        <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mr-3"></div>
+        Loading Tracker...
+      </div>
+    );
+  }
+
+  // ─── Main Render ──────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
@@ -1729,51 +1401,67 @@ const SyllabusTracker = ({ user }) => {
           </label>
         </div>
 
-        {/* Quick Access / Favorites */}
-        {favorites.length > 0 && (
+        {/* Quick Access: Favorites + Recently Updated */}
+        {(favorites.length > 0 || recentBooks.length > 0) && (
           <div className="flex flex-wrap gap-2 items-center mb-4 p-2 bg-amber-50/40 border border-amber-100 rounded-xl">
-            <span className="text-[10px] font-extrabold text-amber-800 uppercase flex items-center gap-1 shrink-0">
-              <i className="fas fa-star text-amber-500 animate-pulse" /> Quick Access:
-            </span>
-            {favorites.map((fav, index) => (
-              <button
-                key={index}
-                onClick={() => {
-                  setSelectedClassId(fav.classId);
-                  const subObj = subjects.find(s => String(s.id) === String(fav.subjectId));
-                  if (subObj && subObj.classification_id) {
-                    setSelectedClassificationId(String(subObj.classification_id));
-                  } else {
-                    setSelectedClassificationId('');
-                  }
-                  setSelectedSubjectId(fav.subjectId);
-                  setSelectedBookId(fav.bookId);
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                  String(selectedClassId) === String(fav.classId) &&
-                  String(selectedSubjectId) === String(fav.subjectId) &&
-                  String(selectedBookId) === String(fav.bookId)
-                    ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
-                    : 'bg-white border-light-border text-dark-soft hover:bg-amber-50/50 hover:text-amber-900'
-                }`}
-              >
-                <span>{fav.className} • {fav.subjectName}</span>
-              </button>
-            ))}
+            {favorites.length > 0 && (
+              <>
+                <span className="text-[10px] font-extrabold text-amber-800 uppercase flex items-center gap-1 shrink-0">
+                  <i className="fas fa-star text-amber-500" /> Favorites:
+                </span>
+                {favorites.map((fav, index) => (
+                  <button
+                    key={`fav-${index}`}
+                    onClick={() => applyQuickAccess(fav)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      String(selectedClassId) === String(fav.classId) &&
+                      String(selectedSubjectId) === String(fav.subjectId) &&
+                      String(selectedBookId) === String(fav.bookId)
+                        ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
+                        : 'bg-white border-light-border text-dark-soft hover:bg-amber-50/50 hover:text-amber-900'
+                    }`}
+                  >
+                    <i className="fas fa-star text-amber-500 text-[8px]" />
+                    <span>{fav.className} • {fav.subjectName}</span>
+                  </button>
+                ))}
+              </>
+            )}
+            {recentBooks.length > 0 && (
+              <>
+                <span className="text-[10px] font-extrabold text-blue-800 uppercase flex items-center gap-1 shrink-0 ml-2">
+                  <i className="fas fa-clock text-blue-500" /> Recent:
+                </span>
+                {recentBooks.slice(0, 10).map((rec, index) => (
+                  <button
+                    key={`rec-${index}`}
+                    onClick={() => applyQuickAccess(rec)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      String(selectedClassId) === String(rec.classId) &&
+                      String(selectedSubjectId) === String(rec.subjectId) &&
+                      String(selectedBookId) === String(rec.bookId)
+                        ? 'bg-blue-100 border-blue-300 text-blue-900 shadow-sm'
+                        : 'bg-white border-light-border text-dark-soft hover:bg-blue-50/50 hover:text-blue-900'
+                    }`}
+                  >
+                    <i className="fas fa-clock text-blue-400 text-[8px]" />
+                    <span>{rec.className} • {rec.subjectName}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
 
+        {/* Filter Controls */}
         {activeClasses.length > 0 ? (
           <div className="flex flex-wrap gap-4 items-center">
-            {/* Class Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-dark-soft uppercase">Class</label>
               <select value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)} className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9">
                 {activeClasses.map(c => <option key={c.id} value={c.id}>{c.name || c.class_name}</option>)}
               </select>
             </div>
-
-            {/* Classification Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-dark-soft uppercase">Classification</label>
               <select value={selectedClassificationId} onChange={e => setSelectedClassificationId(e.target.value)} className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9">
@@ -1781,45 +1469,35 @@ const SyllabusTracker = ({ user }) => {
                 {activeClassifications.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-
-            {/* Subject Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-dark-soft uppercase">Subject</label>
               <select value={selectedSubjectId} onChange={e => setSelectedSubjectId(e.target.value)} className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9">
                 {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-
-            {/* Book Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-dark-soft uppercase">Book</label>
               <select value={selectedBookId} onChange={e => setSelectedBookId(e.target.value)} className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9">
                 {filteredBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
-
-            {/* Date Picker */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-bold text-dark-soft uppercase">Date</label>
               <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9" />
             </div>
-
-            {/* Favorite Pin/Star Action */}
             <div className="flex flex-col gap-1 self-end h-[36px] justify-center ml-1">
               <button
                 onClick={toggleFavorite}
                 disabled={!selectedClassId || !selectedSubjectId || !selectedBookId}
                 title={
-                  favorites.some(f => 
+                  favorites.some(f =>
                     String(f.classId) === String(selectedClassId) &&
                     String(f.subjectId) === String(selectedSubjectId) &&
                     String(f.bookId) === String(selectedBookId)
-                  )
-                    ? "Remove from Quick Access"
-                    : "Add to Quick Access"
+                  ) ? "Remove from Quick Access" : "Add to Quick Access"
                 }
                 className={`p-2 rounded-lg border transition-all ${
-                  favorites.some(f => 
+                  favorites.some(f =>
                     String(f.classId) === String(selectedClassId) &&
                     String(f.subjectId) === String(selectedSubjectId) &&
                     String(f.bookId) === String(selectedBookId)
@@ -1836,78 +1514,148 @@ const SyllabusTracker = ({ user }) => {
           <p className="text-xs font-bold text-red-500">No classes assigned. Enable "Cover for Absent Teacher" above to select a class.</p>
         )}
       </div>
- 
+
       <div className="p-6 overflow-y-auto pb-24">
         <div className="flex gap-4 border-b mb-6 pb-2">
-          {['curriculum', 'adhoc', 'history'].map(tab => (
+          {['curriculum', 'history'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors ${activeTab === tab ? 'bg-brand-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
- 
+
         {activeTab === 'curriculum' && renderCurriculum()}
- 
-        {activeTab === 'adhoc' && (
-          <form onSubmit={handleAdhocSubmit} className="bg-white p-6 rounded-xl shadow-sm border">
-            <h2 className="font-bold mb-4">Log Adhoc Activity</h2>
-            <input type="text" value={adhocName} onChange={e => setAdhocName(e.target.value)} placeholder="Activity description..." className="border p-2 w-full rounded-lg mb-4" required />
-            <button disabled={submitting} type="submit" className="bg-brand-primary text-white px-4 py-2 rounded-lg font-bold">Submit</button>
-          </form>
-        )}
- 
-        {activeTab === 'history' && (
-          <div className="space-y-4">
-            {historyLogs.map(log => (
-              <div key={log.id} className="bg-white p-4 border rounded-xl">
-                <p className="font-bold text-sm text-gray-500 mb-2">{new Date(log.date).toLocaleDateString()}</p>
-                {log.syllabus_tracker_log_items.map(item => (
-                  <div key={item.id} className="text-sm p-2 border-l-2 border-brand-primary bg-gray-50 mb-2">
-                    <span className="font-bold mr-2 uppercase text-[10px] bg-gray-200 px-2 rounded">{item.item_type}</span>
-                    {item.item_type === 'adhoc' || item.item_type === 'book' || item.item_type === 'level1' || item.item_type === 'level2'
-                      ? item.adhoc_name
-                      : `${syllabusData.find(d => String(d.id) === String(item.item_id))?.level3 || 'Unknown Node'}${item.adhoc_name ? ` (${item.adhoc_name})` : ''}`}
-                    <span className="ml-2 text-blue-600">[{item.status}]</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
+        {activeTab === 'history' && renderHistory()}
       </div>
 
-      {/* Add Syllabus Node Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-light-border animate-in scale-in duration-200">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-light-border">
-              <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">
-                Add Syllabus Item
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddModalOpen(false)}
-                className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1"
-              >
+      {/* ─── Single Log Entry Modal ─── */}
+      {isLogModalOpen && (() => {
+        const log = getLessonLog(logModalLessonId);
+        const isCompleted = log?.current_status === 'completed';
+        const lessonNode = syllabusData.find(d => String(d.id) === String(logModalLessonId));
+        const lessonTitle = lessonNode ? (lessonNode.level3 || lessonNode.level2 || lessonNode.level1) : 'Lesson';
+
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-light-border">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">Add Log Entry</h3>
+                <button onClick={() => setIsLogModalOpen(false)} className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1">
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4 font-semibold">{lessonTitle}</p>
+
+              <form onSubmit={handleLogItemSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Date</label>
+                  <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Status</label>
+                  <select value={logModalStatus} onChange={e => setLogModalStatus(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Progress ({logModalProgress}%)</label>
+                  <input type="range" min="0" max="100" step="5" value={logModalProgress} onChange={e => setLogModalProgress(Number(e.target.value))} className="w-full accent-brand-primary" />
+                  <div className="flex justify-between text-[9px] text-gray-400 font-bold mt-1">
+                    <span>0%</span><span>50%</span><span>100%</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Comments</label>
+                  <textarea value={logModalComments} onChange={e => setLogModalComments(e.target.value)} placeholder="Optional comments..." rows={2} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft resize-none" />
+                </div>
+                {isCompleted && (
+                  <label className="flex items-center gap-2 text-xs font-bold text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-100 cursor-pointer">
+                    <input type="checkbox" checked={logModalIsRevision} onChange={e => setLogModalIsRevision(e.target.checked)} className="w-4 h-4 rounded text-purple-600" />
+                    Mark as Revision
+                  </label>
+                )}
+                <div className="flex justify-end gap-2 pt-2 border-t">
+                  <button type="button" onClick={() => setIsLogModalOpen(false)} className="px-4 py-2 border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors">Cancel</button>
+                  <button type="submit" disabled={submitting} className="px-4 py-2 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50">
+                    {submitting ? 'Saving...' : 'Add Entry'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Bulk Log Entry Modal ─── */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-light-border">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b">
+              <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">Bulk Log Entry</h3>
+              <button onClick={() => setIsBulkModalOpen(false)} className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1">
                 <i className="fas fa-times" />
               </button>
             </div>
-            
-            <form onSubmit={handleAddSyllabusItem} className="space-y-4">
-              {/* Add Type Selection */}
+            <p className="text-xs text-gray-500 mb-4 font-semibold">
+              Adding entry for <strong className="text-brand-primary">{selectedNodes.length}</strong> lessons
+            </p>
+
+            <form onSubmit={handleBulkLogSubmit} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1.5">
-                  Item Type
-                </label>
+                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Date</label>
+                <input type="date" value={logDate} onChange={e => setLogDate(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Status</label>
+                <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Progress ({bulkProgress}%)</label>
+                <input type="range" min="0" max="100" step="5" value={bulkProgress} onChange={e => setBulkProgress(Number(e.target.value))} className="w-full accent-brand-primary" />
+                <div className="flex justify-between text-[9px] text-gray-400 font-bold mt-1">
+                  <span>0%</span><span>50%</span><span>100%</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Comments</label>
+                <textarea value={bulkComments} onChange={e => setBulkComments(e.target.value)} placeholder="Optional comments..." rows={2} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft resize-none" />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setIsBulkModalOpen(false)} className="px-4 py-2 border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors">Cancel</button>
+                <button type="submit" disabled={submitting} className="px-4 py-2 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50">
+                  {submitting ? 'Saving...' : `Add ${selectedNodes.length} Entries`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Add Syllabus Node Modal ─── */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-light-border">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b border-light-border">
+              <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">Add Syllabus Item</h3>
+              <button type="button" onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            <form onSubmit={handleAddSyllabusItem} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1.5">Item Type</label>
                 <div className="flex border border-light-border rounded-xl p-0.5 bg-light-bg/40 gap-0.5">
                   {[
-                    { id: 'level1', label: lvl1Label },
-                    { id: 'level2', label: lvl2Label },
-                    { id: 'level3', label: lvl3Label }
-                  ].map(type => (
+                    { id: 'level1', label: lvl1Label, exists: !!bookLevels[0] },
+                    { id: 'level2', label: lvl2Label, exists: !!bookLevels[1] },
+                    { id: 'level3', label: lvl3Label, exists: !!bookLevels[2] }
+                  ].filter(x => x.exists).map(type => (
                     <button
-                      key={type.id}
-                      type="button"
+                      key={type.id} type="button"
                       onClick={() => {
                         setAddType(type.id);
                         const l1Names = [...new Set(bookData.map(n => n.level1))].filter(Boolean);
@@ -1917,11 +1665,7 @@ const SyllabusTracker = ({ user }) => {
                           if (l2Names.length > 0) setSelectedAddLevel2(l2Names[0]);
                         }
                       }}
-                      className={`flex-1 text-center py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        addType === type.id
-                          ? 'bg-brand-primary text-white shadow-sm'
-                          : 'text-dark-soft hover:text-dark-primary'
-                      }`}
+                      className={`flex-1 text-center py-1.5 rounded-lg text-xs font-bold transition-all ${addType === type.id ? 'bg-brand-primary text-white shadow-sm' : 'text-dark-soft hover:text-dark-primary'}`}
                     >
                       {type.label}
                     </button>
@@ -1929,51 +1673,24 @@ const SyllabusTracker = ({ user }) => {
                 </div>
               </div>
 
-              {/* Conditional Inputs */}
               {addType === 'level1' && (
                 <div>
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                    {lvl1Label} Name (Level 1)
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder={`e.g. ${lvl1Label} 1`}
-                    value={addLevel1Name}
-                    onChange={e => setAddLevel1Name(e.target.value)}
-                    className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                  />
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">{lvl1Label} Name</label>
+                  <input type="text" required placeholder={`e.g. ${lvl1Label} 1`} value={addLevel1Name} onChange={e => setAddLevel1Name(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
                 </div>
               )}
 
               {addType === 'level2' && (
                 <>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Parent {lvl1Label}
-                    </label>
-                    <select
-                      value={selectedAddLevel1}
-                      onChange={e => setSelectedAddLevel1(e.target.value)}
-                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                    >
-                      {[...new Set(bookData.map(n => n.level1))].filter(Boolean).map(l1 => (
-                        <option key={l1} value={l1}>{l1}</option>
-                      ))}
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Parent {lvl1Label}</label>
+                    <select value={selectedAddLevel1} onChange={e => setSelectedAddLevel1(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
+                      {[...new Set(bookData.map(n => n.level1))].filter(Boolean).map(l1 => <option key={l1} value={l1}>{l1}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      {lvl2Label} Name (Level 2)
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder={`e.g. ${lvl2Label} A`}
-                      value={addLevel2Name}
-                      onChange={e => setAddLevel2Name(e.target.value)}
-                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                    />
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">{lvl2Label} Name</label>
+                    <input type="text" required placeholder={`e.g. ${lvl2Label} A`} value={addLevel2Name} onChange={e => setAddLevel2Name(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
                   </div>
                 </>
               )}
@@ -1981,72 +1698,29 @@ const SyllabusTracker = ({ user }) => {
               {addType === 'level3' && (
                 <>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Parent {lvl1Label}
-                    </label>
-                    <select
-                      value={selectedAddLevel1}
-                      onChange={e => {
-                        setSelectedAddLevel1(e.target.value);
-                        const l2Names = [...new Set(bookData.filter(n => n.level1 === e.target.value).map(n => n.level2 || 'General'))].filter(Boolean);
-                        setSelectedAddLevel2(l2Names[0] || 'General');
-                      }}
-                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                    >
-                      {[...new Set(bookData.map(n => n.level1))].filter(Boolean).map(l1 => (
-                        <option key={l1} value={l1}>{l1}</option>
-                      ))}
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Parent {lvl1Label}</label>
+                    <select value={selectedAddLevel1} onChange={e => { setSelectedAddLevel1(e.target.value); const l2Names = [...new Set(bookData.filter(n => n.level1 === e.target.value).map(n => n.level2 || 'General'))].filter(Boolean); setSelectedAddLevel2(l2Names[0] || 'General'); }} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
+                      {[...new Set(bookData.map(n => n.level1))].filter(Boolean).map(l1 => <option key={l1} value={l1}>{l1}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Parent {lvl2Label}
-                    </label>
-                    <select
-                      value={selectedAddLevel2}
-                      onChange={e => setSelectedAddLevel2(e.target.value)}
-                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                    >
-                      {[...new Set(bookData.filter(n => n.level1 === selectedAddLevel1).map(n => n.level2 || 'General'))].filter(Boolean).map(l2 => (
-                        <option key={l2} value={l2}>{l2}</option>
-                      ))}
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Parent {lvl2Label}</label>
+                    <select value={selectedAddLevel2} onChange={e => setSelectedAddLevel2(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
+                      {[...new Set(bookData.filter(n => n.level1 === selectedAddLevel1).map(n => n.level2 || 'General'))].filter(Boolean).map(l2 => <option key={l2} value={l2}>{l2}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      {lvl3Label} Name (Level 3)
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder={`e.g. ${lvl3Label} 1`}
-                      value={addLevel3Name}
-                      onChange={e => setAddLevel3Name(e.target.value)}
-                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                    />
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">{lvl3Label} Name</label>
+                    <input type="text" required placeholder={`e.g. ${lvl3Label} 1`} value={addLevel3Name} onChange={e => setAddLevel3Name(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
-                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                        Page Count
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={addPageCount}
-                        onChange={e => setAddPageCount(Number(e.target.value))}
-                        className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                      />
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Page Count</label>
+                      <input type="number" min="0" value={addPageCount} onChange={e => setAddPageCount(Number(e.target.value))} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft" />
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                        Complexity
-                      </label>
-                      <select
-                        value={addComplexity}
-                        onChange={e => setAddComplexity(e.target.value)}
-                        className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                      >
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">Complexity</label>
+                      <select value={addComplexity} onChange={e => setAddComplexity(e.target.value)} className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft">
                         <option value="Easy">Easy</option>
                         <option value="Medium">Medium</option>
                         <option value="Hard">Hard</option>
@@ -2056,20 +1730,9 @@ const SyllabusTracker = ({ user }) => {
                 </>
               )}
 
-              {/* Actions */}
               <div className="flex justify-end gap-2 pt-2 border-t border-light-border">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 border border-light-border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50"
-                >
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 border border-light-border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors">Cancel</button>
+                <button type="submit" disabled={submitting} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50">
                   Add {addType === 'level1' ? lvl1Label : addType === 'level2' ? lvl2Label : lvl3Label}
                 </button>
               </div>
