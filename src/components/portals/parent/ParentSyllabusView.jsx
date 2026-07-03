@@ -30,19 +30,40 @@ const ParentSyllabusView = ({ student }) => {
         ] = await Promise.all([
           supabase.from('syllabus_books').select('*'),
           supabase.from('book_tracker').select('*').eq('class_id', classId),
-          supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
-          supabase.from('syllabus_book_lessons').select('*')
+          supabase.from('lesson_tracker_log').select('*').eq('class_id', classId)
         ]);
 
         if (resBooks.error) throw resBooks.error;
         if (resTrackers.error) throw resTrackers.error;
         if (resLogs.error) throw resLogs.error;
-        if (resSyllabus.error) throw resSyllabus.error;
 
         setBooks(resBooks.data || []);
         setBookTrackers(resTrackers.data || []);
         setLessonLogs(resLogs.data || []);
-        setSyllabusData(resSyllabus.data || []);
+
+        const activeBookIds = [
+          ...new Set([
+            ...(resTrackers.data || []).map(t => String(t.book_id)),
+            ...(resLogs.data || []).map(l => {
+              const book = (resBooks.data || []).find(b => {
+                // We don't have book_id on lesson log, but we can resolve it.
+                return false;
+              });
+              return null;
+            }).filter(Boolean)
+          ])
+        ].map(Number);
+
+        let lessonsData = [];
+        if (activeBookIds.length > 0) {
+          const { data: resSyllabus, error: resSyllabusErr } = await supabase
+            .from('syllabus_book_lessons')
+            .select('*')
+            .in('book_id', activeBookIds);
+          if (resSyllabusErr) throw resSyllabusErr;
+          lessonsData = resSyllabus || [];
+        }
+        setSyllabusData(lessonsData);
 
         // Fetch log items for this class (joined to get details)
         const logIds = (resLogs.data || []).map(l => l.id);

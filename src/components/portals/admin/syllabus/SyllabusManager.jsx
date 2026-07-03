@@ -22,10 +22,89 @@ const SyllabusManager = ({ role, user }) => {
   const [books, setBooks] = useState([]);
   const [syllabusData, setSyllabusData] = useState([]);
   const [allocatedSubjectIds, setAllocatedSubjectIds] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [bookClasses, setBookClasses] = useState([]);
+  const [mappingBook, setMappingBook] = useState(null);
+  const [tempMappings, setTempMappings] = useState([]);
+  const [showAllSubjects, setShowAllSubjects] = useState(false);
+
+  const initiateMapping = (book) => {
+    setMappingBook(book);
+    const existing = bookClasses
+      .filter((bc) => String(bc.book_id) === String(book.id))
+      .map((bc) => String(bc.class_id));
+    setTempMappings(existing);
+  };
+
+  const handleToggleClassMapping = (classId) => {
+    const cidStr = String(classId);
+    if (tempMappings.includes(cidStr)) {
+      setTempMappings(tempMappings.filter((id) => id !== cidStr));
+    } else {
+      setTempMappings([...tempMappings, cidStr]);
+    }
+  };
+
+  const handleSaveClassMappings = async () => {
+    if (!mappingBook) return;
+    setLoading(true);
+    try {
+      const bookId = mappingBook.id;
+
+      if (isSupabaseMode) {
+        const { error: delErr } = await supabase
+          .from('syllabus_book_classes')
+          .delete()
+          .eq('book_id', bookId);
+        if (delErr) throw delErr;
+
+        if (tempMappings.length > 0) {
+          const insertData = tempMappings.map((cid) => ({
+            book_id: bookId,
+            class_id: Number(cid)
+          }));
+          const { error: insErr } = await supabase
+            .from('syllabus_book_classes')
+            .insert(insertData);
+          if (insErr) throw insErr;
+        }
+      }
+
+      const filtered = bookClasses.filter((bc) => String(bc.book_id) !== String(bookId));
+      const updated = [
+        ...filtered,
+        ...tempMappings.map((cid) => ({
+          book_id: bookId,
+          class_id: Number(cid)
+        }))
+      ];
+      setBookClasses(updated);
+      localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(updated));
+
+      showToast('Book mapped to classes successfully!', 'success');
+      setMappingBook(null);
+    } catch (err) {
+      showToast('Error saving mappings: ' + err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const [collapsedNodes, setCollapsedNodes] = useState({});
   const [collapsedClassifications, setCollapsedClassifications] = useState({});
   const [activeSubjectId, setActiveSubjectId] = useState(null);
+
+  useEffect(() => {
+    if (isTeacher && !showAllSubjects && allocatedSubjectIds.length > 0) {
+      const activeAllocated = allocatedSubjectIds.map(id => String(id)).includes(String(activeSubjectId));
+      if (!activeAllocated) {
+        const firstAllocated = subjects.find(s => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)));
+        if (firstAllocated) {
+          setActiveSubjectId(firstAllocated.id);
+        }
+      }
+    }
+  }, [showAllSubjects, activeSubjectId, allocatedSubjectIds, subjects, isTeacher]);
 
   const [deleteModalSubject, setDeleteModalSubject] = useState(null);
   const [mappedClasses, setMappedClasses] = useState([]);
@@ -133,11 +212,15 @@ const SyllabusManager = ({ role, user }) => {
         { data: dbSubjects },
         { data: dbBooks },
         { data: dbSyllabusData },
+        { data: dbClasses },
+        { data: dbBookClasses }
       ] = await Promise.all([
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('subjects').select('*'),
         supabase.from('syllabus_books').select('*'),
         supabase.from('syllabus_book_lessons').select('*'),
+        supabase.from('classes').select('*').order('name', { ascending: true }),
+        supabase.from('syllabus_book_classes').select('*')
       ]);
 
       // If classifications came back empty (e.g. due to RLS), try fetching by IDs referenced in subjects
@@ -178,10 +261,12 @@ const SyllabusManager = ({ role, user }) => {
       setSubjects(dbSubjects || []);
       setBooks(dbBooks || []);
       setSyllabusData(dbSyllabusData || []);
+      setClasses(dbClasses || []);
+      setBookClasses(dbBookClasses || []);
       setIsSupabaseMode(true);
 
       let initialSubjectList = dbSubjects || [];
-      if (isTeacher) {
+      if (isTeacher && teacherAllocatedIds.length > 0) {
         initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
       }
       if (initialSubjectList.length > 0 && !activeSubjectId) {
@@ -198,6 +283,26 @@ const SyllabusManager = ({ role, user }) => {
 
   const loadLocalData = () => {
     const raw = localStorage.getItem('jzv_syllabus_data');
+    
+    // Load local classes
+    const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
+    if (rawTimetable) {
+      try {
+        const parsedTimetable = JSON.parse(rawTimetable);
+        setClasses(parsedTimetable.classes || []);
+      } catch (e) {
+        console.warn('Error parsing timetable local data classes:', e);
+      }
+    }
+
+    // Load local book classes mapping
+    const rawBC = localStorage.getItem('jzv_syllabus_book_classes');
+    if (rawBC) {
+      try {
+        setBookClasses(JSON.parse(rawBC));
+      } catch (e) {}
+    }
+
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
@@ -207,28 +312,25 @@ const SyllabusManager = ({ role, user }) => {
         setSyllabusData(parsed.syllabusData || []);
         
         let teacherAllocatedIds = [];
-        if (isTeacher && user?.id) {
-          const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
-          if (rawTimetable) {
-            try {
-              const parsedTimetable = JSON.parse(rawTimetable);
-              const matchedTeacher = (parsedTimetable.teachers || []).find(
-                (t) => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id)
-              );
-              if (matchedTeacher) {
-                teacherAllocatedIds = (parsedTimetable.assignments || [])
-                  .filter((a) => String(a.teacher_id) === String(matchedTeacher.id))
-                  .map((a) => String(a.subject_id));
-              }
-            } catch (e) {
-              console.warn('Error parsing timetable local data:', e);
+        if (isTeacher && user?.id && rawTimetable) {
+          try {
+            const parsedTimetable = JSON.parse(rawTimetable);
+            const matchedTeacher = (parsedTimetable.teachers || []).find(
+              (t) => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id)
+            );
+            if (matchedTeacher) {
+              teacherAllocatedIds = (parsedTimetable.assignments || [])
+                .filter((a) => String(a.teacher_id) === String(matchedTeacher.id))
+                .map((a) => String(a.subject_id));
             }
+          } catch (e) {
+            console.warn('Error parsing timetable local data:', e);
           }
         }
         setAllocatedSubjectIds(teacherAllocatedIds);
 
         let initialSubjectList = parsed.subjects || [];
-        if (isTeacher) {
+        if (isTeacher && teacherAllocatedIds.length > 0) {
           initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
         }
         if (initialSubjectList.length > 0 && !activeSubjectId) {
@@ -271,7 +373,7 @@ const SyllabusManager = ({ role, user }) => {
     setSyllabusData(mockSyllabusData);
     
     let initialSubjectList = mockSubjects;
-    if (isTeacher) {
+    if (isTeacher && allocatedSubjectIds.length > 0) {
       initialSubjectList = initialSubjectList.filter((s) => allocatedSubjectIds.includes(String(s.id)));
     }
     if (initialSubjectList.length > 0) {
@@ -926,7 +1028,7 @@ const SyllabusManager = ({ role, user }) => {
   };
 
   // Grouping subjects by classifications
-  const teacherFilteredSubjects = isTeacher
+  const teacherFilteredSubjects = (isTeacher && allocatedSubjectIds.length > 0 && !showAllSubjects)
     ? subjects.filter((s) => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)))
     : subjects;
 
@@ -1486,6 +1588,20 @@ const SyllabusManager = ({ role, user }) => {
               </div>
             )}
           </div>
+          {isTeacher && (
+            <div className="flex items-center gap-2 mt-2 px-1 pb-1">
+              <label className="relative inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={showAllSubjects}
+                  onChange={(e) => setShowAllSubjects(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-soft peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand-primary"></div>
+                <span className="ms-2 text-[9px] font-black text-gray-500 uppercase tracking-wider">Show All Subjects</span>
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
@@ -1616,6 +1732,13 @@ const SyllabusManager = ({ role, user }) => {
                                   <i className="fas fa-file-import text-xl"></i>
                                 </button>
                                 <button
+                                  onClick={() => initiateMapping(book)}
+                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                  title="Map to Classes"
+                                >
+                                  <i className="fas fa-graduation-cap text-xl"></i>
+                                </button>
+                                <button
                                   onClick={() =>
                                     setModal({
                                       type: 'edit',
@@ -1670,6 +1793,63 @@ const SyllabusManager = ({ role, user }) => {
         onSaveClassifications={handleSaveClassifications}
         onBulkMapSubjects={handleBulkMapSubjects}
       />
+
+      {mappingBook && (
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 p-6 flex flex-col space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-extrabold text-dark-deepblue">
+                Map Book to Classes
+              </h3>
+              <button onClick={() => setMappingBook(null)} className="text-gray-400 hover:text-gray-600 text-lg">
+                <i className="fas fa-times" />
+              </button>
+            </div>
+            
+            <div className="text-xs font-semibold text-gray-500 mb-2">
+              Book: <strong className="text-dark-primary">{mappingBook.name}</strong>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {classes.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">No classes found.</p>
+              ) : (
+                classes.map((cls) => {
+                  const isMapped = tempMappings.includes(String(cls.id));
+                  return (
+                    <label key={cls.id} className="flex items-center gap-3 p-3 border rounded-xl hover:bg-gray-50/50 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isMapped}
+                        onChange={() => handleToggleClassMapping(cls.id)}
+                        className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                      />
+                      <span className="text-xs font-bold text-dark-primary">{cls.name || cls.class_name}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex gap-2 w-full pt-2">
+              <button
+                type="button"
+                onClick={() => setMappingBook(null)}
+                className="flex-1 px-4 py-2 bg-light-ui hover:bg-light-border text-dark-soft rounded-xl text-xs font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveClassMappings}
+                className="flex-1 px-4 py-2 bg-brand-primary hover:bg-brand-primary/95 text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Save Mappings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal
         isOpen={!!confirmConfig}

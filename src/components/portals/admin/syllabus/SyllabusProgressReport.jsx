@@ -28,19 +28,16 @@ const SyllabusProgressReport = () => {
         const [
           { data: dbClasses },
           { data: dbSubjects },
-          { data: dbBooks },
-          { data: dbSyllabusData }
+          { data: dbBooks }
         ] = await Promise.all([
           supabase.from('classes').select('*'),
           supabase.from('subjects').select('*'),
-          supabase.from('syllabus_books').select('*'),
-          supabase.from('syllabus_book_lessons').select('*')
+          supabase.from('syllabus_books').select('*')
         ]);
 
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
         setBooks(dbBooks || []);
-        setSyllabusData(dbSyllabusData || []);
 
         if (dbClasses && dbClasses.length > 0) setSelectedClassId(String(dbClasses[0].id));
         if (dbSubjects && dbSubjects.length > 0) setSelectedSubjectId(String(dbSubjects[0].id));
@@ -59,6 +56,28 @@ const SyllabusProgressReport = () => {
     if (filteredBooks.length > 0) setSelectedBookId(String(filteredBooks[0].id));
     else setSelectedBookId('');
   }, [selectedSubjectId]);
+
+  const fetchSyllabusData = async (bookId) => {
+    if (!bookId) {
+      setSyllabusData([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('syllabus_book_lessons')
+        .select('*')
+        .eq('book_id', bookId);
+      if (error) throw error;
+      setSyllabusData(data || []);
+    } catch (err) {
+      console.warn('Failed to fetch syllabus lessons:', err.message);
+      setSyllabusData([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchSyllabusData(selectedBookId);
+  }, [selectedBookId]);
 
   const fetchReportData = async () => {
     if (!selectedClassId || !selectedBookId) {
