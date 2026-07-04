@@ -68,10 +68,10 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
           <div>
             <h3 className="text-base font-bold flex items-center gap-2">
               <i className="fas fa-file-import"></i>
-              CSV Column Mapping & Preview
+              File Column Mapping & Preview
             </h3>
             <p className="text-[10px] text-brand-lbg/80 mt-0.5 flex items-center flex-wrap gap-1">
-              Confirm which CSV columns map to the active book hierarchy: <span className="font-bold text-white bg-white/20 px-1.5 py-0.5 rounded text-[9px]">{hierarchy}</span>
+              Confirm which columns map to the active book hierarchy: <span className="font-bold text-white bg-white/20 px-1.5 py-0.5 rounded text-[9px]">{hierarchy}</span>
             </p>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white transition-all text-xl outline-none p-1">
@@ -180,7 +180,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
 
           {/* Preview Section */}
           <div className="flex-1 flex flex-col min-h-[150px]">
-            <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider mb-2 shrink-0">CSV Data Preview (First 5 rows)</h4>
+            <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider mb-2 shrink-0">Data Preview (First 5 rows)</h4>
             <div className="flex-1 overflow-auto border border-light-border/40 rounded-2xl bg-light-lbg/10 p-2 text-[10px]">
               <table className="w-full border-collapse">
                 <thead>

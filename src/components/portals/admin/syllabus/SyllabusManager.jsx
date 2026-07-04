@@ -4,6 +4,8 @@ import { showToast } from '../../../../utils/toast';
 import ClassificationsModal from '../timetable/ClassificationsModal';
 import ConfirmModal from '../../../ConfirmModal';
 import SyllabusCsvMappingModal from './SyllabusCsvMappingModal';
+import * as XLSX from 'xlsx';
+
 
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
 
@@ -95,16 +97,29 @@ const SyllabusManager = ({ role, user }) => {
   const [activeSubjectId, setActiveSubjectId] = useState(null);
 
   useEffect(() => {
-    if (isTeacher && !showAllSubjects && allocatedSubjectIds.length > 0) {
+    if (isTeacher && !showAllSubjects) {
       const activeAllocated = allocatedSubjectIds.map(id => String(id)).includes(String(activeSubjectId));
       if (!activeAllocated) {
         const firstAllocated = subjects.find(s => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)));
         if (firstAllocated) {
           setActiveSubjectId(firstAllocated.id);
+        } else {
+          setActiveSubjectId(null);
         }
       }
     }
   }, [showAllSubjects, activeSubjectId, allocatedSubjectIds, subjects, isTeacher]);
+
+  useEffect(() => {
+    if (!mappingBook) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setMappingBook(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mappingBook]);
 
   const [deleteModalSubject, setDeleteModalSubject] = useState(null);
   const [mappedClasses, setMappedClasses] = useState([]);
@@ -428,12 +443,50 @@ const SyllabusManager = ({ role, user }) => {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      processCsvText(text);
-    };
-    reader.readAsText(file);
+
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (fileExt === 'xlsx' || fileExt === 'xls') {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          // Filter out completely empty rows
+          const nonEmtpyRows = jsonData.filter(row => row && row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ''));
+
+          if (nonEmtpyRows.length < 2) {
+            showToast('Excel file is empty or invalid.', 'error');
+            return;
+          }
+
+          const headers = nonEmtpyRows[0].map(h => String(h || '').trim());
+          const rows = nonEmtpyRows.slice(1).map(row => 
+            headers.map((_, idx) => {
+              const cell = row[idx];
+              return cell === null || cell === undefined ? '' : String(cell).trim();
+            })
+          );
+
+          setCsvHeaders(headers);
+          setCsvRows(rows);
+          setIsCsvMappingOpen(true);
+        } catch (err) {
+          showToast('Error parsing Excel file: ' + err.message, 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        processCsvText(text);
+      };
+      reader.readAsText(file);
+    }
     e.target.value = null;
   };
 
@@ -476,6 +529,16 @@ const SyllabusManager = ({ role, user }) => {
     const complexityIdx = complexityCol ? csvHeaders.indexOf(complexityCol) : -1;
     const pageIdx = pageCol ? csvHeaders.indexOf(pageCol) : -1;
 
+    const toProperCase = (str) => {
+      if (!str || !str.trim()) return null;
+      return str
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    };
+
     try {
       const targetBook = books.find((b) => String(b.id) === String(importBookId));
       if (!targetBook) throw new Error('Target book not found');
@@ -486,10 +549,10 @@ const SyllabusManager = ({ role, user }) => {
       let rowsImported = 0;
 
       for (const row of csvRows) {
-        const l1 = unitIdx !== -1 ? row[unitIdx] : null;
-        const l2 = chapterIdx !== -1 ? row[chapterIdx] : null;
-        const l3 = lessonIdx !== -1 ? row[lessonIdx] : null;
-        if (!l1 || !l1.trim()) continue;
+        const l1 = toProperCase(unitIdx !== -1 ? row[unitIdx] : null);
+        const l2 = toProperCase(chapterIdx !== -1 ? row[chapterIdx] : null);
+        const l3 = toProperCase(lessonIdx !== -1 ? row[lessonIdx] : null);
+        if (!l1) continue;
 
         const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
         let compVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
@@ -506,17 +569,17 @@ const SyllabusManager = ({ role, user }) => {
         let existingRow = currentData.find(
           (d) =>
             String(d.book_id) === String(importBookId) &&
-            d.level1?.toLowerCase() === l1.trim().toLowerCase() &&
-            (d.level2 || '')?.toLowerCase() === (l2 ? l2.trim() : '').toLowerCase() &&
-            (d.level3 || '')?.toLowerCase() === (l3 ? l3.trim() : '').toLowerCase()
+            d.level1?.toLowerCase() === l1.toLowerCase() &&
+            (d.level2 || '')?.toLowerCase() === (l2 ? l2 : '').toLowerCase() &&
+            (d.level3 || '')?.toLowerCase() === (l3 ? l3 : '').toLowerCase()
         );
 
         if (!existingRow) {
           const newRow = {
             book_id: importBookId,
-            level1: l1.trim(),
-            level2: l2?.trim() || null,
-            level3: l3?.trim() || null,
+            level1: l1,
+            level2: l2,
+            level3: l3,
             page_count: pageVal,
             complexity: compVal,
           };
@@ -1028,7 +1091,7 @@ const SyllabusManager = ({ role, user }) => {
   };
 
   // Grouping subjects by classifications
-  const teacherFilteredSubjects = (isTeacher && allocatedSubjectIds.length > 0 && !showAllSubjects)
+  const teacherFilteredSubjects = (isTeacher && !showAllSubjects)
     ? subjects.filter((s) => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)))
     : subjects;
 
@@ -1062,6 +1125,10 @@ const SyllabusManager = ({ role, user }) => {
 
     return knownGroups;
   })();
+
+  const allClassificationsCollapsed = groupedSubjects.length > 0 && groupedSubjects.every(
+    (cls) => collapsedClassifications[cls.name]
+  );
 
   const renderSubjectSelector = (title, subs, isUnclassified = false) => {
     if (!subs || subs.length === 0) return null;
@@ -1262,6 +1329,7 @@ const SyllabusManager = ({ role, user }) => {
           Object.keys(grouped).map((l1) => {
             const isL1Collapsed = collapsedNodes[`${book.id}-${l1}`];
             const l2Groups = grouped[l1];
+            const l2Keys = Object.keys(l2Groups).filter((k) => k !== '_direct_lessons' && k);
             return (
               <div
                 key={l1}
@@ -1283,6 +1351,33 @@ const SyllabusManager = ({ role, user }) => {
                     </span>
                   </button>
                   <div className="flex items-center gap-1.5">
+                    {l2Keys.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const allL2Collapsed = l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]);
+                          setCollapsedNodes((prev) => {
+                            const next = { ...prev };
+                            if (allL2Collapsed) {
+                              delete next[`${book.id}-${l1}`]; // Ensure L1 is expanded
+                            }
+                            l2Keys.forEach((l2) => {
+                              if (allL2Collapsed) {
+                                delete next[`${book.id}-${l1}-${l2}`];
+                              } else {
+                                next[`${book.id}-${l1}-${l2}`] = true;
+                              }
+                            });
+                            return next;
+                          });
+                        }}
+                        className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-orange-50 transition-all flex items-center justify-center"
+                        title={l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]) ? `Expand All ${l2Name}s` : `Collapse All ${l2Name}s`}
+                      >
+                        <i className={`fas ${l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-[10px]`} />
+                      </button>
+                    )}
                     <button
                       onClick={() =>
                         setModal({
@@ -1432,6 +1527,19 @@ const SyllabusManager = ({ role, user }) => {
                               )}
 
                               <div className="flex gap-1">
+                                {l3Nodes.lessons.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleCollapse(`${book.id}-${l1}-${l2}`);
+                                    }}
+                                    className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all flex items-center justify-center"
+                                    title={isL2Collapsed ? `Expand All ${l3Name}s` : `Collapse All ${l3Name}s`}
+                                  >
+                                    <i className={`fas ${isL2Collapsed ? 'fa-chevron-down' : 'fa-chevron-up'} text-[9px]`} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     setModal({
@@ -1569,6 +1677,28 @@ const SyllabusManager = ({ role, user }) => {
             <h2 className="text-xl font-black text-brand-primary flex items-center gap-2 tracking-tight">
               <i className="fas fa-layer-group text-brand-primary"></i> Curriculum
             </h2>
+            {groupedSubjects.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (allClassificationsCollapsed) {
+                    setCollapsedClassifications({});
+                  } else {
+                    const newCollapsed = {};
+                    groupedSubjects.forEach((cls) => {
+                      newCollapsed[cls.name] = true;
+                    });
+                    setCollapsedClassifications(newCollapsed);
+                  }
+                }}
+                className="p-1 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
+                title={allClassificationsCollapsed ? 'Expand All Classifications' : 'Collapse All Classifications'}
+              >
+                <i
+                  className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
+                />
+              </button>
+            )}
             {(isAdmin || isTeacher) && (
               <div className="p-4 border-t border-light-border/50 bg-white flex gap-2">
                 {isAdmin && (
@@ -1673,7 +1803,7 @@ const SyllabusManager = ({ role, user }) => {
                     const bookData = syllabusData.filter(
                       (d) => String(d.book_id) === String(book.id)
                     );
-                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1)));
+                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1))).filter(Boolean);
                     const bookL1Count = l1Keys.length;
                     return (
                       <div
@@ -1710,6 +1840,33 @@ const SyllabusManager = ({ role, user }) => {
                           <div className="flex gap-2">
                             {(isAdmin || isTeacher) && (
                               <>
+                                {l1Keys.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const allL1Collapsed = l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]);
+                                      setCollapsedNodes((prev) => {
+                                        const next = { ...prev };
+                                        if (allL1Collapsed) {
+                                          delete next[book.id]; // Ensure book itself is expanded
+                                        }
+                                        l1Keys.forEach((l1) => {
+                                          if (allL1Collapsed) {
+                                            delete next[`${book.id}-${l1}`];
+                                          } else {
+                                            next[`${book.id}-${l1}`] = true;
+                                          }
+                                        });
+                                        return next;
+                                      });
+                                    }}
+                                    className="p-1.5 text-dark-soft hover:bg-light-lbg rounded-xl transition-all flex items-center justify-center border border-light-border bg-white"
+                                    title={l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? `Expand All ${bookL1Name}s` : `Collapse All ${bookL1Name}s`}
+                                  >
+                                    <i className={`fas ${l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`} />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     setModal({
@@ -1975,7 +2132,7 @@ const SyllabusManager = ({ role, user }) => {
       <input
         type="file"
         ref={fileInputRef}
-        accept=".csv"
+        accept=".csv,.xls,.xlsx"
         onChange={handleFileChange}
         className="hidden"
       />

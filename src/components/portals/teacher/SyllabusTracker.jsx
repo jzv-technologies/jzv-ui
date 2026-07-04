@@ -563,9 +563,7 @@ const SyllabusTracker = ({ user }) => {
   const abFilteredBooks = abSubjectId
     ? abAvailableBooks.filter((b) => String(b.subject_id) === String(abSubjectId))
     : abAvailableBooks;
-  const abFilteredSubjects = subjects.filter((s) =>
-    abAvailableBooks.some((b) => String(b.subject_id) === String(s.id))
-  );
+  const abFilteredSubjects = subjects;
   const abActiveClassifications = classifications.filter((c) =>
     abFilteredSubjects.some((s) => String(s.classification_id) === String(c.id))
   );
