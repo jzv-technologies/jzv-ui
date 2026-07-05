@@ -1,19 +1,19 @@
 // src/components/portals/admin/AdminLinksView.jsx
-import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "../../../utils/supabase";
-import { showToast } from "../../../utils/toast";
-import ConfirmModal from "../../ConfirmModal";
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../../utils/supabase';
+import { showToast } from '../../../utils/toast';
+import ConfirmModal from '../../ConfirmModal';
 
 const ROLES = [
-  { id: 1, name: "Guest" },
-  { id: 2, name: "Parents" },
-  { id: 4, name: "Staff" },
-  { id: 8, name: "Teacher" },
-  { id: 16, name: "Management" },
-  { id: 32, name: "Administrator" },
+  { id: 1, name: 'Guest' },
+  { id: 2, name: 'Parents' },
+  { id: 4, name: 'Staff' },
+  { id: 8, name: 'Teacher' },
+  { id: 16, name: 'Management' },
+  { id: 32, name: 'Administrator' },
 ];
 
-const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
+const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = '' }) => {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
@@ -22,11 +22,11 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
   // Inline editing state
   const [editingId, setEditingId] = useState(null); // 'new' or record id
   const [editForm, setEditForm] = useState({
-    link_name: "",
-    link_description: "",
-    link: "",
+    link_name: '',
+    link_description: '',
+    link: '',
     roles: 1,
-    target: "_blank",
+    target: '_blank',
   });
 
   // Floating roles picker dropdown state
@@ -37,15 +37,15 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("useful_links")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .from('useful_links')
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       setLinks(data || []);
     } catch (err) {
-      console.error("Error loading links:", err);
-      showToast("Failed to load links.", "error");
+      console.error('Error loading links:', err);
+      showToast('Failed to load links.', 'error');
     } finally {
       setLoading(false);
     }
@@ -69,37 +69,37 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
         setRolesPicker(null);
       }
     };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [rolesPicker]);
 
   const handleOpenAdd = () => {
     if (editingId) {
-      showToast("Please save or cancel your current edits first.", "warning");
+      showToast('Please save or cancel your current edits first.', 'warning');
       return;
     }
-    setEditingId("new");
+    setEditingId('new');
     setEditForm({
-      link_name: "",
-      link_description: "",
-      link: "",
+      link_name: '',
+      link_description: '',
+      link: '',
       roles: 1,
-      target: "_blank",
+      target: '_blank',
     });
   };
 
   const handleOpenEdit = (link) => {
     if (editingId) {
-      showToast("Please save or cancel your current edits first.", "warning");
+      showToast('Please save or cancel your current edits first.', 'warning');
       return;
     }
     setEditingId(link.id);
     setEditForm({
       link_name: link.link_name,
-      link_description: link.link_description || "",
+      link_description: link.link_description || '',
       link: link.link,
       roles: link.roles,
-      target: link.target || "_blank",
+      target: link.target || '_blank',
     });
   };
 
@@ -110,7 +110,7 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
 
   const handleSave = async (id) => {
     if (!editForm.link_name.trim() || !editForm.link.trim()) {
-      showToast("Link Name and Link URL are required.", "warning");
+      showToast('Link Name and Link URL are required.', 'warning');
       return;
     }
 
@@ -124,25 +124,22 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
         target: editForm.target,
       };
 
-      if (id === "new") {
-        const { error } = await supabase.from("useful_links").insert(payload);
+      if (id === 'new') {
+        const { error } = await supabase.from('useful_links').insert(payload);
         if (error) throw error;
-        showToast("Useful link created successfully.");
+        showToast('Useful link created successfully.');
       } else {
-        const { error } = await supabase
-          .from("useful_links")
-          .update(payload)
-          .eq("id", id);
+        const { error } = await supabase.from('useful_links').update(payload).eq('id', id);
         if (error) throw error;
-        showToast("Useful link updated successfully.");
+        showToast('Useful link updated successfully.');
       }
 
       setEditingId(null);
       setRolesPicker(null);
       fetchLinks();
     } catch (err) {
-      console.error("Error saving link:", err);
-      showToast("Failed to save useful link.", "error");
+      console.error('Error saving link:', err);
+      showToast('Failed to save useful link.', 'error');
     } finally {
       setSavingId(null);
     }
@@ -150,24 +147,21 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
 
   const handleDelete = (link) => {
     setConfirmConfig({
-      title: "Delete Useful Link",
+      title: 'Delete Useful Link',
       message: `Are you sure you want to delete "${link.link_name}"? This action cannot be undone.`,
-      type: "danger",
-      confirmText: "Delete",
+      type: 'danger',
+      confirmText: 'Delete',
       onConfirm: async () => {
         setConfirmConfig(null);
         try {
-          const { error } = await supabase
-            .from("useful_links")
-            .delete()
-            .eq("id", link.id);
+          const { error } = await supabase.from('useful_links').delete().eq('id', link.id);
 
           if (error) throw error;
-          showToast("Useful link deleted successfully.");
+          showToast('Useful link deleted successfully.');
           fetchLinks();
         } catch (err) {
-          console.error("Error deleting link:", err);
-          showToast("Failed to delete useful link.", "error");
+          console.error('Error deleting link:', err);
+          showToast('Failed to delete useful link.', 'error');
         }
       },
     });
@@ -175,9 +169,7 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
 
   const getRolesNames = (rolesSum) => {
     const selected = ROLES.filter((r) => (rolesSum & r.id) !== 0);
-    return selected.length > 0
-      ? selected.map((r) => r.name).join(", ")
-      : "None";
+    return selected.length > 0 ? selected.map((r) => r.name).join(', ') : 'None';
   };
 
   const handleToggleRoleBit = (roleId) => {
@@ -216,7 +208,6 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
 
   return (
     <div className="flex flex-col w-full relative">
-
       {/* Grid Content Table (Borderless card container, matches Google Mappings table styling) */}
       {loading && links.length === 0 ? (
         <div className="p-20 text-center text-dark-muted bg-white border border-light-border rounded-2xl shadow-sm">
@@ -238,7 +229,7 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
             </thead>
             <tbody className="divide-y divide-light-border text-sm">
               {/* Inline Adding Row */}
-              {editingId === "new" && (
+              {editingId === 'new' && (
                 <tr className="bg-blue-50/20 border-b border-blue-200">
                   <td className="p-4">
                     <input
@@ -255,7 +246,9 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                       type="text"
                       placeholder="Enter description..."
                       value={editForm.link_description}
-                      onChange={(e) => setEditForm({ ...editForm, link_description: e.target.value })}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, link_description: e.target.value })
+                      }
                       className="w-full px-3 py-2 border border-light-border focus:border-blue-500 rounded-xl outline-none text-xs font-semibold text-dark-primary shadow-sm"
                     />
                   </td>
@@ -292,11 +285,11 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                   <td className="p-4 text-right">
                     <div className="flex justify-end items-center gap-2">
                       <button
-                        onClick={() => handleSave("new")}
+                        onClick={() => handleSave('new')}
                         disabled={savingId !== null}
                         className="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-xs font-bold shadow-md shadow-blue-100 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
-                        {savingId === "new" ? (
+                        {savingId === 'new' ? (
                           <i className="fas fa-spinner fa-spin" />
                         ) : (
                           <i className="fas fa-check" />
@@ -314,12 +307,14 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                 </tr>
               )}
 
-              {filteredLinks.length === 0 && editingId !== "new" ? (
+              {filteredLinks.length === 0 && editingId !== 'new' ? (
                 <tr>
                   <td colSpan={6} className="p-16 text-center text-dark-muted">
                     <i className="fas fa-link-slash text-3xl mb-3 text-gray-300 block"></i>
                     <p className="font-bold">No records found.</p>
-                    <p className="text-xs mt-1">Try refining your search query or add a new link.</p>
+                    <p className="text-xs mt-1">
+                      Try refining your search query or add a new link.
+                    </p>
                   </td>
                 </tr>
               ) : (
@@ -328,7 +323,7 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                   return (
                     <tr
                       key={link.id}
-                      className={`transition-colors hover:bg-gray-50/40 ${isEditing ? "bg-blue-50/20 border-b border-blue-200" : ""}`}
+                      className={`transition-colors hover:bg-gray-50/40 ${isEditing ? 'bg-blue-50/20 border-b border-blue-200' : ''}`}
                     >
                       {isEditing ? (
                         <>
@@ -337,7 +332,9 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                               type="text"
                               required
                               value={editForm.link_name}
-                              onChange={(e) => setEditForm({ ...editForm, link_name: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, link_name: e.target.value })
+                              }
                               className="w-full px-3 py-2 border border-blue-300 focus:border-blue-500 rounded-xl outline-none text-xs font-bold text-dark-primary shadow-inner"
                             />
                           </td>
@@ -345,7 +342,9 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                             <input
                               type="text"
                               value={editForm.link_description}
-                              onChange={(e) => setEditForm({ ...editForm, link_description: e.target.value })}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, link_description: e.target.value })
+                              }
                               className="w-full px-3 py-2 border border-light-border focus:border-blue-500 rounded-xl outline-none text-xs font-semibold text-dark-primary shadow-sm"
                             />
                           </td>
@@ -404,14 +403,24 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                       ) : (
                         <>
                           <td className="p-5 font-bold text-dark-deepblue">{link.link_name}</td>
-                          <td className="p-5 text-dark-soft text-xs">{link.link_description || "—"}</td>
-                          <td className="p-5 text-xs text-blue-600 font-mono truncate max-w-[250px]" title={link.link}>
-                            <a href={link.link} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          <td className="p-5 text-dark-soft text-xs">
+                            {link.link_description || '—'}
+                          </td>
+                          <td
+                            className="p-5 text-xs text-blue-600 font-mono truncate max-w-[250px]"
+                            title={link.link}
+                          >
+                            <a
+                              href={link.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline"
+                            >
                               {link.link}
                             </a>
                           </td>
                           <td className="p-5 text-xs font-bold text-dark-muted">
-                            {link.target === "_self" ? "Current Tab" : "New Tab"}
+                            {link.target === '_self' ? 'Current Tab' : 'New Tab'}
                           </td>
                           <td className="p-5 text-xs font-semibold text-dark-primary">
                             {getRolesNames(link.roles)}
@@ -455,7 +464,9 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
             left: rolesPicker.x,
           }}
         >
-          <p className="text-[10px] font-bold text-dark-muted uppercase tracking-wider mb-2">Select Entitled Roles</p>
+          <p className="text-[10px] font-bold text-dark-muted uppercase tracking-wider mb-2">
+            Select Entitled Roles
+          </p>
           <div className="space-y-1">
             {ROLES.map((role) => {
               const isChecked = (editForm.roles & role.id) !== 0;
@@ -464,8 +475,8 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                   key={role.id}
                   className={`flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-pointer text-xs font-bold transition-all ${
                     isChecked
-                      ? "bg-blue-50 text-blue-600"
-                      : "text-dark-soft hover:bg-light-lbg/50 hover:text-dark-primary"
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-dark-soft hover:bg-light-lbg/50 hover:text-dark-primary'
                   }`}
                 >
                   <input
@@ -474,7 +485,9 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = "" }) => {
                     onChange={() => handleToggleRoleBit(role.id)}
                     className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 border-light-border cursor-pointer"
                   />
-                  <span className="truncate flex-1">{role.name} ({role.id})</span>
+                  <span className="truncate flex-1">
+                    {role.name} ({role.id})
+                  </span>
                 </label>
               );
             })}

@@ -438,9 +438,12 @@ const TimetableScheduler = ({
   const getTeacherOptions = () => {
     if (!selectedSubjectId || !editingSlot) return [];
 
-    // 1. Filter teachers who are qualified for this subject
+    // 1. Filter teachers who are qualified for this subject (only active or currently assigned)
     const qualified = teachers.filter(
-      (t) => t.subjects && t.subjects.some((sid) => String(sid) === String(selectedSubjectId))
+      (t) =>
+        (t.is_active !== false || String(t.id) === String(editingSlot.teacherId)) &&
+        t.subjects &&
+        t.subjects.some((sid) => String(sid) === String(selectedSubjectId))
     );
 
     // 2. Map and identify busy conflicts

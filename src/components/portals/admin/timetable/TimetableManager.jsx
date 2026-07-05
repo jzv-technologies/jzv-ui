@@ -190,7 +190,7 @@ const TimetableManager = () => {
       let fetchedSeasonsConfig = null;
       try {
         const { data: settingsData } = await supabase
-          .from('timetable_settings')
+          .from('admin_configruation')
           .select('*')
           .eq('key', 'timetable_seasons_config')
           .maybeSingle();
@@ -373,7 +373,7 @@ const TimetableManager = () => {
       // Sync seasonsConfig with DB in background/async
       if (isSupabaseMode) {
         supabase
-          .from('timetable_settings')
+          .from('admin_configruation')
           .upsert(
             {
               key: 'timetable_seasons_config',
@@ -404,6 +404,7 @@ const TimetableManager = () => {
       name,
       subjects: qualifiedSubjects,
       is_male: isMale,
+      is_active: true,
     };
     let updatedTeachers = [...teachers, newTeacher];
 
@@ -412,7 +413,7 @@ const TimetableManager = () => {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
           .from('teachers')
-          .insert([{ name, is_male: isMale }])
+          .insert([{ name, is_male: isMale, is_active: true }])
           .select();
 
         if (teacherErr) throw teacherErr;
@@ -519,6 +520,31 @@ const TimetableManager = () => {
       assignments: updatedAssignments,
       slots: updatedSlots,
     });
+  };
+
+  const handleToggleTeacherActive = async (id) => {
+    const teacher = teachers.find((t) => String(t.id) === String(id));
+    if (!teacher) return;
+    const nextActive = teacher.is_active === false ? true : false;
+
+    const updatedTeachers = teachers.map((t) =>
+      String(t.id) === String(id) ? { ...t, is_active: nextActive } : t
+    );
+
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+      try {
+        const { error } = await supabase
+          .from('teachers')
+          .update({ is_active: nextActive })
+          .eq('id', id);
+        if (error) throw error;
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        return;
+      }
+    }
+    saveState({ teachers: updatedTeachers });
+    showToast(`Teacher "${teacher.name}" ${nextActive ? 'reactivated' : 'deactivated'} successfully.`, 'success');
   };
 
   // CLASS ACTION HANDLERS
@@ -1123,7 +1149,7 @@ const TimetableManager = () => {
           }
 
           // Save settings to database
-          const { error: settingsError } = await supabase.from('timetable_settings').upsert(
+          const { error: settingsError } = await supabase.from('admin_configruation').upsert(
             {
               key: 'timetable_seasons_config',
               val: finalConfig,
@@ -1159,7 +1185,7 @@ const TimetableManager = () => {
         localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
 
         if (isSupabaseMode) {
-          const { error: settingsError } = await supabase.from('timetable_settings').upsert(
+          const { error: settingsError } = await supabase.from('admin_configruation').upsert(
             {
               key: 'timetable_seasons_config',
               val: finalConfig,
@@ -1815,6 +1841,7 @@ const TimetableManager = () => {
               onAddTeacher={handleAddTeacher}
               onUpdateTeacher={handleUpdateTeacher}
               onDeleteTeacher={handleDeleteTeacher}
+              onToggleTeacherActive={handleToggleTeacherActive}
               slots={slots}
               assignments={assignments}
             />

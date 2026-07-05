@@ -6,7 +6,6 @@ import ConfirmModal from '../../../ConfirmModal';
 import SyllabusCsvMappingModal from './SyllabusCsvMappingModal';
 import * as XLSX from 'xlsx';
 
-
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
 
 const getComplexityBadgeClass = (comp) => {
@@ -63,11 +62,9 @@ const SyllabusManager = ({ role, user }) => {
         if (tempMappings.length > 0) {
           const insertData = tempMappings.map((cid) => ({
             book_id: bookId,
-            class_id: Number(cid)
+            class_id: Number(cid),
           }));
-          const { error: insErr } = await supabase
-            .from('syllabus_book_classes')
-            .insert(insertData);
+          const { error: insErr } = await supabase.from('syllabus_book_classes').insert(insertData);
           if (insErr) throw insErr;
         }
       }
@@ -77,8 +74,8 @@ const SyllabusManager = ({ role, user }) => {
         ...filtered,
         ...tempMappings.map((cid) => ({
           book_id: bookId,
-          class_id: Number(cid)
-        }))
+          class_id: Number(cid),
+        })),
       ];
       setBookClasses(updated);
       localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(updated));
@@ -98,9 +95,13 @@ const SyllabusManager = ({ role, user }) => {
 
   useEffect(() => {
     if (isTeacher && !showAllSubjects) {
-      const activeAllocated = allocatedSubjectIds.map(id => String(id)).includes(String(activeSubjectId));
+      const activeAllocated = allocatedSubjectIds
+        .map((id) => String(id))
+        .includes(String(activeSubjectId));
       if (!activeAllocated) {
-        const firstAllocated = subjects.find(s => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)));
+        const firstAllocated = subjects.find((s) =>
+          allocatedSubjectIds.map((id) => String(id)).includes(String(s.id))
+        );
         if (firstAllocated) {
           setActiveSubjectId(firstAllocated.id);
         } else {
@@ -228,22 +229,28 @@ const SyllabusManager = ({ role, user }) => {
         { data: dbBooks },
         { data: dbSyllabusData },
         { data: dbClasses },
-        { data: dbBookClasses }
+        { data: dbBookClasses },
       ] = await Promise.all([
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('subjects').select('*'),
         supabase.from('syllabus_books').select('*'),
         supabase.from('syllabus_book_lessons').select('*'),
         supabase.from('classes').select('*').order('name', { ascending: true }),
-        supabase.from('syllabus_book_classes').select('*')
+        supabase.from('syllabus_book_classes').select('*'),
       ]);
 
       // If classifications came back empty (e.g. due to RLS), try fetching by IDs referenced in subjects
       let resolvedClassifications = dbClassifications || [];
-      if ((!resolvedClassifications || resolvedClassifications.length === 0) && dbSubjects && dbSubjects.length > 0) {
-        const referencedIds = [...new Set(
-          dbSubjects.filter((s) => s.classification_id).map((s) => String(s.classification_id))
-        )];
+      if (
+        (!resolvedClassifications || resolvedClassifications.length === 0) &&
+        dbSubjects &&
+        dbSubjects.length > 0
+      ) {
+        const referencedIds = [
+          ...new Set(
+            dbSubjects.filter((s) => s.classification_id).map((s) => String(s.classification_id))
+          ),
+        ];
         if (referencedIds.length > 0) {
           const { data: fallbackCls } = await supabase
             .from('subject_classifications')
@@ -282,7 +289,9 @@ const SyllabusManager = ({ role, user }) => {
 
       let initialSubjectList = dbSubjects || [];
       if (isTeacher && teacherAllocatedIds.length > 0) {
-        initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
+        initialSubjectList = initialSubjectList.filter((s) =>
+          teacherAllocatedIds.includes(String(s.id))
+        );
       }
       if (initialSubjectList.length > 0 && !activeSubjectId) {
         setActiveSubjectId(initialSubjectList[0].id);
@@ -298,7 +307,7 @@ const SyllabusManager = ({ role, user }) => {
 
   const loadLocalData = () => {
     const raw = localStorage.getItem('jzv_syllabus_data');
-    
+
     // Load local classes
     const rawTimetable = localStorage.getItem('jzv_timetable_local_data');
     if (rawTimetable) {
@@ -325,7 +334,7 @@ const SyllabusManager = ({ role, user }) => {
         setSubjects(parsed.subjects || []);
         setBooks(parsed.books || []);
         setSyllabusData(parsed.syllabusData || []);
-        
+
         let teacherAllocatedIds = [];
         if (isTeacher && user?.id && rawTimetable) {
           try {
@@ -346,7 +355,9 @@ const SyllabusManager = ({ role, user }) => {
 
         let initialSubjectList = parsed.subjects || [];
         if (isTeacher && teacherAllocatedIds.length > 0) {
-          initialSubjectList = initialSubjectList.filter((s) => teacherAllocatedIds.includes(String(s.id)));
+          initialSubjectList = initialSubjectList.filter((s) =>
+            teacherAllocatedIds.includes(String(s.id))
+          );
         }
         if (initialSubjectList.length > 0 && !activeSubjectId) {
           setActiveSubjectId(initialSubjectList[0].id);
@@ -386,10 +397,12 @@ const SyllabusManager = ({ role, user }) => {
     setSubjects(mockSubjects);
     setBooks(mockBooks);
     setSyllabusData(mockSyllabusData);
-    
+
     let initialSubjectList = mockSubjects;
     if (isTeacher && allocatedSubjectIds.length > 0) {
-      initialSubjectList = initialSubjectList.filter((s) => allocatedSubjectIds.includes(String(s.id)));
+      initialSubjectList = initialSubjectList.filter((s) =>
+        allocatedSubjectIds.includes(String(s.id))
+      );
     }
     if (initialSubjectList.length > 0) {
       setActiveSubjectId(initialSubjectList[0].id);
@@ -430,7 +443,13 @@ const SyllabusManager = ({ role, user }) => {
     loadData();
   }, [user, role]);
 
-  const toggleCollapse = (id) => setCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleCollapse = (id) =>
+    setCollapsedNodes((prev) => {
+      const currentVal = prev[id];
+      const defaultVal = String(id).includes('-') ? false : true;
+      const nextVal = currentVal === undefined ? !defaultVal : !currentVal;
+      return { ...prev, [id]: nextVal };
+    });
   const toggleClassificationCollapse = (name) =>
     setCollapsedClassifications((prev) => ({ ...prev, [name]: !prev[name] }));
 
@@ -454,17 +473,21 @@ const SyllabusManager = ({ role, user }) => {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-          
+
           // Filter out completely empty rows
-          const nonEmtpyRows = jsonData.filter(row => row && row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ''));
+          const nonEmtpyRows = jsonData.filter(
+            (row) =>
+              row &&
+              row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '')
+          );
 
           if (nonEmtpyRows.length < 2) {
             showToast('Excel file is empty or invalid.', 'error');
             return;
           }
 
-          const headers = nonEmtpyRows[0].map(h => String(h || '').trim());
-          const rows = nonEmtpyRows.slice(1).map(row => 
+          const headers = nonEmtpyRows[0].map((h) => String(h || '').trim());
+          const rows = nonEmtpyRows.slice(1).map((row) =>
             headers.map((_, idx) => {
               const cell = row[idx];
               return cell === null || cell === undefined ? '' : String(cell).trim();
@@ -1091,9 +1114,10 @@ const SyllabusManager = ({ role, user }) => {
   };
 
   // Grouping subjects by classifications
-  const teacherFilteredSubjects = (isTeacher && !showAllSubjects)
-    ? subjects.filter((s) => allocatedSubjectIds.map(id => String(id)).includes(String(s.id)))
-    : subjects;
+  const teacherFilteredSubjects =
+    isTeacher && !showAllSubjects
+      ? subjects.filter((s) => allocatedSubjectIds.map((id) => String(id)).includes(String(s.id)))
+      : subjects;
 
   const unclassifiedSubjects = teacherFilteredSubjects.filter((s) => !s.classification_id);
   const groupedSubjects = (() => {
@@ -1101,7 +1125,9 @@ const SyllabusManager = ({ role, user }) => {
     const knownGroups = classifications
       .map((cls) => ({
         ...cls,
-        subjects: teacherFilteredSubjects.filter((s) => String(s.classification_id) === String(cls.id)),
+        subjects: teacherFilteredSubjects.filter(
+          (s) => String(s.classification_id) === String(cls.id)
+        ),
       }))
       .filter((cls) => cls.subjects.length > 0);
 
@@ -1117,7 +1143,8 @@ const SyllabusManager = ({ role, user }) => {
       const orphanGroups = {};
       orphanedSubjects.forEach((s) => {
         const key = String(s.classification_id);
-        if (!orphanGroups[key]) orphanGroups[key] = { id: key, name: `Classification #${key}`, subjects: [] };
+        if (!orphanGroups[key])
+          orphanGroups[key] = { id: key, name: `Classification #${key}`, subjects: [] };
         orphanGroups[key].subjects.push(s);
       });
       return [...knownGroups, ...Object.values(orphanGroups)];
@@ -1126,9 +1153,9 @@ const SyllabusManager = ({ role, user }) => {
     return knownGroups;
   })();
 
-  const allClassificationsCollapsed = groupedSubjects.length > 0 && groupedSubjects.every(
-    (cls) => collapsedClassifications[cls.name]
-  );
+  const allClassificationsCollapsed =
+    groupedSubjects.length > 0 &&
+    groupedSubjects.every((cls) => collapsedClassifications[cls.name]);
 
   const renderSubjectSelector = (title, subs, isUnclassified = false) => {
     if (!subs || subs.length === 0) return null;
@@ -1302,7 +1329,7 @@ const SyllabusManager = ({ role, user }) => {
     });
 
     return (
-      <div className="p-4 bg-white border-t border-light-border space-y-4">
+      <div className="p-2 bg-white border-t border-light-border space-y-2">
         {Object.keys(grouped).length === 0 ? (
           <div className="text-xs italic text-dark-muted text-center py-6 border border-dashed border-light-border rounded-xl">
             No data added under this book.
@@ -1335,7 +1362,7 @@ const SyllabusManager = ({ role, user }) => {
                 key={l1}
                 className="border border-dashed border-light-border rounded-xl overflow-hidden pl-2"
               >
-                <div className="bg-light-lbg/10 p-3 flex items-center justify-between gap-4 border-b border-light-border/40 border-dashed">
+                <div className="bg-blue-400 p-1 flex items-center justify-between gap-4 border-b border-light-border/40 border-dashed">
                   <button
                     onClick={() => toggleCollapse(`${book.id}-${l1}`)}
                     className="flex items-center gap-3 text-left focus:outline-none flex-1 min-w-0"
@@ -1356,7 +1383,9 @@ const SyllabusManager = ({ role, user }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const allL2Collapsed = l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]);
+                          const allL2Collapsed = l2Keys.every(
+                            (l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]
+                          );
                           setCollapsedNodes((prev) => {
                             const next = { ...prev };
                             if (allL2Collapsed) {
@@ -1373,9 +1402,15 @@ const SyllabusManager = ({ role, user }) => {
                           });
                         }}
                         className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-orange-50 transition-all flex items-center justify-center"
-                        title={l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]) ? `Expand All ${l2Name}s` : `Collapse All ${l2Name}s`}
+                        title={
+                          l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`])
+                            ? `Expand All ${l2Name}s`
+                            : `Collapse All ${l2Name}s`
+                        }
                       >
-                        <i className={`fas ${l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-[10px]`} />
+                        <i
+                          className={`fas ${l2Keys.every((l2) => collapsedNodes[`${book.id}-${l1}-${l2}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`}
+                        />
                       </button>
                     )}
                     <button
@@ -1422,7 +1457,7 @@ const SyllabusManager = ({ role, user }) => {
                 </div>
 
                 {!isL1Collapsed && (
-                  <div className="p-3 bg-white space-y-3">
+                  <div className="p-1 bg-white space-y-3">
                     {Object.keys(l2Groups).length === 0 ? (
                       <div className="text-xs italic text-dark-muted pl-4">
                         No {l2Name}s added under this {l1Name}.
@@ -1433,7 +1468,7 @@ const SyllabusManager = ({ role, user }) => {
                           return l2Groups[l2].map((node, idx) => (
                             <div
                               key={idx}
-                              className="flex justify-between items-center bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
+                              className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
                             >
                               <div className="flex items-center gap-2">
                                 <i className="fas fa-file-alt text-dark-soft text-[10px]" />
@@ -1487,9 +1522,9 @@ const SyllabusManager = ({ role, user }) => {
                         return (
                           <div
                             key={l2}
-                            className="border border-light-border/40 rounded-lg overflow-hidden pl-4"
+                            className="bg-blue-100 border border-light-border/40 rounded-lg overflow-hidden pl-4"
                           >
-                            <div className="bg-light-lbg/5 p-2.5 flex items-center justify-between gap-4">
+                            <div className="p-1 flex items-center justify-between gap-4">
                               <button
                                 onClick={() => toggleCollapse(`${book.id}-${l1}-${l2}`)}
                                 className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
@@ -1535,9 +1570,15 @@ const SyllabusManager = ({ role, user }) => {
                                       toggleCollapse(`${book.id}-${l1}-${l2}`);
                                     }}
                                     className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all flex items-center justify-center"
-                                    title={isL2Collapsed ? `Expand All ${l3Name}s` : `Collapse All ${l3Name}s`}
+                                    title={
+                                      isL2Collapsed
+                                        ? `Expand All ${l3Name}s`
+                                        : `Collapse All ${l3Name}s`
+                                    }
                                   >
-                                    <i className={`fas ${isL2Collapsed ? 'fa-chevron-down' : 'fa-chevron-up'} text-[9px]`} />
+                                    <i
+                                      className={`fas ${isL2Collapsed ? 'fa-chevron-down' : 'fa-chevron-up'} text-[9px]`}
+                                    />
                                   </button>
                                 )}
                                 <button
@@ -1575,7 +1616,7 @@ const SyllabusManager = ({ role, user }) => {
                                   }
                                   className="p-1 text-blue-500 hover:bg-blue-50 rounded"
                                 >
-                                  <i className="fas fa-edit text-[10px]"></i>
+                                  <i className="fas fa-edit text-xs"></i>
                                 </button>
                                 {(isAdmin || isTeacher) && (
                                   <button
@@ -1588,7 +1629,7 @@ const SyllabusManager = ({ role, user }) => {
                                     }
                                     className="p-1 text-red-primary hover:bg-red-50 rounded"
                                   >
-                                    <i className="fas fa-trash-alt text-[10px]"></i>
+                                    <i className="fas fa-trash-alt text-xs"></i>
                                   </button>
                                 )}
                               </div>
@@ -1603,7 +1644,7 @@ const SyllabusManager = ({ role, user }) => {
                                   l3Nodes.lessons.map((node, idx) => (
                                     <div
                                       key={idx}
-                                      className="flex justify-between items-center bg-light-lbg/10 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
+                                      className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
                                     >
                                       <div className="flex items-center gap-2">
                                         <i className="fas fa-file-alt text-dark-soft text-[10px]" />
@@ -1692,7 +1733,11 @@ const SyllabusManager = ({ role, user }) => {
                   }
                 }}
                 className="p-1 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
-                title={allClassificationsCollapsed ? 'Expand All Classifications' : 'Collapse All Classifications'}
+                title={
+                  allClassificationsCollapsed
+                    ? 'Expand All Classifications'
+                    : 'Collapse All Classifications'
+                }
               >
                 <i
                   className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
@@ -1728,7 +1773,9 @@ const SyllabusManager = ({ role, user }) => {
                   className="sr-only peer"
                 />
                 <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-soft peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand-primary"></div>
-                <span className="ms-2 text-[9px] font-black text-gray-500 uppercase tracking-wider">Show All Subjects</span>
+                <span className="ms-2 text-[9px] font-black text-gray-500 uppercase tracking-wider">
+                  Show All Subjects
+                </span>
               </label>
             </div>
           )}
@@ -1795,7 +1842,7 @@ const SyllabusManager = ({ role, user }) => {
               ) : (
                 <div className="space-y-4">
                   {activeBooks.map((book) => {
-                    const isBookCollapsed = collapsedNodes[book.id];
+                    const isBookCollapsed = collapsedNodes[book.id] === undefined ? true : collapsedNodes[book.id];
                     const bookLevels = (book.hierarchy_type || 'Unit, Chapter, Lesson')
                       .split(',')
                       .map((s) => s.trim());
@@ -1803,7 +1850,9 @@ const SyllabusManager = ({ role, user }) => {
                     const bookData = syllabusData.filter(
                       (d) => String(d.book_id) === String(book.id)
                     );
-                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1))).filter(Boolean);
+                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1))).filter(
+                      Boolean
+                    );
                     const bookL1Count = l1Keys.length;
                     return (
                       <div
@@ -1845,7 +1894,9 @@ const SyllabusManager = ({ role, user }) => {
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      const allL1Collapsed = l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]);
+                                      const allL1Collapsed = l1Keys.every(
+                                        (l1) => collapsedNodes[`${book.id}-${l1}`]
+                                      );
                                       setCollapsedNodes((prev) => {
                                         const next = { ...prev };
                                         if (allL1Collapsed) {
@@ -1862,9 +1913,15 @@ const SyllabusManager = ({ role, user }) => {
                                       });
                                     }}
                                     className="p-1.5 text-dark-soft hover:bg-light-lbg rounded-xl transition-all flex items-center justify-center border border-light-border bg-white"
-                                    title={l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? `Expand All ${bookL1Name}s` : `Collapse All ${bookL1Name}s`}
+                                    title={
+                                      l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`])
+                                        ? `Expand All ${bookL1Name}s`
+                                        : `Collapse All ${bookL1Name}s`
+                                    }
                                   >
-                                    <i className={`fas ${l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`} />
+                                    <i
+                                      className={`fas ${l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`}
+                                    />
                                   </button>
                                 )}
                                 <button
@@ -1877,7 +1934,7 @@ const SyllabusManager = ({ role, user }) => {
                                       hierarchy: book.hierarchy_type,
                                     })
                                   }
-                                  className="px-3 py-1.5 bg-brand-primary text-white hover:bg-brand-primary/95 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
+                                  className="px-3 py-1.5 bg-blue-primary text-white hover:bg-blue-dark rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
                                 >
                                   <i className="fas fa-plus"></i> Add {bookL1Name}
                                 </button>
@@ -1955,14 +2012,15 @@ const SyllabusManager = ({ role, user }) => {
         <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 p-6 flex flex-col space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-extrabold text-dark-deepblue">
-                Map Book to Classes
-              </h3>
-              <button onClick={() => setMappingBook(null)} className="text-gray-400 hover:text-gray-600 text-lg">
+              <h3 className="text-base font-extrabold text-dark-deepblue">Map Book to Classes</h3>
+              <button
+                onClick={() => setMappingBook(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg"
+              >
                 <i className="fas fa-times" />
               </button>
             </div>
-            
+
             <div className="text-xs font-semibold text-gray-500 mb-2">
               Book: <strong className="text-dark-primary">{mappingBook.name}</strong>
             </div>
@@ -1974,14 +2032,19 @@ const SyllabusManager = ({ role, user }) => {
                 classes.map((cls) => {
                   const isMapped = tempMappings.includes(String(cls.id));
                   return (
-                    <label key={cls.id} className="flex items-center gap-3 p-3 border rounded-xl hover:bg-gray-50/50 cursor-pointer select-none">
+                    <label
+                      key={cls.id}
+                      className="flex items-center gap-3 p-3 border rounded-xl hover:bg-gray-50/50 cursor-pointer select-none"
+                    >
                       <input
                         type="checkbox"
                         checked={isMapped}
                         onChange={() => handleToggleClassMapping(cls.id)}
                         className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
                       />
-                      <span className="text-xs font-bold text-dark-primary">{cls.name || cls.class_name}</span>
+                      <span className="text-xs font-bold text-dark-primary">
+                        {cls.name || cls.class_name}
+                      </span>
                     </label>
                   );
                 })

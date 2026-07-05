@@ -127,6 +127,107 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
     }
   };
 
+  const handleAddTeacherFromUser = async (userId, fullName) => {
+    setSaving(true);
+    try {
+      // 1. Create the teacher in the database
+      const { data: newTeacherData, error: insertErr } = await supabase
+        .from('teachers')
+        .insert([
+          {
+            name: fullName,
+            auth_id: userId,
+            is_active: true,
+          }
+        ])
+        .select();
+
+      if (insertErr) throw insertErr;
+      const newTeacher = newTeacherData[0];
+
+      // 2. Update the user's role to include Teacher role (8)
+      const user = users.find((u) => String(u.user_id) === String(userId));
+      const currentRole = user ? (parseInt(user.role, 10) || 0) : 0;
+      const newRoleSum = String(currentRole | 8);
+
+      const { error: roleErr } = await supabase.from('user_roles').upsert(
+        {
+          user_id: userId,
+          role: newRoleSum,
+        },
+        { onConflict: 'user_id' }
+      );
+      if (roleErr) throw roleErr;
+
+      // 3. Fallback/Local storage sync
+      const raw = localStorage.getItem('jzv_timetable_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          const localTeachers = parsed.teachers || [];
+          const nextTeachers = localTeachers.map((t) => 
+            String(t.auth_id) === String(userId) ? { ...t, auth_id: null } : t
+          );
+          nextTeachers.push({
+            id: newTeacher.id,
+            name: fullName,
+            is_male: true,
+            auth_id: userId,
+            is_active: true,
+            subjects: []
+          });
+          parsed.teachers = nextTeachers;
+          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`Teacher record created and mapped for "${fullName}"`, 'success');
+      fetchAllUsers();
+      fetchTeachers();
+    } catch (err) {
+      showToast('Failed to add teacher: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleTeacherActiveFromUser = async (teacherId, currentStatus) => {
+    setSaving(true);
+    const nextStatus = !currentStatus;
+    try {
+      const { error } = await supabase
+        .from('teachers')
+        .update({ is_active: nextStatus })
+        .eq('id', teacherId);
+
+      if (error) throw error;
+
+      // Local storage sync
+      const raw = localStorage.getItem('jzv_timetable_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          parsed.teachers = (parsed.teachers || []).map((t) =>
+            String(t.id) === String(teacherId) ? { ...t, is_active: nextStatus } : t
+          );
+          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`Teacher status updated to ${nextStatus ? 'Active' : 'Inactive'}`, 'success');
+      fetchAllUsers();
+      fetchTeachers();
+    } catch (err) {
+      showToast('Failed to update status: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ----- Form Configurations & Sheet Mappings -----
   const fetchConfigs = async () => {
     if (fetchingRef.current) return;
@@ -365,6 +466,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
           onUpdateUser={handleUpdateUser}
           saving={saving}
           teachers={teachers}
+          onAddTeacher={handleAddTeacherFromUser}
+          onToggleTeacherActive={handleToggleTeacherActiveFromUser}
         />
       )}
 

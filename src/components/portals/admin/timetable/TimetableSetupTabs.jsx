@@ -265,6 +265,7 @@ export const TeachersSetup = ({
   onAddTeacher,
   onUpdateTeacher,
   onDeleteTeacher,
+  onToggleTeacherActive,
   slots,
   assignments,
 }) => {
@@ -516,9 +517,12 @@ export const TeachersSetup = ({
                 Gender
               </th>
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
+                Status
+              </th>
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
                 Qualified Subjects
               </th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[150px]">
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[180px]">
                 Actions
               </th>
             </tr>
@@ -526,7 +530,7 @@ export const TeachersSetup = ({
           <tbody className="divide-y divide-light-border">
             {teachers.length === 0 ? (
               <tr>
-                <td colSpan="4" className="py-8 text-center text-dark-muted text-sm">
+                <td colSpan="5" className="py-8 text-center text-dark-muted text-sm">
                   No teachers configured. Add one above!
                 </td>
               </tr>
@@ -546,6 +550,17 @@ export const TeachersSetup = ({
                       ) : (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
                           <i className="fas fa-venus text-[10px]"></i> Female
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
+                      {teacher.is_active !== false ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                          Inactive
                         </span>
                       )}
                     </td>
@@ -616,6 +631,16 @@ export const TeachersSetup = ({
                             </div>
                           )}
                         </div>
+                        <button
+                          onClick={() => onToggleTeacherActive?.(teacher.id)}
+                          className={`p-2 rounded-lg hover:bg-light-lbg transition-all ${
+                            teacher.is_active !== false ? 'text-red-primary hover:text-red-dark' : 'text-green-600 hover:text-green-800'
+                          }`}
+                          title={teacher.is_active !== false ? 'Deactivate' : 'Reactivate'}
+                          disabled={!!editingTeacher}
+                        >
+                          <i className={`fas ${teacher.is_active !== false ? 'fa-user-slash' : 'fa-user-check'}`}></i>
+                        </button>
                         <button
                           onClick={() => handleStartEdit(teacher)}
                           className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
@@ -728,11 +753,11 @@ export const ClassesSetup = ({
     });
   };
 
-  // Filter teachers based on chosen subject
+  // Filter teachers based on chosen subject (only active qualified teachers are listable)
   const getQualifiedTeachers = (subjectId) => {
     if (!subjectId) return [];
     return teachers
-      .filter((t) => t.subjects && t.subjects.some((sid) => String(sid) === String(subjectId)))
+      .filter((t) => t.is_active !== false && t.subjects && t.subjects.some((sid) => String(sid) === String(subjectId)))
       .sort((a, b) => a.name.localeCompare(b.name));
   };
 

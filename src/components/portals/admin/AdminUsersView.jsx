@@ -104,7 +104,7 @@ const MultiSelectRolesDropdown = ({ value, onChange }) => {
   );
 };
 
-const UserRow = ({ user, onSave, saving, teachers = [] }) => {
+const UserRow = ({ user, onSave, onAddTeacher, onToggleTeacherActive, saving, teachers = [] }) => {
   const [roles, setRoles] = useState(() => getInitialRolesSum(user.role));
   
   // Find which teacher is currently linked to this user's user_id
@@ -116,11 +116,24 @@ const UserRow = ({ user, onSave, saving, teachers = [] }) => {
     roles !== initialSum ||
     String(selectedTeacherId) !== String(initiallyLinkedTeacher?.id || "");
 
+  const isTeacherActive = initiallyLinkedTeacher ? (initiallyLinkedTeacher.is_active !== false) : true;
+
   return (
     <tr className="hover:bg-gray-50/50 transition-colors border-b border-light-border last:border-0 group">
       <td className="p-4">
-        <div className="font-bold text-dark-deepblue text-base">
-          {user.full_name || "New User"}
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-dark-deepblue text-base">
+            {user.full_name || "New User"}
+          </span>
+          {initiallyLinkedTeacher && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+              isTeacherActive 
+                ? 'bg-green-50 text-green-700 border-green-100' 
+                : 'bg-gray-100 text-gray-600 border-gray-200'
+            }`}>
+              {isTeacherActive ? 'Active Teacher' : 'Inactive Teacher'}
+            </span>
+          )}
         </div>
         <div className="text-sm text-dark-muted">{user.email}</div>
       </td>
@@ -152,19 +165,52 @@ const UserRow = ({ user, onSave, saving, teachers = [] }) => {
         </select>
       </td>
       <td className="p-4 text-right">
-        <button
-          onClick={() => onSave(roles, selectedTeacherId)}
-          disabled={saving || !hasChanges}
-          className="bg-orange-primary text-white px-6 py-2 rounded-xl font-bold text-sm hover:bg-orange-600 disabled:opacity-20 transition-all active:scale-95 shadow-lg shadow-orange-100"
-        >
-          {saving ? "..." : "Save"}
-        </button>
+        <div className="flex justify-end gap-2 items-center">
+          {!initiallyLinkedTeacher ? (
+            <button
+              onClick={() => onAddTeacher?.(user.user_id, user.full_name)}
+              disabled={saving}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-lg shadow-emerald-100 disabled:opacity-20"
+              title="Create a teacher record for this user and map it"
+            >
+              Add as Teacher
+            </button>
+          ) : (
+            <button
+              onClick={() => onToggleTeacherActive?.(initiallyLinkedTeacher.id, isTeacherActive)}
+              disabled={saving}
+              className={`px-4 py-2 rounded-xl font-bold text-xs transition-all active:scale-95 border ${
+                isTeacherActive
+                  ? 'bg-white hover:bg-red-50 text-red-600 border-red-200'
+                  : 'bg-white hover:bg-orange-50 text-orange-primary border-orange-200'
+              } disabled:opacity-20`}
+              title={isTeacherActive ? "Deactivate this teacher" : "Reactivate this teacher"}
+            >
+              {isTeacherActive ? 'Deactivate Teacher' : 'Reactivate Teacher'}
+            </button>
+          )}
+          <button
+            onClick={() => onSave(roles, selectedTeacherId)}
+            disabled={saving || !hasChanges}
+            className="bg-orange-primary text-white px-6 py-2 rounded-xl font-bold text-sm hover:bg-orange-600 disabled:opacity-20 transition-all active:scale-95 shadow-lg shadow-orange-100"
+          >
+            {saving ? "..." : "Save"}
+          </button>
+        </div>
       </td>
     </tr>
   );
 };
 
-const AdminUsersView = ({ users, loading, onUpdateUser, saving, teachers = [] }) => {
+const AdminUsersView = ({ 
+  users, 
+  loading, 
+  onUpdateUser, 
+  saving, 
+  teachers = [],
+  onAddTeacher,
+  onToggleTeacherActive 
+}) => {
   if (loading) {
     return (
       <div className="bg-white p-20 text-center">
@@ -201,6 +247,8 @@ const AdminUsersView = ({ users, loading, onUpdateUser, saving, teachers = [] })
                 onSave={(roles, teacherId) =>
                   onUpdateUser(u.user_id, roles, teacherId)
                 }
+                onAddTeacher={onAddTeacher}
+                onToggleTeacherActive={onToggleTeacherActive}
                 saving={saving}
               />
             ))}

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
+import { CARD_THEMES } from '../../../utils/cardTheme';
 
 // Global/Module-level cache to keep reference data, favorites, and entries across mounts
 let syllabusTrackerCache = {
@@ -18,6 +19,8 @@ let syllabusTrackerCache = {
   bookTrackers: {}, // class_id -> array of book trackers
   myBooksData: null,
   bookClasses: [],
+  classLogs: {},
+  classLessons: {},
 };
 
 const SyllabusTracker = ({ user }) => {
@@ -41,7 +44,9 @@ const SyllabusTracker = ({ user }) => {
   const [classifications, setClassifications] = useState(() =>
     isCacheValid ? syllabusTrackerCache.classifications : []
   );
-  const [bookClasses, setBookClasses] = useState(() => (isCacheValid ? syllabusTrackerCache.bookClasses : []));
+  const [bookClasses, setBookClasses] = useState(() =>
+    isCacheValid ? syllabusTrackerCache.bookClasses : []
+  );
 
   // Add Book Mapping form state (bottom of modal)
   const [showAddBookMappingForm, setShowAddBookMappingForm] = useState(false);
@@ -88,6 +93,24 @@ const SyllabusTracker = ({ user }) => {
     isCacheValid && syllabusTrackerCache.myBooksData ? syllabusTrackerCache.myBooksData : []
   );
   const [myBooksLoading, setMyBooksLoading] = useState(false);
+
+  const [classLogs, setClassLogs] = useState([]);
+  const [classLessons, setClassLessons] = useState([]);
+
+  const [expandedLogIds, setExpandedLogIds] = useState({});
+  const [logItemsMap, setLogItemsMap] = useState({});
+
+  const [allLogs, setAllLogs] = useState([]);
+  const [allLessons, setAllLessons] = useState([]);
+
+  const [myProgressExpandedBook, setMyProgressExpandedBook] = useState(null);
+  const [myProgressExpandedClass, setMyProgressExpandedClass] = useState(null);
+  const [myProgressLoading, setMyProgressLoading] = useState(false);
+  const [myProgressBookLessons, setMyProgressBookLessons] = useState([]);
+  const [myProgressBookLogs, setMyProgressBookLogs] = useState([]);
+  const [myProgressExpandedLogIds, setMyProgressExpandedLogIds] = useState({});
+  const [myProgressLogItemsMap, setMyProgressLogItemsMap] = useState({});
+  const [myProgressShowNotStarted, setMyProgressShowNotStarted] = useState(false);
 
   // Add Work modal state
   const [isAddWorkModalOpen, setIsAddWorkModalOpen] = useState(false);
@@ -213,6 +236,8 @@ const SyllabusTracker = ({ user }) => {
           bookTrackers: {},
           myBooksData: null,
           bookClasses: [],
+          classLogs: {},
+          classLessons: {},
         };
         setLoading(true);
         setTeacher(null);
@@ -248,6 +273,7 @@ const SyllabusTracker = ({ user }) => {
           { data: dbBooks },
           { data: dbClassifications },
           { data: dbBookClasses },
+          { data: dbAllLessons },
         ] = await Promise.all([
           supabase.from('classes').select('*'),
           supabase.from('subjects').select('*'),
@@ -255,6 +281,7 @@ const SyllabusTracker = ({ user }) => {
           supabase.from('syllabus_books').select('*'),
           supabase.from('subject_classifications').select('*'),
           supabase.from('syllabus_book_classes').select('*'),
+          supabase.from('syllabus_book_lessons').select('id, book_id'),
         ]);
 
         const fetchedClasses = dbClasses || [];
@@ -263,6 +290,16 @@ const SyllabusTracker = ({ user }) => {
         const fetchedBooks = dbBooks || [];
         const fetchedClassifications = dbClassifications || [];
         const fetchedBookClasses = dbBookClasses || [];
+        const fetchedAllLessons = dbAllLessons || [];
+
+        // Fetch logs for teacher's active classes
+        const assignedClassIds = fetchedAssignments.map((a) => String(a.class_id));
+        const { data: dbAllLogs } =
+          assignedClassIds.length > 0
+            ? await supabase.from('lesson_tracker_log').select('*').in('class_id', assignedClassIds)
+            : { data: [] };
+
+        const fetchedAllLogs = dbAllLogs || [];
 
         setClasses(fetchedClasses);
         setSubjects(fetchedSubjects);
@@ -270,6 +307,8 @@ const SyllabusTracker = ({ user }) => {
         setBooks(fetchedBooks);
         setClassifications(fetchedClassifications);
         setBookClasses(fetchedBookClasses);
+        setAllLessons(fetchedAllLessons);
+        setAllLogs(fetchedAllLogs);
 
         syllabusTrackerCache.classes = fetchedClasses;
         syllabusTrackerCache.subjects = fetchedSubjects;
@@ -278,15 +317,10 @@ const SyllabusTracker = ({ user }) => {
         syllabusTrackerCache.classifications = fetchedClassifications;
         syllabusTrackerCache.bookClasses = fetchedBookClasses;
 
-        const assignedClassIds = fetchedAssignments.map((a) => String(a.class_id));
         const filteredClasses = fetchedClasses.filter((c) =>
           assignedClassIds.includes(String(c.id))
         );
-        if (filteredClasses.length > 0 && !syllabusTrackerCache.selectedProgressClassId) {
-          const defaultClassId = String(filteredClasses[0].id);
-          setSelectedProgressClassId(defaultClassId);
-          syllabusTrackerCache.selectedProgressClassId = defaultClassId;
-        }
+        // Do not auto-select first class to default selectedProgressClassId to empty
 
         let dbFavs = await loadFavoritesFromDB(teacherData.id);
         if (dbFavs.length === 0) {
@@ -431,24 +465,53 @@ const SyllabusTracker = ({ user }) => {
     }
   }, [teacher, books, subjects, classes, fetchMyWorkEntries]);
 
-  // ─── Book Tracker fetch for Syllabus Progress ──────────────────────
-
   const fetchBookTrackers = async (classId) => {
     if (!classId) return;
     if (syllabusTrackerCache.bookTrackers[classId]) {
       setBookTrackers(syllabusTrackerCache.bookTrackers[classId]);
     }
+    if (syllabusTrackerCache.classLogs?.[classId]) {
+      setClassLogs(syllabusTrackerCache.classLogs[classId]);
+    }
+    if (syllabusTrackerCache.classLessons?.[classId]) {
+      setClassLessons(syllabusTrackerCache.classLessons[classId]);
+    }
+
     try {
-      const { data, error } = await supabase
-        .from('book_tracker')
-        .select('*')
-        .eq('class_id', classId);
-      if (error) throw error;
-      const trackers = data || [];
+      const classBookIds = bookClasses
+        .filter((bc) => String(bc.class_id) === String(classId))
+        .map((bc) => bc.book_id);
+
+      const [trackerRes, logsRes, lessonsRes] = await Promise.all([
+        supabase.from('book_tracker').select('*').eq('class_id', classId),
+        supabase
+          .from('lesson_tracker_log')
+          .select('lesson_id, current_status, completion_percentage, revision_counter')
+          .eq('class_id', classId),
+        classBookIds.length > 0
+          ? supabase.from('syllabus_book_lessons').select('id, book_id').in('book_id', classBookIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      if (trackerRes.error) throw trackerRes.error;
+      if (logsRes.error) throw logsRes.error;
+      if (lessonsRes.error) throw lessonsRes.error;
+
+      const trackers = trackerRes.data || [];
+      const logs = logsRes.data || [];
+      const lessons = lessonsRes.data || [];
+
       setBookTrackers(trackers);
+      setClassLogs(logs);
+      setClassLessons(lessons);
+
       syllabusTrackerCache.bookTrackers[classId] = trackers;
+      if (!syllabusTrackerCache.classLogs) syllabusTrackerCache.classLogs = {};
+      if (!syllabusTrackerCache.classLessons) syllabusTrackerCache.classLessons = {};
+      syllabusTrackerCache.classLogs[classId] = logs;
+      syllabusTrackerCache.classLessons[classId] = lessons;
     } catch (err) {
-      console.warn('Failed to fetch book trackers:', err.message);
+      console.warn('Failed to fetch book trackers & details:', err.message);
     }
   };
 
@@ -457,6 +520,12 @@ const SyllabusTracker = ({ user }) => {
       fetchBookTrackers(selectedProgressClassId);
       setProgressExpandedBook(null);
       syllabusTrackerCache.selectedProgressClassId = selectedProgressClassId;
+    } else {
+      setBookTrackers([]);
+      setClassLogs([]);
+      setClassLessons([]);
+      setProgressExpandedBook(null);
+      syllabusTrackerCache.selectedProgressClassId = '';
     }
   }, [selectedProgressClassId]);
 
@@ -532,9 +601,10 @@ const SyllabusTracker = ({ user }) => {
 
   // ─── Add Work Modal: cascading filter helpers ──────────────────────
 
-  const awClasses = (coverMode || assignments.length === 0)
-    ? classes
-    : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+  const awClasses =
+    coverMode || assignments.length === 0
+      ? classes
+      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
 
   // Filter books and subjects by classes mapped in syllabus_book_classes
   const mappedBookIds = bookClasses
@@ -722,7 +792,7 @@ const SyllabusTracker = ({ user }) => {
   const handleMapBookToClass = async () => {
     if (!awClassId) return showToast('Please select a class first.', 'warning');
     if (!abBookId) return showToast('Please select a book to map.', 'warning');
-    
+
     setSubmitting(true);
     try {
       const bookId = Number(abBookId);
@@ -1163,6 +1233,7 @@ const SyllabusTracker = ({ user }) => {
     setProgressExpandedBook(bookId);
     setProgressLoading(true);
     setShowNotStarted(false);
+    setExpandedLogIds({});
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
@@ -1171,31 +1242,116 @@ const SyllabusTracker = ({ user }) => {
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
 
-      const bookLessons = (lessons || []).filter((l) => l.level3);
+      const bookLessons = (lessons || []).filter((l) => {
+        if (l.level3) return true;
+        if (l.level2 && !l.level3) {
+          const hasL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3
+          );
+          return !hasL3;
+        }
+        if (l.level1 && !l.level2 && !l.level3) {
+          const hasL2orL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || o.level3)
+          );
+          return !hasL2orL3;
+        }
+        return false;
+      });
+
       const relevantLogs = (logs || []).filter((l) =>
         bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
       );
 
       setProgressBookLessons(bookLessons);
       setProgressBookLogs(relevantLogs);
-
-      const completedLogIds = relevantLogs
-        .filter((l) => l.current_status === 'completed')
-        .map((l) => l.id);
-      if (completedLogIds.length > 0) {
-        const { data: items } = await supabase
-          .from('lesson_tracker_log_items')
-          .select('*, teacher:teachers(name)')
-          .in('lt_log_id', completedLogIds)
-          .order('date', { ascending: false });
-        setProgressBookLogItems(items || []);
-      } else {
-        setProgressBookLogItems([]);
-      }
     } catch (err) {
       console.warn('Progress book expand failed:', err.message);
     } finally {
       setProgressLoading(false);
+    }
+  };
+
+  const toggleLogExpand = async (logId) => {
+    setExpandedLogIds((prev) => ({ ...prev, [logId]: !prev[logId] }));
+    if (!logItemsMap[logId]) {
+      try {
+        const { data, error } = await supabase
+          .from('lesson_tracker_log_items')
+          .select('*, teacher:teachers(name)')
+          .eq('lt_log_id', logId)
+          .order('date', { ascending: false });
+        if (error) throw error;
+        setLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
+      } catch (err) {
+        console.warn('Failed to load log items:', err.message);
+      }
+    }
+  };
+
+  const handleMyProgressBookClick = async (bookId, classId) => {
+    if (myProgressExpandedBook === bookId && myProgressExpandedClass === classId) {
+      setMyProgressExpandedBook(null);
+      setMyProgressExpandedClass(null);
+      return;
+    }
+    setMyProgressExpandedBook(bookId);
+    setMyProgressExpandedClass(classId);
+    setMyProgressLoading(true);
+    setMyProgressShowNotStarted(false);
+    setMyProgressExpandedLogIds({});
+    try {
+      const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
+        supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
+        supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
+      ]);
+      if (lessErr) throw lessErr;
+      if (logErr) throw logErr;
+
+      const bookLessons = (lessons || []).filter((l) => {
+        if (l.level3) return true;
+        if (l.level2 && !l.level3) {
+          const hasL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3
+          );
+          return !hasL3;
+        }
+        if (l.level1 && !l.level2 && !l.level3) {
+          const hasL2orL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || o.level3)
+          );
+          return !hasL2orL3;
+        }
+        return false;
+      });
+
+      const relevantLogs = (logs || []).filter((l) =>
+        bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
+      );
+
+      setMyProgressBookLessons(bookLessons);
+      setMyProgressBookLogs(relevantLogs);
+    } catch (err) {
+      console.warn('My progress book expand failed:', err.message);
+    } finally {
+      setMyProgressLoading(false);
+    }
+  };
+
+  const toggleMyProgressLogExpand = async (logId) => {
+    setMyProgressExpandedLogIds((prev) => ({ ...prev, [logId]: !prev[logId] }));
+    if (!myProgressLogItemsMap[logId]) {
+      try {
+        const { data, error } = await supabase
+          .from('lesson_tracker_log_items')
+          .select('*, teacher:teachers(name)')
+          .eq('lt_log_id', logId)
+          .order('date', { ascending: false });
+        if (error) throw error;
+        setMyProgressLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
+      } catch (err) {
+        console.warn('Failed to load log items:', err.message);
+      }
     }
   };
 
@@ -1333,111 +1489,162 @@ const SyllabusTracker = ({ user }) => {
   // ─── Render: Syllabus Progress Tab ────────────────────────────────
 
   const renderSyllabusProgress = () => {
-    const progressClasses = (coverMode || assignments.length === 0)
-      ? classes
-      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
-
-    if (progressClasses.length === 0) {
+    if (!selectedProgressClassId) {
       return (
-        <div className="p-8 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-          No allocated classes found.
+        <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
+          <i className="fas fa-hand-pointer text-3xl text-gray-300 mb-3 block animate-bounce"></i>
+          Please select a class from the filter dropdown next to the tabs above to view progress.
         </div>
       );
     }
 
-    const assignedSubjectIds = (coverMode || assignments.length === 0)
-      ? subjects.map((s) => String(s.id))
-      : assignments
-          .filter((a) => String(a.class_id) === String(selectedProgressClassId))
-          .map((a) => String(a.subject_id));
-    const classBooks = books.filter((b) => assignedSubjectIds.includes(String(b.subject_id)));
+    const classBookIds = bookClasses
+      .filter((bc) => String(bc.class_id) === String(selectedProgressClassId))
+      .map((bc) => String(bc.book_id));
+    const classBooks = books.filter((b) => classBookIds.includes(String(b.id)));
+
+    // Group books by classification
+    const booksByClassification = {};
+    classBooks.forEach((book) => {
+      const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+      const classificationId = subj?.classification_id;
+      const classification = classifications.find((c) => String(c.id) === String(classificationId));
+
+      const groupName = classification ? classification.name : 'Other / Unclassified';
+      if (!booksByClassification[groupName]) {
+        booksByClassification[groupName] = [];
+      }
+      booksByClassification[groupName].push(book);
+    });
 
     return (
       <div className="space-y-4">
-        {/* Class selector for progress */}
-        <div className="flex items-center gap-3 bg-white p-3 border rounded-xl shadow-sm">
-          <label className="text-[10px] font-extrabold text-dark-soft uppercase shrink-0">
-            Class:
-          </label>
-          <select
-            value={selectedProgressClassId}
-            onChange={(e) => setSelectedProgressClassId(e.target.value)}
-            className="border p-2 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-9"
-          >
-            {progressClasses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name || c.class_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {classBooks.length === 0 ? (
           <div className="p-8 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
             No syllabus books found for this class.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {classBooks.map((book) => {
-              const bt = bookTrackers.find((t) => String(t.book_id) === String(book.id));
-              const pct = bt ? Number(bt.completion_percentage) : 0;
-              const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-              const isExpanded = progressExpandedBook === book.id;
-              const pctColor =
-                pct >= 70 ? 'text-emerald-600' : pct >= 30 ? 'text-amber-600' : 'text-red-500';
-              const pctBg =
-                pct >= 70
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : pct >= 30
-                    ? 'bg-amber-50 border-amber-200'
-                    : 'bg-red-50 border-red-200';
-              const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
+          <div className="space-y-6">
+            {Object.entries(booksByClassification).map(([groupName, booksInGroup]) => (
+              <div key={groupName} className="space-y-3">
+                <h4 className="text-sm font-black text-brand-primary uppercase tracking-wider border-b pb-1.5 flex items-center gap-2">
+                  <i className="fas fa-bookmark text-xs"></i>
+                  {groupName}
+                  <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold normal-case">
+                    {booksInGroup.length} {booksInGroup.length === 1 ? 'Book' : 'Books'}
+                  </span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {booksInGroup.map((book) => {
+                    const bt = bookTrackers.find((t) => String(t.book_id) === String(book.id));
+                    const pct = bt ? Number(bt.completion_percentage) : 0;
+                    const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+                    const isExpanded = progressExpandedBook === book.id;
+                    const pctColor =
+                      pct >= 70
+                        ? 'text-emerald-600'
+                        : pct >= 30
+                          ? 'text-amber-600'
+                          : 'text-red-500';
+                    const pctBg =
+                      pct >= 70
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : pct >= 30
+                          ? 'bg-amber-50 border-amber-200'
+                          : 'bg-red-50 border-red-200';
+                    const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
 
-              return (
-                <div
-                  key={book.id}
-                  onClick={() => handleProgressBookClick(book.id)}
-                  className={`p-4 border rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] ${
-                    isExpanded ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5' : 'bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-black text-dark-primary truncate">{book.name}</h4>
-                      {subj && (
-                        <p className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                          {subj.name}
-                        </p>
-                      )}
-                    </div>
-                    <div
-                      className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
-                    >
-                      <span className={`text-sm font-black ${pctColor}`}>{pct.toFixed(0)}%</span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${pct}%`, backgroundColor: barColor }}
-                    />
-                  </div>
-                  {bt && (
-                    <div className="flex items-center gap-3 mt-2 text-[9px] font-bold flex-wrap">
-                      <span className="text-emerald-600">✓ {bt.completed}</span>
-                      <span className="text-blue-600">◔ {bt.in_progress}</span>
-                      <span className="text-gray-400">○ {bt.not_started}</span>
-                      <span className="text-gray-500">Total: {bt.total_lessons}</span>
-                    </div>
-                  )}
-                  {!bt && (
-                    <p className="text-[9px] text-gray-400 mt-2 font-semibold">
-                      No tracking data yet
-                    </p>
-                  )}
+                    const classificationId = subj?.classification_id;
+                    const classification = classifications.find(
+                      (c) => String(c.id) === String(classificationId)
+                    );
+                    const themeStyles =
+                      classification?.theme && CARD_THEMES[classification.theme]
+                        ? CARD_THEMES[classification.theme]
+                        : CARD_THEMES.charcoal;
+
+                    // Compute lesson counts dynamically for this class + book
+                    const bookLessons = classLessons.filter(
+                      (l) => String(l.book_id) === String(book.id)
+                    );
+                    const bookLessonIds = bookLessons.map((l) => String(l.id));
+                    const bookLogs = classLogs.filter((log) =>
+                      bookLessonIds.includes(String(log.lesson_id))
+                    );
+                    const revisionCount = bookLogs.reduce(
+                      (sum, log) => sum + (log.revision_counter || 0),
+                      0
+                    );
+
+                    const total = bt?.total_lessons || bookLessons.length;
+                    const completed = bt?.completed || 0;
+                    const inProgress = bt?.in_progress || 0;
+                    const notStarted = bt?.not_started || 0;
+
+                    return (
+                      <div
+                        key={book.id}
+                        onClick={() => handleProgressBookClick(book.id)}
+                        className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
+                          isExpanded
+                            ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
+                            : 'bg-white'
+                        } border-l-${themeStyles.color}`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1 min-w-0">
+                              {subj && (
+                                <h3 className=" font-semibold text-gray-500 mt-0.5">{subj.name}</h3>
+                              )}
+                              <h4 className="text-sm font-black text-dark-primary truncate">
+                                {book.name}
+                              </h4>
+                            </div>
+                            <div
+                              className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
+                            >
+                              <span className={`text-sm font-black ${pctColor}`}>
+                                {pct.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+                            <div
+                              className="h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, backgroundColor: barColor }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
+                          <div className="flex justify-between text-emerald-600">
+                            <span>Completed:</span>
+                            <span>{completed}</span>
+                          </div>
+                          <div className="flex justify-between text-blue-600">
+                            <span>In-progress:</span>
+                            <span>{inProgress}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-400">
+                            <span>Not Started:</span>
+                            <span>{notStarted}</span>
+                          </div>
+                          <div className="flex justify-between text-purple-600">
+                            <span>Revisions:</span>
+                            <span>{revisionCount}</span>
+                          </div>
+                          <div className="flex justify-between text-dark-muted col-span-2 border-t border-dashed pt-1.5 mt-0.5">
+                            <span>Total Lessons:</span>
+                            <span>{total}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
 
@@ -1453,155 +1660,245 @@ const SyllabusTracker = ({ user }) => {
               <>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                   <h3 className="text-sm font-black text-dark-primary">
-                    {classBooks.find((b) => b.id === progressExpandedBook)?.name} — Lesson Details
+                    {books.find((b) => b.id === progressExpandedBook)?.name} — Lesson Details
                   </h3>
-                  <label className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-xl cursor-pointer text-xs font-bold text-gray-700 select-none hover:bg-gray-150 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={showNotStarted}
-                      onChange={(e) => setShowNotStarted(e.target.checked)}
-                      className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
-                    />
-                    Show Not Started
-                  </label>
                 </div>
 
-                {/* Completed */}
-                {(() => {
-                  const completedLogs = progressBookLogs.filter(
-                    (l) => l.current_status === 'completed'
-                  );
-                  const inProgressLogs = progressBookLogs.filter(
-                    (l) => l.current_status === 'in_progress'
-                  );
-
-                  return (
-                    <div className="space-y-3">
-                      {completedLogs.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-extrabold text-emerald-700 uppercase mb-2 flex items-center gap-1">
-                            <i className="fas fa-check-circle" /> Completed ({completedLogs.length})
+                {/* Level-1 Progress Breakdown */}
+                <div className="mb-6 border-b border-light-border pb-6">
+                  <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
+                    Level-1 Unit Progress
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {(() => {
+                      const uniqueLevel1s = [
+                        ...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean)),
+                      ];
+                      if (uniqueLevel1s.length === 0) {
+                        return (
+                          <p className="text-xs text-gray-400 font-semibold col-span-full">
+                            No level-1 sections defined for this book.
                           </p>
-                          <div className="space-y-2">
-                            {completedLogs.map((log) => {
-                              const lesson = progressBookLessons.find(
-                                (l) => String(l.id) === String(log.lesson_id)
-                              );
-                              const title = lesson
-                                ? [lesson.level1, lesson.level2, lesson.level3]
-                                    .filter(Boolean)
-                                    .join(' > ')
-                                : 'Unknown';
-                              const relatedItems = progressBookLogItems.filter(
-                                (i) => String(i.lt_log_id) === String(log.id)
-                              );
-                              const latestItem = relatedItems[0];
-                              return (
+                        );
+                      }
+
+                      return uniqueLevel1s.map((lvl1) => {
+                        const lvl1Lessons = progressBookLessons.filter((l) => l.level1 === lvl1);
+                        const total = lvl1Lessons.length;
+
+                        let completedCount = 0;
+                        let inProgressCount = 0;
+                        let totalProgressSum = 0;
+
+                        lvl1Lessons.forEach((lesson) => {
+                          const log = progressBookLogs.find(
+                            (l) => String(l.lesson_id) === String(lesson.id)
+                          );
+                          if (log) {
+                            if (log.current_status === 'completed') {
+                              completedCount++;
+                              totalProgressSum += 100;
+                            } else if (log.current_status === 'in_progress') {
+                              inProgressCount++;
+                              totalProgressSum += Number(log.completion_percentage) || 0;
+                            }
+                          }
+                        });
+
+                        const progressPct = total > 0 ? totalProgressSum / total : 0;
+                        const barColor =
+                          progressPct >= 70 ? '#10b981' : progressPct >= 30 ? '#f59e0b' : '#ef4444';
+
+                        return (
+                          <div
+                            key={lvl1}
+                            className="p-3 border border-light-border rounded-xl bg-gray-50/50 flex flex-col justify-between shadow-sm"
+                          >
+                            <div className="flex items-start justify-between mb-2 gap-2">
+                              <span
+                                className="text-xs font-black text-dark-primary truncate"
+                                title={lvl1}
+                              >
+                                {lvl1}
+                              </span>
+                              <span className="text-xs font-black text-dark-deepblue shrink-0">
+                                {progressPct.toFixed(0)}%
+                              </span>
+                            </div>
+                            <div>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5">
                                 <div
-                                  key={log.id}
-                                  className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl"
-                                >
-                                  <div className="flex items-center justify-between flex-wrap gap-1">
-                                    <p className="text-xs font-bold text-dark-primary">{title}</p>
-                                    <div className="flex items-center gap-2 text-[9px] text-gray-500 font-semibold">
-                                      {log.end_date && (
-                                        <span>
-                                          Completed: {new Date(log.end_date).toLocaleDateString()}
+                                  className="h-1.5 rounded-full transition-all duration-300"
+                                  style={{ width: `${progressPct}%`, backgroundColor: barColor }}
+                                />
+                              </div>
+                              <p className="text-[9px] text-gray-500 font-bold mt-1.5 flex items-center justify-between">
+                                <span>
+                                  {total} {total === 1 ? 'Lesson' : 'Lessons'}
+                                </span>
+                                <span className="text-dark-soft">
+                                  {completedCount} ✓ / {inProgressCount} ◔
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Lessons Coverage Tracker */}
+                <div className="bg-white rounded-2xl border border-light-border overflow-hidden">
+                  <div className="p-4 border-b bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                    <h3 className="font-extrabold text-sm text-dark-primary">
+                      Lessons Coverage Tracker
+                    </h3>
+                    <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl cursor-pointer text-xs font-bold text-gray-700 select-none hover:bg-gray-50 transition-colors shadow-sm">
+                      <input
+                        type="checkbox"
+                        checked={showNotStarted}
+                        onChange={(e) => setShowNotStarted(e.target.checked)}
+                        className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                      />
+                      Show Not Started Lessons
+                    </label>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    {(() => {
+                      const bookLessons = progressBookLessons;
+
+                      const lessonsToRender = showNotStarted
+                        ? bookLessons
+                        : bookLessons.filter((node) => {
+                            const log = progressBookLogs.find(
+                              (l) => String(l.lesson_id) === String(node.id)
+                            );
+                            return log && log.current_status !== 'not_started';
+                          });
+
+                      if (lessonsToRender.length === 0) {
+                        return (
+                          <p className="text-xs text-gray-400 font-semibold py-4 text-center">
+                            {showNotStarted
+                              ? 'No lessons found for this book.'
+                              : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
+                          </p>
+                        );
+                      }
+
+                      return lessonsToRender.map((node) => {
+                        const log = progressBookLogs.find(
+                          (l) => String(l.lesson_id) === String(node.id)
+                        );
+                        const status = log?.current_status || 'not_started';
+                        const title = [node.level1, node.level2, node.level3]
+                          .filter(Boolean)
+                          .join(' > ');
+                        const isLogExpanded = log && expandedLogIds[log.id];
+
+                        return (
+                          <div
+                            key={node.id}
+                            className="border border-gray-150 rounded-xl p-3 hover:bg-gray-50/50 transition-colors"
+                          >
+                            <div className="flex justify-between items-center flex-wrap gap-2">
+                              <div>
+                                <span className="font-bold text-xs text-dark-primary">{title}</span>
+                                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                  {getStatusBadge(status)}
+                                  {log && (
+                                    <>
+                                      <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                        {Number(log.completion_percentage).toFixed(0)}% Progress
+                                      </span>
+                                      <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                        Days Logged: {log.days_taken}
+                                      </span>
+                                      {log.revision_counter > 0 && (
+                                        <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                          Revisions: {log.revision_counter}
                                         </span>
                                       )}
-                                      {latestItem?.teacher?.name && (
-                                        <span>by {latestItem.teacher.name}</span>
-                                      )}
-                                    </div>
-                                  </div>
+                                    </>
+                                  )}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {inProgressLogs.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-extrabold text-blue-700 uppercase mb-2 flex items-center gap-1">
-                            <i className="fas fa-spinner" /> In Progress ({inProgressLogs.length})
-                          </p>
-                          <div className="space-y-2">
-                            {inProgressLogs.map((log) => {
-                              const lesson = progressBookLessons.find(
-                                (l) => String(l.id) === String(log.lesson_id)
-                              );
-                              const title = lesson
-                                ? [lesson.level1, lesson.level2, lesson.level3]
-                                    .filter(Boolean)
-                                    .join(' > ')
-                                : 'Unknown';
-                              return (
-                                <div
-                                  key={log.id}
-                                  className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <p className="text-xs font-bold text-dark-primary">{title}</p>
-                                    <span className="text-[9px] text-blue-600 font-bold">
-                                      {Number(log.completion_percentage).toFixed(0)}%
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {showNotStarted &&
-                        (() => {
-                          const loggedLessonIds = progressBookLogs.map((l) => String(l.lesson_id));
-                          const notStarted = progressBookLessons.filter(
-                            (l) => !loggedLessonIds.includes(String(l.id))
-                          );
-                          if (notStarted.length === 0)
-                            return (
-                              <p className="text-xs text-gray-400 font-semibold mt-2">
-                                All lessons have been started.
-                              </p>
-                            );
-                          return (
-                            <div>
-                              <p className="text-[10px] font-extrabold text-gray-500 uppercase mb-2 flex items-center gap-1">
-                                <i className="fas fa-circle-minus" /> Not Started (
-                                {notStarted.length})
-                              </p>
-                              <div className="space-y-2">
-                                {notStarted.map((lesson) => {
-                                  const title = [lesson.level1, lesson.level2, lesson.level3]
-                                    .filter(Boolean)
-                                    .join(' > ');
-                                  return (
-                                    <div
-                                      key={lesson.id}
-                                      className="p-3 bg-gray-50 border border-gray-150 rounded-xl"
-                                    >
-                                      <p className="text-xs font-bold text-gray-500">{title}</p>
-                                    </div>
-                                  );
-                                })}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {log && (
+                                  <button
+                                    onClick={() => toggleLogExpand(log.id)}
+                                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
+                                  >
+                                    <i
+                                      className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
+                                    ></i>
+                                    {isLogExpanded ? 'Hide' : 'View'} Entries
+                                  </button>
+                                )}
                               </div>
                             </div>
-                          );
-                        })()}
 
-                      {completedLogs.length === 0 &&
-                        inProgressLogs.length === 0 &&
-                        !showNotStarted && (
-                          <p className="text-xs text-gray-400 font-semibold">
-                            No completed or in-progress lessons yet. Toggle "Show Not Started" to
-                            see all lessons.
-                          </p>
-                        )}
-                    </div>
-                  );
-                })()}
+                            {isLogExpanded && log && (
+                              <div className="mt-3 space-y-2 border-t border-dashed pt-3 pl-4">
+                                <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
+                                  Logged Daily Entries
+                                </p>
+                                {!logItemsMap[log.id] ? (
+                                  <div className="flex items-center text-[10px] text-gray-400 font-bold">
+                                    <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                                    Loading details...
+                                  </div>
+                                ) : logItemsMap[log.id].length === 0 ? (
+                                  <p className="text-[10px] text-gray-400 font-semibold">
+                                    No daily entries found.
+                                  </p>
+                                ) : (
+                                  logItemsMap[log.id].map((item) => (
+                                    <div
+                                      key={item.id}
+                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
+                                    >
+                                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                                        <span className="font-bold text-dark-primary">
+                                          {new Date(item.date).toLocaleDateString()}
+                                        </span>
+                                        {getStatusBadge(item.current_status)}
+                                        <span className="text-gray-500 font-bold">
+                                          {Number(item.progress).toFixed(0)}%
+                                        </span>
+                                        {item.teacher?.name && (
+                                          <span className="text-gray-400 font-bold">
+                                            by {item.teacher.name}
+                                          </span>
+                                        )}
+                                        {item.is_revision === 'Y' && (
+                                          <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                            Revision
+                                          </span>
+                                        )}
+                                        {item.late_reporting === 'Y' && (
+                                          <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                            Late Reporting
+                                          </span>
+                                        )}
+                                      </div>
+                                      {item.comments && (
+                                        <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                          {item.comments}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -1620,15 +1917,16 @@ const SyllabusTracker = ({ user }) => {
       );
     }
 
-    const progressClasses = (coverMode || assignments.length === 0)
-      ? classes
-      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+    const progressClasses =
+      coverMode || assignments.length === 0
+        ? classes
+        : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
 
     // Group trackers by class
     const trackerByClass = {};
     myBooksData.forEach((tracker) => {
       const cls = progressClasses.find((c) => String(c.id) === String(tracker.class_id));
-      if (!cls) return; // skip if class not in active classes
+      if (!cls) return;
 
       const bookObj = books.find((b) => String(b.id) === String(tracker.book_id));
       if (!bookObj) return;
@@ -1661,6 +1959,8 @@ const SyllabusTracker = ({ user }) => {
       <div className="space-y-6">
         {classIdsWithEntries.map((classId) => {
           const { classObj, trackers } = trackerByClass[classId];
+          const isThisClassExpanded = myProgressExpandedClass === classObj.id;
+
           return (
             <div
               key={classId}
@@ -1673,6 +1973,8 @@ const SyllabusTracker = ({ user }) => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {trackers.map(({ tracker, book, subject }) => {
                   const pct = Number(tracker.completion_percentage);
+                  const isExpanded =
+                    myProgressExpandedBook === book.id && myProgressExpandedClass === classObj.id;
                   const pctColor =
                     pct >= 70 ? 'text-emerald-600' : pct >= 30 ? 'text-amber-600' : 'text-red-500';
                   const pctBg =
@@ -1683,46 +1985,373 @@ const SyllabusTracker = ({ user }) => {
                         : 'bg-red-50 border-red-200';
                   const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
 
+                  const classificationId = subject?.classification_id;
+                  const classification = classifications.find(
+                    (c) => String(c.id) === String(classificationId)
+                  );
+                  const themeStyles =
+                    classification?.theme && CARD_THEMES[classification.theme]
+                      ? CARD_THEMES[classification.theme]
+                      : CARD_THEMES.charcoal;
+
+                  // Compute lesson counts dynamically for revisions count
+                  const bookLessons = allLessons.filter(
+                    (l) => String(l.book_id) === String(book.id)
+                  );
+                  const bookLessonIds = bookLessons.map((l) => String(l.id));
+                  const bookLogs = allLogs.filter(
+                    (log) =>
+                      String(log.class_id) === String(classObj.id) &&
+                      bookLessonIds.includes(String(log.lesson_id))
+                  );
+                  const revisionCount = bookLogs.reduce(
+                    (sum, log) => sum + (log.revision_counter || 0),
+                    0
+                  );
+
+                  const total = tracker.total_lessons || bookLessons.length;
+                  const completed = tracker.completed || 0;
+                  const inProgress = tracker.in_progress || 0;
+                  const notStarted = tracker.not_started || 0;
+
                   return (
                     <div
-                      key={tracker.id}
-                      className="p-4 border border-gray-100 rounded-xl bg-gray-50/30"
+                      key={book.id}
+                      onClick={() => handleMyProgressBookClick(book.id, classObj.id)}
+                      className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
+                        isExpanded
+                          ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
+                          : 'bg-white'
+                      } border-l-${themeStyles.color}`}
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-xs font-black text-dark-primary truncate">
-                            {book.name}
-                          </h4>
-                          {subject && (
-                            <p className="text-[10px] font-semibold text-gray-500 mt-0.5">
-                              {subject.name}
+                      <div>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            {subject && (
+                              <h3 className=" font-semibold text-gray-500 mt-0.5">
+                                {subject.name}
+                              </h3>
+                            )}
+                            <h4 className="text-sm font-black text-dark-primary truncate">
+                              {book.name}
+                            </h4>
+                            <p className="text-[9px] text-brand-primary font-bold mt-1">
+                              Class: {classObj.name || classObj.class_name}
                             </p>
-                          )}
+                          </div>
+                          <div
+                            className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
+                          >
+                            <span className={`text-sm font-black ${pctColor}`}>
+                              {pct.toFixed(0)}%
+                            </span>
+                          </div>
                         </div>
-                        <div
-                          className={`flex items-center justify-center w-10 h-10 rounded-lg border ${pctBg} shrink-0 ml-2`}
-                        >
-                          <span className={`text-xs font-black ${pctColor}`}>
-                            {pct.toFixed(0)}%
-                          </span>
+                        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+                          <div
+                            className="h-1.5 rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%`, backgroundColor: barColor }}
+                          />
                         </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5">
-                        <div
-                          className="h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%`, backgroundColor: barColor }}
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 mt-2 text-[9px] font-bold text-gray-500">
-                        <span className="text-emerald-600">✓ {tracker.completed}</span>
-                        <span className="text-blue-600">◔ {tracker.in_progress}</span>
-                        <span className="text-gray-400">○ {tracker.not_started}</span>
-                        <span>Total: {tracker.total_lessons}</span>
+
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
+                        <div className="flex justify-between text-emerald-600">
+                          <span>Completed:</span>
+                          <span>{completed}</span>
+                        </div>
+                        <div className="flex justify-between text-blue-600">
+                          <span>In-progress:</span>
+                          <span>{inProgress}</span>
+                        </div>
+                        <div className="flex justify-between text-gray-400">
+                          <span>Not Started:</span>
+                          <span>{notStarted}</span>
+                        </div>
+                        <div className="flex justify-between text-purple-600">
+                          <span>Revisions:</span>
+                          <span>{revisionCount}</span>
+                        </div>
+                        <div className="flex justify-between text-dark-muted col-span-2 border-t border-dashed pt-1.5 mt-0.5">
+                          <span>Total Lessons:</span>
+                          <span>{total}</span>
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* Expanded details list within this class card container */}
+              {isThisClassExpanded && myProgressExpandedBook && (
+                <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4">
+                  {myProgressLoading ? (
+                    <div className="flex items-center justify-center p-8">
+                      <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
+                      <span className="text-xs font-bold text-gray-500">Loading lessons...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <h3 className="text-xs font-extrabold text-dark-primary">
+                          {books.find((b) => b.id === myProgressExpandedBook)?.name} — Lesson
+                          Details
+                        </h3>
+                      </div>
+
+                      {/* Level-1 Unit Progress */}
+                      <div className="mb-6 border-b border-light-border pb-6">
+                        <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
+                          Level-1 Unit Progress
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {(() => {
+                            const uniqueLevel1s = [
+                              ...new Set(
+                                myProgressBookLessons.map((l) => l.level1).filter(Boolean)
+                              ),
+                            ];
+                            if (uniqueLevel1s.length === 0) {
+                              return (
+                                <p className="text-xs text-gray-400 font-semibold col-span-full">
+                                  No level-1 sections defined for this book.
+                                </p>
+                              );
+                            }
+
+                            return uniqueLevel1s.map((lvl1) => {
+                              const lvl1Lessons = myProgressBookLessons.filter(
+                                (l) => l.level1 === lvl1
+                              );
+                              const total = lvl1Lessons.length;
+
+                              let completedCount = 0;
+                              let inProgressCount = 0;
+                              let totalProgressSum = 0;
+
+                              lvl1Lessons.forEach((lesson) => {
+                                const log = myProgressBookLogs.find(
+                                  (l) => String(l.lesson_id) === String(lesson.id)
+                                );
+                                if (log) {
+                                  if (log.current_status === 'completed') {
+                                    completedCount++;
+                                    totalProgressSum += 100;
+                                  } else if (log.current_status === 'in_progress') {
+                                    inProgressCount++;
+                                    totalProgressSum += Number(log.completion_percentage) || 0;
+                                  }
+                                }
+                              });
+
+                              const progressPct = total > 0 ? totalProgressSum / total : 0;
+                              const barColor =
+                                progressPct >= 70
+                                  ? '#10b981'
+                                  : progressPct >= 30
+                                    ? '#f59e0b'
+                                    : '#ef4444';
+
+                              return (
+                                <div
+                                  key={lvl1}
+                                  className="p-3 border border-light-border rounded-xl bg-white flex flex-col justify-between shadow-sm"
+                                >
+                                  <div className="flex items-start justify-between mb-2 gap-2">
+                                    <span
+                                      className="text-xs font-bold text-dark-primary truncate"
+                                      title={lvl1}
+                                    >
+                                      {lvl1}
+                                    </span>
+                                    <span className="text-xs font-bold text-dark-deepblue shrink-0">
+                                      {progressPct.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                      <div
+                                        className="h-1.5 rounded-full transition-all duration-300"
+                                        style={{
+                                          width: `${progressPct}%`,
+                                          backgroundColor: barColor,
+                                        }}
+                                      />
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 font-bold mt-1.5 flex items-center justify-between">
+                                      <span>
+                                        {total} {total === 1 ? 'Lesson' : 'Lessons'}
+                                      </span>
+                                      <span className="text-dark-soft">
+                                        {completedCount} ✓ / {inProgressCount} ◔
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Lessons Coverage Tracker */}
+                      <div className="bg-white rounded-2xl border border-light-border overflow-hidden">
+                        <div className="p-4 border-b bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                          <h3 className="font-extrabold text-xs text-dark-primary">
+                            Lessons Coverage Tracker
+                          </h3>
+                          <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl cursor-pointer text-xs font-bold text-gray-700 select-none hover:bg-gray-50 transition-colors shadow-sm">
+                            <input
+                              type="checkbox"
+                              checked={myProgressShowNotStarted}
+                              onChange={(e) => setMyProgressShowNotStarted(e.target.checked)}
+                              className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                            />
+                            Show Not Started Lessons
+                          </label>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          {(() => {
+                            const bookLessons = myProgressBookLessons;
+
+                            const lessonsToRender = myProgressShowNotStarted
+                              ? bookLessons
+                              : bookLessons.filter((node) => {
+                                  const log = myProgressBookLogs.find(
+                                    (l) => String(l.lesson_id) === String(node.id)
+                                  );
+                                  return log && log.current_status !== 'not_started';
+                                });
+
+                            if (lessonsToRender.length === 0) {
+                              return (
+                                <p className="text-xs text-gray-400 font-semibold py-4 text-center">
+                                  {myProgressShowNotStarted
+                                    ? 'No lessons found for this book.'
+                                    : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
+                                </p>
+                              );
+                            }
+
+                            return lessonsToRender.map((node) => {
+                              const log = myProgressBookLogs.find(
+                                (l) => String(l.lesson_id) === String(node.id)
+                              );
+                              const status = log?.current_status || 'not_started';
+                              const title = [node.level1, node.level2, node.level3]
+                                .filter(Boolean)
+                                .join(' > ');
+                              const isLogExpanded = log && myProgressExpandedLogIds[log.id];
+
+                              return (
+                                <div
+                                  key={node.id}
+                                  className="border border-gray-150 rounded-xl p-3 bg-white hover:bg-gray-50/50 transition-colors"
+                                >
+                                  <div className="flex justify-between items-center flex-wrap gap-2">
+                                    <div>
+                                      <span className="font-bold text-xs text-dark-primary">
+                                        {title}
+                                      </span>
+                                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                        {getStatusBadge(status)}
+                                        {log && (
+                                          <>
+                                            <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                              {Number(log.completion_percentage).toFixed(0)}%
+                                              Progress
+                                            </span>
+                                            <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                              Days Logged: {log.days_taken}
+                                            </span>
+                                            {log.revision_counter > 0 && (
+                                              <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                                Revisions: {log.revision_counter}
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {log && (
+                                        <button
+                                          onClick={() => toggleMyProgressLogExpand(log.id)}
+                                          className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
+                                        >
+                                          <i
+                                            className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
+                                          ></i>
+                                          {isLogExpanded ? 'Hide' : 'View'} Entries
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {isLogExpanded && log && (
+                                    <div className="mt-3 space-y-2 border-t border-dashed pt-3 pl-4">
+                                      <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
+                                        Logged Daily Entries
+                                      </p>
+                                      {!myProgressLogItemsMap[log.id] ? (
+                                        <div className="flex items-center text-[10px] text-gray-400 font-bold">
+                                          <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                                          Loading details...
+                                        </div>
+                                      ) : myProgressLogItemsMap[log.id].length === 0 ? (
+                                        <p className="text-[10px] text-gray-400 font-semibold">
+                                          No daily entries found.
+                                        </p>
+                                      ) : (
+                                        myProgressLogItemsMap[log.id].map((item) => (
+                                          <div
+                                            key={item.id}
+                                            className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
+                                          >
+                                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                                              <span className="font-bold text-dark-primary">
+                                                {new Date(item.date).toLocaleDateString()}
+                                              </span>
+                                              {getStatusBadge(item.current_status)}
+                                              <span className="text-gray-500 font-bold">
+                                                {Number(item.progress).toFixed(0)}%
+                                              </span>
+                                              {item.teacher?.name && (
+                                                <span className="text-gray-400 font-bold">
+                                                  by {item.teacher.name}
+                                                </span>
+                                              )}
+                                              {item.is_revision === 'Y' && (
+                                                <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                                  Revision
+                                                </span>
+                                              )}
+                                              {item.late_reporting === 'Y' && (
+                                                <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                                  Late Reporting
+                                                </span>
+                                              )}
+                                            </div>
+                                            {item.comments && (
+                                              <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                                {item.comments}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1742,6 +2371,10 @@ const SyllabusTracker = ({ user }) => {
   }
 
   // ─── Main Render ──────────────────────────────────────────────
+  const progressClasses =
+    coverMode || assignments.length === 0
+      ? classes
+      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
@@ -1771,25 +2404,42 @@ const SyllabusTracker = ({ user }) => {
 
       {/* Tab Content */}
       <div className="p-6 overflow-y-auto pb-24">
-        <div className="flex gap-4 border-b mb-6 pb-2">
-          {[
-            { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
-            { key: 'teacher-progress', label: 'My Progress', icon: 'fa-book' },
-            { key: 'class-progress', label: 'Class Progress', icon: 'fa-chart-pie' },
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => handleTabChange(tab.key)}
-              className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
-                activeTab === tab.key
-                  ? 'bg-brand-primary text-white'
-                  : 'bg-white text-gray-600 hover:bg-gray-100'
-              }`}
+        <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2">
+          <div className="flex gap-4">
+            {[
+              { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
+              { key: 'teacher-progress', label: 'My Progress', icon: 'fa-book' },
+              { key: 'class-progress', label: 'Class Progress', icon: 'fa-chart-pie' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => handleTabChange(tab.key)}
+                className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
+                  activeTab === tab.key
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <i className={`fas ${tab.icon} text-xs`}></i>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === 'class-progress' && (
+            <select
+              value={selectedProgressClassId}
+              onChange={(e) => setSelectedProgressClassId(e.target.value)}
+              className="border p-1.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-8 cursor-pointer"
             >
-              <i className={`fas ${tab.icon} text-xs`}></i>
-              {tab.label}
-            </button>
-          ))}
+              <option value="">Select Class</option>
+              {progressClasses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || c.class_name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {activeTab === 'teacher-activity' && renderMyWork()}
