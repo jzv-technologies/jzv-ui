@@ -3,6 +3,103 @@ import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import { CARD_THEMES } from '../../../../utils/cardTheme';
 
+const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = 'All' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredOptions = options.filter((opt) =>
+    (opt.label || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleToggle = (id) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((x) => x !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    onChange(options.map((opt) => opt.id));
+  };
+
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
+  return (
+    <div className="relative inline-block text-left w-full sm:w-44">
+      <div className="flex flex-col gap-0.5">
+        {label && (
+          <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+            {label}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-bold text-dark-primary flex justify-between items-center shadow-sm hover:bg-gray-50 cursor-pointer h-7"
+        >
+          <span className="truncate select-none">
+            {selected.length === 0 ? placeholder : `Selected (${selected.length})`}
+          </span>
+          <i className="fas fa-chevron-down text-[9px] text-gray-400 ml-1"></i>
+        </button>
+      </div>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute left-0 mt-1 w-64 rounded-xl bg-white border border-gray-200 shadow-lg z-20 flex flex-col max-h-72 overflow-hidden">
+            <div className="p-2 border-b bg-gray-50 flex items-center justify-between gap-2">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
+              />
+            </div>
+            <div className="p-1.5 border-b bg-gray-50/50 flex justify-between text-[10px] font-black text-brand-primary uppercase px-3 select-none">
+              <button onClick={handleSelectAll} className="hover:underline cursor-pointer">
+                Select All
+              </button>
+              <button onClick={handleClearAll} className="hover:underline cursor-pointer">
+                Clear All
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-2 space-y-1">
+              {filteredOptions.length === 0 ? (
+                <p className="text-[10px] text-gray-400 font-semibold text-center py-2">
+                  No matching options
+                </p>
+              ) : (
+                filteredOptions.map((opt) => {
+                  const isChecked = selected.includes(opt.id);
+                  return (
+                    <label
+                      key={opt.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer select-none text-xs font-bold text-dark-primary"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggle(opt.id)}
+                        className="rounded text-brand-primary focus:ring-brand-primary w-4 h-4 cursor-pointer"
+                      />
+                      <span className="truncate">{opt.label}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const SyllabusProgressReport = () => {
   const [loading, setLoading] = useState(true);
 
@@ -26,15 +123,25 @@ const SyllabusProgressReport = () => {
   const [dailyLoading, setDailyLoading] = useState(false);
 
   // Column Filters for Daily Activity
-  const [filterClass, setFilterClass] = useState('');
-  const [filterSubject, setFilterSubject] = useState('');
-  const [filterBook, setFilterBook] = useState('');
-  const [filterTeacher, setFilterTeacher] = useState('');
+  const [filterClasses, setFilterClasses] = useState([]);
+  const [filterSubjects, setFilterSubjects] = useState([]);
+  const [filterBooks, setFilterBooks] = useState([]);
+  const [filterTeachers, setFilterTeachers] = useState([]);
   const [filterTopic, setFilterTopic] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
+  // Daily Activity Date Picker States
+  const [dateFilterType, setDateFilterType] = useState('all'); // 'all' | 'single' | 'multiple' | 'range'
+  const [singleDate, setSingleDate] = useState('');
+  const [multipleDates, setMultipleDates] = useState([]);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [isDatePopupOpen, setIsDatePopupOpen] = useState(false);
+
   // ─── Tab 2: Book Progress States ───
-  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+  const [bpGroupingMode, setBpGroupingMode] = useState('class'); // 'none' | 'book' | 'class'
+  const [bpFilterClasses, setBpFilterClasses] = useState([]);
+  const [bpFilterBooks, setBpFilterBooks] = useState([]);
+  const [bpFilterClassifications, setBpFilterClassifications] = useState([]);
 
   const [myProgressExpandedBook, setMyProgressExpandedBook] = useState(null);
   const [myProgressExpandedClass, setMyProgressExpandedClass] = useState(null);
@@ -47,6 +154,7 @@ const SyllabusProgressReport = () => {
 
   // ─── Tab 3: Class Progress States ───
   const [selectedProgressClassId, setSelectedProgressClassId] = useState('');
+  const [cpGroupingMode, setCpGroupingMode] = useState('classification'); // 'classification' | 'subject' | 'none'
   const [classLogs, setClassLogs] = useState([]);
   const [classLessons, setClassLessons] = useState([]);
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
@@ -73,7 +181,7 @@ const SyllabusProgressReport = () => {
         resLogs,
         resLessons,
       ] = await Promise.all([
-        supabase.from('classes').select('*').order('name', { ascending: true }),
+        supabase.from('classes').select('*').order('id', { ascending: true }),
         supabase.from('subjects').select('*').order('name', { ascending: true }),
         supabase.from('syllabus_books').select('*').order('name', { ascending: true }),
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
@@ -430,6 +538,144 @@ const SyllabusProgressReport = () => {
 
   // ─── Render Helpers ───
 
+  const renderDateFilterPopup = () => {
+    return (
+      <div className="relative inline-block text-left w-full">
+        <button
+          type="button"
+          onClick={() => setIsDatePopupOpen(!isDatePopupOpen)}
+          className="w-full bg-white border border-gray-200 rounded-lg p-1 text-[11px] font-bold text-dark-primary flex justify-between items-center shadow-sm hover:bg-gray-50 cursor-pointer h-7"
+        >
+          <span className="truncate">
+            {dateFilterType === 'all' && 'All'}
+            {dateFilterType === 'single' && (singleDate || 'Pick Date')}
+            {dateFilterType === 'multiple' && `Picked (${multipleDates.length})`}
+            {dateFilterType === 'range' &&
+              `${dateRange.start || 'Start'} to ${dateRange.end || 'End'}`}
+          </span>
+          <i className="fas fa-calendar-alt text-gray-400 ml-1"></i>
+        </button>
+
+        {isDatePopupOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setIsDatePopupOpen(false)}></div>
+            <div className="absolute left-0 mt-1 w-64 rounded-xl bg-white border border-gray-200 shadow-lg z-20 p-3 space-y-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+                  Date Mode
+                </span>
+                <select
+                  value={dateFilterType}
+                  onChange={(e) => {
+                    setDateFilterType(e.target.value);
+                    if (e.target.value === 'all') {
+                      setSingleDate('');
+                      setMultipleDates([]);
+                      setDateRange({ start: '', end: '' });
+                    }
+                  }}
+                  className="w-full border rounded-lg p-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-primary cursor-pointer font-bold text-dark-primary bg-white"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="single">Single Date</option>
+                  <option value="multiple">Multiple Dates</option>
+                  <option value="range">Date Range</option>
+                </select>
+              </div>
+
+              {dateFilterType === 'single' && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+                    Pick Date
+                  </span>
+                  <input
+                    type="date"
+                    value={singleDate}
+                    onChange={(e) => setSingleDate(e.target.value)}
+                    className="w-full border rounded-lg p-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
+                  />
+                </div>
+              )}
+
+              {dateFilterType === 'multiple' && (
+                <div className="space-y-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+                      Add Date
+                    </span>
+                    <input
+                      type="date"
+                      onChange={(e) => {
+                        if (e.target.value && !multipleDates.includes(e.target.value)) {
+                          setMultipleDates([...multipleDates, e.target.value]);
+                        }
+                      }}
+                      className="w-full border rounded-lg p-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
+                    />
+                  </div>
+                  {multipleDates.length > 0 && (
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto border p-1 rounded-lg bg-gray-50">
+                      {multipleDates.map((d) => (
+                        <span
+                          key={d}
+                          className="inline-flex items-center gap-1 bg-white border px-1.5 py-0.5 rounded text-[9px] font-bold text-dark-primary"
+                        >
+                          {d}
+                          <button
+                            onClick={() => setMultipleDates(multipleDates.filter((x) => x !== d))}
+                            className="text-red-500 hover:text-red-700 cursor-pointer font-bold"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {dateFilterType === 'range' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+                      Start
+                    </span>
+                    <input
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                      className="w-full border rounded-lg p-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
+                      End
+                    </span>
+                    <input
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                      className="w-full border rounded-lg p-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => setIsDatePopupOpen(false)}
+                  className="bg-brand-primary hover:bg-brand-primary/90 text-white font-extrabold text-[10px] uppercase px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderDailyActivity = () => {
     if (dailyLoading) {
       return (
@@ -440,99 +686,65 @@ const SyllabusProgressReport = () => {
       );
     }
 
-    // Apply filters
-    const filteredDailyEntries = dailyEntries.filter((entry) => {
-      if (
-        filterClass &&
-        !entry.class?.name?.toLowerCase().includes(filterClass.toLowerCase()) &&
-        !entry.class?.class_name?.toLowerCase().includes(filterClass.toLowerCase())
-      ) {
-        return false;
-      }
-      if (
-        filterSubject &&
-        !entry.subject?.name?.toLowerCase().includes(filterSubject.toLowerCase())
-      ) {
-        return false;
-      }
-      if (filterBook && !entry.book?.name?.toLowerCase().includes(filterBook.toLowerCase())) {
-        return false;
-      }
-      if (
-        filterTeacher &&
-        !entry.teacher?.name?.toLowerCase().includes(filterTeacher.toLowerCase())
-      ) {
-        return false;
-      }
-      if (filterTopic && !entry.lessonPath?.toLowerCase().includes(filterTopic.toLowerCase())) {
-        return false;
-      }
-      if (filterStatus && entry.current_status !== filterStatus) {
-        return false;
-      }
-      return true;
-    });
+    // Options mapping for MultiSelectDropdowns
+    const classOpts = classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
+    const subjectOpts = subjects.map((s) => ({ id: String(s.id), label: s.name }));
+    const bookOpts = books.map((b) => ({ id: String(b.id), label: b.name }));
+    const teacherOpts = teachers.map((t) => ({ id: String(t.id), label: t.name }));
 
     return (
-      <div className="bg-white border rounded-2xl shadow-sm overflow-hidden space-y-4 p-4">
-        <div className="flex justify-between items-center pb-2 border-b flex-wrap gap-2">
-          <h3 className="font-extrabold text-sm text-dark-primary">Daily Activity Logs</h3>
-          <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full">
-            Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
-          </span>
-        </div>
-
+      <div className="bg-white border rounded-2xl shadow-sm overflow-hidden space-y-4 p-4 text-left">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b border-light-border text-dark-muted font-extrabold text-[10px] uppercase tracking-wider">
-                <th className="px-4 py-3 min-w-[100px]">Date</th>
-                <th className="px-4 py-3 min-w-[120px]">Class</th>
-                <th className="px-4 py-3 min-w-[120px]">Subject</th>
-                <th className="px-4 py-3 min-w-[150px]">Book</th>
-                <th className="px-4 py-3 min-w-[120px]">Teacher</th>
-                <th className="px-4 py-3 min-w-[180px]">Topic / Path</th>
-                <th className="px-4 py-3 min-w-[110px]">Status</th>
-                <th className="px-4 py-3 min-w-[80px]">Progress</th>
-                <th className="px-4 py-3 min-w-[150px]">Comments</th>
+              <tr className="bg-gray-50 border-b border-light-border text-dark-muted font-extrabold text-[10px] uppercase tracking-wider whitespace-nowrap">
+                <th className="px-4 py-3 min-w-[90px]">Date</th>
+                <th className="px-4 py-3 min-w-[80px]">Class</th>
+                <th className="px-4 py-3 min-w-[90px]">Subject</th>
+                <th className="px-4 py-3 min-w-[110px]">Book</th>
+                <th className="px-4 py-3 min-w-[115px]">Teacher</th>
+                <th className="px-4 py-3 min-w-[140px]">Topic / Path</th>
+                <th className="px-4 py-3 min-w-[95px]">Status</th>
+                <th className="px-4 py-3 min-w-[70px]">Progress</th>
+                <th className="px-4 py-3 min-w-[140px]">Comments</th>
               </tr>
               {/* Filter inputs row */}
               <tr className="bg-gray-100/50 border-b border-light-border">
-                <th className="px-2 py-1"></th>
+                <th className="px-2 py-1">{renderDateFilterPopup()}</th>
                 <th className="px-2 py-1">
-                  <input
-                    type="text"
-                    value={filterClass}
-                    onChange={(e) => setFilterClass(e.target.value)}
-                    placeholder="Filter class..."
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="All"
+                    options={classOpts}
+                    selected={filterClasses}
+                    onChange={setFilterClasses}
                   />
                 </th>
                 <th className="px-2 py-1">
-                  <input
-                    type="text"
-                    value={filterSubject}
-                    onChange={(e) => setFilterSubject(e.target.value)}
-                    placeholder="Filter subject..."
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="All"
+                    options={subjectOpts}
+                    selected={filterSubjects}
+                    onChange={setFilterSubjects}
                   />
                 </th>
                 <th className="px-2 py-1">
-                  <input
-                    type="text"
-                    value={filterBook}
-                    onChange={(e) => setFilterBook(e.target.value)}
-                    placeholder="Filter book..."
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="All"
+                    options={bookOpts}
+                    selected={filterBooks}
+                    onChange={setFilterBooks}
                   />
                 </th>
                 <th className="px-2 py-1">
-                  <input
-                    type="text"
-                    value={filterTeacher}
-                    onChange={(e) => setFilterTeacher(e.target.value)}
-                    placeholder="Filter teacher..."
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="All"
+                    options={teacherOpts}
+                    selected={filterTeachers}
+                    onChange={setFilterTeachers}
                   />
                 </th>
                 <th className="px-2 py-1">
@@ -541,14 +753,14 @@ const SyllabusProgressReport = () => {
                     value={filterTopic}
                     onChange={(e) => setFilterTopic(e.target.value)}
                     placeholder="Filter topic..."
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                    className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary h-7 bg-white"
                   />
                 </th>
                 <th className="px-2 py-1">
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full border p-1 rounded font-normal text-[11px] outline-none focus:ring-1 focus:ring-brand-primary"
+                    className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary bg-white h-7 cursor-pointer"
                   >
                     <option value="">All Statuses</option>
                     <option value="completed">Completed</option>
@@ -557,7 +769,15 @@ const SyllabusProgressReport = () => {
                   </select>
                 </th>
                 <th className="px-2 py-1"></th>
-                <th className="px-2 py-1"></th>
+                <th className="px-2 py-1 text-center">
+                  <button
+                    onClick={clearDailyFilters}
+                    className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] uppercase px-2 py-1 rounded-lg border border-red-100 transition-colors cursor-pointer w-full h-7 flex items-center justify-center gap-1 shadow-sm font-black"
+                    title="Clear all filters"
+                  >
+                    <i className="fas fa-trash-can text-[9px]"></i> Clear
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 font-bold text-gray-700">
@@ -573,32 +793,32 @@ const SyllabusProgressReport = () => {
                     <td className="px-4 py-3 text-dark-primary whitespace-nowrap">
                       {new Date(entry.date).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 font-extrabold text-brand-primary">
+                    <td className="px-4 py-3 font-extrabold text-brand-primary whitespace-nowrap">
                       {entry.class?.name || entry.class?.class_name || '—'}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
+                    <td className="px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
                       {entry.subject?.name || '—'}
                     </td>
-                    <td className="px-4 py-3 font-bold text-dark-primary">
+                    <td className="px-4 py-3 font-bold text-dark-primary whitespace-nowrap">
                       {entry.book?.name || '—'}
                     </td>
-                    <td className="px-4 py-3 text-blue-600 font-extrabold">
+                    <td className="px-4 py-3 text-blue-600 font-extrabold whitespace-nowrap">
                       {entry.teacher?.name || '—'}
                     </td>
                     <td
-                      className="px-4 py-3 font-semibold text-gray-600 max-w-[200px] truncate"
+                      className="px-4 py-3 font-semibold text-gray-600 max-w-[250px] truncate whitespace-nowrap"
                       title={entry.lessonPath}
                     >
                       {entry.lessonPath}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {getStatusBadge(entry.current_status, entry.isRevision)}
                     </td>
-                    <td className="px-4 py-3 font-bold text-gray-700">
+                    <td className="px-4 py-3 font-bold text-gray-700 whitespace-nowrap">
                       {entry.isRevision ? '—' : `${Number(entry.progress).toFixed(0)}%`}
                     </td>
                     <td
-                      className="px-4 py-3 text-gray-500 max-w-[200px] truncate"
+                      className="px-4 py-3 text-gray-500 max-w-[200px] truncate whitespace-nowrap"
                       title={entry.comments || ''}
                     >
                       {entry.comments || '—'}
@@ -614,455 +834,491 @@ const SyllabusProgressReport = () => {
   };
 
   const renderBookProgress = () => {
-    const teacherAssignments = assignments.filter(
-      (a) => String(a.teacher_id) === String(selectedTeacherId)
-    );
-    const progressClasses =
-      teacherAssignments.length === 0
-        ? classes
-        : classes.filter((c) =>
-            teacherAssignments.some((a) => String(a.class_id) === String(c.id))
-          );
+    // Multi-select dropdown options
+    const classOptions = classes.map((c) => ({
+      id: String(c.id),
+      label: c.name || c.class_name,
+    }));
+    const bookOptions = books.map((b) => ({
+      id: String(b.id),
+      label: b.name,
+    }));
+    const classificationOptions = classifications.map((cl) => ({
+      id: String(cl.id),
+      label: cl.name,
+    }));
 
-    // Group trackers by class
-    const trackerByClass = {};
-    bookTrackers.forEach((tracker) => {
-      const cls = progressClasses.find((c) => String(c.id) === String(tracker.class_id));
-      if (!cls) return;
-
-      const bookObj = books.find((b) => String(b.id) === String(tracker.book_id));
-      if (!bookObj) return;
-
-      if (!trackerByClass[cls.id]) {
-        trackerByClass[cls.id] = {
-          classObj: cls,
-          trackers: [],
-        };
+    // Filter trackers based on multi-select selections
+    const filteredTrackers = bookTrackers.filter((tracker) => {
+      // Class filter
+      if (bpFilterClasses.length > 0 && !bpFilterClasses.includes(String(tracker.class_id))) {
+        return false;
       }
-      trackerByClass[cls.id].trackers.push({
-        tracker,
-        book: bookObj,
-        subject: subjects.find((s) => String(s.id) === String(bookObj.subject_id)),
-      });
+      // Book filter
+      if (bpFilterBooks.length > 0 && !bpFilterBooks.includes(String(tracker.book_id))) {
+        return false;
+      }
+      // Classification filter
+      const bookObj = books.find((b) => String(b.id) === String(tracker.book_id));
+      if (!bookObj) return false;
+      const subject = subjects.find((s) => String(s.id) === String(bookObj.subject_id));
+      const classificationId = subject?.classification_id;
+      if (
+        bpFilterClassifications.length > 0 &&
+        !bpFilterClassifications.includes(String(classificationId))
+      ) {
+        return false;
+      }
+      return true;
     });
 
-    const classIdsWithEntries = Object.keys(trackerByClass);
+    // Grouping logic
+    let grouped = {};
+    if (bpGroupingMode === 'class') {
+      filteredTrackers.forEach((tracker) => {
+        const cls = classes.find((c) => String(c.id) === String(tracker.class_id));
+        if (!cls) return;
+        if (!grouped[cls.id]) {
+          grouped[cls.id] = {
+            id: cls.id,
+            title: cls.name || cls.class_name,
+            icon: 'fa-graduation-cap',
+            trackers: [],
+          };
+        }
+        grouped[cls.id].trackers.push(tracker);
+      });
+    } else if (bpGroupingMode === 'book') {
+      filteredTrackers.forEach((tracker) => {
+        const bookObj = books.find((b) => String(b.id) === String(tracker.book_id));
+        if (!bookObj) return;
+        if (!grouped[bookObj.id]) {
+          grouped[bookObj.id] = {
+            id: bookObj.id,
+            title: bookObj.name,
+            icon: 'fa-book',
+            trackers: [],
+          };
+        }
+        grouped[bookObj.id].trackers.push(tracker);
+      });
+    }
 
-    return (
-      <div className="space-y-4">
-        {!selectedTeacherId ? (
-          <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-            <i className="fas fa-hand-pointer text-3xl text-gray-300 mb-3 block animate-bounce"></i>
-            Please select a teacher from the dropdown above to view progress.
+    const renderTrackerCard = (tracker) => {
+      const pct = Number(tracker.completion_percentage);
+      const isExpanded =
+        myProgressExpandedBook === tracker.book_id && myProgressExpandedClass === tracker.class_id;
+
+      const pctColor =
+        pct >= 70 ? 'text-emerald-600' : pct >= 30 ? 'text-amber-600' : 'text-red-500';
+      const pctBg =
+        pct >= 70
+          ? 'bg-emerald-50 border-emerald-200'
+          : pct >= 30
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-red-50 border-red-200';
+      const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
+
+      const bookObj = books.find((b) => String(b.id) === String(tracker.book_id));
+      const classObj = classes.find((c) => String(c.id) === String(tracker.class_id));
+      if (!bookObj || !classObj) return null;
+
+      const subject = subjects.find((s) => String(s.id) === String(bookObj.subject_id));
+      const classificationId = subject?.classification_id;
+      const classification = classifications.find((c) => String(c.id) === String(classificationId));
+      const themeStyles =
+        classification?.theme && CARD_THEMES[classification.theme]
+          ? CARD_THEMES[classification.theme]
+          : CARD_THEMES.charcoal;
+
+      // Compute lesson counts dynamically for revisions count
+      const bookLessons = allLessons.filter((l) => String(l.book_id) === String(bookObj.id));
+      const bookLessonIds = bookLessons.map((l) => String(l.id));
+      const bookLogs = allLogs.filter(
+        (log) =>
+          String(log.class_id) === String(classObj.id) &&
+          bookLessonIds.includes(String(log.lesson_id))
+      );
+      const revisionCount = bookLogs.reduce((sum, log) => sum + (log.revision_counter || 0), 0);
+
+      const total = tracker.total_lessons || bookLessons.length;
+      const completed = tracker.completed || 0;
+      const inProgress = tracker.in_progress || 0;
+      const notStarted = tracker.not_started || 0;
+
+      return (
+        <div
+          key={`${tracker.class_id}-${tracker.book_id}`}
+          onClick={() => handleMyProgressBookClick(bookObj.id, classObj.id)}
+          className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
+            isExpanded
+              ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
+              : 'bg-white'
+          } border-l-${themeStyles.color}`}
+        >
+          <div>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0">
+                {subject && <h3 className=" font-semibold text-gray-500 mt-0.5">{subject.name}</h3>}
+                <h4 className="text-sm font-black text-dark-primary truncate">{bookObj.name}</h4>
+                <p className="text-[9px] text-brand-primary font-bold mt-1">
+                  Class: {classObj.name || classObj.class_name}
+                </p>
+              </div>
+              <div
+                className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
+              >
+                <span className={`text-sm font-black ${pctColor}`}>{pct.toFixed(0)}%</span>
+              </div>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+              <div
+                className="h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, backgroundColor: barColor }}
+              />
+            </div>
           </div>
-        ) : classIdsWithEntries.length === 0 ? (
-          <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-            No allocated classes or progress records found for this teacher.
+
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
+            <div className="flex justify-between text-emerald-600">
+              <span>Completed:</span>
+              <span>{completed}</span>
+            </div>
+            <div className="flex justify-between text-blue-600">
+              <span>In-progress:</span>
+              <span>{inProgress}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>Not Started:</span>
+              <span>{notStarted}</span>
+            </div>
+            <div className="flex justify-between text-purple-600">
+              <span>Revisions:</span>
+              <span>{revisionCount}</span>
+            </div>
+            <div className="flex justify-between text-dark-muted col-span-2 border-t border-dashed pt-1.5 mt-0.5">
+              <span>Total Lessons:</span>
+              <span>{total}</span>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-6">
-            {classIdsWithEntries.map((classId) => {
-              const { classObj, trackers } = trackerByClass[classId];
-              const isThisClassExpanded = myProgressExpandedClass === classObj.id;
+        </div>
+      );
+    };
 
-              return (
-                <div
-                  key={classId}
-                  className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden p-6 space-y-4"
-                >
-                  <h3 className="text-base font-black text-dark-primary border-b pb-2 flex items-center gap-2">
-                    <i className="fas fa-graduation-cap text-brand-primary"></i>
-                    {classObj.name || classObj.class_name}
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {trackers.map(({ tracker, book, subject }) => {
-                      const pct = Number(tracker.completion_percentage);
-                      const isExpanded =
-                        myProgressExpandedBook === book.id &&
-                        myProgressExpandedClass === classObj.id;
-                      const pctColor =
-                        pct >= 70
-                          ? 'text-emerald-600'
-                          : pct >= 30
-                            ? 'text-amber-600'
-                            : 'text-red-500';
-                      const pctBg =
-                        pct >= 70
-                          ? 'bg-emerald-50 border-emerald-200'
-                          : pct >= 30
-                            ? 'bg-amber-50 border-amber-200'
-                            : 'bg-red-50 border-red-200';
-                      const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
+    const renderExpandedDetails = () => {
+      if (!myProgressExpandedBook || !myProgressExpandedClass) return null;
+      return (
+        <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4 text-left">
+          {myProgressLoading ? (
+            <div className="flex items-center justify-center p-8">
+              <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
+              <span className="text-xs font-bold text-gray-500">Loading lessons...</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="text-xs font-extrabold text-dark-primary">
+                  {books.find((b) => b.id === myProgressExpandedBook)?.name} — Lesson Details
+                </h3>
+              </div>
 
-                      const classificationId = subject?.classification_id;
-                      const classification = classifications.find(
-                        (c) => String(c.id) === String(classificationId)
+              {/* Level-1 Unit Progress */}
+              <div className="mb-6 border-b border-light-border pb-6">
+                <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
+                  Level-1 Unit Progress
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(() => {
+                    const uniqueLevel1s = [
+                      ...new Set(myProgressBookLessons.map((l) => l.level1).filter(Boolean)),
+                    ];
+                    if (uniqueLevel1s.length === 0) {
+                      return (
+                        <p className="text-xs text-gray-400 font-semibold col-span-full">
+                          No level-1 sections defined for this book.
+                        </p>
                       );
-                      const themeStyles =
-                        classification?.theme && CARD_THEMES[classification.theme]
-                          ? CARD_THEMES[classification.theme]
-                          : CARD_THEMES.charcoal;
+                    }
 
-                      // Compute lesson counts dynamically for revisions count
-                      const bookLessons = allLessons.filter(
-                        (l) => String(l.book_id) === String(book.id)
-                      );
-                      const bookLessonIds = bookLessons.map((l) => String(l.id));
-                      const bookLogs = allLogs.filter(
-                        (log) =>
-                          String(log.class_id) === String(classObj.id) &&
-                          bookLessonIds.includes(String(log.lesson_id))
-                      );
-                      const revisionCount = bookLogs.reduce(
-                        (sum, log) => sum + (log.revision_counter || 0),
-                        0
-                      );
+                    return uniqueLevel1s.map((lvl1) => {
+                      const lvl1Lessons = myProgressBookLessons.filter((l) => l.level1 === lvl1);
+                      const total = lvl1Lessons.length;
 
-                      const total = tracker.total_lessons || bookLessons.length;
-                      const completed = tracker.completed || 0;
-                      const inProgress = tracker.in_progress || 0;
-                      const notStarted = tracker.not_started || 0;
+                      let completedCount = 0;
+                      let inProgressCount = 0;
+                      let totalProgressSum = 0;
+
+                      lvl1Lessons.forEach((lesson) => {
+                        const log = myProgressBookLogs.find(
+                          (l) => String(l.lesson_id) === String(lesson.id)
+                        );
+                        if (log) {
+                          if (log.current_status === 'completed') {
+                            completedCount++;
+                            totalProgressSum += 100;
+                          } else if (log.current_status === 'in_progress') {
+                            inProgressCount++;
+                            totalProgressSum += Number(log.completion_percentage) || 0;
+                          }
+                        }
+                      });
+
+                      const progressPct = total > 0 ? totalProgressSum / total : 0;
+                      const barColor =
+                        progressPct >= 70 ? '#10b981' : progressPct >= 30 ? '#f59e0b' : '#ef4444';
 
                       return (
                         <div
-                          key={book.id}
-                          onClick={() => handleMyProgressBookClick(book.id, classObj.id)}
-                          className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
-                            isExpanded
-                              ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
-                              : 'bg-white'
-                          } border-l-${themeStyles.color}`}
+                          key={lvl1}
+                          className="p-3 border border-light-border rounded-xl bg-white flex flex-col justify-between shadow-sm"
                         >
+                          <div className="flex items-start justify-between mb-2 gap-2">
+                            <span
+                              className="text-xs font-bold text-dark-primary truncate"
+                              title={lvl1}
+                            >
+                              {lvl1}
+                            </span>
+                            <span className="text-xs font-bold text-dark-deepblue shrink-0">
+                              {progressPct.toFixed(0)}%
+                            </span>
+                          </div>
                           <div>
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1 min-w-0">
-                                {subject && (
-                                  <h3 className=" font-semibold text-gray-500 mt-0.5">
-                                    {subject.name}
-                                  </h3>
-                                )}
-                                <h4 className="text-sm font-black text-dark-primary truncate">
-                                  {book.name}
-                                </h4>
-                                <p className="text-[9px] text-brand-primary font-bold mt-1">
-                                  Class: {classObj.name || classObj.class_name}
-                                </p>
-                              </div>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5">
                               <div
-                                className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
-                              >
-                                <span className={`text-sm font-black ${pctColor}`}>
-                                  {pct.toFixed(0)}%
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
-                              <div
-                                className="h-1.5 rounded-full transition-all duration-500"
-                                style={{ width: `${pct}%`, backgroundColor: barColor }}
+                                className="h-1.5 rounded-full transition-all duration-300"
+                                style={{ width: `${progressPct}%`, backgroundColor: barColor }}
                               />
                             </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
-                            <div className="flex justify-between text-emerald-600">
-                              <span>Completed:</span>
-                              <span>{completed}</span>
-                            </div>
-                            <div className="flex justify-between text-blue-600">
-                              <span>In-progress:</span>
-                              <span>{inProgress}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-400">
-                              <span>Not Started:</span>
-                              <span>{notStarted}</span>
-                            </div>
-                            <div className="flex justify-between text-purple-600">
-                              <span>Revisions:</span>
-                              <span>{revisionCount}</span>
-                            </div>
-                            <div className="flex justify-between text-dark-muted col-span-2 border-t border-dashed pt-1.5 mt-0.5">
-                              <span>Total Lessons:</span>
-                              <span>{total}</span>
-                            </div>
+                            <p className="text-[9px] text-gray-500 font-bold mt-1.5 flex items-center justify-between">
+                              <span>
+                                {total} {total === 1 ? 'Lesson' : 'Lessons'}
+                              </span>
+                              <span className="text-dark-soft">
+                                {completedCount} ✓ / {inProgressCount} ◔
+                              </span>
+                            </p>
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    });
+                  })()}
+                </div>
+              </div>
 
-                  {/* Expanded details list within this class card container */}
-                  {isThisClassExpanded && myProgressExpandedBook && (
-                    <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4">
-                      {myProgressLoading ? (
-                        <div className="flex items-center justify-center p-8">
-                          <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
-                          <span className="text-xs font-bold text-gray-500">
-                            Loading lessons...
-                          </span>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                            <h3 className="text-xs font-extrabold text-dark-primary">
-                              {books.find((b) => b.id === myProgressExpandedBook)?.name} — Lesson
-                              Details
-                            </h3>
-                          </div>
+              {/* Lessons Coverage Tracker */}
+              <div className="bg-white rounded-2xl border border-light-border overflow-hidden">
+                <div className="p-4 border-b bg-gray-50 flex items-center justify-between flex-wrap gap-2">
+                  <h3 className="font-extrabold text-sm text-dark-primary">
+                    Lessons Coverage Tracker
+                  </h3>
+                  <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl cursor-pointer text-xs font-bold text-gray-700 select-none hover:bg-gray-50 transition-colors shadow-sm">
+                    <input
+                      type="checkbox"
+                      checked={myProgressShowNotStarted}
+                      onChange={(e) => setMyProgressShowNotStarted(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                    />
+                    Show Not Started Lessons
+                  </label>
+                </div>
+                <div className="p-4 space-y-3">
+                  {(() => {
+                    const bookLessons = myProgressBookLessons;
 
-                          {/* Level-1 Unit Progress */}
-                          <div className="mb-6 border-b border-light-border pb-6">
-                            <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
-                              Level-1 Unit Progress
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {(() => {
-                                const uniqueLevel1s = [
-                                  ...new Set(
-                                    myProgressBookLessons.map((l) => l.level1).filter(Boolean)
-                                  ),
-                                ];
-                                if (uniqueLevel1s.length === 0) {
-                                  return (
-                                    <p className="text-xs text-gray-400 font-semibold col-span-full">
-                                      No level-1 sections defined for this book.
-                                    </p>
-                                  );
-                                }
+                    const lessonsToRender = myProgressShowNotStarted
+                      ? bookLessons.filter((node) => {
+                          const log = myProgressBookLogs.find(
+                            (l) => String(l.lesson_id) === String(node.id)
+                          );
+                          const isNotStarted = !log || log.current_status === 'not_started';
+                          if (isNotStarted) {
+                            const isRev = [node.level1, node.level2, node.level3]
+                              .filter(Boolean)
+                              .some(
+                                (lvl) =>
+                                  lvl.toLowerCase().includes('_revision') ||
+                                  lvl.toLowerCase() === 'revision'
+                              );
+                            return !isRev;
+                          }
+                          return true;
+                        })
+                      : bookLessons.filter((node) => {
+                          const log = myProgressBookLogs.find(
+                            (l) => String(l.lesson_id) === String(node.id)
+                          );
+                          return log && log.current_status !== 'not_started';
+                        });
 
-                                return uniqueLevel1s.map((lvl1) => {
-                                  const lvl1Lessons = myProgressBookLessons.filter(
-                                    (l) => l.level1 === lvl1
-                                  );
-                                  const total = lvl1Lessons.length;
+                    if (lessonsToRender.length === 0) {
+                      return (
+                        <p className="text-xs text-gray-400 font-semibold py-4 text-center">
+                          {myProgressShowNotStarted
+                            ? 'No lessons found for this book.'
+                            : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
+                        </p>
+                      );
+                    }
 
-                                  let completedCount = 0;
-                                  let inProgressCount = 0;
-                                  let totalProgressSum = 0;
+                    return lessonsToRender.map((node) => {
+                      const log = myProgressBookLogs.find(
+                        (l) => String(l.lesson_id) === String(node.id)
+                      );
+                      const status = log?.current_status || 'not_started';
+                      const title = [node.level1, node.level2, node.level3]
+                        .filter(Boolean)
+                        .join(' > ');
+                      const isLogExpanded = log && myProgressExpandedLogIds[log.id];
 
-                                  lvl1Lessons.forEach((lesson) => {
-                                    const log = myProgressBookLogs.find(
-                                      (l) => String(l.lesson_id) === String(lesson.id)
-                                    );
-                                    if (log) {
-                                      if (log.current_status === 'completed') {
-                                        completedCount++;
-                                        totalProgressSum += 100;
-                                      } else if (log.current_status === 'in_progress') {
-                                        inProgressCount++;
-                                        totalProgressSum += Number(log.completion_percentage) || 0;
-                                      }
-                                    }
-                                  });
-
-                                  const progressPct = total > 0 ? totalProgressSum / total : 0;
-                                  const barColor =
-                                    progressPct >= 70
-                                      ? '#10b981'
-                                      : progressPct >= 30
-                                        ? '#f59e0b'
-                                        : '#ef4444';
-
-                                  return (
-                                    <div
-                                      key={lvl1}
-                                      className="p-3 border border-light-border rounded-xl bg-white flex flex-col justify-between shadow-sm"
-                                    >
-                                      <div className="flex items-start justify-between mb-2 gap-2">
-                                        <span
-                                          className="text-xs font-bold text-dark-primary truncate"
-                                          title={lvl1}
-                                        >
-                                          {lvl1}
-                                        </span>
-                                        <span className="text-xs font-bold text-dark-deepblue shrink-0">
-                                          {progressPct.toFixed(0)}%
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                          <div
-                                            className="h-1.5 rounded-full transition-all duration-300"
-                                            style={{
-                                              width: `${progressPct}%`,
-                                              backgroundColor: barColor,
-                                            }}
-                                          />
-                                        </div>
-                                        <p className="text-[9px] text-gray-500 font-bold mt-1.5 flex items-center justify-between">
-                                          <span>
-                                            {total} {total === 1 ? 'Lesson' : 'Lessons'}
-                                          </span>
-                                          <span className="text-dark-soft">
-                                            {completedCount} ✓ / {inProgressCount} ◔
-                                          </span>
-                                        </p>
-                                      </div>
-                                    </div>
-                                  );
-                                });
-                              })()}
+                      return (
+                        <div
+                          key={node.id}
+                          className="border border-gray-150 rounded-xl p-3 bg-white hover:bg-gray-50/50 transition-colors"
+                        >
+                          <div className="flex justify-between items-center flex-wrap gap-2">
+                            <div>
+                              <span className="font-bold text-xs text-dark-primary">{title}</span>
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {getStatusBadge(status)}
+                                {log && (
+                                  <>
+                                    <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                      {Number(log.completion_percentage).toFixed(0)}% Progress
+                                    </span>
+                                    <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
+                                      Days Logged: {log.days_taken}
+                                    </span>
+                                    {log.revision_counter > 0 && (
+                                      <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
+                                        Revisions: {log.revision_counter}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {log && (
+                                <button
+                                  onClick={() => toggleMyProgressLogExpand(log.id)}
+                                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
+                                >
+                                  <i
+                                    className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
+                                  ></i>
+                                  {isLogExpanded ? 'Hide' : 'View'} Entries
+                                </button>
+                              )}
                             </div>
                           </div>
 
-                          {/* Lessons Coverage Tracker */}
-                          <div className="bg-white rounded-2xl border border-light-border overflow-hidden">
-                            <div className="p-4 border-b bg-gray-50 flex items-center justify-between flex-wrap gap-2">
-                              <h3 className="font-extrabold text-xs text-dark-primary">
-                                Lessons Coverage Tracker
-                              </h3>
-                              <label className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-xl cursor-pointer text-xs font-bold text-gray-700 select-none hover:bg-gray-50 transition-colors shadow-sm">
-                                <input
-                                  type="checkbox"
-                                  checked={myProgressShowNotStarted}
-                                  onChange={(e) => setMyProgressShowNotStarted(e.target.checked)}
-                                  className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
-                                />
-                                Show Not Started Lessons
-                              </label>
-                            </div>
-                            <div className="p-4 space-y-3">
-                              {(() => {
-                                const bookLessons = myProgressBookLessons;
-
-                                const lessonsToRender = myProgressShowNotStarted
-                                  ? bookLessons
-                                  : bookLessons.filter((node) => {
-                                      const log = myProgressBookLogs.find(
-                                        (l) => String(l.lesson_id) === String(node.id)
-                                      );
-                                      return log && log.current_status !== 'not_started';
-                                    });
-
-                                if (lessonsToRender.length === 0) {
-                                  return (
-                                    <p className="text-xs text-gray-400 font-semibold py-4 text-center">
-                                      {myProgressShowNotStarted
-                                        ? 'No lessons found for this book.'
-                                        : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
-                                    </p>
-                                  );
-                                }
-
-                                return lessonsToRender.map((node) => {
-                                  const log = myProgressBookLogs.find(
-                                    (l) => String(l.lesson_id) === String(node.id)
-                                  );
-                                  const status = log?.current_status || 'not_started';
-                                  const title = [node.level1, node.level2, node.level3]
-                                    .filter(Boolean)
-                                    .join(' > ');
-                                  const isLogExpanded = log && myProgressExpandedLogIds[log.id];
-
-                                  return (
-                                    <div
-                                      key={node.id}
-                                      className="border border-gray-150 rounded-xl p-3 bg-white hover:bg-gray-50/50 transition-colors"
-                                    >
-                                      <div className="flex justify-between items-center flex-wrap gap-2">
-                                        <div>
-                                          <span className="font-bold text-xs text-dark-primary">
-                                            {title}
-                                          </span>
-                                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                            {getStatusBadge(status)}
-                                            {log && (
-                                              <>
-                                                <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
-                                                  {Number(log.completion_percentage).toFixed(0)}%
-                                                  Progress
-                                                </span>
-                                                <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
-                                                  Days Logged: {log.days_taken}
-                                                </span>
-                                                {log.revision_counter > 0 && (
-                                                  <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                                                    Revisions: {log.revision_counter}
-                                                  </span>
-                                                )}
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          {log && (
-                                            <button
-                                              onClick={() => toggleMyProgressLogExpand(log.id)}
-                                              className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
-                                            >
-                                              <i
-                                                className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
-                                              ></i>
-                                              {isLogExpanded ? 'Hide' : 'View'} Entries
-                                            </button>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {isLogExpanded && log && (
-                                        <div className="mt-3 space-y-2 border-t border-dashed pt-3 pl-4">
-                                          <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
-                                            Logged Daily Entries
-                                          </p>
-                                          {!myProgressLogItemsMap[log.id] ? (
-                                            <div className="flex items-center text-[10px] text-gray-400 font-bold">
-                                              <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
-                                              Loading details...
-                                            </div>
-                                          ) : myProgressLogItemsMap[log.id].length === 0 ? (
-                                            <p className="text-[10px] text-gray-400 font-semibold">
-                                              No daily entries found.
-                                            </p>
-                                          ) : (
-                                            myProgressLogItemsMap[log.id].map((item) => (
-                                              <div
-                                                key={item.id}
-                                                className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
-                                              >
-                                                <div className="flex items-center gap-2 flex-wrap mb-1">
-                                                  <span className="font-bold text-dark-primary">
-                                                    {new Date(item.date).toLocaleDateString()}
-                                                  </span>
-                                                  {getStatusBadge(item.current_status)}
-                                                  <span className="text-gray-500 font-bold">
-                                                    {Number(item.progress).toFixed(0)}%
-                                                  </span>
-                                                  {item.teacher?.name && (
-                                                    <span className="text-gray-400 font-bold">
-                                                      by {item.teacher.name}
-                                                    </span>
-                                                  )}
-                                                  {item.is_revision === 'Y' && (
-                                                    <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
-                                                      Revision
-                                                    </span>
-                                                  )}
-                                                  {item.late_reporting === 'Y' && (
-                                                    <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
-                                                      Late Reporting
-                                                    </span>
-                                                  )}
-                                                </div>
-                                                {item.comments && (
-                                                  <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
-                                                    {item.comments}
-                                                  </p>
-                                                )}
-                                              </div>
-                                            ))
-                                          )}
-                                        </div>
+                          {isLogExpanded && log && (
+                            <div className="mt-3 space-y-2 border-t border-dashed pt-3 pl-4">
+                              <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
+                                Logged Daily Entries
+                              </p>
+                              {!myProgressLogItemsMap[log.id] ? (
+                                <div className="flex items-center text-[10px] text-gray-400 font-bold">
+                                  <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                                  Loading details...
+                                </div>
+                              ) : myProgressLogItemsMap[log.id].length === 0 ? (
+                                <p className="text-[10px] text-gray-400 font-semibold">
+                                  No daily entries found.
+                                </p>
+                              ) : (
+                                myProgressLogItemsMap[log.id].map((item) => (
+                                  <div
+                                    key={item.id}
+                                    className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
+                                  >
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <span className="font-bold text-dark-primary">
+                                        {new Date(item.date).toLocaleDateString()}
+                                      </span>
+                                      {getStatusBadge(item.current_status)}
+                                      <span className="text-gray-500 font-bold">
+                                        {Number(item.progress).toFixed(0)}%
+                                      </span>
+                                      {item.teacher?.name && (
+                                        <span className="text-gray-400 font-bold">
+                                          by {item.teacher.name}
+                                        </span>
+                                      )}
+                                      {item.is_revision === 'Y' && (
+                                        <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                          Revision
+                                        </span>
+                                      )}
+                                      {item.late_reporting === 'Y' && (
+                                        <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                          Late Reporting
+                                        </span>
                                       )}
                                     </div>
-                                  );
-                                });
-                              })()}
+                                    {item.comments && (
+                                      <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                        {item.comments}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))
+                              )}
                             </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-4">
+        {filteredTrackers.length === 0 ? (
+          <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
+            No matching progress records found.
+          </div>
+        ) : bpGroupingMode === 'none' ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredTrackers.map((t) => renderTrackerCard(t))}
+            </div>
+            {renderExpandedDetails()}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Object.keys(grouped).map((groupId) => {
+              const { title, icon, trackers } = grouped[groupId];
+              const hasExpandedInThisGroup =
+                myProgressExpandedClass &&
+                (bpGroupingMode === 'class'
+                  ? String(myProgressExpandedClass) === String(groupId)
+                  : trackers.some(
+                      (t) =>
+                        String(t.book_id) === String(myProgressExpandedBook) &&
+                        String(t.class_id) === String(myProgressExpandedClass)
+                    ));
+
+              return (
+                <div
+                  key={groupId}
+                  className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden p-6 space-y-4"
+                >
+                  <h3 className="text-base font-black text-dark-primary border-b pb-2 flex items-center gap-2">
+                    <i className={`fas ${icon} text-brand-primary`}></i>
+                    {title}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {trackers.map((t) => renderTrackerCard(t))}
+                  </div>
+                  {hasExpandedInThisGroup && renderExpandedDetails()}
                 </div>
               );
             })}
@@ -1087,19 +1343,33 @@ const SyllabusProgressReport = () => {
       .map((bc) => String(bc.book_id));
     const classBooks = books.filter((b) => classBookIds.includes(String(b.id)));
 
-    // Group books by classification
+    // Group books by classification or subject or no group
     const booksByClassification = {};
-    classBooks.forEach((book) => {
-      const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-      const classificationId = subj?.classification_id;
-      const classification = classifications.find((c) => String(c.id) === String(classificationId));
-
-      const groupName = classification ? classification.name : 'Other / Unclassified';
-      if (!booksByClassification[groupName]) {
-        booksByClassification[groupName] = [];
-      }
-      booksByClassification[groupName].push(book);
-    });
+    if (cpGroupingMode === 'classification') {
+      classBooks.forEach((book) => {
+        const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+        const classificationId = subj?.classification_id;
+        const classification = classifications.find(
+          (c) => String(c.id) === String(classificationId)
+        );
+        const groupName = classification ? classification.name : 'Other / Unclassified';
+        if (!booksByClassification[groupName]) {
+          booksByClassification[groupName] = [];
+        }
+        booksByClassification[groupName].push(book);
+      });
+    } else if (cpGroupingMode === 'subject') {
+      classBooks.forEach((book) => {
+        const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+        const groupName = subj ? subj.name : 'General / Unclassified';
+        if (!booksByClassification[groupName]) {
+          booksByClassification[groupName] = [];
+        }
+        booksByClassification[groupName].push(book);
+      });
+    } else {
+      booksByClassification['All Books'] = classBooks;
+    }
 
     return (
       <div className="space-y-4">
@@ -1111,13 +1381,15 @@ const SyllabusProgressReport = () => {
           <div className="space-y-6">
             {Object.entries(booksByClassification).map(([groupName, booksInGroup]) => (
               <div key={groupName} className="space-y-3">
-                <h4 className="text-sm font-black text-brand-primary uppercase tracking-wider border-b pb-1.5 flex items-center gap-2">
-                  <i className="fas fa-bookmark text-xs"></i>
-                  {groupName}
-                  <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold normal-case">
-                    {booksInGroup.length} {booksInGroup.length === 1 ? 'Book' : 'Books'}
-                  </span>
-                </h4>
+                {cpGroupingMode !== 'none' && (
+                  <h4 className="text-sm font-black text-brand-primary uppercase tracking-wider border-b pb-1.5 flex items-center gap-2">
+                    <i className="fas fa-bookmark text-xs"></i>
+                    {groupName}
+                    <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold normal-case">
+                      {booksInGroup.length} {booksInGroup.length === 1 ? 'Book' : 'Books'}
+                    </span>
+                  </h4>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {booksInGroup.map((book) => {
                     const bt = bookTrackers.find(
@@ -1357,7 +1629,23 @@ const SyllabusProgressReport = () => {
                       const bookLessons = progressBookLessons;
 
                       const lessonsToRender = showNotStarted
-                        ? bookLessons
+                        ? bookLessons.filter((node) => {
+                            const log = progressBookLogs.find(
+                              (l) => String(l.lesson_id) === String(node.id)
+                            );
+                            const isNotStarted = !log || log.current_status === 'not_started';
+                            if (isNotStarted) {
+                              const isRev = [node.level1, node.level2, node.level3]
+                                .filter(Boolean)
+                                .some(
+                                  (lvl) =>
+                                    lvl.toLowerCase().includes('_revision') ||
+                                    lvl.toLowerCase() === 'revision'
+                                );
+                              return !isRev;
+                            }
+                            return true;
+                          })
                         : bookLessons.filter((node) => {
                             const log = progressBookLogs.find(
                               (l) => String(l.lesson_id) === String(node.id)
@@ -1495,6 +1783,60 @@ const SyllabusProgressReport = () => {
     );
   };
 
+  const clearDailyFilters = () => {
+    setFilterClasses([]);
+    setFilterSubjects([]);
+    setFilterBooks([]);
+    setFilterTeachers([]);
+    setFilterTopic('');
+    setFilterStatus('');
+    setDateFilterType('all');
+    setSingleDate('');
+    setMultipleDates([]);
+    setDateRange({ start: '', end: '' });
+  };
+
+  const getFilteredDailyEntries = () => {
+    return dailyEntries.filter((entry) => {
+      // Date filter
+      if (entry.date) {
+        const entryDateStr = new Date(entry.date).toISOString().split('T')[0];
+        if (dateFilterType === 'single' && singleDate) {
+          if (entryDateStr !== singleDate) return false;
+        } else if (dateFilterType === 'multiple' && multipleDates.length > 0) {
+          if (!multipleDates.includes(entryDateStr)) return false;
+        } else if (dateFilterType === 'range' && (dateRange.start || dateRange.end)) {
+          if (dateRange.start && entryDateStr < dateRange.start) return false;
+          if (dateRange.end && entryDateStr > dateRange.end) return false;
+        }
+      } else if (dateFilterType !== 'all') {
+        return false;
+      }
+
+      if (filterClasses.length > 0 && !filterClasses.includes(String(entry.class?.id))) {
+        return false;
+      }
+      if (filterSubjects.length > 0 && !filterSubjects.includes(String(entry.subject?.id))) {
+        return false;
+      }
+      if (filterBooks.length > 0 && !filterBooks.includes(String(entry.book?.id))) {
+        return false;
+      }
+      if (filterTeachers.length > 0 && !filterTeachers.includes(String(entry.teacher_id))) {
+        return false;
+      }
+      if (filterTopic && !entry.lessonPath?.toLowerCase().includes(filterTopic.toLowerCase())) {
+        return false;
+      }
+      if (filterStatus && entry.current_status !== filterStatus) {
+        return false;
+      }
+      return true;
+    });
+  };
+
+  const filteredDailyEntries = getFilteredDailyEntries();
+
   // ─── Main Render ───
   if (loading) {
     return (
@@ -1507,61 +1849,122 @@ const SyllabusProgressReport = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
-      <div className="bg-white border-b p-6 shadow-sm flex items-center justify-between">
-        <h1 className="text-2xl font-black flex items-center gap-2">Syllabus Progress Reports</h1>
-      </div>
-
       <div className="p-6 overflow-y-auto pb-24 flex-1">
-        <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2">
-          <div className="flex gap-4">
-            {[
-              { key: 'daily-activity', label: 'Daily Activity', icon: 'fa-list-check' },
-              { key: 'book-progress', label: 'Book Progress', icon: 'fa-book' },
-              { key: 'class-progress', label: 'Class Progress', icon: 'fa-chart-pie' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
-                  activeTab === tab.key
-                    ? 'bg-brand-primary text-white'
-                    : 'bg-white text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <i className={`fas ${tab.icon} text-xs`}></i>
-                {tab.label}
-              </button>
-            ))}
+        <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap">
+          <div className="flex gap-4 items-center flex-wrap">
+            <div className="flex gap-2">
+              {[
+                { key: 'daily-activity', label: 'Daily Activity', icon: 'fa-list-check' },
+                { key: 'book-progress', label: 'Book Progress', icon: 'fa-book' },
+                { key: 'class-progress', label: 'Class Progress', icon: 'fa-chart-pie' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
+                    activeTab === tab.key
+                      ? 'bg-brand-primary text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon} text-xs`}></i>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === 'daily-activity' && (
+              <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
+                Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
+              </span>
+            )}
           </div>
 
           {activeTab === 'book-progress' && (
-            <select
-              value={selectedTeacherId}
-              onChange={(e) => setSelectedTeacherId(e.target.value)}
-              className="border p-1.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-8 cursor-pointer"
-            >
-              <option value="">Select Teacher</option>
-              {teachers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Class Filter"
+                options={classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                selected={bpFilterClasses}
+                onChange={setBpFilterClasses}
+              />
+              <MultiSelectDropdown
+                label=""
+                placeholder="Book Filter"
+                options={books.map((b) => ({ id: String(b.id), label: b.name }))}
+                selected={bpFilterBooks}
+                onChange={setBpFilterBooks}
+              />
+              <MultiSelectDropdown
+                label=""
+                placeholder="Classification Filter"
+                options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
+                selected={bpFilterClassifications}
+                onChange={setBpFilterClassifications}
+              />
+
+              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7">
+                {[
+                  { key: 'none', label: 'No Group' },
+                  { key: 'class', label: 'Class' },
+                  { key: 'book', label: 'Book' },
+                ].map((g) => (
+                  <button
+                    key={g.key}
+                    onClick={() => {
+                      setBpGroupingMode(g.key);
+                      setMyProgressExpandedBook(null);
+                      setMyProgressExpandedClass(null);
+                    }}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer h-full flex items-center ${
+                      bpGroupingMode === g.key
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {activeTab === 'class-progress' && (
-            <select
-              value={selectedProgressClassId}
-              onChange={(e) => setSelectedProgressClassId(e.target.value)}
-              className="border p-1.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-8 cursor-pointer"
-            >
-              <option value="">Select Class</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name || c.class_name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={selectedProgressClassId}
+                onChange={(e) => setSelectedProgressClassId(e.target.value)}
+                className="border p-1 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-7 cursor-pointer"
+              >
+                <option value="">Select Class</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.class_name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7">
+                {[
+                  { key: 'none', label: 'No Group' },
+                  { key: 'classification', label: 'Classification' },
+                  { key: 'subject', label: 'Subject' },
+                ].map((g) => (
+                  <button
+                    key={g.key}
+                    onClick={() => setCpGroupingMode(g.key)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer h-full flex items-center ${
+                      cpGroupingMode === g.key
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

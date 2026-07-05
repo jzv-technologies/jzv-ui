@@ -82,6 +82,7 @@ const SyllabusTracker = ({ user }) => {
 
   // Syllabus Progress expanded state
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
+  const [cpGroupingMode, setCpGroupingMode] = useState('classification'); // 'classification' | 'subject' | 'none'
   const [showNotStarted, setShowNotStarted] = useState(false);
   const [progressBookLessons, setProgressBookLessons] = useState([]);
   const [progressBookLogs, setProgressBookLogs] = useState([]);
@@ -1503,19 +1504,31 @@ const SyllabusTracker = ({ user }) => {
       .map((bc) => String(bc.book_id));
     const classBooks = books.filter((b) => classBookIds.includes(String(b.id)));
 
-    // Group books by classification
+    // Group books by classification or subject or no group
     const booksByClassification = {};
-    classBooks.forEach((book) => {
-      const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-      const classificationId = subj?.classification_id;
-      const classification = classifications.find((c) => String(c.id) === String(classificationId));
-
-      const groupName = classification ? classification.name : 'Other / Unclassified';
-      if (!booksByClassification[groupName]) {
-        booksByClassification[groupName] = [];
-      }
-      booksByClassification[groupName].push(book);
-    });
+    if (cpGroupingMode === 'classification') {
+      classBooks.forEach((book) => {
+        const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+        const classificationId = subj?.classification_id;
+        const classification = classifications.find((c) => String(c.id) === String(classificationId));
+        const groupName = classification ? classification.name : 'Other / Unclassified';
+        if (!booksByClassification[groupName]) {
+          booksByClassification[groupName] = [];
+        }
+        booksByClassification[groupName].push(book);
+      });
+    } else if (cpGroupingMode === 'subject') {
+      classBooks.forEach((book) => {
+        const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+        const groupName = subj ? subj.name : 'General / Unclassified';
+        if (!booksByClassification[groupName]) {
+          booksByClassification[groupName] = [];
+        }
+        booksByClassification[groupName].push(book);
+      });
+    } else {
+      booksByClassification['All Books'] = classBooks;
+    }
 
     return (
       <div className="space-y-4">
@@ -1527,13 +1540,15 @@ const SyllabusTracker = ({ user }) => {
           <div className="space-y-6">
             {Object.entries(booksByClassification).map(([groupName, booksInGroup]) => (
               <div key={groupName} className="space-y-3">
-                <h4 className="text-sm font-black text-brand-primary uppercase tracking-wider border-b pb-1.5 flex items-center gap-2">
-                  <i className="fas fa-bookmark text-xs"></i>
-                  {groupName}
-                  <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold normal-case">
-                    {booksInGroup.length} {booksInGroup.length === 1 ? 'Book' : 'Books'}
-                  </span>
-                </h4>
+                {cpGroupingMode !== 'none' && (
+                  <h4 className="text-sm font-black text-brand-primary uppercase tracking-wider border-b pb-1.5 flex items-center gap-2">
+                    <i className="fas fa-bookmark text-xs"></i>
+                    {groupName}
+                    <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-0.5 rounded-full font-bold normal-case">
+                      {booksInGroup.length} {booksInGroup.length === 1 ? 'Book' : 'Books'}
+                    </span>
+                  </h4>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {booksInGroup.map((book) => {
                     const bt = bookTrackers.find((t) => String(t.book_id) === String(book.id));
@@ -1769,7 +1784,23 @@ const SyllabusTracker = ({ user }) => {
                       const bookLessons = progressBookLessons;
 
                       const lessonsToRender = showNotStarted
-                        ? bookLessons
+                        ? bookLessons.filter((node) => {
+                            const log = progressBookLogs.find(
+                              (l) => String(l.lesson_id) === String(node.id)
+                            );
+                            const isNotStarted = !log || log.current_status === 'not_started';
+                            if (isNotStarted) {
+                              const isRev = [node.level1, node.level2, node.level3]
+                                .filter(Boolean)
+                                .some(
+                                  (lvl) =>
+                                    lvl.toLowerCase().includes('_revision') ||
+                                    lvl.toLowerCase() === 'revision'
+                                );
+                              return !isRev;
+                            }
+                            return true;
+                          })
                         : bookLessons.filter((node) => {
                             const log = progressBookLogs.find(
                               (l) => String(l.lesson_id) === String(node.id)
@@ -2215,7 +2246,23 @@ const SyllabusTracker = ({ user }) => {
                             const bookLessons = myProgressBookLessons;
 
                             const lessonsToRender = myProgressShowNotStarted
-                              ? bookLessons
+                              ? bookLessons.filter((node) => {
+                                  const log = myProgressBookLogs.find(
+                                    (l) => String(l.lesson_id) === String(node.id)
+                                  );
+                                  const isNotStarted = !log || log.current_status === 'not_started';
+                                  if (isNotStarted) {
+                                    const isRev = [node.level1, node.level2, node.level3]
+                                      .filter(Boolean)
+                                      .some(
+                                        (lvl) =>
+                                          lvl.toLowerCase().includes('_revision') ||
+                                          lvl.toLowerCase() === 'revision'
+                                      );
+                                    return !isRev;
+                                  }
+                                  return true;
+                                })
                               : bookLessons.filter((node) => {
                                   const log = myProgressBookLogs.find(
                                     (l) => String(l.lesson_id) === String(node.id)
@@ -2427,18 +2474,40 @@ const SyllabusTracker = ({ user }) => {
           </div>
 
           {activeTab === 'class-progress' && (
-            <select
-              value={selectedProgressClassId}
-              onChange={(e) => setSelectedProgressClassId(e.target.value)}
-              className="border p-1.5 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-8 cursor-pointer"
-            >
-              <option value="">Select Class</option>
-              {progressClasses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name || c.class_name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={selectedProgressClassId}
+                onChange={(e) => setSelectedProgressClassId(e.target.value)}
+                className="border p-1 rounded-lg bg-white outline-none focus:ring-2 focus:ring-brand-primary text-xs font-bold text-dark-primary h-7 cursor-pointer"
+              >
+                <option value="">Select Class</option>
+                {progressClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.class_name}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7">
+                {[
+                  { key: 'none', label: 'No Group' },
+                  { key: 'classification', label: 'Classification' },
+                  { key: 'subject', label: 'Subject' },
+                ].map((g) => (
+                  <button
+                    key={g.key}
+                    onClick={() => setCpGroupingMode(g.key)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer h-full flex items-center ${
+                      cpGroupingMode === g.key
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 

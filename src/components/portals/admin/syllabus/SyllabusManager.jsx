@@ -235,7 +235,7 @@ const SyllabusManager = ({ role, user }) => {
         supabase.from('subjects').select('*'),
         supabase.from('syllabus_books').select('*'),
         supabase.from('syllabus_book_lessons').select('*'),
-        supabase.from('classes').select('*').order('name', { ascending: true }),
+        supabase.from('classes').select('*').order('id', { ascending: true }),
         supabase.from('syllabus_book_classes').select('*'),
       ]);
 
