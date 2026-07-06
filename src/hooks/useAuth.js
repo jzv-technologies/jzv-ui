@@ -186,7 +186,11 @@ export const useAuth = () => {
     localStorage.removeItem("jzv_parent_session");
     localStorage.removeItem("jzv_admin_session");
     if (supabase.rest.headers) {
-      delete supabase.rest.headers['x-parent-mobile'];
+      if (typeof supabase.rest.headers.delete === 'function') {
+        supabase.rest.headers.delete('x-parent-mobile');
+      } else {
+        delete supabase.rest.headers['x-parent-mobile'];
+      }
     }
     if (user && !user.parentMode) {
       clearUserDataCookie(user.id);
@@ -215,8 +219,12 @@ export const useAuth = () => {
     };
     localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
     if (parentMobile) {
-      if (!supabase.rest.headers) supabase.rest.headers = {};
-      supabase.rest.headers['x-parent-mobile'] = parentMobile;
+      if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
+        supabase.rest.headers.set('x-parent-mobile', parentMobile);
+      } else {
+        if (!supabase.rest.headers) supabase.rest.headers = {};
+        supabase.rest.headers['x-parent-mobile'] = parentMobile;
+      }
     }
     setUser(parentSession.user);
     updateRoles(["parent"]);
@@ -242,8 +250,12 @@ export const useAuth = () => {
     };
     localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
     if (parentMobile) {
-      if (!supabase.rest.headers) supabase.rest.headers = {};
-      supabase.rest.headers['x-parent-mobile'] = parentMobile;
+      if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
+        supabase.rest.headers.set('x-parent-mobile', parentMobile);
+      } else {
+        if (!supabase.rest.headers) supabase.rest.headers = {};
+        supabase.rest.headers['x-parent-mobile'] = parentMobile;
+      }
     }
     setUser(parentSession.user);
     updateRoles(["parent"]);
@@ -260,8 +272,13 @@ export const useAuth = () => {
         const parsed = JSON.parse(savedParent);
         const parentMobile = parsed.user?.parentMobile || parsed.user?.student?.mobile1 || parsed.user?.student?.mobile2 || "";
         if (parentMobile) {
-          if (!supabase.rest.headers) supabase.rest.headers = {};
-          supabase.rest.headers['x-parent-mobile'] = parentMobile.replace(/\D/g, "");
+          const formattedMobile = parentMobile.replace(/\D/g, "");
+          if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
+            supabase.rest.headers.set('x-parent-mobile', formattedMobile);
+          } else {
+            if (!supabase.rest.headers) supabase.rest.headers = {};
+            supabase.rest.headers['x-parent-mobile'] = formattedMobile;
+          }
         }
         setUser(parsed.user);
         updateRoles(["parent"]);

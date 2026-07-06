@@ -271,7 +271,7 @@ const ParentSyllabusView = ({ student }) => {
         <div className="flex gap-2">
           {[
             { key: 'class-progress', label: 'Class Progress', icon: 'fa-chart-pie' },
-            { key: 'daily-activity', label: 'Daily Activity', icon: 'fa-list-check' },
+            { key: 'daily-activity', label: "Today's Class", icon: 'fa-list-check' },
           ].map((tab) => (
             <button
               key={tab.key}

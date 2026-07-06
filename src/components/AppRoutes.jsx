@@ -16,6 +16,7 @@ import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import SyllabusTracker from './portals/teacher/SyllabusTracker';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import ParentSyllabusView from './portals/parent/ParentSyllabusView';
+import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -208,7 +209,7 @@ export const AppRoutes = ({
                   <ReporterTicketsView user={user} fullName={fullName} />
                 )}
                 {parentSubView === 'syllabus-progress' && (
-                  <ParentSyllabusView student={user?.student} />
+                  <SyllabusProgressReport role="parent" student={user?.student} />
                 )}
               </RolePortal>
             ) : (
