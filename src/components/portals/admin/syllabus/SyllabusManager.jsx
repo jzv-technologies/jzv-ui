@@ -453,6 +453,41 @@ const SyllabusManager = ({ role, user }) => {
   const toggleClassificationCollapse = (name) =>
     setCollapsedClassifications((prev) => ({ ...prev, [name]: !prev[name] }));
 
+  const handleExportExcel = (book) => {
+    try {
+      const bookData = syllabusData.filter((d) => String(d.book_id) === String(book.id));
+      
+      const sortedData = [...bookData].sort((a, b) => {
+        const l1Compare = (a.level1 || '').localeCompare(b.level1 || '');
+        if (l1Compare !== 0) return l1Compare;
+        
+        const l2Compare = (a.level2 || '').localeCompare(b.level2 || '');
+        if (l2Compare !== 0) return l2Compare;
+        
+        return (a.level3 || '').localeCompare(b.level3 || '');
+      });
+
+      const sheetData = sortedData.map((d) => ({
+        Level1: d.level1 || '',
+        Level2: d.level2 || '',
+        Level3: d.level3 || '',
+        page: d.page_count !== undefined && d.page_count !== null ? d.page_count : 0,
+        complexity: d.complexity || 'Easy'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Syllabus');
+      
+      const filename = `${book.name.replace(/\s+/g, '_')}_Syllabus.xlsx`;
+      XLSX.writeFile(workbook, filename);
+      
+      showToast('Excel downloaded successfully!', 'success');
+    } catch (err) {
+      showToast('Export Error: ' + err.message, 'error');
+    }
+  };
+
   // Csv Import Logic
   const initiateCsvImport = (bookId) => {
     setImportBookId(bookId);
@@ -1939,12 +1974,19 @@ const SyllabusManager = ({ role, user }) => {
                                   <i className="fas fa-plus"></i> Add {bookL1Name}
                                 </button>
                                 <button
-                                  onClick={() => initiateCsvImport(book.id)}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                  title="Import CSV"
-                                >
-                                  <i className="fas fa-file-import text-xl"></i>
-                                </button>
+                                   onClick={() => initiateCsvImport(book.id)}
+                                   className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                   title="Import CSV"
+                                 >
+                                   <i className="fas fa-file-import text-xl"></i>
+                                 </button>
+                                 <button
+                                   onClick={() => handleExportExcel(book)}
+                                   className="p-2 text-emerald-700 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                   title="Download Excel"
+                                 >
+                                   <i className="fas fa-file-excel text-xl"></i>
+                                 </button>
                                 <button
                                   onClick={() => initiateMapping(book)}
                                   className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
