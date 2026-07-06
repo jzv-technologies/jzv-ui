@@ -270,11 +270,20 @@ const SyllabusManager = ({ role, user }) => {
           .maybeSingle();
 
         if (teacherData) {
-          const { data: dbAssignments } = await supabase
-            .from('class_assignments')
-            .select('subject_id')
-            .eq('teacher_id', teacherData.id);
-          teacherAllocatedIds = (dbAssignments || []).map((a) => String(a.subject_id));
+          const [dbAssignments, dbTeacherSubjects] = await Promise.all([
+            supabase
+              .from('class_assignments')
+              .select('subject_id')
+              .eq('teacher_id', teacherData.id),
+            supabase
+              .from('teacher_subjects')
+              .select('subject_id')
+              .eq('teacher_id', teacherData.id)
+          ]);
+          
+          const idsFromAssignments = (dbAssignments.data || []).map((a) => String(a.subject_id));
+          const idsFromTeacherSubjects = (dbTeacherSubjects.data || []).map((ts) => String(ts.subject_id));
+          teacherAllocatedIds = Array.from(new Set([...idsFromAssignments, ...idsFromTeacherSubjects]));
         }
       }
       setAllocatedSubjectIds(teacherAllocatedIds);
@@ -343,9 +352,11 @@ const SyllabusManager = ({ role, user }) => {
               (t) => String(t.auth_id) === String(user.id) || String(t.id) === String(user.id)
             );
             if (matchedTeacher) {
-              teacherAllocatedIds = (parsedTimetable.assignments || [])
+              const idsFromTeacher = (matchedTeacher.subjects || []).map((id) => String(id));
+              const idsFromAssignments = (parsedTimetable.assignments || [])
                 .filter((a) => String(a.teacher_id) === String(matchedTeacher.id))
                 .map((a) => String(a.subject_id));
+              teacherAllocatedIds = Array.from(new Set([...idsFromTeacher, ...idsFromAssignments]));
             }
           } catch (e) {
             console.warn('Error parsing timetable local data:', e);

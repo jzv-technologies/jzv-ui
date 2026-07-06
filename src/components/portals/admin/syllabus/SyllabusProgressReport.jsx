@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import { CARD_THEMES } from '../../../../utils/cardTheme';
+import ConfirmModal from '../../../ConfirmModal';
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = 'All' }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -121,6 +122,7 @@ const SyllabusProgressReport = ({ role, student }) => {
   // ─── Tab 1: Daily Activity States & Filters ───
   const [dailyEntries, setDailyEntries] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [deleteModalConfig, setDeleteModalConfig] = useState(null);
 
   const getLocalDateStr = () => {
     const d = new Date();
@@ -380,6 +382,69 @@ const SyllabusProgressReport = ({ role, student }) => {
       setDailyLoading(false);
     }
   }, [books, classes, subjects, role, student]);
+
+  const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
+    let className = '—';
+    if (entry.class?.name || entry.class?.class_name) {
+      className = entry.class.name || entry.class.class_name;
+    } else if (parentLog) {
+      const cls = classes.find((c) => c.id === parentLog.class_id);
+      className = cls?.name || `Class ID ${parentLog.class_id}`;
+    }
+
+    let subjectName = '—';
+    if (entry.subject?.name) {
+      subjectName = entry.subject.name;
+    } else if (book) {
+      const sub = subjects.find((s) => s.id === book.subject_id);
+      subjectName = sub?.name || '—';
+    } else if (lesson) {
+      const b = books.find((x) => x.id === lesson.book_id);
+      const sub = b ? subjects.find((s) => s.id === b.subject_id) : null;
+      subjectName = sub?.name || '—';
+    }
+
+    setDeleteModalConfig({
+      id: entry.id,
+      date: new Date(entry.date).toLocaleDateString(),
+      className,
+      subjectName,
+      logId: parentLog?.id || entry.lt_log_id
+    });
+  };
+
+  const handleExecuteDelete = async () => {
+    if (!deleteModalConfig) return;
+    setDailyLoading(true);
+    try {
+      const { error } = await supabase
+        .from('lesson_tracker_log_items')
+        .delete()
+        .eq('id', deleteModalConfig.id);
+      if (error) throw error;
+
+      showToast('Log entry deleted successfully!', 'success');
+
+      if (deleteModalConfig.logId) {
+        setLogItemsMap((prev) => {
+          const updated = { ...prev };
+          if (updated[deleteModalConfig.logId]) {
+            updated[deleteModalConfig.logId] = updated[deleteModalConfig.logId].filter(
+              (item) => item.id !== deleteModalConfig.id
+            );
+          }
+          return updated;
+        });
+      }
+
+      setDeleteModalConfig(null);
+      await fetchDailyEntries();
+    } catch (err) {
+      showToast('Error deleting log entry: ' + err.message, 'error');
+    } finally {
+      setDailyLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'daily-activity' && books.length > 0) {
@@ -760,6 +825,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                 <th className="px-4 py-3 min-w-[95px]">Status</th>
                 <th className="px-4 py-3 min-w-[70px]">Progress</th>
                 <th className="px-4 py-3 min-w-[140px]">Comments</th>
+                {role !== 'parent' && <th className="px-4 py-3 min-w-[60px] text-center">Action</th>}
               </tr>
               {/* Filter inputs row */}
               <tr className="bg-gray-100/50 border-b border-light-border">
@@ -840,12 +906,13 @@ const SyllabusProgressReport = ({ role, student }) => {
                     <i className="fas fa-trash-can text-[9px]"></i> Clear
                   </button>
                 </th>
+                {role !== 'parent' && <th className="px-2 py-1"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 font-bold text-gray-700">
               {filteredDailyEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="text-center py-6 text-gray-400 font-semibold">
+                  <td colSpan={role === 'parent' ? 9 : 10} className="text-center py-6 text-gray-400 font-semibold">
                     No entries match your search filters.
                   </td>
                 </tr>
@@ -885,6 +952,17 @@ const SyllabusProgressReport = ({ role, student }) => {
                     >
                       {entry.comments || '—'}
                     </td>
+                    {role !== 'parent' && (
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleDeleteClick(entry)}
+                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"
+                          title="Delete Log Entry"
+                        >
+                          <i className="fas fa-trash-alt text-xs"></i>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -1332,36 +1410,47 @@ const SyllabusProgressReport = ({ role, student }) => {
                                   logItemsMap[log.id].map((item) => (
                                     <div
                                       key={item.id}
-                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
+                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600 flex justify-between items-start gap-4"
                                     >
-                                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                                        <span className="font-bold text-dark-primary">
-                                          {new Date(item.date).toLocaleDateString()}
-                                        </span>
-                                        {getStatusBadge(item.current_status)}
-                                        <span className="text-gray-500 font-bold">
-                                          {Number(item.progress).toFixed(0)}%
-                                        </span>
-                                        {item.teacher?.name && (
-                                          <span className="text-gray-400 font-bold">
-                                            by {item.teacher.name}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          <span className="font-bold text-dark-primary">
+                                            {new Date(item.date).toLocaleDateString()}
                                           </span>
-                                        )}
-                                        {item.is_revision === 'Y' && (
-                                          <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
-                                            Revision
+                                          {getStatusBadge(item.current_status)}
+                                          <span className="text-gray-500 font-bold">
+                                            {Number(item.progress).toFixed(0)}%
                                           </span>
-                                        )}
-                                        {item.late_reporting === 'Y' && (
-                                          <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
-                                            Late Reporting
-                                          </span>
+                                          {item.teacher?.name && (
+                                            <span className="text-gray-400 font-bold">
+                                              by {item.teacher.name}
+                                            </span>
+                                          )}
+                                          {item.is_revision === 'Y' && (
+                                            <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                              Revision
+                                            </span>
+                                          )}
+                                          {item.late_reporting === 'Y' && (
+                                            <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                              Late Reporting
+                                            </span>
+                                          )}
+                                        </div>
+                                        {item.comments && (
+                                          <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                            {item.comments}
+                                          </p>
                                         )}
                                       </div>
-                                      {item.comments && (
-                                        <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
-                                          {item.comments}
-                                        </p>
+                                      {role !== 'parent' && (
+                                        <button
+                                          onClick={() => handleDeleteClick(item, log, lesson, book)}
+                                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
+                                          title="Delete Log Entry"
+                                        >
+                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
                                       )}
                                     </div>
                                   ))
@@ -1588,6 +1677,17 @@ const SyllabusProgressReport = ({ role, student }) => {
         {activeTab === 'daily-activity' && renderDailyActivity()}
         {activeTab === 'class-progress' && renderSyllabusProgress()}
       </div>
+
+      <ConfirmModal
+        isOpen={!!deleteModalConfig}
+        title="Delete Log Entry"
+        message={`Are you sure you want to delete this class log entry?\n\nDate: ${deleteModalConfig?.date}\nClass: ${deleteModalConfig?.className}\nSubject: ${deleteModalConfig?.subjectName}\n\nThis action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={handleExecuteDelete}
+        onCancel={() => setDeleteModalConfig(null)}
+      />
     </div>
   );
 };

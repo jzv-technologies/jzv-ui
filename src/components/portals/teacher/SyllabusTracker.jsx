@@ -1,8 +1,9 @@
 // src/components/portals/teacher/SyllabusTracker.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 import { CARD_THEMES } from '../../../utils/cardTheme';
+import ConfirmModal from '../../ConfirmModal';
 
 // Global/Module-level cache to keep reference data, favorites, and entries across mounts
 let syllabusTrackerCache = {
@@ -165,6 +166,8 @@ const SyllabusTracker = ({ user }) => {
     isCacheValid && syllabusTrackerCache.myWorkEntries ? syllabusTrackerCache.myWorkEntries : []
   );
   const [myWorkLoading, setMyWorkLoading] = useState(false);
+  const isFetchingMyWorkRef = useRef(false);
+  const initialLoadRef = useRef(false);
 
   // ─── Tab 2: Syllabus Progress States ───
   const [cpFilterClasses, setCpFilterClasses] = useState([]);
@@ -185,6 +188,7 @@ const SyllabusTracker = ({ user }) => {
 
   const [expandedLogIds, setExpandedLogIds] = useState({});
   const [logItemsMap, setLogItemsMap] = useState({});
+  const [deleteModalConfig, setDeleteModalConfig] = useState(null);
 
   // Add Work modal state
   const [isAddWorkModalOpen, setIsAddWorkModalOpen] = useState(false);
@@ -464,14 +468,24 @@ const SyllabusTracker = ({ user }) => {
 
   const fetchMyWorkEntries = useCallback(async () => {
     if (!teacher?.id) return;
+    if (isFetchingMyWorkRef.current) return;
+    isFetchingMyWorkRef.current = true;
+
     if (!syllabusTrackerCache.myWorkEntries) {
       setMyWorkLoading(true);
     }
     try {
-      // Fetch all log items by this teacher
+      // Fetch all log items by this teacher, joining log and lesson details in a single query
       const { data: items, error } = await supabase
         .from('lesson_tracker_log_items')
-        .select('*, teacher:teachers(name)')
+        .select(`
+          *,
+          teacher:teachers(name),
+          log:lesson_tracker_log(
+            *,
+            lesson:syllabus_book_lessons(*)
+          )
+        `)
         .eq('teacher_id', teacher.id)
         .order('date', { ascending: false })
         .limit(200);
@@ -480,30 +494,13 @@ const SyllabusTracker = ({ user }) => {
       if (!items || items.length === 0) {
         setMyWorkEntries([]);
         syllabusTrackerCache.myWorkEntries = [];
-        setMyWorkLoading(false);
         return;
       }
 
-      // Get unique lt_log_ids to fetch parent log info
-      const ltLogIds = [...new Set(items.map((i) => i.lt_log_id))];
-      const { data: logs, error: logErr } = await supabase
-        .from('lesson_tracker_log')
-        .select('*')
-        .in('id', ltLogIds);
-      if (logErr) throw logErr;
-
-      // Get lesson details
-      const lessonIds = [...new Set((logs || []).map((l) => l.lesson_id))];
-      const { data: lessons, error: lesErr } = await supabase
-        .from('syllabus_book_lessons')
-        .select('*')
-        .in('id', lessonIds);
-      if (lesErr) throw lesErr;
-
-      // Build enriched entries
+      // Build enriched entries using nested query result
       const enriched = items.map((item) => {
-        const log = (logs || []).find((l) => l.id === item.lt_log_id);
-        const lesson = log ? (lessons || []).find((ls) => ls.id === log.lesson_id) : null;
+        const log = item.log;
+        const lesson = log ? log.lesson : null;
         const book = lesson ? books.find((b) => b.id === lesson.book_id) : null;
         const subject = book ? subjects.find((s) => s.id === book.subject_id) : null;
         const cls = log ? classes.find((c) => c.id === log.class_id) : null;
@@ -531,12 +528,16 @@ const SyllabusTracker = ({ user }) => {
       }
     } finally {
       setMyWorkLoading(false);
+      isFetchingMyWorkRef.current = false;
     }
   }, [teacher, books, subjects, classes]);
 
   useEffect(() => {
     if (teacher?.id && books.length > 0 && subjects.length > 0 && classes.length > 0) {
-      fetchMyWorkEntries();
+      if (!initialLoadRef.current) {
+        initialLoadRef.current = true;
+        fetchMyWorkEntries();
+      }
     }
   }, [teacher, books, subjects, classes, fetchMyWorkEntries]);
 
@@ -1372,6 +1373,87 @@ const SyllabusTracker = ({ user }) => {
     }
   };
 
+  const isCreatedToday = (createdAtStr) => {
+    if (!createdAtStr) return false;
+    try {
+      const entryDate = new Date(createdAtStr).toLocaleDateString();
+      const today = new Date().toLocaleDateString();
+      return entryDate === today;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
+    let className = '—';
+    if (entry.class?.name || entry.class?.class_name) {
+      className = entry.class.name || entry.class.class_name;
+    } else if (parentLog) {
+      const cls = classes.find((c) => c.id === parentLog.class_id);
+      className = cls?.name || `Class ID ${parentLog.class_id}`;
+    }
+
+    let subjectName = '—';
+    if (entry.subject?.name) {
+      subjectName = entry.subject.name;
+    } else if (book) {
+      const sub = subjects.find((s) => s.id === book.subject_id);
+      subjectName = sub?.name || '—';
+    } else if (lesson) {
+      const b = books.find((x) => x.id === lesson.book_id);
+      const sub = b ? subjects.find((s) => s.id === b.subject_id) : null;
+      subjectName = sub?.name || '—';
+    }
+
+    setDeleteModalConfig({
+      id: entry.id,
+      date: new Date(entry.date).toLocaleDateString(),
+      className,
+      subjectName,
+      logId: parentLog?.id || entry.lt_log_id
+    });
+  };
+
+  const handleExecuteDelete = async () => {
+    if (!deleteModalConfig) return;
+    setMyWorkLoading(true);
+    try {
+      const { error } = await supabase
+        .from('lesson_tracker_log_items')
+        .delete()
+        .eq('id', deleteModalConfig.id);
+      if (error) throw error;
+
+      showToast('Log entry deleted successfully!', 'success');
+
+      setMyWorkEntries((prev) => prev.filter((item) => item.id !== deleteModalConfig.id));
+      if (syllabusTrackerCache.myWorkEntries) {
+        syllabusTrackerCache.myWorkEntries = syllabusTrackerCache.myWorkEntries.filter(
+          (item) => item.id !== deleteModalConfig.id
+        );
+      }
+
+      if (deleteModalConfig.logId) {
+        setLogItemsMap((prev) => {
+          const updated = { ...prev };
+          if (updated[deleteModalConfig.logId]) {
+            updated[deleteModalConfig.logId] = updated[deleteModalConfig.logId].filter(
+              (item) => item.id !== deleteModalConfig.id
+            );
+          }
+          return updated;
+        });
+      }
+
+      setDeleteModalConfig(null);
+      await fetchMyWorkEntries();
+    } catch (err) {
+      showToast('Error deleting log entry: ' + err.message, 'error');
+    } finally {
+      setMyWorkLoading(false);
+    }
+  };
+
   // ─── Syllabus Progress Tab Logic ──────────────────────────────────
 
   const handleProgressBookClick = async (bookId, classId) => {
@@ -1585,6 +1667,9 @@ const SyllabusTracker = ({ user }) => {
                 <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
                   Comments
                 </th>
+                <th className="text-center px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px] min-w-[60px]">
+                  Action
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -1627,6 +1712,17 @@ const SyllabusTracker = ({ user }) => {
                     title={entry.comments || ''}
                   >
                     {entry.comments || '—'}
+                  </td>
+                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {isCreatedToday(entry.created_at) && (
+                      <button
+                        onClick={() => handleDeleteClick(entry)}
+                        className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"
+                        title="Delete Log Entry"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -2075,36 +2171,47 @@ const SyllabusTracker = ({ user }) => {
                                   logItemsMap[log.id].map((item) => (
                                     <div
                                       key={item.id}
-                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600"
+                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600 flex justify-between items-start gap-4"
                                     >
-                                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                                        <span className="font-bold text-dark-primary">
-                                          {new Date(item.date).toLocaleDateString()}
-                                        </span>
-                                        {getStatusBadge(item.current_status)}
-                                        <span className="text-gray-500 font-bold">
-                                          {Number(item.progress).toFixed(0)}%
-                                        </span>
-                                        {item.teacher?.name && (
-                                          <span className="text-gray-400 font-bold">
-                                            by {item.teacher.name}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                          <span className="font-bold text-dark-primary">
+                                            {new Date(item.date).toLocaleDateString()}
                                           </span>
-                                        )}
-                                        {item.is_revision === 'Y' && (
-                                          <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
-                                            Revision
+                                          {getStatusBadge(item.current_status)}
+                                          <span className="text-gray-500 font-bold">
+                                            {Number(item.progress).toFixed(0)}%
                                           </span>
-                                        )}
-                                        {item.late_reporting === 'Y' && (
-                                          <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
-                                            Late Reporting
-                                          </span>
+                                          {item.teacher?.name && (
+                                            <span className="text-gray-400 font-bold">
+                                              by {item.teacher.name}
+                                            </span>
+                                          )}
+                                          {item.is_revision === 'Y' && (
+                                            <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                              Revision
+                                            </span>
+                                          )}
+                                          {item.late_reporting === 'Y' && (
+                                            <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                              Late Reporting
+                                            </span>
+                                          )}
+                                        </div>
+                                        {item.comments && (
+                                          <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                            {item.comments}
+                                          </p>
                                         )}
                                       </div>
-                                      {item.comments && (
-                                        <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
-                                          {item.comments}
-                                        </p>
+                                      {String(item.teacher_id) === String(teacher?.id) && isCreatedToday(item.created_at) && (
+                                        <button
+                                          onClick={() => handleDeleteClick(item, log, lesson, book)}
+                                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
+                                          title="Delete Log Entry"
+                                        >
+                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
                                       )}
                                     </div>
                                   ))
@@ -2955,6 +3062,17 @@ const SyllabusTracker = ({ user }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteModalConfig}
+        title="Delete Log Entry"
+        message={`Are you sure you want to delete this class log entry?\n\nDate: ${deleteModalConfig?.date}\nClass: ${deleteModalConfig?.className}\nSubject: ${deleteModalConfig?.subjectName}\n\nThis action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        onConfirm={handleExecuteDelete}
+        onCancel={() => setDeleteModalConfig(null)}
+      />
     </div>
   );
 };
