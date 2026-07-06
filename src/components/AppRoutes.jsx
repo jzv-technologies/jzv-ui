@@ -17,6 +17,7 @@ import SyllabusTracker from './portals/teacher/SyllabusTracker';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import ParentSyllabusView from './portals/parent/ParentSyllabusView';
 import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
+import CandidatePortal from './portals/CandidatePortal';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -39,6 +40,8 @@ export const AppRoutes = ({
   setTeacherSubView,
   parentSubView,
   setParentSubView,
+  candidateSubView,
+  setCandidateSubView,
 }) => {
   const navigate = useNavigate();
   const [dynamicConfigs, setDynamicConfigs] = useState([]);
@@ -314,6 +317,27 @@ export const AppRoutes = ({
               />
             </div>
           </div>
+        }
+      />
+      <Route
+        path="/portal/candidate"
+        element={
+          user ? (
+            rolesLoading ? (
+              portalRouteFallback
+            ) : userRoles.includes('candidate') ? (
+              <CandidatePortal
+                user={user}
+                userRoles={userRoles}
+                subView={candidateSubView}
+                onSetSubView={setCandidateSubView}
+              />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          ) : (
+            <Navigate to="/" replace />
+          )
         }
       />
     </Routes>

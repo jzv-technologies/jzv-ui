@@ -7,10 +7,11 @@ import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../data/mockStudents";
 
 
 
-const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsParent }) => {
-  // authMode: 'main' | 'parent-login' | 'selection' | 'pending'
+const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsParent, loginAsCandidate }) => {
+  // authMode: 'main' | 'parent-login' | 'candidate-login' | 'selection' | 'pending'
   const [authMode, setAuthMode] = useState("main");
   const [mobileNo, setMobileNo] = useState("");
+  const [candidateMobileNo, setCandidateMobileNo] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
     if (!isOpen) {
       setAuthMode("main");
       setMobileNo("");
+      setCandidateMobileNo("");
       setMessage({ type: "", text: "" });
     }
   }, [isOpen]);
@@ -201,6 +203,43 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
     }
   };
 
+  const handleCandidateLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+    try {
+      const cleanMobile = candidateMobileNo.replace(/\D/g, "");
+      if (!cleanMobile) {
+        throw new Error("Please enter a valid mobile number.");
+      }
+
+      // Query admin_configruation of enable_test using RPC as a guest
+      const { data, error } = await supabase.rpc('get_enable_test_config');
+      if (error) {
+        throw new Error("Failed to verify test status. Please try again later.");
+      }
+
+      if (!data || !data[cleanMobile]) {
+        throw new Error("This mobile number is not enabled for any tests.");
+      }
+
+      const config = data[cleanMobile];
+      const expireOn = new Date(config.expire_on);
+      if (expireOn <= new Date()) {
+        throw new Error("Your access to the tests has expired.");
+      }
+
+      // Login as Candidate!
+      loginAsCandidate(cleanMobile, config.test, config.expire_on);
+      navigate("/portal/candidate");
+      onClose();
+    } catch (err) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderHeader = () => (
     <div className="flex justify-between items-center p-4 sm:p-6 lg:p-8 bg-orange-primary border-b border-light-border shrink-0 gap-3">
       <div className="flex items-center gap-3">
@@ -275,6 +314,25 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
                   </p>
                 </div>
               </button>
+
+              {/* Interview Candidate Login card */}
+              <button
+                onClick={() => setAuthMode("candidate-login")}
+                disabled={loading}
+                className="w-full text-left p-6 bg-teal-lbg border border-teal-soft/40 rounded-[2rem] hover:border-teal-primary hover:shadow-xl hover:scale-[1.02] active:scale-95 transition-all duration-300 flex items-center gap-6 shadow-sm group"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-white text-teal-primary flex items-center justify-center text-2xl transition-all duration-300 group-hover:scale-110 shrink-0 shadow-md shadow-teal-100">
+                  <i className="fas fa-user-edit"></i>
+                </div>
+                <div>
+                  <h5 className="font-bold text-lg text-teal-dark group-hover:text-teal-medium transition-colors">
+                    Interview Candidate
+                  </h5>
+                  <p className="text-teal-dark/80 text-xs mt-1">
+                    For candidates taking evaluation tests. Login using registered Mobile Number.
+                  </p>
+                </div>
+              </button>
             </div>
           )}
 
@@ -331,6 +389,74 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
                   type="submit"
                   disabled={loading}
                   className="w-full bg-orange-primary hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl transition-all duration-200 ease-out active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg shadow-orange-100 disabled:opacity-50 mt-6"
+                >
+                  {loading ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i> Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-sign-in-alt"></i> Authenticate Login
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Candidate Login Form */}
+          {authMode === "candidate-login" && (
+            <div className="py-2">
+              <button
+                onClick={() => {
+                  setAuthMode("main");
+                  setMessage({ type: "", text: "" });
+                }}
+                className="text-teal-primary hover:text-teal-600 font-bold text-sm flex items-center gap-2 mb-6 active:scale-95 transition-all duration-200"
+              >
+                <i className="fas fa-arrow-left"></i> Back
+              </button>
+              
+              <div className="mb-6">
+                <h4 className="font-bold text-xl text-dark-deepblue mb-1">
+                  Candidate Login
+                </h4>
+                <p className="text-xs text-dark-soft">
+                  Verify registered candidate Mobile Number.
+                </p>
+              </div>
+
+              {message.text && (
+                <div
+                  className={`p-4 rounded-xl mb-6 text-xs font-semibold ${
+                    message.type === "error"
+                      ? "bg-red-50 text-red-600 border border-red-100"
+                      : "bg-green-50 text-green-600 border border-green-100"
+                  }`}
+                >
+                  <i className="fas fa-exclamation-circle mr-1.5"></i>
+                  {message.text}
+                </div>
+              )}
+
+              <form onSubmit={handleCandidateLoginSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
+                    Candidate Mobile Number *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. 9876543210"
+                    value={candidateMobileNo}
+                    onChange={(e) => setCandidateMobileNo(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-teal-primary focus:ring-4 focus:ring-teal-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-teal-primary hover:bg-teal-600 text-white font-bold py-3.5 rounded-xl transition-all duration-200 ease-out active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg shadow-teal-100 disabled:opacity-50 mt-6"
                 >
                   {loading ? (
                     <>

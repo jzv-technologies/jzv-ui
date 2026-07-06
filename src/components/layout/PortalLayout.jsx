@@ -37,6 +37,14 @@ const roleStyles = {
     chevronColor: "text-blue-300",
     borderColor: "border-blue-200",
   },
+  candidate: {
+    bgGradient: "from-teal-50 via-white to-teal-100",
+    textColor: "text-teal-700",
+    activeTextColor: "text-teal-800",
+    hoverColor: "hover:text-teal-800",
+    chevronColor: "text-teal-300",
+    borderColor: "border-teal-200",
+  },
 };
 
 // Fallback for unknown roles (e.g., when roleName is not one of the four)

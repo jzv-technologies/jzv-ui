@@ -200,6 +200,7 @@ const SyllabusTracker = ({ user }) => {
   const [awDate, setAwDate] = useState(new Date().toISOString().split('T')[0]);
   const [awComments, setAwComments] = useState('');
   const [awBookData, setAwBookData] = useState([]);
+  const [previousMaxProgress, setPreviousMaxProgress] = useState(0);
 
   // Inline add level states
   const [inlineAddType, setInlineAddType] = useState(null); // 'level1' | 'level2' | 'level3'
@@ -773,6 +774,95 @@ const SyllabusTracker = ({ user }) => {
     }
   }, [awBookId, isAddWorkModalOpen]);
 
+  // ─── Fetch and default progress to previous max submission ──────
+  useEffect(() => {
+    const updateDefaultProgress = async () => {
+      if (!isAddWorkModalOpen) return;
+      if (!awClassId || !awBookId || !awLevel1) {
+        setPreviousMaxProgress(0);
+        setAwProgress(0);
+        setAwStatus('in_progress');
+        return;
+      }
+      if (isRevisionMode) {
+        setPreviousMaxProgress(0);
+        return;
+      }
+      if (!isLeafNodeSelected) {
+        setPreviousMaxProgress(0);
+        setAwProgress(0);
+        setAwStatus('in_progress');
+        return;
+      }
+
+      // Find the target lesson
+      let targetLesson = null;
+      if (awLevel3) {
+        targetLesson = awBookData.find(
+          (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && d.level3 === awLevel3
+        );
+      } else if (awLevel2) {
+        targetLesson = awBookData.find(
+          (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && !d.level3
+        );
+      } else if (awLevel1) {
+        targetLesson = awBookData.find((d) => d.level1 === awLevel1 && !d.level2 && !d.level3);
+      }
+
+      if (!targetLesson) {
+        console.warn('[Add Work Progress] Selected leaf node could not be resolved in awBookData.');
+        setPreviousMaxProgress(0);
+        setAwProgress(0);
+        setAwStatus('in_progress');
+        return;
+      }
+
+      console.log(`[Add Work Progress] Querying progress for Class ID: ${awClassId}, Lesson ID: ${targetLesson.id} (${targetLesson.level1} > ${targetLesson.level2 || ''})`);
+
+      try {
+        const { data, error } = await supabase
+          .from('lesson_tracker_log')
+          .select('completion_percentage, current_status')
+          .eq('class_id', Number(awClassId))
+          .eq('lesson_id', Number(targetLesson.id))
+          .maybeSingle();
+
+        if (error) throw error;
+
+        console.log('[Add Work Progress] Query returned:', data);
+
+        const maxProgress = data ? Number(data.completion_percentage || 0) : 0;
+        const currentStatus = data ? data.current_status || 'in_progress' : 'in_progress';
+        
+        setPreviousMaxProgress(maxProgress);
+        setAwProgress(maxProgress);
+        setAwStatus(currentStatus);
+      } catch (err) {
+        console.warn('[Add Work Progress] Failed to fetch previous max progress:', err.message);
+        setPreviousMaxProgress(0);
+        setAwProgress(0);
+        setAwStatus('in_progress');
+      }
+    };
+
+    updateDefaultProgress();
+  }, [awClassId, awBookId, awLevel1, awLevel2, awLevel3, awBookData, isLeafNodeSelected, isAddWorkModalOpen]);
+
+  // ─── Close Add Work Modal with Escape Key ──────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isAddWorkModalOpen) {
+        setIsAddWorkModalOpen(false);
+      }
+    };
+    if (isAddWorkModalOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAddWorkModalOpen]);
+
   // ─── Status ↔ Progress sync ──────────────────────────────────────
 
   const handleAwStatusChange = (newStatus) => {
@@ -780,12 +870,14 @@ const SyllabusTracker = ({ user }) => {
     if (newStatus === 'completed') {
       setAwProgress(100);
     } else if (newStatus === 'in_progress' && awProgress === 100) {
-      setAwProgress(50);
+      const defaultProgress = Math.max(50, previousMaxProgress);
+      setAwProgress(defaultProgress);
     }
   };
 
   const handleAwProgressChange = (newProgress) => {
     const p = Number(newProgress);
+    if (p < previousMaxProgress) return;
     setAwProgress(p);
     if (p === 100) {
       setAwStatus('completed');
@@ -914,6 +1006,7 @@ const SyllabusTracker = ({ user }) => {
     setInlineAddWithLevel3(false);
     setInlineAddLevel3Name('');
     setShowAddBookMappingForm(false);
+    setPreviousMaxProgress(0);
     setAbClassificationId('');
     setAbSubjectId('');
     setAbBookId('');
@@ -1243,6 +1336,10 @@ const SyllabusTracker = ({ user }) => {
       finalIsRevision = true;
     } else if (!isLeafNodeSelected) {
       return showToast('Please select a leaf-level node to log progress.', 'warning');
+    }
+
+    if (!isRevisionMode && finalProgress < previousMaxProgress) {
+      return showToast(`Progress percentage cannot be lesser than the previous max of ${previousMaxProgress}%.`, 'warning');
     }
 
     setSubmitting(true);
@@ -2069,30 +2166,6 @@ const SyllabusTracker = ({ user }) => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
-      {/* Simplified Header — no filter dropdowns */}
-      <div className="bg-white border-b p-6 shadow-sm">
-        <div className="flex justify-between items-center flex-wrap gap-4">
-          <h1 className="text-2xl font-black flex items-center gap-2">Syllabus Tracker</h1>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={openAddWorkModal}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
-            >
-              <i className="fas fa-plus"></i> Add Work
-            </button>
-            <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors">
-              <input
-                type="checkbox"
-                checked={coverMode}
-                onChange={(e) => handleCoverModeChange(e.target.checked)}
-                className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
-              />
-              Cover for Absent Teacher
-            </label>
-          </div>
-        </div>
-      </div>
-
       {/* Tab Content */}
       <div className="p-6 overflow-y-auto pb-24">
         <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2">
@@ -2115,6 +2188,26 @@ const SyllabusTracker = ({ user }) => {
               </button>
             ))}
           </div>
+
+          {activeTab === 'teacher-activity' && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openAddWorkModal}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <i className="fas fa-plus"></i> Add Work
+              </button>
+              <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={coverMode}
+                  onChange={(e) => handleCoverModeChange(e.target.checked)}
+                  className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                />
+                Cover for Absent Teacher
+              </label>
+            </div>
+          )}
 
           {activeTab === 'class-progress' && (
             <div className="flex items-center gap-2 flex-wrap">

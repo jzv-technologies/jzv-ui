@@ -1268,7 +1268,27 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
   };
 
   const visibleFields = fields
-    .filter((field) => isFieldRendered(field, formData))
+    .filter((field) => {
+      if (!isFieldRendered(field, formData)) return false;
+      // For candidate sessions on the teacher test form, only show their enabled tests
+      if (
+        uuid === 'online-teacher-test' &&
+        currentUserObj?.candidateMode &&
+        currentUserObj?.enabledTests &&
+        ['button', 'link'].includes(field['Field Type']?.trim().toLowerCase())
+      ) {
+        const label = (field.Label || '').trim();
+        const enabledTests = currentUserObj.enabledTests;
+        // enabledTests stores values like "English Test", "Tamil Test" etc.
+        // field Label is "English", "Tamil" etc. — match either way
+        return enabledTests.some(
+          (t) =>
+            t.toLowerCase() === label.toLowerCase() ||
+            t.toLowerCase() === `${label.toLowerCase()} test`
+        );
+      }
+      return true;
+    })
     .sort((a, b) => {
       const aType = a['Field Type']?.trim().toLowerCase();
       const bType = b['Field Type']?.trim().toLowerCase();

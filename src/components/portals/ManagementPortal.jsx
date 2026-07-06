@@ -29,6 +29,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   const [error, setError] = useState("");
   const [dynamicConfigs, setDynamicConfigs] = useState([]);
 
+  // === Candidate test enable/access state ===
+  const TEST_NAMES = ["English Test", "Tamil Test", "Arabic Test", "Urdu Test"];
+  const [enabledTestsMap, setEnabledTestsMap] = useState({});
+  const [loadingEnabledTests, setLoadingEnabledTests] = useState(false);
+  const [enableMobile, setEnableMobile] = useState("");
+  const [enableSelectedTests, setEnableSelectedTests] = useState([]);
+  const [enableExpiryHours, setEnableExpiryHours] = useState(2);
+  const [savingEnable, setSavingEnable] = useState(false);
+
   useEffect(() => {
     const fetchConfigs = async () => {
       try {
@@ -44,6 +53,85 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     };
     fetchConfigs();
   }, []);
+
+  // Fetch enabled tests config (runs as authenticated user; management staff will be logged in)
+  const fetchEnabledTests = async () => {
+    setLoadingEnabledTests(true);
+    try {
+      const { data, error } = await supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'enable_test')
+        .maybeSingle();
+      if (!error && data?.val) {
+        setEnabledTestsMap(typeof data.val === 'string' ? JSON.parse(data.val) : data.val);
+      } else {
+        setEnabledTestsMap({});
+      }
+    } catch (err) {
+      console.warn('Failed to load enabled tests:', err);
+    } finally {
+      setLoadingEnabledTests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subView === 'take-test') {
+      fetchEnabledTests();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subView]);
+
+  const handleEnableAccess = async (e) => {
+    e.preventDefault();
+    const cleanMobile = enableMobile.replace(/\D/g, '');
+    if (!cleanMobile) {
+      showToast('Please enter a valid mobile number.', 'error');
+      return;
+    }
+    if (enableSelectedTests.length === 0) {
+      showToast('Please select at least one test.', 'error');
+      return;
+    }
+    setSavingEnable(true);
+    try {
+      const expireOn = new Date(
+        Date.now() + enableExpiryHours * 60 * 60 * 1000
+      ).toISOString();
+      const updatedMap = {
+        ...enabledTestsMap,
+        [cleanMobile]: { test: enableSelectedTests, expire_on: expireOn },
+      };
+      const { error } = await supabase
+        .from('admin_configruation')
+        .upsert({ key: 'enable_test', val: updatedMap }, { onConflict: 'key' });
+      if (error) throw error;
+      setEnabledTestsMap(updatedMap);
+      setEnableMobile('');
+      setEnableSelectedTests([]);
+      setEnableExpiryHours(2);
+      showToast(`Test access enabled for ${cleanMobile}`, 'success');
+    } catch (err) {
+      showToast('Failed to enable test access: ' + err.message, 'error');
+    } finally {
+      setSavingEnable(false);
+    }
+  };
+
+  const handleRevokeAccess = async (mobile) => {
+    try {
+      const updatedMap = { ...enabledTestsMap };
+      delete updatedMap[mobile];
+      const { error } = await supabase
+        .from('admin_configruation')
+        .upsert({ key: 'enable_test', val: updatedMap }, { onConflict: 'key' });
+      if (error) throw error;
+      setEnabledTestsMap(updatedMap);
+      showToast(`Access revoked for ${mobile}`, 'success');
+    } catch (err) {
+      showToast('Failed to revoke access: ' + err.message, 'error');
+    }
+  };
 
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [editStatus, setEditStatus] = useState("Open");
@@ -983,10 +1071,223 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   };
 
   const renderTakeTestView = () => {
+    const now = new Date();
+    const activeEntries = Object.entries(enabledTestsMap).filter(
+      ([, cfg]) => new Date(cfg.expire_on) > now
+    );
+    const expiredEntries = Object.entries(enabledTestsMap).filter(
+      ([, cfg]) => new Date(cfg.expire_on) <= now
+    );
+
     return (
       <div className="bg-white border-0 shadow-none rounded-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-full m-0 p-0 flex flex-col">
-        <div className="p-8 sm:p-12 max-w-5xl mx-auto w-full">
-          <DynamicForm uuid="online-teacher-test" textColor="text-teal-600" />
+        <div className="p-6 sm:p-10 max-w-5xl mx-auto w-full space-y-10">
+
+          {/* ─── Enable Access Card ─── */}
+          <div className="bg-gradient-to-br from-teal-50 to-emerald-50 border border-teal-200 rounded-[2rem] p-6 sm:p-8 shadow-lg shadow-teal-100/50">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-600 to-emerald-600 flex items-center justify-center text-white text-2xl shadow-md">
+                <i className="fas fa-unlock-alt"></i>
+              </div>
+              <div>
+                <h3 className="text-xl font-extrabold text-teal-900">Enable Candidate Test Access</h3>
+                <p className="text-sm text-teal-700/80">Grant a candidate access to specific evaluation tests.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleEnableAccess} className="space-y-5">
+              {/* Mobile Number */}
+              <div>
+                <label className="block text-xs font-bold text-teal-900 mb-1.5 uppercase tracking-wide">
+                  Candidate Mobile Number
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 9876543210"
+                  value={enableMobile}
+                  onChange={(e) => setEnableMobile(e.target.value)}
+                  className="w-full px-4 py-3 border border-teal-200 rounded-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 outline-none transition-all text-sm font-semibold text-dark-primary bg-white"
+                />
+              </div>
+
+              {/* Test Selector */}
+              <div>
+                <label className="block text-xs font-bold text-teal-900 mb-2 uppercase tracking-wide">
+                  Tests to Enable
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {TEST_NAMES.map((testName) => {
+                    const isChecked = enableSelectedTests.includes(testName);
+                    return (
+                      <button
+                        key={testName}
+                        type="button"
+                        onClick={() =>
+                          setEnableSelectedTests((prev) =>
+                            isChecked
+                              ? prev.filter((t) => t !== testName)
+                              : [...prev, testName]
+                          )
+                        }
+                        className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all duration-200 text-sm font-semibold text-left ${
+                          isChecked
+                            ? 'bg-teal-600 border-teal-600 text-white shadow-md'
+                            : 'bg-white border-teal-200 text-teal-800 hover:border-teal-400'
+                        }`}
+                      >
+                        <i className={`fas ${isChecked ? 'fa-check-square' : 'fa-square'} text-base`}></i>
+                        {testName}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Expiry */}
+              <div>
+                <label className="block text-xs font-bold text-teal-900 mb-1.5 uppercase tracking-wide">
+                  Expiry Duration
+                </label>
+                <select
+                  value={enableExpiryHours}
+                  onChange={(e) => setEnableExpiryHours(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-teal-200 rounded-xl focus:border-teal-500 focus:ring-4 focus:ring-teal-100 outline-none transition-all text-sm font-semibold bg-white text-dark-primary"
+                >
+                  {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => (
+                    <option key={h} value={h}>
+                      {h} {h === 1 ? 'hour' : 'hours'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingEnable}
+                className="w-full py-3.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold rounded-xl transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-teal-200 disabled:opacity-50"
+              >
+                {savingEnable ? (
+                  <><i className="fas fa-spinner fa-spin"></i> Saving...</>
+                ) : (
+                  <><i className="fas fa-check-circle"></i> Enable Access</>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* ─── Active Access Table ─── */}
+          <div className="bg-white border border-light-border rounded-[2rem] p-6 sm:p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl">
+                  <i className="fas fa-users"></i>
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-dark-deepblue">Active Test Access</h3>
+                  <p className="text-xs text-dark-muted">{activeEntries.length} candidate(s) currently enabled</p>
+                </div>
+              </div>
+              <button
+                onClick={fetchEnabledTests}
+                disabled={loadingEnabledTests}
+                className="p-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-all active:scale-95"
+                title="Refresh"
+              >
+                <i className={`fas fa-sync-alt ${loadingEnabledTests ? 'animate-spin' : ''}`}></i>
+              </button>
+            </div>
+
+            {loadingEnabledTests ? (
+              <div className="flex justify-center py-8">
+                <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : activeEntries.length === 0 ? (
+              <div className="text-center py-12 text-dark-muted">
+                <i className="fas fa-user-slash text-4xl opacity-20 mb-3"></i>
+                <p className="font-semibold">No active test access grants</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-light-border">
+                      <th className="text-left py-3 px-4 text-xs font-bold text-dark-muted uppercase tracking-wide">Mobile</th>
+                      <th className="text-left py-3 px-4 text-xs font-bold text-dark-muted uppercase tracking-wide">Enabled Tests</th>
+                      <th className="text-left py-3 px-4 text-xs font-bold text-dark-muted uppercase tracking-wide">Expires At</th>
+                      <th className="py-3 px-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeEntries.map(([mobile, cfg]) => (
+                      <tr key={mobile} className="border-b border-light-border/50 hover:bg-teal-50/30 transition-colors">
+                        <td className="py-3 px-4 font-bold text-dark-deepblue font-mono">{mobile}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(cfg.test || []).map((t) => (
+                              <span key={t} className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full">{t}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-dark-muted text-xs">
+                          {new Date(cfg.expire_on).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => handleRevokeAccess(mobile)}
+                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs rounded-lg transition-all active:scale-95 border border-red-200"
+                          >
+                            <i className="fas fa-times mr-1"></i>Revoke
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Expired entries (collapsed summary) */}
+            {expiredEntries.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-light-border/50">
+                <p className="text-xs text-dark-muted font-semibold">
+                  <i className="fas fa-clock mr-1 text-amber-500"></i>
+                  {expiredEntries.length} expired grant(s) still in config —{' '}
+                  <button
+                    onClick={async () => {
+                      const cleaned = {};
+                      for (const [m, c] of Object.entries(enabledTestsMap)) {
+                        if (new Date(c.expire_on) > now) cleaned[m] = c;
+                      }
+                      const { error } = await supabase.from('admin_configruation').upsert(
+                        { key: 'enable_test', val: cleaned },
+                        { onConflict: 'key' }
+                      );
+                      if (!error) { setEnabledTestsMap(cleaned); showToast('Expired entries cleaned up', 'success'); }
+                    }}
+                    className="text-red-500 hover:underline font-bold"
+                  >
+                    Clean up
+                  </button>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ─── Take Test section ─── */}
+          <div className="bg-white border border-light-border rounded-[2rem] p-6 sm:p-8 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center text-xl">
+                <i className="fas fa-vial"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-extrabold text-dark-deepblue">Take the Test</h3>
+                <p className="text-xs text-dark-muted">Staff evaluation tests</p>
+              </div>
+            </div>
+            <DynamicForm uuid="online-teacher-test" textColor="text-teal-600" />
+          </div>
+
         </div>
       </div>
     );

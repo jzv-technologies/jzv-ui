@@ -185,6 +185,7 @@ export const useAuth = () => {
   const handleLogout = useCallback(async () => {
     localStorage.removeItem("jzv_parent_session");
     localStorage.removeItem("jzv_admin_session");
+    localStorage.removeItem("jzv_candidate_session");
     if (supabase.rest.headers) {
       if (typeof supabase.rest.headers.delete === 'function') {
         supabase.rest.headers.delete('x-parent-mobile');
@@ -233,6 +234,28 @@ export const useAuth = () => {
     setAuthLoading(false);
   }, []);
 
+  const loginAsCandidate = useCallback((mobileNumber, enabledTests = [], expireOn = "") => {
+    const candidateSession = {
+      user: {
+        id: "candidate-" + mobileNumber,
+        email: "Candidate (" + mobileNumber + ")",
+        full_name: "Candidate " + mobileNumber,
+        candidateMode: true,
+        candidateMobile: mobileNumber,
+        enabledTests,
+        expire_on: expireOn,
+      },
+      fullName: "Candidate " + mobileNumber,
+      studentIds: "",
+    };
+    localStorage.setItem("jzv_candidate_session", JSON.stringify(candidateSession));
+    setUser(candidateSession.user);
+    updateRoles(["candidate"]);
+    updateStudentIds("");
+    setFullName(candidateSession.fullName);
+    setAuthLoading(false);
+  }, []);
+
   const switchParentStudent = useCallback((student, allStudents) => {
     const parentMobile = (student.mobile1 || student.mobile2 || "").replace(/\D/g, "");
     const parentSession = {
@@ -265,6 +288,27 @@ export const useAuth = () => {
 
   // Setup auth state listener only once
   useEffect(() => {
+    // Check if there is a local candidate session first
+    const savedCandidate = localStorage.getItem("jzv_candidate_session");
+    if (savedCandidate) {
+      try {
+        const parsed = JSON.parse(savedCandidate);
+        const expireOn = new Date(parsed.user?.expire_on);
+        if (expireOn > new Date()) {
+          setUser(parsed.user);
+          updateRoles(["candidate"]);
+          updateStudentIds("");
+          setFullName(parsed.fullName);
+          setAuthLoading(false);
+          return;
+        } else {
+          localStorage.removeItem("jzv_candidate_session");
+        }
+      } catch (e) {
+        console.error("Failed to restore candidate session:", e);
+      }
+    }
+
     // Check if there is a local parent session first
     const savedParent = localStorage.getItem("jzv_parent_session");
     if (savedParent) {
@@ -409,6 +453,7 @@ export const useAuth = () => {
     handleLogout,
     fetchRoles,
     loginAsParent,
+    loginAsCandidate,
     switchParentStudent,
   };
 };
