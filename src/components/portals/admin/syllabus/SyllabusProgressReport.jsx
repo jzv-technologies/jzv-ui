@@ -1114,6 +1114,40 @@ const SyllabusProgressReport = ({ role, student }) => {
                       0
                     );
 
+                    const activeBookLogs = bookLogs.filter(log => log.current_status !== 'not_started');
+
+                    let bookStartDate = null;
+                    activeBookLogs.forEach(log => {
+                      if (log.start_date) {
+                        if (!bookStartDate || new Date(log.start_date) < new Date(bookStartDate)) {
+                          bookStartDate = log.start_date;
+                        }
+                      }
+                    });
+
+                    let bookEndDate = null;
+                    activeBookLogs.forEach(log => {
+                      if (log.end_date) {
+                        if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
+                          bookEndDate = log.end_date;
+                        }
+                      }
+                    });
+
+                    let bookUpdatedAt = null;
+                    bookLogs.forEach(log => {
+                      if (log.updated_at) {
+                        if (!bookUpdatedAt || new Date(log.updated_at) > new Date(bookUpdatedAt)) {
+                          bookUpdatedAt = log.updated_at;
+                        }
+                      }
+                    });
+
+                    const cumulativeDaysTaken = bookLogs.reduce(
+                      (sum, log) => sum + (log.days_taken || 0),
+                      0
+                    );
+
                     const total = bt?.total_lessons || bookLessons.length;
                     const completed = bt?.completed || 0;
                     const inProgress = bt?.in_progress || 0;
@@ -1141,20 +1175,35 @@ const SyllabusProgressReport = ({ role, student }) => {
                                 {book.name}
                               </h4>
                             </div>
-                            <div
-                              className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg} shrink-0 ml-2`}
-                            >
-                              <span className={`text-sm font-black ${pctColor}`}>
-                                {pct.toFixed(0)}%
-                              </span>
-                            </div>
+                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                               <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
+                                 {cumulativeDaysTaken} Days
+                               </span>
+                               <div
+                                 className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
+                               >
+                                 <span className={`text-sm font-black ${pctColor}`}>
+                                   {pct.toFixed(0)}%
+                                 </span>
+                               </div>
+                             </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
+                          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
                             <div
                               className="h-1.5 rounded-full transition-all duration-500"
                               style={{ width: `${pct}%`, backgroundColor: barColor }}
                             />
                           </div>
+                          <div className="border-t border-dashed py-1.5 my-1.5 text-[9px] text-gray-500 font-bold space-y-0.5">
+                             <div className="flex justify-between">
+                               <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
+                               {pct === 100 ? (
+                                 <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
+                               ) : (
+                                 <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
+                               )}
+                             </div>
+                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
@@ -1171,10 +1220,14 @@ const SyllabusProgressReport = ({ role, student }) => {
                             <span>{notStarted}</span>
                           </div>
                           <div className="flex justify-between text-purple-600">
-                            <span>Revisions:</span>
+                            <span>Revision Days:</span>
                             <span>{revisionCount}</span>
                           </div>
-                          <div className="flex justify-between text-dark-muted col-span-2 border-t border-dashed pt-1.5 mt-0.5">
+                          <div className="flex justify-between text-indigo-600">
+                            <span>Days Taken:</span>
+                            <span>{cumulativeDaysTaken}</span>
+                          </div>
+                          <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
                             <span>Total Lessons:</span>
                             <span>{total}</span>
                           </div>
@@ -1244,12 +1297,16 @@ const SyllabusProgressReport = ({ role, student }) => {
                       let completedCount = 0;
                       let inProgressCount = 0;
                       let totalProgressSum = 0;
+                      let cumulativeDaysTaken = 0;
 
                       lvl1Lessons.forEach((lesson) => {
                         const log = progressBookLogs.find(
                           (l) => String(l.lesson_id) === String(lesson.id)
                         );
                         if (log) {
+                          if (log.days_taken) {
+                            cumulativeDaysTaken += Number(log.days_taken);
+                          }
                           if (log.current_status === 'completed') {
                             completedCount++;
                             totalProgressSum += 100;
@@ -1271,13 +1328,18 @@ const SyllabusProgressReport = ({ role, student }) => {
                         >
                           <div>
                             <div className="flex justify-between items-start mb-1.5 gap-2">
-                              <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
-                                {lvl1}
-                              </span>
-                              <span className="font-black text-xs text-dark-soft shrink-0">
-                                {progressPct.toFixed(0)}%
-                              </span>
-                            </div>
+                               <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
+                                 {lvl1}
+                               </span>
+                               <div className="flex items-center gap-1.5 shrink-0">
+                                 <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
+                                   {cumulativeDaysTaken} Days
+                                 </span>
+                                 <span className="font-black text-xs text-dark-soft">
+                                   {progressPct.toFixed(0)}%
+                                 </span>
+                               </div>
+                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
                               <div
                                 className="h-1 rounded-full transition-all duration-300"
@@ -1285,12 +1347,12 @@ const SyllabusProgressReport = ({ role, student }) => {
                               />
                             </div>
                           </div>
-                          <div className="flex justify-between text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5">
-                            <span>Completed: {completedCount}/{total}</span>
-                            {inProgressCount > 0 && (
-                              <span className="text-blue-600">In-progress: {inProgressCount}</span>
-                            )}
-                          </div>
+                          <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
+                             <span>Completed: {completedCount}/{total}</span>
+                             {inProgressCount > 0 && (
+                               <span className="text-blue-600">In-progress: {inProgressCount}</span>
+                             )}
+                           </div>
                         </div>
                       );
                     });
@@ -1299,169 +1361,203 @@ const SyllabusProgressReport = ({ role, student }) => {
               </div>
 
               {/* Detailed lessons list */}
-              <div>
-                <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
-                  Lesson Checklist
-                </h4>
-                <div className="space-y-2">
-                  {(() => {
-                    const lessonsToRender = showNotStarted
-                      ? progressBookLessons.filter((node) => {
-                          const log = progressBookLogs.find(
-                            (l) => String(l.lesson_id) === String(node.id)
-                          );
-                          const isNotStarted = !log || log.current_status === 'not_started';
-                          if (isNotStarted) {
-                            const isRev = [node.level1, node.level2, node.level3]
-                              .filter(Boolean)
-                              .some(
-                                (lvl) =>
-                                  lvl.toLowerCase().includes('_revision') ||
-                                  lvl.toLowerCase() === 'revision'
-                              );
-                            return !isRev;
-                          }
-                          return true;
-                        })
-                      : progressBookLessons.filter((node) => {
-                          const log = progressBookLogs.find(
-                            (l) => String(l.lesson_id) === String(node.id)
-                          );
-                          return log && log.current_status !== 'not_started';
-                        });
+              <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-dark-soft font-extrabold text-[10px] uppercase tracking-wider">
+                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">Lesson Details</th>
+                      <th className="pb-2.5 font-extrabold text-center min-w-[80px]">Progress</th>
+                      <th className="pb-2.5 font-extrabold text-center min-w-[85px]">Days Taken</th>
+                      <th className="pb-2.5 font-extrabold text-center min-w-[90px]">Status</th>
+                      <th className="pb-2.5 font-extrabold text-right min-w-[90px]">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {(() => {
+                      const lessonsToRender = showNotStarted
+                        ? progressBookLessons.filter((node) => {
+                            const log = progressBookLogs.find(
+                              (l) => String(l.lesson_id) === String(node.id)
+                            );
+                            const isNotStarted = !log || log.current_status === 'not_started';
+                            if (isNotStarted) {
+                              const isRev = [node.level1, node.level2, node.level3]
+                                .filter(Boolean)
+                                .some(
+                                  (lvl) =>
+                                    lvl.toLowerCase().includes('_revision') ||
+                                    lvl.toLowerCase() === 'revision'
+                                );
+                              return !isRev;
+                            }
+                            return true;
+                          })
+                        : progressBookLessons.filter((node) => {
+                            const log = progressBookLogs.find(
+                              (l) => String(l.lesson_id) === String(node.id)
+                            );
+                            return log && log.current_status !== 'not_started';
+                          });
 
-                    if (lessonsToRender.length === 0) {
-                      return (
-                        <p className="text-xs text-gray-400 font-semibold py-4 text-center">
-                          {showNotStarted
-                            ? 'No lessons found for this book.'
-                            : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
-                        </p>
-                      );
-                    }
+                      if (lessonsToRender.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={5} className="text-xs text-gray-400 font-semibold py-8 text-center">
+                              {showNotStarted
+                                ? 'No lessons found for this book.'
+                                : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
+                            </td>
+                          </tr>
+                        );
+                      }
 
-                    return lessonsToRender.map((node) => {
-                      const log = progressBookLogs.find(
-                        (l) => String(l.lesson_id) === String(node.id)
-                      );
-                      const status = log?.current_status || 'not_started';
-                      const title = [node.level1, node.level2, node.level3]
-                        .filter(Boolean)
-                        .join(' > ');
-                      const isLogExpanded = log && expandedLogIds[log.id];
+                      return lessonsToRender.map((node) => {
+                        const log = progressBookLogs.find(
+                          (l) => String(l.lesson_id) === String(node.id)
+                        );
+                        const status = log?.current_status || 'not_started';
+                        const title = [node.level1, node.level2, node.level3]
+                          .filter(Boolean)
+                          .join(' > ');
+                        const isLogExpanded = log && expandedLogIds[log.id];
 
-                      return (
-                        <div
-                          key={node.id}
-                          className="border border-gray-150 rounded-xl p-3 hover:bg-gray-50/50 transition-colors bg-white"
-                        >
-                          <div className="flex justify-between items-center flex-wrap gap-2">
-                            <div>
-                              <span className="font-bold text-xs text-dark-primary">{title}</span>
-                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                {getStatusBadge(status)}
+                        return (
+                          <React.Fragment key={node.id}>
+                            <tr className="hover:bg-gray-50/50 transition-colors">
+                              <td className="py-3 pr-2">
+                                <div className="font-bold text-dark-primary text-xs">{title}</div>
                                 {log && (
-                                  <>
-                                    <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
-                                      {Number(log.completion_percentage).toFixed(0)}% Progress
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap text-[9px] text-gray-400 font-bold">
+                                    <span>
+                                      Started: {log.start_date ? new Date(log.start_date).toLocaleDateString() : '—'}
                                     </span>
-                                    <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border">
-                                      Days Logged: {log.days_taken}
-                                    </span>
-                                    {log.revision_counter > 0 && (
-                                      <span className="text-[9px] text-purple-600 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">
-                                        Revisions: {log.revision_counter}
-                                      </span>
+                                    <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                    {log.completion_percentage === 100 || status === 'completed' ? (
+                                      <span>Ended: {log.end_date ? new Date(log.end_date).toLocaleDateString() : '—'}</span>
+                                    ) : (
+                                      <span>Last Updated: {log.updated_at ? new Date(log.updated_at).toLocaleDateString() : '—'}</span>
                                     )}
-                                  </>
+                                    {log.revision_counter > 0 && (
+                                      <>
+                                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                        <span className="text-purple-600 bg-purple-50 px-1 py-0.5 rounded border border-purple-100">
+                                          Revisions: {log.revision_counter}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {log && (
-                                <button
-                                  onClick={() => toggleLogExpand(log.id)}
-                                  className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
-                                >
-                                  <i
-                                    className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
-                                  ></i>
-                                  {isLogExpanded ? 'Hide' : 'View'} Entries
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {isLogExpanded && log && (
-                            <div className="mt-3 space-y-2 border-t border-dashed pt-3 pl-4">
-                              <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
-                                Logged Daily Entries
-                              </p>
-                              {!logItemsMap[log.id] ? (
-                                <div className="flex items-center text-[10px] text-gray-400 font-bold">
-                                  <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
-                                  Loading details...
-                                </div>
-                              ) : logItemsMap[log.id].length === 0 ? (
-                                  <p className="text-[10px] text-gray-400 font-semibold">
-                                    No daily entries found.
-                                  </p>
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                {log ? (
+                                  <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded border">
+                                    {Number(log.completion_percentage).toFixed(0)}%
+                                  </span>
                                 ) : (
-                                  logItemsMap[log.id].map((item) => (
-                                    <div
-                                      key={item.id}
-                                      className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600 flex justify-between items-start gap-4"
-                                    >
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                                          <span className="font-bold text-dark-primary">
-                                            {new Date(item.date).toLocaleDateString()}
-                                          </span>
-                                          {getStatusBadge(item.current_status)}
-                                          <span className="text-gray-500 font-bold">
-                                            {Number(item.progress).toFixed(0)}%
-                                          </span>
-                                          {item.teacher?.name && (
-                                            <span className="text-gray-400 font-bold">
-                                              by {item.teacher.name}
-                                            </span>
-                                          )}
-                                          {item.is_revision === 'Y' && (
-                                            <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
-                                              Revision
-                                            </span>
-                                          )}
-                                          {item.late_reporting === 'Y' && (
-                                            <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
-                                              Late Reporting
-                                            </span>
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 text-center">
+                                {log ? (
+                                  <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded border">
+                                    {log.days_taken || 0}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 text-center flex items-center justify-center h-full">
+                                <div className="mt-1">{getStatusBadge(status)}</div>
+                              </td>
+                              <td className="py-3 pl-2 text-right">
+                                {log && (
+                                  <button
+                                    onClick={() => toggleLogExpand(log.id)}
+                                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
+                                  >
+                                    <i
+                                      className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
+                                    ></i>
+                                    {isLogExpanded ? 'Hide' : 'View'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                            {isLogExpanded && log && (
+                              <tr>
+                                <td colSpan={5} className="pb-3 bg-gray-50/50">
+                                  <div className="mt-2 space-y-2 border-t border-dashed pt-3 pl-4">
+                                    <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
+                                      Logged Daily Entries
+                                    </p>
+                                    {!logItemsMap[log.id] ? (
+                                      <div className="flex items-center text-[10px] text-gray-400 font-bold">
+                                        <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
+                                        Loading details...
+                                      </div>
+                                    ) : logItemsMap[log.id].length === 0 ? (
+                                      <p className="text-[10px] text-gray-400 font-semibold">
+                                        No daily entries found.
+                                      </p>
+                                    ) : (
+                                      logItemsMap[log.id].map((item) => (
+                                        <div
+                                          key={item.id}
+                                          className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600 flex justify-between items-start gap-4"
+                                        >
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                                              <span className="font-bold text-dark-primary">
+                                                {new Date(item.date).toLocaleDateString()}
+                                              </span>
+                                              {getStatusBadge(item.current_status)}
+                                              <span className="text-gray-500 font-bold">
+                                                {Number(item.progress).toFixed(0)}%
+                                              </span>
+                                              {item.teacher?.name && (
+                                                <span className="text-gray-400 font-bold">
+                                                  by {item.teacher.name}
+                                                </span>
+                                              )}
+                                              {item.is_revision === 'Y' && (
+                                                <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
+                                                  Revision
+                                                </span>
+                                              )}
+                                              {item.late_reporting === 'Y' && (
+                                                <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
+                                                  Late Reporting
+                                                </span>
+                                              )}
+                                            </div>
+                                            {item.comments && (
+                                              <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
+                                                {item.comments}
+                                              </p>
+                                            )}
+                                          </div>
+                                          {role !== 'parent' && (
+                                            <button
+                                              onClick={() => handleDeleteClick(item, log, node, book)}
+                                              className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
+                                              title="Delete Log Entry"
+                                            >
+                                              <i className="fas fa-trash-alt text-[10px]"></i>
+                                            </button>
                                           )}
                                         </div>
-                                        {item.comments && (
-                                          <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
-                                            {item.comments}
-                                          </p>
-                                        )}
-                                      </div>
-                                      {role !== 'parent' && (
-                                        <button
-                                          onClick={() => handleDeleteClick(item, log, lesson, book)}
-                                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
-                                          title="Delete Log Entry"
-                                        >
-                                          <i className="fas fa-trash-alt text-[10px]"></i>
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))
-                                )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
               </div>
             </>
           )}
