@@ -22,6 +22,9 @@ let syllabusTrackerCache = {
   bookClasses: [],
   classLogs: {},
   classLessons: {},
+  allTrackers: [],
+  allLogs: [],
+  allLessons: [],
 };
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = 'All' }) => {
@@ -175,9 +178,15 @@ const SyllabusTracker = ({ user }) => {
   const [cpFilterClassifications, setCpFilterClassifications] = useState([]);
   const [cpGroupingMode, setCpGroupingMode] = useState('classification'); // 'classification' | 'subject' | 'none'
 
-  const [allTrackers, setAllTrackers] = useState([]);
-  const [allLogs, setAllLogs] = useState([]);
-  const [allLessons, setAllLessons] = useState([]);
+  const [allTrackers, setAllTrackers] = useState(() =>
+    isCacheValid ? syllabusTrackerCache.allTrackers || [] : []
+  );
+  const [allLogs, setAllLogs] = useState(() =>
+    isCacheValid ? syllabusTrackerCache.allLogs || [] : []
+  );
+  const [allLessons, setAllLessons] = useState(() =>
+    isCacheValid ? syllabusTrackerCache.allLessons || [] : []
+  );
 
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
   const [progressExpandedClass, setProgressExpandedClass] = useState(null);
@@ -300,6 +309,10 @@ const SyllabusTracker = ({ user }) => {
 
   useEffect(() => {
     const initData = async () => {
+      if (user?.id && syllabusTrackerCache.userId === user?.id && syllabusTrackerCache.teacher) {
+        return;
+      }
+
       if (syllabusTrackerCache.userId !== user?.id) {
         syllabusTrackerCache = {
           userId: user?.id,
@@ -317,6 +330,9 @@ const SyllabusTracker = ({ user }) => {
           bookClasses: [],
           classLogs: {},
           classLessons: {},
+          allTrackers: [],
+          allLogs: [],
+          allLessons: [],
         };
         setLoading(true);
         setTeacher(null);
@@ -395,6 +411,8 @@ const SyllabusTracker = ({ user }) => {
         syllabusTrackerCache.books = fetchedBooks;
         syllabusTrackerCache.classifications = fetchedClassifications;
         syllabusTrackerCache.bookClasses = fetchedBookClasses;
+        syllabusTrackerCache.allLessons = fetchedAllLessons;
+        syllabusTrackerCache.allLogs = fetchedAllLogs;
 
         const filteredClasses = fetchedClasses.filter((c) =>
           assignedClassIds.includes(String(c.id))
@@ -562,24 +580,22 @@ const SyllabusTracker = ({ user }) => {
         .filter((bc) => classIds.includes(bc.class_id))
         .map((bc) => bc.book_id);
 
-      const [trackerRes, logsRes, lessonsRes] = await Promise.all([
+      const [trackerRes, logsRes] = await Promise.all([
         supabase.from('book_tracker').select('*').in('class_id', classIds),
         supabase
           .from('lesson_tracker_log')
           .select('lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at')
           .in('class_id', classIds),
-        bookIds.length > 0
-          ? supabase.from('syllabus_book_lessons').select('id, book_id').in('book_id', bookIds)
-          : Promise.resolve({ data: [] }),
       ]);
 
       if (trackerRes.error) throw trackerRes.error;
       if (logsRes.error) throw logsRes.error;
-      if (lessonsRes.error) throw lessonsRes.error;
 
       setAllTrackers(trackerRes.data || []);
       setAllLogs(logsRes.data || []);
-      setAllLessons(lessonsRes.data || []);
+      
+      syllabusTrackerCache.allTrackers = trackerRes.data || [];
+      syllabusTrackerCache.allLogs = logsRes.data || [];
     } catch (err) {
       console.warn('Failed to fetch teacher progress data:', err.message);
     } finally {
@@ -616,21 +632,20 @@ const SyllabusTracker = ({ user }) => {
             .filter((bc) => classIds.includes(bc.class_id))
             .map((bc) => bc.book_id);
 
-          const [trackerRes, logsRes, lessonsRes] = await Promise.all([
+          const [trackerRes, logsRes] = await Promise.all([
             supabase.from('book_tracker').select('*').in('class_id', classIds),
             supabase
               .from('lesson_tracker_log')
               .select('lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at')
               .in('class_id', classIds),
-            bookIds.length > 0
-              ? supabase.from('syllabus_book_lessons').select('id, book_id').in('book_id', bookIds)
-              : Promise.resolve({ data: [] }),
           ]);
 
-          if (!trackerRes.error && !logsRes.error && !lessonsRes.error) {
+          if (!trackerRes.error && !logsRes.error) {
             setAllTrackers(trackerRes.data || []);
             setAllLogs(logsRes.data || []);
-            setAllLessons(lessonsRes.data || []);
+            
+            syllabusTrackerCache.allTrackers = trackerRes.data || [];
+            syllabusTrackerCache.allLogs = logsRes.data || [];
           }
         }
       } catch (e) {
@@ -1362,9 +1377,7 @@ const SyllabusTracker = ({ user }) => {
       if (activeTab === 'teacher-activity') {
         await fetchMyWorkEntries();
       } else if (activeTab === 'class-progress') {
-        await fetchBookTrackers(selectedProgressClassId);
-      } else if (activeTab === 'teacher-progress') {
-        await fetchMyBooksData();
+        await fetchTeacherProgressData();
       }
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
@@ -1446,7 +1459,11 @@ const SyllabusTracker = ({ user }) => {
       }
 
       setDeleteModalConfig(null);
-      await fetchMyWorkEntries();
+      if (activeTab === 'teacher-activity') {
+        await fetchMyWorkEntries();
+      } else if (activeTab === 'class-progress') {
+        await fetchTeacherProgressData();
+      }
     } catch (err) {
       showToast('Error deleting log entry: ' + err.message, 'error');
     } finally {
@@ -1934,16 +1951,6 @@ const SyllabusTracker = ({ user }) => {
                                 <h4 className="text-sm font-black text-dark-primary truncate">
                                   {book.name}
                                 </h4>
-                                <div className="border-t border-dashed py-1.5 my-1.5 text-[9px] text-gray-500 font-bold space-y-0.5">
-                                  <div className="flex justify-between">
-                                    <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
-                                    {pct === 100 ? (
-                                      <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
-                                    ) : (
-                                      <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
-                                    )}
-                                  </div>
-                                </div>
                               </div>
                               <div className="flex items-center gap-2 shrink-0 ml-2">
                                 <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
@@ -1990,6 +1997,16 @@ const SyllabusTracker = ({ user }) => {
                             <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
                               <span>Total Lessons:</span>
                               <span>{total}</span>
+                            </div>
+                            <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
+                              <div className="flex justify-between">
+                                <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
+                                {pct === 100 ? (
+                                  <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
+                                ) : (
+                                  <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>

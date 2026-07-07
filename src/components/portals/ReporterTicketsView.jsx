@@ -18,19 +18,32 @@ const getLocalMappingFallback = (uuid) => {
   return mappings[uuid] || null;
 };
 
+let reporterTicketsCache = {
+  userId: null,
+  configs: [],
+  mappings: [],
+  tickets: [],
+  selectedConfig: null,
+};
+
 const ReporterTicketsView = ({ user, fullName }) => {
-  const [loading, setLoading] = useState(true);
-  const [configs, setConfigs] = useState([]);
-  const [mappings, setMappings] = useState([]);
-  const [tickets, setTickets] = useState([]);
+  const isCacheValid = user?.id && reporterTicketsCache.userId === user.id;
+
+  const [loading, setLoading] = useState(() => !isCacheValid);
+  const [configs, setConfigs] = useState(() => (isCacheValid ? reporterTicketsCache.configs : []));
+  const [mappings, setMappings] = useState(() => (isCacheValid ? reporterTicketsCache.mappings : []));
+  const [tickets, setTickets] = useState(() => (isCacheValid ? reporterTicketsCache.tickets : []));
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [selectedConfig, setSelectedConfig] = useState(null);
+  const [selectedConfig, setSelectedConfig] = useState(() => (isCacheValid ? reporterTicketsCache.selectedConfig : null));
   const [sendingMessage, setSendingMessage] = useState(false);
   const [error, setError] = useState("");
 
   const fetchUserTickets = async (config, allMappings) => {
     if (!config.data_id) {
       setTickets([]);
+      if (user?.id) {
+        reporterTicketsCache.tickets = [];
+      }
       return;
     }
     const mapping = (allMappings && allMappings.find((m) => m.data_id === config.data_id)) || getLocalMappingFallback(config.form_name || config.data_id);
@@ -60,6 +73,9 @@ const ReporterTicketsView = ({ user, fullName }) => {
       const data = await res.json();
       if (data.success) {
         setTickets(data.data || []);
+        if (user?.id) {
+          reporterTicketsCache.tickets = data.data || [];
+        }
       } else {
         throw new Error(data.error || "Failed to search tickets");
       }
@@ -86,6 +102,10 @@ const ReporterTicketsView = ({ user, fullName }) => {
 
       setConfigs(activeConfigs);
       setMappings(activeMappings);
+      if (user?.id) {
+        reporterTicketsCache.configs = activeConfigs;
+        reporterTicketsCache.mappings = activeMappings;
+      }
 
       const defaultForm =
         activeConfigs.find((c) => c.form_name === "complaint") ||
@@ -94,7 +114,13 @@ const ReporterTicketsView = ({ user, fullName }) => {
 
       if (defaultForm) {
         setSelectedConfig(defaultForm);
+        if (user?.id) {
+          reporterTicketsCache.selectedConfig = defaultForm;
+        }
         await fetchUserTickets(defaultForm, activeMappings);
+      }
+      if (user?.id) {
+        reporterTicketsCache.userId = user.id;
       }
     } catch (err) {
       setError(err.message);
@@ -104,6 +130,9 @@ const ReporterTicketsView = ({ user, fullName }) => {
   };
 
   useEffect(() => {
+    if (user?.id && reporterTicketsCache.userId === user.id) {
+      return;
+    }
     loadData();
   }, [user]);
 

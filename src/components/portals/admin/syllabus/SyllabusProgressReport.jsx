@@ -293,7 +293,18 @@ const SyllabusProgressReport = ({ role, student }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [student?.id, student?.class_id]);
+
+  useEffect(() => {
+    if (role === 'parent' && student?.class_id) {
+      setCpFilterClasses([String(student.class_id)]);
+      setFilterClasses([String(student.class_id)]);
+      setProgressExpandedBook(null);
+      setProgressExpandedClass(null);
+      setExpandedLogIds({});
+      setLogItemsMap({});
+    }
+  }, [student?.class_id, role]);
 
   // ─── Daily Activity: Fetch & Enrich Logs ───
   const fetchDailyEntries = useCallback(async () => {
@@ -1194,16 +1205,6 @@ const SyllabusProgressReport = ({ role, student }) => {
                               style={{ width: `${pct}%`, backgroundColor: barColor }}
                             />
                           </div>
-                          <div className="border-t border-dashed py-1.5 my-1.5 text-[9px] text-gray-500 font-bold space-y-0.5">
-                             <div className="flex justify-between">
-                               <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
-                               {pct === 100 ? (
-                                 <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
-                               ) : (
-                                 <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
-                               )}
-                             </div>
-                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
@@ -1230,6 +1231,16 @@ const SyllabusProgressReport = ({ role, student }) => {
                           <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
                             <span>Total Lessons:</span>
                             <span>{total}</span>
+                          </div>
+                          <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
+                            <div className="flex justify-between">
+                              <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
+                              {pct === 100 ? (
+                                <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
+                              ) : (
+                                <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
