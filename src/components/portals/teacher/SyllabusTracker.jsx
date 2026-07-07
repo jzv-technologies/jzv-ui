@@ -124,13 +124,13 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder =
   );
 };
 
-const SyllabusTracker = ({ user }) => {
+const SyllabusTracker = ({ user, teacherRecord }) => {
   const isCacheValid = syllabusTrackerCache.userId === user?.id;
 
   const [loading, setLoading] = useState(() => !isCacheValid || !syllabusTrackerCache.teacher);
   const [submitting, setSubmitting] = useState(false);
   const [teacher, setTeacher] = useState(() =>
-    isCacheValid ? syllabusTrackerCache.teacher : null
+    isCacheValid ? syllabusTrackerCache.teacher : (teacherRecord || null)
   );
 
   // Reference data
@@ -367,12 +367,16 @@ const SyllabusTracker = ({ user }) => {
 
       try {
         if (!user || !user.id) throw new Error('User session not found.');
-        const { data: teacherData, error: teachErr } = await supabase
-          .from('teachers')
-          .select('*')
-          .eq('auth_id', user.id)
-          .maybeSingle();
-        if (teachErr) throw teachErr;
+        let teacherData = teacherRecord || syllabusTrackerCache.teacher;
+        if (!teacherData) {
+          const { data, error: teachErr } = await supabase
+            .from('teachers')
+            .select('*')
+            .eq('auth_id', user.id)
+            .maybeSingle();
+          if (teachErr) throw teachErr;
+          teacherData = data;
+        }
         if (!teacherData) throw new Error('User not mapped to Teacher record.');
         setTeacher(teacherData);
         syllabusTrackerCache.teacher = teacherData;
@@ -496,7 +500,7 @@ const SyllabusTracker = ({ user }) => {
     };
 
     initData();
-  }, [user]);
+  }, [user, teacherRecord]);
 
   // ─── My Work: Fetch teacher's log entries ──────────────────────────
 

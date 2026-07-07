@@ -42,6 +42,7 @@ export const AppRoutes = ({
   setParentSubView,
   candidateSubView,
   setCandidateSubView,
+  teacherRecord,
 }) => {
   const navigate = useNavigate();
   const [dynamicConfigs, setDynamicConfigs] = useState([]);
@@ -288,8 +289,8 @@ export const AppRoutes = ({
               >
                 {teacherSubView === 'timetable' && <TeacherTimetableViewer user={user} />}
                 {teacherSubView === 'students' && <TeacherStudentsViewer />}
-                {teacherSubView === 'syllabus' && <SyllabusManager role="teacher" user={user} />}
-                {teacherSubView === 'syllabus-tracker' && <SyllabusTracker user={user} />}
+                {teacherSubView === 'syllabus' && <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />}
+                {teacherSubView === 'syllabus-tracker' && <SyllabusTracker user={user} teacherRecord={teacherRecord} />}
                 {teacherSubView === 'tickets' && (
                   <ReporterTicketsView user={user} fullName={fullName} />
                 )}

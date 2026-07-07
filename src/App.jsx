@@ -18,7 +18,7 @@ const App = () => {
   const navigate = useNavigate();
   const hasRedirectedRef = useRef(false);
 
-  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent, loginAsCandidate, switchParentStudent } =
+  const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent, loginAsCandidate, switchParentStudent, teacherRecord } =
     useAuth();
 
   const [showLoginPortal, setShowLoginPortal] = useState(false);
@@ -169,6 +169,7 @@ const App = () => {
           setParentSubView={setParentSubView}
           candidateSubView={candidateSubView}
           setCandidateSubView={setCandidateSubView}
+          teacherRecord={teacherRecord}
         />
       </main>
 

@@ -14,7 +14,7 @@ const getComplexityBadgeClass = (comp) => {
   return 'bg-green-100 text-green-700 border-green-200';
 };
 
-const SyllabusManager = ({ role, user }) => {
+const SyllabusManager = ({ role, user, teacherRecord }) => {
   const isAdmin = role === 'admin' || role === 'management';
   const isTeacher = role === 'teacher';
 
@@ -263,11 +263,15 @@ const SyllabusManager = ({ role, user }) => {
 
       let teacherAllocatedIds = [];
       if (isTeacher && user?.id) {
-        const { data: teacherData } = await supabase
-          .from('teachers')
-          .select('id')
-          .eq('auth_id', user.id)
-          .maybeSingle();
+        let teacherData = teacherRecord;
+        if (!teacherData) {
+          const { data } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('auth_id', user.id)
+            .maybeSingle();
+          teacherData = data;
+        }
 
         if (teacherData) {
           const [dbAssignments, dbTeacherSubjects] = await Promise.all([
@@ -452,7 +456,7 @@ const SyllabusManager = ({ role, user }) => {
 
   useEffect(() => {
     loadData();
-  }, [user, role]);
+  }, [user, role, teacherRecord]);
 
   const toggleCollapse = (id) =>
     setCollapsedNodes((prev) => {

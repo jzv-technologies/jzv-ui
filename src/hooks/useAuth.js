@@ -15,6 +15,7 @@ export const useAuth = () => {
   const [fullName, setFullName] = useState("");
   const [rolesLoading, setRolesLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [teacherRecord, setTeacherRecord] = useState(null);
 
   const rolesFetchedRef = useRef(false);
   const fetchingRef = useRef(false);
@@ -41,28 +42,41 @@ export const useAuth = () => {
     setFullName(name || "");
   };
 
-  const fetchTeacherName = async (userId) => {
-    if (fullNameRef.current) return fullNameRef.current;
+  const teacherRecordRef = useRef(null);
+
+  const updateTeacherRecord = (record) => {
+    teacherRecordRef.current = record;
+    setTeacherRecord(record);
+  };
+
+  const fetchTeacherRecord = async (userId) => {
+    if (teacherRecordRef.current) return teacherRecordRef.current;
     try {
       const { data, error } = await supabase
         .from("teachers")
-        .select("name")
+        .select("*")
         .eq("auth_id", userId)
         .maybeSingle();
-      if (data && data.name) {
-        updateFullName(data.name);
-        return data.name;
+      if (data) {
+        updateTeacherRecord(data);
+        if (data.name) {
+          updateFullName(data.name);
+        }
+        return data;
       }
     } catch (err) {
-      console.warn("Could not load teacher name from Supabase, checking LocalStorage fallback:", err);
+      console.warn("Could not load teacher record from Supabase, checking LocalStorage fallback:", err);
       const raw = localStorage.getItem('jzv_timetable_data');
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
           const t = (parsed.teachers || []).find(t => String(t.auth_id) === String(userId));
-          if (t && t.name) {
-            updateFullName(t.name);
-            return t.name;
+          if (t) {
+            updateTeacherRecord(t);
+            if (t.name) {
+              updateFullName(t.name);
+            }
+            return t;
           }
         } catch (e) {
           console.error(e);
@@ -208,6 +222,7 @@ export const useAuth = () => {
     updateRoles([]);
     updateStudentIds("");
     updateFullName("");
+    updateTeacherRecord(null);
     currentUserIdRef.current = null;
   }, [user]);
   const loginAsParent = useCallback((student, students = []) => {
@@ -398,7 +413,7 @@ export const useAuth = () => {
             rolesFetchedRef.current = true;
             currentUserIdRef.current = currentUser.id;
             if (cookieRoles.includes("teacher")) {
-              fetchTeacherName(currentUser.id);
+              fetchTeacherRecord(currentUser.id);
             }
           } else {
             updateRoles([]);
@@ -426,7 +441,7 @@ export const useAuth = () => {
                 "Access Denied: Your account has not been registered by an administrator."
               );
             } else if (res && res.success && res.roles.includes("teacher")) {
-              fetchTeacherName(currentUser.id);
+              fetchTeacherRecord(currentUser.id);
             }
           }
         } else {
@@ -434,6 +449,7 @@ export const useAuth = () => {
           updateRoles([]);
           updateFullName("");
           updateStudentIds("");
+          updateTeacherRecord(null);
           setAuthLoading(false);
           rolesFetchedRef.current = false;
           fetchingRef.current = false;
@@ -462,6 +478,7 @@ export const useAuth = () => {
     loginAsParent,
     loginAsCandidate,
     switchParentStudent,
+    teacherRecord,
   };
 };
 
