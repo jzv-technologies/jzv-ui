@@ -172,6 +172,21 @@ const SyllabusTracker = ({ user }) => {
   const isFetchingMyWorkRef = useRef(false);
   const initialLoadRef = useRef(false);
 
+  const getLocalDateStr = (offsetDays = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() - offsetDays);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [timeFilter, setTimeFilter] = useState('7_days'); // '7_days' | '30_days' | 'range'
+  const [dateRange, setDateRange] = useState(() => ({
+    start: getLocalDateStr(7),
+    end: getLocalDateStr(0),
+  }));
+
   // ─── Tab 2: Syllabus Progress States ───
   const [cpFilterClasses, setCpFilterClasses] = useState([]);
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
@@ -490,12 +505,32 @@ const SyllabusTracker = ({ user }) => {
     if (isFetchingMyWorkRef.current) return;
     isFetchingMyWorkRef.current = true;
 
-    if (!syllabusTrackerCache.myWorkEntries) {
-      setMyWorkLoading(true);
-    }
+    setMyWorkLoading(true);
     try {
-      // Fetch all log items by this teacher, joining log and lesson details in a single query
-      const { data: items, error } = await supabase
+      // Determine date boundaries
+      let startBound = null;
+      let endBound = null;
+
+      if (timeFilter === '7_days') {
+        startBound = getLocalDateStr(7);
+        endBound = getLocalDateStr(0);
+      } else if (timeFilter === '30_days') {
+        startBound = getLocalDateStr(30);
+        endBound = getLocalDateStr(0);
+      } else if (timeFilter === 'range' && dateRange.start && dateRange.end) {
+        startBound = dateRange.start;
+        endBound = dateRange.end;
+      }
+
+      // If range is selected but not completely filled, clear and skip query
+      if (timeFilter === 'range' && (!dateRange.start || !dateRange.end)) {
+        setMyWorkEntries([]);
+        setMyWorkLoading(false);
+        isFetchingMyWorkRef.current = false;
+        return;
+      }
+
+      let query = supabase
         .from('lesson_tracker_log_items')
         .select(
           `
@@ -507,9 +542,16 @@ const SyllabusTracker = ({ user }) => {
           )
         `
         )
-        .eq('teacher_id', teacher.id)
+        .eq('teacher_id', teacher.id);
+
+      if (startBound && endBound) {
+        query = query.gte('date', startBound).lte('date', endBound);
+      }
+
+      const { data: items, error } = await query
         .order('date', { ascending: false })
         .limit(200);
+
       if (error) throw error;
 
       if (!items || items.length === 0) {
@@ -551,16 +593,22 @@ const SyllabusTracker = ({ user }) => {
       setMyWorkLoading(false);
       isFetchingMyWorkRef.current = false;
     }
-  }, [teacher, books, subjects, classes]);
+  }, [teacher?.id, timeFilter, dateRange.start, dateRange.end, books, subjects, classes]);
 
   useEffect(() => {
     if (teacher?.id && books.length > 0 && subjects.length > 0 && classes.length > 0) {
-      if (!initialLoadRef.current) {
-        initialLoadRef.current = true;
-        fetchMyWorkEntries();
-      }
+      fetchMyWorkEntries();
     }
-  }, [teacher, books, subjects, classes, fetchMyWorkEntries]);
+  }, [
+    teacher?.id,
+    books.length,
+    subjects.length,
+    classes.length,
+    timeFilter,
+    dateRange.start,
+    dateRange.end,
+    fetchMyWorkEntries,
+  ]);
 
   const fetchTeacherProgressData = async () => {
     setProgressLoading(true);
@@ -1659,7 +1707,7 @@ const SyllabusTracker = ({ user }) => {
   const renderMyWork = () => {
     if (myWorkLoading) {
       return (
-        <div className="flex items-center justify-center p-12">
+        <div className="flex items-center justify-center p-12 bg-white border border-light-border rounded-2xl shadow-sm">
           <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
           <span className="text-xs font-bold text-gray-500">Loading your entries...</span>
         </div>
@@ -1670,106 +1718,106 @@ const SyllabusTracker = ({ user }) => {
       return (
         <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
           <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 block"></i>
-          No log entries yet. Click <strong>"Add Work"</strong> to get started.
+          No log entries found for the selected date period.
         </div>
       );
     }
 
     return (
       <div className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-gray-50 border-b border-light-border">
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Date
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Class
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Subject
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Book
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Lesson Path
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Status
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Progress
-                </th>
-                <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                  Comments
-                </th>
-                <th className="text-center px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px] min-w-[60px]">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {myWorkEntries.map((entry, idx) => (
-                <tr
-                  key={entry.id}
-                  className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                >
-                  <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
-                    {new Date(entry.date).toLocaleDateString()}
-                    {entry.late_reporting === 'Y' && (
-                      <span className="ml-1 text-red-500 text-[8px] font-bold bg-red-50 px-1 py-0.5 rounded border border-red-100">
-                        Late
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-gray-700">
-                    {entry.class?.name || '—'}
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-gray-600">
-                    {entry.subject?.name || '—'}
-                  </td>
-                  <td className="px-4 py-3 font-bold text-dark-primary">
-                    {entry.book?.name || '—'}
-                  </td>
-                  <td
-                    className="px-4 py-3 font-semibold text-gray-600 max-w-[250px] truncate"
-                    title={entry.lessonPath}
-                  >
-                    {entry.lessonPath}
-                  </td>
-                  <td className="px-4 py-3">
-                    {getStatusBadge(entry.current_status, entry.isRevision)}
-                  </td>
-                  <td className="px-4 py-3 font-bold text-gray-700">
-                    {entry.isRevision ? '—' : `${Number(entry.progress).toFixed(0)}%`}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-gray-500 max-w-[200px] truncate"
-                    title={entry.comments || ''}
-                  >
-                    {entry.comments || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center whitespace-nowrap">
-                    {isCreatedToday(entry.created_at) && (
-                      <button
-                        onClick={() => handleDeleteClick(entry)}
-                        className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"
-                        title="Delete Log Entry"
-                      >
-                        <i className="fas fa-trash-alt text-xs"></i>
-                      </button>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-gray-50 border-b border-light-border">
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Date
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Class
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Subject
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Book
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Lesson Path
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Status
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Progress
+                  </th>
+                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
+                    Comments
+                  </th>
+                  <th className="text-center px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px] min-w-[60px]">
+                    Action
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {myWorkEntries.map((entry, idx) => (
+                  <tr
+                    key={entry.id}
+                    className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                  >
+                    <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
+                      {new Date(entry.date).toLocaleDateString()}
+                      {entry.late_reporting === 'Y' && (
+                        <span className="ml-1 text-red-500 text-[8px] font-bold bg-red-50 px-1 py-0.5 rounded border border-red-100">
+                          Late
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-700">
+                      {entry.class?.name || '—'}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-600">
+                      {entry.subject?.name || '—'}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-dark-primary">
+                      {entry.book?.name || '—'}
+                    </td>
+                    <td
+                      className="px-4 py-3 font-semibold text-gray-600 max-w-[250px] truncate"
+                      title={entry.lessonPath}
+                    >
+                      {entry.lessonPath}
+                    </td>
+                    <td className="px-4 py-3">
+                      {getStatusBadge(entry.current_status, entry.isRevision)}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-gray-700">
+                      {entry.isRevision ? '—' : `${Number(entry.progress).toFixed(0)}%`}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-gray-500 max-w-[200px] truncate"
+                      title={entry.comments || ''}
+                    >
+                      {entry.comments || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center whitespace-nowrap">
+                      {isCreatedToday(entry.created_at) && (
+                        <button
+                          onClick={() => handleDeleteClick(entry)}
+                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"
+                          title="Delete Log Entry"
+                        >
+                          <i className="fas fa-trash-alt text-xs"></i>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    );
-  };
+      );
+    };
 
   // ─── Render: Syllabus Progress Tab ────────────────────────────────
 
@@ -2475,14 +2523,53 @@ const SyllabusTracker = ({ user }) => {
           </div>
 
           {activeTab === 'teacher-activity' && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
+                {[
+                  { key: '7_days', label: '7 Days' },
+                  { key: '30_days', label: '30 Days' },
+                  { key: 'range', label: 'Custom Range' },
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setTimeFilter(t.key)}
+                    className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all h-full cursor-pointer flex items-center ${
+                      timeFilter === t.key
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {timeFilter === 'range' && (
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
+                  <input
+                    type="date"
+                    value={dateRange.start}
+                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                    className="border rounded-lg px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-7 bg-white"
+                  />
+                  <span>to</span>
+                  <input
+                    type="date"
+                    value={dateRange.end}
+                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                    className="border rounded-lg px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-7 bg-white"
+                  />
+                </div>
+              )}
+
               <button
                 onClick={openAddWorkModal}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
               >
                 <i className="fas fa-plus"></i> Add Work
               </button>
-              <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors">
+              <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors h-8">
                 <input
                   type="checkbox"
                   checked={coverMode}
