@@ -191,6 +191,7 @@ const SyllabusTracker = ({ user }) => {
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
   const [progressExpandedClass, setProgressExpandedClass] = useState(null);
   const [progressLoading, setProgressLoading] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [progressBookLessons, setProgressBookLessons] = useState([]);
   const [progressBookLogs, setProgressBookLogs] = useState([]);
   const [showNotStarted, setShowNotStarted] = useState(false);
@@ -496,14 +497,16 @@ const SyllabusTracker = ({ user }) => {
       // Fetch all log items by this teacher, joining log and lesson details in a single query
       const { data: items, error } = await supabase
         .from('lesson_tracker_log_items')
-        .select(`
+        .select(
+          `
           *,
           teacher:teachers(name),
           log:lesson_tracker_log(
             *,
             lesson:syllabus_book_lessons(*)
           )
-        `)
+        `
+        )
         .eq('teacher_id', teacher.id)
         .order('date', { ascending: false })
         .limit(200);
@@ -584,7 +587,9 @@ const SyllabusTracker = ({ user }) => {
         supabase.from('book_tracker').select('*').in('class_id', classIds),
         supabase
           .from('lesson_tracker_log')
-          .select('lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at')
+          .select(
+            'lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+          )
           .in('class_id', classIds),
       ]);
 
@@ -593,7 +598,7 @@ const SyllabusTracker = ({ user }) => {
 
       setAllTrackers(trackerRes.data || []);
       setAllLogs(logsRes.data || []);
-      
+
       syllabusTrackerCache.allTrackers = trackerRes.data || [];
       syllabusTrackerCache.allLogs = logsRes.data || [];
     } catch (err) {
@@ -636,14 +641,16 @@ const SyllabusTracker = ({ user }) => {
             supabase.from('book_tracker').select('*').in('class_id', classIds),
             supabase
               .from('lesson_tracker_log')
-              .select('lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at')
+              .select(
+                'lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+              )
               .in('class_id', classIds),
           ]);
 
           if (!trackerRes.error && !logsRes.error) {
             setAllTrackers(trackerRes.data || []);
             setAllLogs(logsRes.data || []);
-            
+
             syllabusTrackerCache.allTrackers = trackerRes.data || [];
             syllabusTrackerCache.allLogs = logsRes.data || [];
           }
@@ -833,7 +840,9 @@ const SyllabusTracker = ({ user }) => {
         return;
       }
 
-      console.log(`[Add Work Progress] Querying progress for Class ID: ${awClassId}, Lesson ID: ${targetLesson.id} (${targetLesson.level1} > ${targetLesson.level2 || ''})`);
+      console.log(
+        `[Add Work Progress] Querying progress for Class ID: ${awClassId}, Lesson ID: ${targetLesson.id} (${targetLesson.level1} > ${targetLesson.level2 || ''})`
+      );
 
       try {
         const { data, error } = await supabase
@@ -849,7 +858,7 @@ const SyllabusTracker = ({ user }) => {
 
         const maxProgress = data ? Number(data.completion_percentage || 0) : 0;
         const currentStatus = data ? data.current_status || 'in_progress' : 'in_progress';
-        
+
         setPreviousMaxProgress(maxProgress);
         setAwProgress(maxProgress);
         setAwStatus(currentStatus);
@@ -862,7 +871,16 @@ const SyllabusTracker = ({ user }) => {
     };
 
     updateDefaultProgress();
-  }, [awClassId, awBookId, awLevel1, awLevel2, awLevel3, awBookData, isLeafNodeSelected, isAddWorkModalOpen]);
+  }, [
+    awClassId,
+    awBookId,
+    awLevel1,
+    awLevel2,
+    awLevel3,
+    awBookData,
+    isLeafNodeSelected,
+    isAddWorkModalOpen,
+  ]);
 
   // ─── Close Add Work Modal with Escape Key ──────────────────────────
   useEffect(() => {
@@ -1355,7 +1373,10 @@ const SyllabusTracker = ({ user }) => {
     }
 
     if (!isRevisionMode && finalProgress < previousMaxProgress) {
-      return showToast(`Progress percentage cannot be lesser than the previous max of ${previousMaxProgress}%.`, 'warning');
+      return showToast(
+        `Progress percentage cannot be lesser than the previous max of ${previousMaxProgress}%.`,
+        'warning'
+      );
     }
 
     setSubmitting(true);
@@ -1423,7 +1444,7 @@ const SyllabusTracker = ({ user }) => {
       date: new Date(entry.date).toLocaleDateString(),
       className,
       subjectName,
-      logId: parentLog?.id || entry.lt_log_id
+      logId: parentLog?.id || entry.lt_log_id,
     });
   };
 
@@ -1481,7 +1502,7 @@ const SyllabusTracker = ({ user }) => {
     }
     setProgressExpandedBook(bookId);
     setProgressExpandedClass(classId);
-    setProgressLoading(true);
+    setDetailsLoading(true);
     setShowNotStarted(false);
     setExpandedLogIds({});
     try {
@@ -1826,7 +1847,10 @@ const SyllabusTracker = ({ user }) => {
       const isClassExpanded = progressExpandedClass === classObj.id;
 
       return (
-        <div key={classObj.id} className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden p-6 space-y-4 text-left">
+        <div
+          key={classObj.id}
+          className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden p-6 space-y-4 text-left"
+        >
           <h3 className="text-base font-black text-dark-primary border-b pb-2 flex items-center gap-2">
             <i className="fas fa-graduation-cap text-brand-primary"></i>
             {classObj.name || classObj.class_name}
@@ -1891,19 +1915,24 @@ const SyllabusTracker = ({ user }) => {
                         0
                       );
 
-                      const activeBookLogs = bookLogs.filter(log => log.current_status !== 'not_started');
+                      const activeBookLogs = bookLogs.filter(
+                        (log) => log.current_status !== 'not_started'
+                      );
 
                       let bookStartDate = null;
-                      activeBookLogs.forEach(log => {
+                      activeBookLogs.forEach((log) => {
                         if (log.start_date) {
-                          if (!bookStartDate || new Date(log.start_date) < new Date(bookStartDate)) {
+                          if (
+                            !bookStartDate ||
+                            new Date(log.start_date) < new Date(bookStartDate)
+                          ) {
                             bookStartDate = log.start_date;
                           }
                         }
                       });
 
                       let bookEndDate = null;
-                      activeBookLogs.forEach(log => {
+                      activeBookLogs.forEach((log) => {
                         if (log.end_date) {
                           if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
                             bookEndDate = log.end_date;
@@ -1912,9 +1941,12 @@ const SyllabusTracker = ({ user }) => {
                       });
 
                       let bookUpdatedAt = null;
-                      bookLogs.forEach(log => {
+                      bookLogs.forEach((log) => {
                         if (log.updated_at) {
-                          if (!bookUpdatedAt || new Date(log.updated_at) > new Date(bookUpdatedAt)) {
+                          if (
+                            !bookUpdatedAt ||
+                            new Date(log.updated_at) > new Date(bookUpdatedAt)
+                          ) {
                             bookUpdatedAt = log.updated_at;
                           }
                         }
@@ -1990,21 +2022,31 @@ const SyllabusTracker = ({ user }) => {
                               <span>Revision Days:</span>
                               <span>{revisionCount}</span>
                             </div>
-                            <div className="flex justify-between text-indigo-600">
-                              <span>Days Taken:</span>
-                              <span>{cumulativeDaysTaken}</span>
-                            </div>
+
                             <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
                               <span>Total Lessons:</span>
                               <span>{total}</span>
                             </div>
                             <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
                               <div className="flex justify-between">
-                                <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
+                                <span>
+                                  Started:{' '}
+                                  {bookStartDate
+                                    ? new Date(bookStartDate).toLocaleDateString()
+                                    : '—'}
+                                </span>
                                 {pct === 100 ? (
-                                  <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
+                                  <span>
+                                    Ended:{' '}
+                                    {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
+                                  </span>
                                 ) : (
-                                  <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
+                                  <span>
+                                    Updated:{' '}
+                                    {bookUpdatedAt
+                                      ? new Date(bookUpdatedAt).toLocaleDateString()
+                                      : '—'}
+                                  </span>
                                 )}
                               </div>
                             </div>
@@ -2028,7 +2070,7 @@ const SyllabusTracker = ({ user }) => {
     const renderExpandedDetails = () => {
       return (
         <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4 text-left">
-          {progressLoading ? (
+          {detailsLoading ? (
             <div className="flex items-center justify-center p-8">
               <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
               <span className="text-xs font-bold text-gray-500">Loading lessons...</span>
@@ -2126,7 +2168,9 @@ const SyllabusTracker = ({ user }) => {
                             </div>
                           </div>
                           <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
-                            <span>Completed: {completedCount}/{total}</span>
+                            <span>
+                              Completed: {completedCount}/{total}
+                            </span>
                             {inProgressCount > 0 && (
                               <span className="text-blue-600">In-progress: {inProgressCount}</span>
                             )}
@@ -2143,7 +2187,9 @@ const SyllabusTracker = ({ user }) => {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-gray-200 text-dark-soft font-extrabold text-[10px] uppercase tracking-wider">
-                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">Lesson Details</th>
+                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">
+                        Lesson Details
+                      </th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[80px]">Progress</th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[85px]">Days Taken</th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[90px]">Status</th>
@@ -2180,7 +2226,10 @@ const SyllabusTracker = ({ user }) => {
                       if (lessonsToRender.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={5} className="text-xs text-gray-400 font-semibold py-8 text-center">
+                            <td
+                              colSpan={5}
+                              className="text-xs text-gray-400 font-semibold py-8 text-center"
+                            >
                               {showNotStarted
                                 ? 'No lessons found for this book.'
                                 : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
@@ -2207,13 +2256,26 @@ const SyllabusTracker = ({ user }) => {
                                 {log && (
                                   <div className="flex items-center gap-2 mt-1 flex-wrap text-[9px] text-gray-400 font-bold">
                                     <span>
-                                      Started: {log.start_date ? new Date(log.start_date).toLocaleDateString() : '—'}
+                                      Started:{' '}
+                                      {log.start_date
+                                        ? new Date(log.start_date).toLocaleDateString()
+                                        : '—'}
                                     </span>
                                     <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                                     {log.completion_percentage === 100 || status === 'completed' ? (
-                                      <span>Ended: {log.end_date ? new Date(log.end_date).toLocaleDateString() : '—'}</span>
+                                      <span>
+                                        Ended:{' '}
+                                        {log.end_date
+                                          ? new Date(log.end_date).toLocaleDateString()
+                                          : '—'}
+                                      </span>
                                     ) : (
-                                      <span>Last Updated: {log.updated_at ? new Date(log.updated_at).toLocaleDateString() : '—'}</span>
+                                      <span>
+                                        Last Updated:{' '}
+                                        {log.updated_at
+                                          ? new Date(log.updated_at).toLocaleDateString()
+                                          : '—'}
+                                      </span>
                                     )}
                                     {log.revision_counter > 0 && (
                                       <>
@@ -2314,15 +2376,18 @@ const SyllabusTracker = ({ user }) => {
                                               </p>
                                             )}
                                           </div>
-                                          {String(item.teacher_id) === String(teacher?.id) && isCreatedToday(item.created_at) && (
-                                            <button
-                                              onClick={() => handleDeleteClick(item, log, node, book)}
-                                              className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
-                                              title="Delete Log Entry"
-                                            >
-                                              <i className="fas fa-trash-alt text-[10px]"></i>
-                                            </button>
-                                          )}
+                                          {String(item.teacher_id) === String(teacher?.id) &&
+                                            isCreatedToday(item.created_at) && (
+                                              <button
+                                                onClick={() =>
+                                                  handleDeleteClick(item, log, node, book)
+                                                }
+                                                className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
+                                                title="Delete Log Entry"
+                                              >
+                                                <i className="fas fa-trash-alt text-[10px]"></i>
+                                              </button>
+                                            )}
                                         </div>
                                       ))
                                     )}
@@ -2434,7 +2499,10 @@ const SyllabusTracker = ({ user }) => {
               <MultiSelectDropdown
                 label=""
                 placeholder="Class Filter"
-                options={progressClasses.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                options={progressClasses.map((c) => ({
+                  id: String(c.id),
+                  label: c.name || c.class_name,
+                }))}
                 selected={cpFilterClasses}
                 onChange={(val) => {
                   setCpFilterClasses(val);

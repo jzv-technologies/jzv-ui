@@ -35,7 +35,14 @@ export const useAuth = () => {
     setStudentIds(ids || "");
   };
 
+  const fullNameRef = useRef("");
+  const updateFullName = (name) => {
+    fullNameRef.current = name || "";
+    setFullName(name || "");
+  };
+
   const fetchTeacherName = async (userId) => {
+    if (fullNameRef.current) return fullNameRef.current;
     try {
       const { data, error } = await supabase
         .from("teachers")
@@ -43,7 +50,7 @@ export const useAuth = () => {
         .eq("auth_id", userId)
         .maybeSingle();
       if (data && data.name) {
-        setFullName(data.name);
+        updateFullName(data.name);
         return data.name;
       }
     } catch (err) {
@@ -54,7 +61,7 @@ export const useAuth = () => {
           const parsed = JSON.parse(raw);
           const t = (parsed.teachers || []).find(t => String(t.auth_id) === String(userId));
           if (t && t.name) {
-            setFullName(t.name);
+            updateFullName(t.name);
             return t.name;
           }
         } catch (e) {
@@ -200,7 +207,7 @@ export const useAuth = () => {
     setUser(null);
     updateRoles([]);
     updateStudentIds("");
-    setFullName("");
+    updateFullName("");
     currentUserIdRef.current = null;
   }, [user]);
   const loginAsParent = useCallback((student, students = []) => {
@@ -230,7 +237,7 @@ export const useAuth = () => {
     setUser(parentSession.user);
     updateRoles(["parent"]);
     updateStudentIds(parentSession.studentIds);
-    setFullName(parentSession.fullName);
+    updateFullName(parentSession.fullName);
     setAuthLoading(false);
   }, []);
 
@@ -252,7 +259,7 @@ export const useAuth = () => {
     setUser(candidateSession.user);
     updateRoles(["candidate"]);
     updateStudentIds("");
-    setFullName(candidateSession.fullName);
+    updateFullName(candidateSession.fullName);
     setAuthLoading(false);
   }, []);
 
@@ -283,7 +290,7 @@ export const useAuth = () => {
     setUser(parentSession.user);
     updateRoles(["parent"]);
     updateStudentIds(parentSession.studentIds);
-    setFullName(parentSession.fullName);
+    updateFullName(parentSession.fullName);
   }, [user]);
 
   // Setup auth state listener only once
@@ -298,7 +305,7 @@ export const useAuth = () => {
           setUser(parsed.user);
           updateRoles(["candidate"]);
           updateStudentIds("");
-          setFullName(parsed.fullName);
+          updateFullName(parsed.fullName);
           setAuthLoading(false);
           return;
         } else {
@@ -327,7 +334,7 @@ export const useAuth = () => {
         setUser(parsed.user);
         updateRoles(["parent"]);
         updateStudentIds(parsed.studentIds);
-        setFullName(parsed.fullName);
+        updateFullName(parsed.fullName);
         setAuthLoading(false);
         return;
       } catch (e) {
@@ -343,7 +350,7 @@ export const useAuth = () => {
         setUser(parsed.user);
         updateRoles(parsed.roles || ["admin"]);
         updateStudentIds("");
-        setFullName(parsed.fullName);
+        updateFullName(parsed.fullName);
         setAuthLoading(false);
         return;
       } catch (e) {
@@ -377,7 +384,7 @@ export const useAuth = () => {
         setUser(currentUser);
 
         if (currentUser) {
-          setFullName(currentUser.user_metadata?.full_name || "");
+          updateFullName(currentUser.user_metadata?.full_name || fullNameRef.current || "");
 
           // Load cached roles from cookie
           const cached = getUserDataCookie(currentUser.id);
@@ -425,7 +432,7 @@ export const useAuth = () => {
         } else {
           // No user – reset everything
           updateRoles([]);
-          setFullName("");
+          updateFullName("");
           updateStudentIds("");
           setAuthLoading(false);
           rolesFetchedRef.current = false;

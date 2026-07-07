@@ -146,9 +146,7 @@ const SyllabusProgressReport = ({ role, student }) => {
   const [dateFilterType, setDateFilterType] = useState(() =>
     role === 'parent' ? 'single' : 'all'
   ); // 'all' | 'single' | 'multiple' | 'range'
-  const [singleDate, setSingleDate] = useState(() =>
-    role === 'parent' ? getLocalDateStr() : ''
-  );
+  const [singleDate, setSingleDate] = useState(() => (role === 'parent' ? getLocalDateStr() : ''));
   const [multipleDates, setMultipleDates] = useState([]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [isDatePopupOpen, setIsDatePopupOpen] = useState(false);
@@ -241,7 +239,12 @@ const SyllabusProgressReport = ({ role, student }) => {
         }
       }
 
-      if (dbClasses.length === 0 && dbTeachers.length === 0 && dbBooks.length === 0 && role !== 'parent') {
+      if (
+        dbClasses.length === 0 &&
+        dbTeachers.length === 0 &&
+        dbBooks.length === 0 &&
+        role !== 'parent'
+      ) {
         loadLocalFallback();
       } else {
         setClasses(fetchedClasses);
@@ -420,7 +423,7 @@ const SyllabusProgressReport = ({ role, student }) => {
       date: new Date(entry.date).toLocaleDateString(),
       className,
       subjectName,
-      logId: parentLog?.id || entry.lt_log_id
+      logId: parentLog?.id || entry.lt_log_id,
     });
   };
 
@@ -738,7 +741,10 @@ const SyllabusProgressReport = ({ role, student }) => {
                       <span className="text-[10px] uppercase font-black text-gray-400 tracking-wider block mb-0.5">
                         {entry.subject?.name || 'Subject'}
                       </span>
-                      <h4 className="text-sm font-black text-dark-primary truncate" title={entry.book?.name || ''}>
+                      <h4
+                        className="text-sm font-black text-dark-primary truncate"
+                        title={entry.book?.name || ''}
+                      >
                         {entry.book?.name || 'Syllabus Book'}
                       </h4>
                     </div>
@@ -748,14 +754,19 @@ const SyllabusProgressReport = ({ role, student }) => {
                   <div className="space-y-2 mb-4 text-left">
                     <div className="text-xs">
                       <span className="text-gray-400 font-medium block">Topic / Path</span>
-                      <span className="font-bold text-dark-charcoal line-clamp-2" title={entry.lessonPath}>
+                      <span
+                        className="font-bold text-dark-charcoal line-clamp-2"
+                        title={entry.lessonPath}
+                      >
                         {entry.lessonPath || '—'}
                       </span>
                     </div>
 
                     {entry.comments && (
                       <div className="text-xs bg-gray-50 p-2.5 rounded-lg border border-gray-100 mt-2">
-                        <span className="text-gray-400 font-medium block text-[10px] uppercase tracking-wider mb-0.5">Teacher's Remarks</span>
+                        <span className="text-gray-400 font-medium block text-[10px] uppercase tracking-wider mb-0.5">
+                          Teacher's Remarks
+                        </span>
                         <p className="font-bold text-gray-600 text-xs leading-relaxed italic">
                           "{entry.comments}"
                         </p>
@@ -770,7 +781,10 @@ const SyllabusProgressReport = ({ role, student }) => {
                       <div className="w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold">
                         <i className="fas fa-user-tie"></i>
                       </div>
-                      <span className="font-extrabold text-blue-600 truncate" title={entry.teacher?.name || ''}>
+                      <span
+                        className="font-extrabold text-blue-600 truncate"
+                        title={entry.teacher?.name || ''}
+                      >
                         {entry.teacher?.name || '—'}
                       </span>
                     </div>
@@ -836,12 +850,14 @@ const SyllabusProgressReport = ({ role, student }) => {
                 <th className="px-4 py-3 min-w-[95px]">Status</th>
                 <th className="px-4 py-3 min-w-[70px]">Progress</th>
                 <th className="px-4 py-3 min-w-[140px]">Comments</th>
-                {role !== 'parent' && <th className="px-4 py-3 min-w-[60px] text-center">Action</th>}
+                {role !== 'parent' && (
+                  <th className="px-4 py-3 min-w-[60px] text-center">Action</th>
+                )}
               </tr>
               {/* Filter inputs row */}
               <tr className="bg-gray-100/50 border-b border-light-border">
                 <th className="px-2 py-1">{renderDateFilterPopup()}</th>
-                 <th className="px-2 py-1">
+                <th className="px-2 py-1">
                   {role === 'parent' ? (
                     <div
                       className="px-2 py-1 bg-brand-primary/10 border border-brand-primary/20 rounded-lg text-[10px] font-black text-brand-primary text-center select-none truncate max-w-[80px]"
@@ -923,7 +939,10 @@ const SyllabusProgressReport = ({ role, student }) => {
             <tbody className="divide-y divide-gray-100 font-bold text-gray-700">
               {filteredDailyEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={role === 'parent' ? 9 : 10} className="text-center py-6 text-gray-400 font-semibold">
+                  <td
+                    colSpan={role === 'parent' ? 9 : 10}
+                    className="text-center py-6 text-gray-400 font-semibold"
+                  >
                     No entries match your search filters.
                   </td>
                 </tr>
@@ -1125,10 +1144,12 @@ const SyllabusProgressReport = ({ role, student }) => {
                       0
                     );
 
-                    const activeBookLogs = bookLogs.filter(log => log.current_status !== 'not_started');
+                    const activeBookLogs = bookLogs.filter(
+                      (log) => log.current_status !== 'not_started'
+                    );
 
                     let bookStartDate = null;
-                    activeBookLogs.forEach(log => {
+                    activeBookLogs.forEach((log) => {
                       if (log.start_date) {
                         if (!bookStartDate || new Date(log.start_date) < new Date(bookStartDate)) {
                           bookStartDate = log.start_date;
@@ -1137,7 +1158,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                     });
 
                     let bookEndDate = null;
-                    activeBookLogs.forEach(log => {
+                    activeBookLogs.forEach((log) => {
                       if (log.end_date) {
                         if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
                           bookEndDate = log.end_date;
@@ -1146,7 +1167,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                     });
 
                     let bookUpdatedAt = null;
-                    bookLogs.forEach(log => {
+                    bookLogs.forEach((log) => {
                       if (log.updated_at) {
                         if (!bookUpdatedAt || new Date(log.updated_at) > new Date(bookUpdatedAt)) {
                           bookUpdatedAt = log.updated_at;
@@ -1168,7 +1189,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                       <div
                         key={book.id}
                         onClick={() => handleProgressBookClick(book.id, classObj.id)}
-                        className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
+                        className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01]  flex flex-col justify-between ${
                           isExpanded
                             ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
                             : 'bg-white'
@@ -1178,26 +1199,24 @@ const SyllabusProgressReport = ({ role, student }) => {
                           <div className="flex items-start justify-between mb-2">
                             <div className="flex-1 min-w-0">
                               {subj && (
-                                <h3 className=" font-semibold text-gray-500 mt-0.5">
-                                  {subj.name}
-                                </h3>
+                                <h3 className=" font-semibold text-gray-500 mt-0.5">{subj.name}</h3>
                               )}
                               <h4 className="text-sm font-black text-dark-primary truncate">
                                 {book.name}
                               </h4>
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-2">
-                               <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
-                                 {cumulativeDaysTaken} Days
-                               </span>
-                               <div
-                                 className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
-                               >
-                                 <span className={`text-sm font-black ${pctColor}`}>
-                                   {pct.toFixed(0)}%
-                                 </span>
-                               </div>
-                             </div>
+                              <span className="text-[10px] text-gray-500 font-bold bg--100 px-2 py-1 rounded border whitespace-nowrap">
+                                {cumulativeDaysTaken} Days
+                              </span>
+                              <div
+                                className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
+                              >
+                                <span className={`text-sm font-black ${pctColor}`}>
+                                  {pct.toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
                             <div
@@ -1224,21 +1243,29 @@ const SyllabusProgressReport = ({ role, student }) => {
                             <span>Revision Days:</span>
                             <span>{revisionCount}</span>
                           </div>
-                          <div className="flex justify-between text-indigo-600">
-                            <span>Days Taken:</span>
-                            <span>{cumulativeDaysTaken}</span>
-                          </div>
+
                           <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
                             <span>Total Lessons:</span>
                             <span>{total}</span>
                           </div>
                           <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
                             <div className="flex justify-between">
-                              <span>Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}</span>
+                              <span>
+                                Started:{' '}
+                                {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}
+                              </span>
                               {pct === 100 ? (
-                                <span>Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}</span>
+                                <span>
+                                  Ended:{' '}
+                                  {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
+                                </span>
                               ) : (
-                                <span>Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}</span>
+                                <span>
+                                  Updated:{' '}
+                                  {bookUpdatedAt
+                                    ? new Date(bookUpdatedAt).toLocaleDateString()
+                                    : '—'}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1339,18 +1366,18 @@ const SyllabusProgressReport = ({ role, student }) => {
                         >
                           <div>
                             <div className="flex justify-between items-start mb-1.5 gap-2">
-                               <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
-                                 {lvl1}
-                               </span>
-                               <div className="flex items-center gap-1.5 shrink-0">
-                                 <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
-                                   {cumulativeDaysTaken} Days
-                                 </span>
-                                 <span className="font-black text-xs text-dark-soft">
-                                   {progressPct.toFixed(0)}%
-                                 </span>
-                               </div>
-                             </div>
+                              <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
+                                {lvl1}
+                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
+                                  {cumulativeDaysTaken} Days
+                                </span>
+                                <span className="font-black text-xs text-dark-soft">
+                                  {progressPct.toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
                             <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
                               <div
                                 className="h-1 rounded-full transition-all duration-300"
@@ -1359,11 +1386,13 @@ const SyllabusProgressReport = ({ role, student }) => {
                             </div>
                           </div>
                           <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
-                             <span>Completed: {completedCount}/{total}</span>
-                             {inProgressCount > 0 && (
-                               <span className="text-blue-600">In-progress: {inProgressCount}</span>
-                             )}
-                           </div>
+                            <span>
+                              Completed: {completedCount}/{total}
+                            </span>
+                            {inProgressCount > 0 && (
+                              <span className="text-blue-600">In-progress: {inProgressCount}</span>
+                            )}
+                          </div>
                         </div>
                       );
                     });
@@ -1376,7 +1405,9 @@ const SyllabusProgressReport = ({ role, student }) => {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-gray-200 text-dark-soft font-extrabold text-[10px] uppercase tracking-wider">
-                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">Lesson Details</th>
+                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">
+                        Lesson Details
+                      </th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[80px]">Progress</th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[85px]">Days Taken</th>
                       <th className="pb-2.5 font-extrabold text-center min-w-[90px]">Status</th>
@@ -1413,7 +1444,10 @@ const SyllabusProgressReport = ({ role, student }) => {
                       if (lessonsToRender.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={5} className="text-xs text-gray-400 font-semibold py-8 text-center">
+                            <td
+                              colSpan={5}
+                              className="text-xs text-gray-400 font-semibold py-8 text-center"
+                            >
                               {showNotStarted
                                 ? 'No lessons found for this book.'
                                 : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
@@ -1440,13 +1474,26 @@ const SyllabusProgressReport = ({ role, student }) => {
                                 {log && (
                                   <div className="flex items-center gap-2 mt-1 flex-wrap text-[9px] text-gray-400 font-bold">
                                     <span>
-                                      Started: {log.start_date ? new Date(log.start_date).toLocaleDateString() : '—'}
+                                      Started:{' '}
+                                      {log.start_date
+                                        ? new Date(log.start_date).toLocaleDateString()
+                                        : '—'}
                                     </span>
                                     <span className="w-1 h-1 rounded-full bg-gray-300"></span>
                                     {log.completion_percentage === 100 || status === 'completed' ? (
-                                      <span>Ended: {log.end_date ? new Date(log.end_date).toLocaleDateString() : '—'}</span>
+                                      <span>
+                                        Ended:{' '}
+                                        {log.end_date
+                                          ? new Date(log.end_date).toLocaleDateString()
+                                          : '—'}
+                                      </span>
                                     ) : (
-                                      <span>Last Updated: {log.updated_at ? new Date(log.updated_at).toLocaleDateString() : '—'}</span>
+                                      <span>
+                                        Last Updated:{' '}
+                                        {log.updated_at
+                                          ? new Date(log.updated_at).toLocaleDateString()
+                                          : '—'}
+                                      </span>
                                     )}
                                     {log.revision_counter > 0 && (
                                       <>
@@ -1549,7 +1596,9 @@ const SyllabusProgressReport = ({ role, student }) => {
                                           </div>
                                           {role !== 'parent' && (
                                             <button
-                                              onClick={() => handleDeleteClick(item, log, node, book)}
+                                              onClick={() =>
+                                                handleDeleteClick(item, log, node, book)
+                                              }
                                               className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
                                               title="Delete Log Entry"
                                             >
@@ -1725,7 +1774,10 @@ const SyllabusProgressReport = ({ role, student }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Class Filter"
-                    options={classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                    options={classes.map((c) => ({
+                      id: String(c.id),
+                      label: c.name || c.class_name,
+                    }))}
                     selected={cpFilterClasses}
                     onChange={(val) => {
                       setCpFilterClasses(val);
