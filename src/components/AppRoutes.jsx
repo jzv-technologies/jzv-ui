@@ -16,6 +16,7 @@ import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import SyllabusTracker from './portals/teacher/SyllabusTracker';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import ParentSyllabusView from './portals/parent/ParentSyllabusView';
+import LessonPlanner from './portals/teacher/LessonPlanner';
 import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
 import CandidatePortal from './portals/CandidatePortal';
 
@@ -128,6 +129,7 @@ export const AppRoutes = ({
               portalRouteFallback
             ) : userRoles.includes('admin') ? (
               <AdminPortal
+                user={user}
                 userRoles={userRoles}
                 subView={adminSubView}
                 onSetSubView={setAdminSubView}
@@ -241,8 +243,8 @@ export const AppRoutes = ({
                     titleKey: 'role_portal.view_timetable.title',
                     description: 'View weekly timetables by class or search schedules by teacher.',
                     icon: 'fa-calendar-alt',
-                    buttonColor: 'bg-emerald-600 text-white',
-                    shadow: 'shadow-emerald-200',
+                    buttonColor: 'bg-orange-600 text-white',
+                    shadow: 'shadow-orange-200',
                     onClick: () => setTeacherSubView('timetable'),
                   },
                   {
@@ -259,13 +261,22 @@ export const AppRoutes = ({
                     title: 'Syllabus Manager',
                     description: 'Manage syllabus books, units, chapters, and lessons.',
                     icon: 'fa-book-open',
-                    buttonColor: 'bg-emerald-600 text-white',
-                    shadow: 'shadow-emerald-200',
+                    buttonColor: 'bg-purple-600 text-white',
+                    shadow: 'shadow-purple-200',
                     onClick: () => setTeacherSubView('syllabus'),
                   },
                   {
+                    id: 'lesson-planner',
+                    title: 'Lesson Planner',
+                    description: 'Plan syllabus coverage by dates or academic weeks.',
+                    icon: 'fa-calendar-check',
+                    buttonColor: 'bg-pink-600 text-white',
+                    shadow: 'shadow-pink-200',
+                    onClick: () => setTeacherSubView('lesson-planner'),
+                  },
+                  {
                     id: 'syllabus-tracker',
-                    title: 'Daily Syllabus Tracker',
+                    title: 'Syllabus Tracker',
                     description:
                       'Submit daily reports on progress, mark lessons completed, and log revisions.',
                     icon: 'fa-list-check',
@@ -289,8 +300,15 @@ export const AppRoutes = ({
               >
                 {teacherSubView === 'timetable' && <TeacherTimetableViewer user={user} />}
                 {teacherSubView === 'students' && <TeacherStudentsViewer />}
-                {teacherSubView === 'syllabus' && <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />}
-                {teacherSubView === 'syllabus-tracker' && <SyllabusTracker user={user} teacherRecord={teacherRecord} />}
+                {teacherSubView === 'syllabus' && (
+                  <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />
+                )}
+                {teacherSubView === 'lesson-planner' && (
+                  <LessonPlanner user={user} teacherRecord={teacherRecord} />
+                )}
+                {teacherSubView === 'syllabus-tracker' && (
+                  <SyllabusTracker user={user} teacherRecord={teacherRecord} />
+                )}
                 {teacherSubView === 'tickets' && (
                   <ReporterTicketsView user={user} fullName={fullName} />
                 )}

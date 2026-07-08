@@ -22,9 +22,9 @@ let syllabusTrackerCache = {
   bookClasses: [],
   classLogs: {},
   classLessons: {},
-  allTrackers: [],
   allLogs: [],
   allLessons: [],
+  todaysPlans: [],
 };
 
 const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = 'All' }) => {
@@ -201,6 +201,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   );
   const [allLessons, setAllLessons] = useState(() =>
     isCacheValid ? syllabusTrackerCache.allLessons || [] : []
+  );
+  const [todaysPlans, setTodaysPlans] = useState(() =>
+    isCacheValid ? syllabusTrackerCache.todaysPlans || [] : []
   );
 
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
@@ -389,6 +392,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           { data: dbClassifications },
           { data: dbBookClasses },
           { data: dbAllLessons },
+          { data: dbPlans },
         ] = await Promise.all([
           supabase.from('classes').select('*'),
           supabase.from('subjects').select('*'),
@@ -396,7 +400,8 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           supabase.from('syllabus_books').select('*'),
           supabase.from('subject_classifications').select('*'),
           supabase.from('syllabus_book_classes').select('*'),
-          supabase.from('syllabus_book_lessons').select('id, book_id'),
+          supabase.from('syllabus_book_lessons').select('*'),
+          supabase.from('lesson_plans').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').in('status', ['planned']),
         ]);
 
         const fetchedClasses = dbClasses || [];
@@ -406,6 +411,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         const fetchedClassifications = dbClassifications || [];
         const fetchedBookClasses = dbBookClasses || [];
         const fetchedAllLessons = dbAllLessons || [];
+        const fetchedPlans = dbPlans || [];
 
         // Fetch logs for teacher's active classes
         const assignedClassIds = fetchedAssignments.map((a) => String(a.class_id));
@@ -425,6 +431,11 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         setAllLessons(fetchedAllLessons);
         setAllLogs(fetchedAllLogs);
 
+        const todayStr = getLocalDateStr(0);
+        // We include today's plans, PAST DUE plans (so they can be carried forward or completed), and weekly plans
+        const activePlans = fetchedPlans.filter(p => p.target_date === null || p.target_date <= todayStr);
+        setTodaysPlans(activePlans);
+
         syllabusTrackerCache.classes = fetchedClasses;
         syllabusTrackerCache.subjects = fetchedSubjects;
         syllabusTrackerCache.assignments = fetchedAssignments;
@@ -433,6 +444,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         syllabusTrackerCache.bookClasses = fetchedBookClasses;
         syllabusTrackerCache.allLessons = fetchedAllLessons;
         syllabusTrackerCache.allLogs = fetchedAllLogs;
+        syllabusTrackerCache.todaysPlans = activePlans;
 
         const filteredClasses = fetchedClasses.filter((c) =>
           assignedClassIds.includes(String(c.id))
@@ -1706,6 +1718,109 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     );
   };
 
+  const handleSubmitPlannedLesson = (plan) => {
+    setAwClassId(String(plan.class_id));
+    setAwClassificationId(String(plan.subject?.classification_id || ''));
+    setAwSubjectId(String(plan.subject_id));
+    setAwBookId(String(plan.book_id));
+    setAwLevel1(plan.lesson?.level1 || '');
+    setAwLevel2(plan.lesson?.level2 || '');
+    setAwLevel3(plan.lesson?.level3 || '');
+    setAwStatus('completed');
+    setAwProgress(100);
+    setAwDate(getLocalDateStr(0)); // today
+    
+    // Auto load book data so the modal resolves it
+    loadAwBookData(plan.book_id);
+    
+    setIsAddWorkModalOpen(true);
+  };
+
+  const handleCarryForward = async (plan) => {
+    try {
+      setMyWorkLoading(true);
+      // Increment carry_forward_count, and push target_date to tomorrow (or if it's weekly, just increment week)
+      let updateData = { carry_forward_count: (plan.carry_forward_count || 0) + 1 };
+      if (plan.target_date) {
+        const d = new Date(plan.target_date);
+        d.setDate(d.getDate() + 1);
+        if (d.getDay() === 0) d.setDate(d.getDate() + 1); // skip sunday
+        updateData.target_date = d.toISOString().split('T')[0];
+      } else if (plan.academic_week) {
+        updateData.academic_week = plan.academic_week + 1;
+      }
+      
+      const { data, error } = await supabase
+        .from('lesson_plans')
+        .update(updateData)
+        .eq('id', plan.id)
+        .select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)');
+      if (error) throw error;
+      
+      if (plan.target_date) {
+        await supabase.from('lesson_plan_carry_forwards').insert([{
+           plan_id: plan.id,
+           teacher_id: teacher?.id,
+           original_date: plan.target_date,
+           new_date: updateData.target_date
+        }]);
+      }
+
+      showToast('Lesson carried forward', 'success');
+      
+      const newPlans = todaysPlans.filter(p => p.id !== plan.id);
+      setTodaysPlans(newPlans);
+      syllabusTrackerCache.todaysPlans = newPlans;
+    } catch (e) {
+      showToast('Failed to carry forward: ' + e.message, 'error');
+    } finally {
+      setMyWorkLoading(false);
+    }
+  };
+
+  const renderPlannedForToday = () => {
+    if (!todaysPlans || todaysPlans.length === 0) return null;
+    
+    return (
+      <div className="mb-8">
+        <h3 className="text-sm font-black text-dark-primary mb-4 flex items-center gap-2">
+          <i className="fas fa-calendar-check text-brand-primary"></i> Planned for Today
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {todaysPlans.map(plan => {
+             const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3].filter(Boolean).join(' > ');
+             return (
+               <div key={plan.id} className="bg-white border border-brand-primary/20 rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                  <div>
+                     <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-extrabold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full uppercase">
+                           {plan.class?.name || plan.class?.class_name}
+                        </span>
+                        {plan.carry_forward_count > 0 && (
+                           <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full" title="Carried Forward">
+                              CF x{plan.carry_forward_count}
+                           </span>
+                        )}
+                     </div>
+                     <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
+                     <p className="text-[11px] text-gray-500 font-semibold mb-3">{plan.subject?.name} • {plan.book?.name}</p>
+                  </div>
+                  <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
+                     <button onClick={() => handleSubmitPlannedLesson(plan)} className="flex-1 py-1.5 bg-brand-primary text-white text-[10px] font-bold rounded-lg hover:bg-brand-primary/90 transition-colors cursor-pointer">
+                        <i className="fas fa-check mr-1"></i> Submit Log
+                     </button>
+                     <button onClick={() => handleCarryForward(plan)} className="flex-1 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors cursor-pointer">
+                        <i className="fas fa-forward mr-1"></i> Carry Forward
+                     </button>
+                  </div>
+               </div>
+             );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   // ─── Render: My Work Tab ──────────────────────────────────────────
 
   const renderMyWork = () => {
@@ -2647,7 +2762,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           )}
         </div>
 
-        {activeTab === 'teacher-activity' && renderMyWork()}
+        {activeTab === 'teacher-activity' && (
+          <>
+            {renderPlannedForToday()}
+            {renderMyWork()}
+          </>
+        )}
         {activeTab === 'class-progress' && renderSyllabusProgress()}
       </div>
 

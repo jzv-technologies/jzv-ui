@@ -115,6 +115,8 @@ const SyllabusProgressReport = ({ role, student }) => {
   const [bookTrackers, setBookTrackers] = useState([]);
   const [allLogs, setAllLogs] = useState([]);
   const [allLessons, setAllLessons] = useState([]);
+  const [lessonPlans, setLessonPlans] = useState([]);
+  const [carryForwards, setCarryForwards] = useState([]);
 
   // Active Tab: 'daily-activity' | 'book-progress' | 'class-progress'
   const [activeTab, setActiveTab] = useState(() =>
@@ -186,6 +188,8 @@ const SyllabusProgressReport = ({ role, student }) => {
         resTrackers,
         resLogs,
         resLessons,
+        resPlans,
+        resCarryForwards
       ] = await Promise.all([
         supabase.from('classes').select('*').order('id', { ascending: true }),
         supabase.from('subjects').select('*').order('name', { ascending: true }),
@@ -201,6 +205,8 @@ const SyllabusProgressReport = ({ role, student }) => {
         supabase.from('book_tracker').select('*'),
         supabase.from('lesson_tracker_log').select('*'),
         supabase.from('syllabus_book_lessons').select('id, book_id'),
+        supabase.from('lesson_plans').select('*'),
+        supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
       if (resClasses.error) throw resClasses.error;
@@ -213,6 +219,8 @@ const SyllabusProgressReport = ({ role, student }) => {
       if (resTrackers.error) throw resTrackers.error;
       if (resLogs.error) throw resLogs.error;
       if (resLessons.error) throw resLessons.error;
+      if (resPlans.error) throw resPlans.error;
+      if (resCarryForwards.error) throw resCarryForwards.error;
 
       const dbClasses = resClasses.data || [];
       const dbSubjects = resSubjects.data || [];
@@ -224,6 +232,8 @@ const SyllabusProgressReport = ({ role, student }) => {
       const dbTrackers = resTrackers.data || [];
       const dbLogs = resLogs.data || [];
       const dbLessons = resLessons.data || [];
+      const dbPlans = resPlans.data || [];
+      const dbCarryForwards = resCarryForwards.data || [];
 
       let fetchedClasses = dbClasses;
       if (role === 'parent' && student?.class_id) {
@@ -258,6 +268,8 @@ const SyllabusProgressReport = ({ role, student }) => {
       setBookTrackers(dbTrackers);
       setAllLogs(dbLogs);
       setAllLessons(dbLessons);
+      setLessonPlans(dbPlans);
+      setCarryForwards(dbCarryForwards);
     } catch (err) {
       console.warn('SyllabusProgressReport loadData failed:', err.message);
       loadLocalFallback();
@@ -734,6 +746,142 @@ const SyllabusProgressReport = ({ role, student }) => {
           })
         )}
       </div>
+    );
+  };
+
+  const renderUpcomingLessons = () => {
+    // get plans for student's class that have target_date >= today
+    const todayStr = getLocalDateStr(0);
+    const upcoming = lessonPlans.filter(p => 
+      String(p.class_id) === String(student?.class_id) &&
+      p.target_date && p.target_date >= todayStr &&
+      p.status !== 'completed'
+    ).sort((a, b) => a.target_date.localeCompare(b.target_date));
+
+    if (upcoming.length === 0) {
+      return (
+         <div className="text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
+            No upcoming lessons planned.
+         </div>
+      );
+    }
+
+    return (
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+         {upcoming.map(plan => {
+             const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3].filter(Boolean).join(' > ');
+             return (
+               <div key={plan.id} className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                  <div className="flex justify-between items-start mb-2">
+                     <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                        {new Date(plan.target_date).toLocaleDateString()}
+                     </span>
+                     {plan.carry_forward_count > 0 && (
+                        <span className="text-[10px] text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">
+                           Delayed
+                        </span>
+                     )}
+                  </div>
+                  <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
+                  <p className="text-[11px] text-gray-500 font-semibold">{plan.subject?.name} • {plan.book?.name}</p>
+               </div>
+             )
+         })}
+       </div>
+    );
+  };
+
+  const renderTeacherAdherence = () => {
+    // Determine time boundaries
+    const now = new Date();
+    const oneWeekAgo = new Date(now); oneWeekAgo.setDate(now.getDate() - 7);
+    const oneMonthAgo = new Date(now); oneMonthAgo.setDate(now.getDate() - 30);
+    const oneYearAgo = new Date(now); oneYearAgo.setDate(now.getDate() - 365);
+
+    // group plans by teacher
+    const teacherStats = teachers.map(t => {
+       const tPlans = lessonPlans.filter(p => String(p.teacher_id) === String(t.id));
+       const totalPlans = tPlans.length;
+       const completedPlans = tPlans.filter(p => p.status === 'completed').length;
+       
+       const tCarryForwards = carryForwards.filter(c => String(c.teacher_id) === String(t.id));
+       
+       const cfWeek = tCarryForwards.filter(c => new Date(c.created_at) >= oneWeekAgo).length;
+       const cfMonth = tCarryForwards.filter(c => new Date(c.created_at) >= oneMonthAgo).length;
+       const cfYear = tCarryForwards.filter(c => new Date(c.created_at) >= oneYearAgo).length;
+       
+       const carryForwardTotal = tCarryForwards.length;
+       
+       const accuracy = totalPlans > 0 ? Math.max(0, 100 - (carryForwardTotal / totalPlans * 20)) : 0; // heuristic: 20% penalty per CF
+       return {
+         ...t,
+         totalPlans,
+         completedPlans,
+         carryForwardTotal,
+         cfWeek,
+         cfMonth,
+         cfYear,
+         accuracy: totalPlans > 0 ? accuracy.toFixed(0) : '-',
+       };
+    }).sort((a, b) => b.totalPlans - a.totalPlans);
+
+    return (
+       <div className="bg-white border rounded-2xl shadow-sm p-4 text-left overflow-x-auto">
+         <div className="mb-4 flex items-center justify-between">
+           <h3 className="font-bold text-gray-700 text-sm">Teacher Planning Adherence</h3>
+           <div className="text-xs text-gray-500 font-semibold bg-gray-50 px-3 py-1.5 rounded-full border">
+              Metrics derived from automated Carry-Forward tracking
+           </div>
+         </div>
+         <table className="w-full text-left border-collapse text-xs">
+           <thead>
+             <tr className="bg-gray-50 border-y border-light-border text-dark-muted font-extrabold text-[10px] uppercase tracking-wider">
+               <th className="px-4 py-3 border-r">Teacher</th>
+               <th className="px-4 py-3 text-center border-r" colSpan="2">Overall Planning</th>
+               <th className="px-4 py-3 text-center border-r" colSpan="4">Carry Forward Analytics</th>
+               <th className="px-4 py-3 text-center">Health</th>
+             </tr>
+             <tr className="bg-gray-50 border-b border-light-border text-dark-muted font-bold text-[9px] uppercase tracking-wider">
+               <th className="px-4 py-2 border-r"></th>
+               <th className="px-4 py-2 text-center text-gray-500">Total Planned</th>
+               <th className="px-4 py-2 text-center text-gray-500 border-r">Completed</th>
+               
+               <th className="px-4 py-2 text-center text-orange-600/80">7 Days</th>
+               <th className="px-4 py-2 text-center text-orange-600/80">30 Days</th>
+               <th className="px-4 py-2 text-center text-orange-600/80">Year</th>
+               <th className="px-4 py-2 text-center text-orange-700 border-r">Lifetime Total</th>
+               
+               <th className="px-4 py-2 text-center">Accuracy %</th>
+             </tr>
+           </thead>
+           <tbody className="divide-y divide-gray-100">
+             {teacherStats.length === 0 ? (
+               <tr><td colSpan="8" className="text-center py-8 text-gray-500">No teacher data.</td></tr>
+             ) : (
+               teacherStats.map(stat => (
+                 <tr key={stat.id} className="hover:bg-gray-50/50">
+                   <td className="px-4 py-3 font-bold text-dark-primary border-r">{stat.name}</td>
+                   <td className="px-4 py-3 text-center text-gray-600">{stat.totalPlans}</td>
+                   <td className="px-4 py-3 text-center text-emerald-600 font-bold border-r">{stat.completedPlans}</td>
+                   
+                   <td className="px-4 py-3 text-center text-orange-500 font-semibold">{stat.cfWeek}</td>
+                   <td className="px-4 py-3 text-center text-orange-500 font-semibold">{stat.cfMonth}</td>
+                   <td className="px-4 py-3 text-center text-orange-500 font-semibold">{stat.cfYear}</td>
+                   <td className="px-4 py-3 text-center text-orange-600 font-bold border-r">{stat.carryForwardTotal}</td>
+                   
+                   <td className="px-4 py-3 text-center bg-gray-50/30">
+                     {stat.accuracy === '-' ? <span className="text-gray-400">—</span> : (
+                       <span className={`px-2 py-0.5 rounded font-bold ${stat.accuracy >= 80 ? 'bg-emerald-100 text-emerald-700' : stat.accuracy >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                          {stat.accuracy}%
+                       </span>
+                     )}
+                   </td>
+                 </tr>
+               ))
+             )}
+           </tbody>
+         </table>
+       </div>
     );
   };
 
@@ -1684,6 +1832,7 @@ const SyllabusProgressReport = ({ role, student }) => {
               {role === 'parent' ? (
                 [
                   { key: 'today-class', label: "Today's Class", icon: 'fa-calendar-day' },
+                  { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
                   { key: 'two-weeks-class', label: "Last 2 Weeks Classes", icon: 'fa-calendar-week' },
                   { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
                 ].map((tab) => (
@@ -1703,6 +1852,7 @@ const SyllabusProgressReport = ({ role, student }) => {
               ) : (
                 [
                   { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
+                  { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
                   { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
                 ].map((tab) => (
                   <button
@@ -1843,6 +1993,8 @@ const SyllabusProgressReport = ({ role, student }) => {
 
         {(activeTab === 'daily-activity' || activeTab === 'today-class' || activeTab === 'two-weeks-class') &&
           renderDailyActivity()}
+        {activeTab === 'upcoming-lessons' && renderUpcomingLessons()}
+        {activeTab === 'teacher-adherence' && renderTeacherAdherence()}
         {activeTab === 'class-progress' && renderSyllabusProgress()}
       </div>
 

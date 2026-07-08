@@ -8,12 +8,13 @@ import TimetableManager from './admin/timetable/TimetableManager';
 import AdminStudentsView from './admin/AdminStudentsView';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
+import LessonPlanner from './teacher/LessonPlanner';
 import ConfirmModal from '../ConfirmModal';
 import { showToast } from '../../utils/toast';
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
-const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
+const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -138,7 +139,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
             name: fullName,
             auth_id: userId,
             is_active: true,
-          }
+          },
         ])
         .select();
 
@@ -147,7 +148,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
 
       // 2. Update the user's role to include Teacher role (8)
       const user = users.find((u) => String(u.user_id) === String(userId));
-      const currentRole = user ? (parseInt(user.role, 10) || 0) : 0;
+      const currentRole = user ? parseInt(user.role, 10) || 0 : 0;
       const newRoleSum = String(currentRole | 8);
 
       const { error: roleErr } = await supabase.from('user_roles').upsert(
@@ -165,7 +166,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
         try {
           const parsed = JSON.parse(raw);
           const localTeachers = parsed.teachers || [];
-          const nextTeachers = localTeachers.map((t) => 
+          const nextTeachers = localTeachers.map((t) =>
             String(t.auth_id) === String(userId) ? { ...t, auth_id: null } : t
           );
           nextTeachers.push({
@@ -174,7 +175,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
             is_male: true,
             auth_id: userId,
             is_active: true,
-            subjects: []
+            subjects: [],
           });
           parsed.teachers = nextTeachers;
           localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
@@ -435,8 +436,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       title: 'Syllabus Manager',
       description: 'Manage curriculum nodes, subjects, books, units, chapters, and lessons.',
       icon: 'fa-book-open',
-      buttonColor: 'bg-emerald-600 text-white',
-      shadow: 'shadow-emerald-200',
+      buttonColor: 'bg-purple-600 text-white',
+      shadow: 'shadow-purple-200',
       onClick: () => onSetSubView('syllabus'),
     },
     {
@@ -447,6 +448,15 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
       onClick: () => onSetSubView('syllabus-report'),
+    },
+    {
+      id: 'lesson-planner',
+      title: 'Lesson Planner',
+      description: 'View and manage lesson plans across all classes, subjects, and teachers.',
+      icon: 'fa-calendar-check',
+      buttonColor: 'bg-pink-600 text-white',
+      shadow: 'shadow-pink-200',
+      onClick: () => onSetSubView('lesson-planner'),
     },
   ];
 
@@ -500,6 +510,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView }) => {
       {/* Syllabus Progress Report view */}
       {subView === 'syllabus-report' && <SyllabusProgressReport />}
 
+      {/* Lesson Planner view */}
+      {subView === 'lesson-planner' && <LessonPlanner role="admin" user={user} />}
 
       <ConfirmModal
         isOpen={confirmConfig !== null}
