@@ -13,12 +13,12 @@ import TeacherTimetableViewer from './portals/teacher/TeacherTimetableViewer';
 import TeacherStudentsViewer from './portals/teacher/TeacherStudentsViewer';
 import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
 import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
-import SyllabusTracker from './portals/teacher/SyllabusTracker';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import ParentSyllabusView from './portals/parent/ParentSyllabusView';
-import LessonPlanner from './portals/teacher/LessonPlanner';
+import LessonManager from './portals/teacher/LessonManager/LessonManager';
 import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
 import CandidatePortal from './portals/CandidatePortal';
+import SyllabusTracker from './portals/teacher/SyllabusTracker';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -197,13 +197,13 @@ export const AppRoutes = ({
                     onClick: () => setParentSubView('tickets'),
                   },
                   {
-                    id: 'syllabus-progress',
+                    id: 'progress-tracker',
                     title: 'Syllabus Progress',
                     description: "View syllabus progress and activity logs for your child's class.",
                     icon: 'fa-book-reader',
                     buttonColor: 'bg-purple-600 text-white',
                     shadow: 'shadow-purple-200',
-                    onClick: () => setParentSubView('syllabus-progress'),
+                    onClick: () => setParentSubView('progress-tracker'),
                   },
                 ])}
                 subView={parentSubView}
@@ -214,7 +214,7 @@ export const AppRoutes = ({
                 {parentSubView === 'tickets' && (
                   <ReporterTicketsView user={user} fullName={fullName} />
                 )}
-                {parentSubView === 'syllabus-progress' && (
+                {parentSubView === 'progress-tracker' && (
                   <SyllabusProgressReport role="parent" student={user?.student} />
                 )}
               </RolePortal>
@@ -268,21 +268,22 @@ export const AppRoutes = ({
                   {
                     id: 'lesson-planner',
                     title: 'Lesson Planner',
-                    description: 'Plan syllabus coverage by dates or academic weeks.',
+                    description:
+                      'Plan, track, and log syllabus progress all in one unified dashboard.',
                     icon: 'fa-calendar-check',
-                    buttonColor: 'bg-pink-600 text-white',
-                    shadow: 'shadow-pink-200',
+                    buttonColor: 'bg-indigo-600 text-white',
+                    shadow: 'shadow-indigo-200',
                     onClick: () => setTeacherSubView('lesson-planner'),
                   },
                   {
-                    id: 'syllabus-tracker',
-                    title: 'Syllabus Tracker',
+                    id: 'progress-tracker',
+                    title: 'Progress Tracker',
                     description:
-                      'Submit daily reports on progress, mark lessons completed, and log revisions.',
-                    icon: 'fa-list-check',
-                    buttonColor: 'bg-blue-600 text-white',
-                    shadow: 'shadow-blue-200',
-                    onClick: () => setTeacherSubView('syllabus-tracker'),
+                      'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
+                    icon: 'fa-graduation-cap',
+                    buttonColor: 'bg-teal-600 text-white',
+                    shadow: 'shadow-teal-200',
+                    onClick: () => setTeacherSubView('progress-tracker'),
                   },
                   {
                     id: 'track-tickets',
@@ -304,9 +305,9 @@ export const AppRoutes = ({
                   <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />
                 )}
                 {teacherSubView === 'lesson-planner' && (
-                  <LessonPlanner user={user} teacherRecord={teacherRecord} />
+                  <LessonManager user={user} teacherRecord={teacherRecord} />
                 )}
-                {teacherSubView === 'syllabus-tracker' && (
+                {teacherSubView === 'progress-tracker' && (
                   <SyllabusTracker user={user} teacherRecord={teacherRecord} />
                 )}
                 {teacherSubView === 'tickets' && (

@@ -8,7 +8,7 @@ import TimetableManager from './admin/timetable/TimetableManager';
 import AdminStudentsView from './admin/AdminStudentsView';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
-import LessonPlanner from './teacher/LessonPlanner';
+import LessonManager from './teacher/LessonManager/LessonManager';
 import ConfirmModal from '../ConfirmModal';
 import { showToast } from '../../utils/toast';
 
@@ -451,11 +451,11 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     },
     {
       id: 'lesson-planner',
-      title: 'Lesson Planner',
+      title: 'Lesson PLanner',
       description: 'View and manage lesson plans across all classes, subjects, and teachers.',
       icon: 'fa-calendar-check',
-      buttonColor: 'bg-pink-600 text-white',
-      shadow: 'shadow-pink-200',
+      buttonColor: 'bg-indigo-600 text-white',
+      shadow: 'shadow-indigo-200',
       onClick: () => onSetSubView('lesson-planner'),
     },
   ];
@@ -510,8 +510,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {/* Syllabus Progress Report view */}
       {subView === 'syllabus-report' && <SyllabusProgressReport />}
 
-      {/* Lesson Planner view */}
-      {subView === 'lesson-planner' && <LessonPlanner role="admin" user={user} />}
+      {/* Lesson Manager view */}
+      {subView === 'lesson-planner' && <LessonManager role="admin" user={user} />}
 
       <ConfirmModal
         isOpen={confirmConfig !== null}

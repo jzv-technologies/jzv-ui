@@ -401,7 +401,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           supabase.from('subject_classifications').select('*'),
           supabase.from('syllabus_book_classes').select('*'),
           supabase.from('syllabus_book_lessons').select('*'),
-          supabase.from('lesson_plans').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').in('status', ['planned']),
+          supabase.from('lesson_progress').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').eq('status', 'planned'),
         ]);
 
         const fetchedClasses = dbClasses || [];
@@ -417,8 +417,13 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         const assignedClassIds = fetchedAssignments.map((a) => String(a.class_id));
         const { data: dbAllLogs } =
           assignedClassIds.length > 0
-            ? await supabase.from('lesson_tracker_log').select('*').in('class_id', assignedClassIds)
+            ? await supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').in('class_id', assignedClassIds)
             : { data: [] };
+
+        const mappedAllLogs = (dbAllLogs || []).map(log => ({
+          ...log,
+          current_status: log.status,
+        }));
 
         const fetchedAllLogs = dbAllLogs || [];
 
@@ -429,11 +434,11 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         setClassifications(fetchedClassifications);
         setBookClasses(fetchedBookClasses);
         setAllLessons(fetchedAllLessons);
-        setAllLogs(fetchedAllLogs);
+        setAllLogs(mappedAllLogs);
 
         const todayStr = getLocalDateStr(0);
         // We include today's plans, PAST DUE plans (so they can be carried forward or completed), and weekly plans
-        const activePlans = fetchedPlans.filter(p => p.target_date === null || p.target_date <= todayStr);
+        const activePlans = fetchedPlans.filter(p => p.target_start_date === null || p.target_start_date <= todayStr);
         setTodaysPlans(activePlans);
 
         syllabusTrackerCache.classes = fetchedClasses;
@@ -443,7 +448,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         syllabusTrackerCache.classifications = fetchedClassifications;
         syllabusTrackerCache.bookClasses = fetchedBookClasses;
         syllabusTrackerCache.allLessons = fetchedAllLessons;
-        syllabusTrackerCache.allLogs = fetchedAllLogs;
+        syllabusTrackerCache.allLogs = mappedAllLogs;
         syllabusTrackerCache.todaysPlans = activePlans;
 
         const filteredClasses = fetchedClasses.filter((c) =>
@@ -547,12 +552,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       }
 
       let query = supabase
-        .from('lesson_tracker_log_items')
+        .from('lesson_progress_items')
         .select(
           `
           *,
           teacher:teachers(name),
-          log:lesson_tracker_log(
+          log:lesson_progress(
             *,
             lesson:syllabus_book_lessons(*)
           )
@@ -626,11 +631,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     fetchMyWorkEntries,
   ]);
 
-  const fetchTeacherProgressData = async () => {
+  const fetchTeacherProgressData = async (overrideCoverMode = null) => {
     setProgressLoading(true);
     try {
+      const isCover = overrideCoverMode !== null ? overrideCoverMode : coverMode;
       const progressClasses =
-        coverMode || assignments.length === 0
+        isCover || assignments.length === 0
           ? classes
           : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
       const classIds = progressClasses.map((c) => c.id);
@@ -650,9 +656,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       const [trackerRes, logsRes] = await Promise.all([
         supabase.from('book_tracker').select('*').in('class_id', classIds),
         supabase
-          .from('lesson_tracker_log')
+          .from('lesson_progress')
           .select(
-            'lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
           )
           .in('class_id', classIds),
       ]);
@@ -660,11 +666,16 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       if (trackerRes.error) throw trackerRes.error;
       if (logsRes.error) throw logsRes.error;
 
+      const mappedLogs = (logsRes.data || []).map(log => ({
+        ...log,
+        current_status: log.status,
+      }));
+
       setAllTrackers(trackerRes.data || []);
-      setAllLogs(logsRes.data || []);
+      setAllLogs(mappedLogs);
 
       syllabusTrackerCache.allTrackers = trackerRes.data || [];
-      syllabusTrackerCache.allLogs = logsRes.data || [];
+      syllabusTrackerCache.allLogs = mappedLogs;
     } catch (err) {
       console.warn('Failed to fetch teacher progress data:', err.message);
     } finally {
@@ -688,41 +699,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     if (activeTab === 'teacher-activity') {
       await fetchMyWorkEntries();
     } else if (activeTab === 'class-progress') {
-      setProgressLoading(true);
-      try {
-        const progressClasses =
-          checked || assignments.length === 0
-            ? classes
-            : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
-        const classIds = progressClasses.map((c) => c.id);
-
-        if (classIds.length > 0) {
-          const bookIds = bookClasses
-            .filter((bc) => classIds.includes(bc.class_id))
-            .map((bc) => bc.book_id);
-
-          const [trackerRes, logsRes] = await Promise.all([
-            supabase.from('book_tracker').select('*').in('class_id', classIds),
-            supabase
-              .from('lesson_tracker_log')
-              .select(
-                'lesson_id, class_id, current_status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
-              )
-              .in('class_id', classIds),
-          ]);
-
-          if (!trackerRes.error && !logsRes.error) {
-            setAllTrackers(trackerRes.data || []);
-            setAllLogs(logsRes.data || []);
-
-            syllabusTrackerCache.allTrackers = trackerRes.data || [];
-            syllabusTrackerCache.allLogs = logsRes.data || [];
-          }
-        }
-      } catch (e) {
-      } finally {
-        setProgressLoading(false);
-      }
+      await fetchTeacherProgressData(checked);
       setProgressExpandedBook(null);
       setProgressExpandedClass(null);
     }
@@ -910,8 +887,8 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
       try {
         const { data, error } = await supabase
-          .from('lesson_tracker_log')
-          .select('completion_percentage, current_status')
+          .from('lesson_progress')
+          .select('completion_percentage, status')
           .eq('class_id', Number(awClassId))
           .eq('lesson_id', Number(targetLesson.id))
           .maybeSingle();
@@ -921,7 +898,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         console.log('[Add Work Progress] Query returned:', data);
 
         const maxProgress = data ? Number(data.completion_percentage || 0) : 0;
-        const currentStatus = data ? data.current_status || 'in_progress' : 'in_progress';
+        const currentStatus = data ? data.status || 'in_progress' : 'in_progress';
 
         setPreviousMaxProgress(maxProgress);
         setAwProgress(maxProgress);
@@ -986,10 +963,10 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
   // ─── Core Actions ──────────────────────────────────────────────────
 
-  const ensureLessonLog = async (classId, lessonId, date) => {
+  const ensureLessonLog = async (classId, lessonId, date, subjectId, bookId) => {
     // Check existing
     const { data: existing } = await supabase
-      .from('lesson_tracker_log')
+      .from('lesson_progress')
       .select('*')
       .eq('class_id', classId)
       .eq('lesson_id', lessonId)
@@ -997,14 +974,16 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     if (existing) return existing;
 
     const { data, error } = await supabase
-      .from('lesson_tracker_log')
+      .from('lesson_progress')
       .upsert(
         [
           {
+            id: crypto.randomUUID(),
             class_id: classId,
+            subject_id: subjectId,
+            book_id: bookId,
             lesson_id: lessonId,
-            start_date: date,
-            current_status: 'not_started',
+            status: 'not_started',
           },
         ],
         { onConflict: 'class_id,lesson_id' }
@@ -1014,10 +993,10 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     return data[0];
   };
 
-  const addLogItem = async (ltLogId, date, teacherId, status, progress, comments, isRevision) => {
-    const { error } = await supabase.from('lesson_tracker_log_items').insert([
+  const addLogItem = async (progressId, date, teacherId, status, progress, comments, isRevision) => {
+    const { error } = await supabase.from('lesson_progress_items').insert([
       {
-        lt_log_id: ltLogId,
+        progress_id: progressId,
         date: date,
         teacher_id: teacherId,
         current_status: status,
@@ -1445,7 +1424,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
     setSubmitting(true);
     try {
-      const log = await ensureLessonLog(awClassId, targetLesson.id, awDate);
+      const log = await ensureLessonLog(awClassId, targetLesson.id, awDate, awSubjectId, targetLesson.book_id);
       await addLogItem(
         log.id,
         awDate,
@@ -1517,7 +1496,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     setMyWorkLoading(true);
     try {
       const { error } = await supabase
-        .from('lesson_tracker_log_items')
+        .from('lesson_progress_items')
         .delete()
         .eq('id', deleteModalConfig.id);
       if (error) throw error;
@@ -1572,7 +1551,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
@@ -1594,7 +1573,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         return false;
       });
 
-      const relevantLogs = (logs || []).filter((l) =>
+      const mappedLogs = (logs || []).map(log => ({
+        ...log,
+        current_status: log.status,
+      }));
+
+      const relevantLogs = mappedLogs.filter((l) =>
         bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
       );
 
@@ -1612,9 +1596,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     if (!logItemsMap[logId]) {
       try {
         const { data, error } = await supabase
-          .from('lesson_tracker_log_items')
+          .from('lesson_progress_items')
           .select('*, teacher:teachers(name)')
-          .eq('lt_log_id', logId)
+          .eq('progress_id', logId)
           .order('date', { ascending: false });
         if (error) throw error;
         setLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
@@ -1638,7 +1622,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
@@ -1660,7 +1644,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         return false;
       });
 
-      const relevantLogs = (logs || []).filter((l) =>
+      const mappedLogs = (logs || []).map(log => ({
+        ...log,
+        current_status: log.status,
+      }));
+
+      const relevantLogs = mappedLogs.filter((l) =>
         bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
       );
 
@@ -1678,9 +1667,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     if (!myProgressLogItemsMap[logId]) {
       try {
         const { data, error } = await supabase
-          .from('lesson_tracker_log_items')
+          .from('lesson_progress_items')
           .select('*, teacher:teachers(name)')
-          .eq('lt_log_id', logId)
+          .eq('progress_id', logId)
           .order('date', { ascending: false });
         if (error) throw error;
         setMyProgressLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
@@ -1739,31 +1728,41 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   const handleCarryForward = async (plan) => {
     try {
       setMyWorkLoading(true);
-      // Increment carry_forward_count, and push target_date to tomorrow (or if it's weekly, just increment week)
+      // Increment carry_forward_count, and push target_start_date to tomorrow (or if it's weekly, just increment week)
       let updateData = { carry_forward_count: (plan.carry_forward_count || 0) + 1 };
-      if (plan.target_date) {
-        const d = new Date(plan.target_date);
+      if (plan.target_start_date) {
+        const d = new Date(plan.target_start_date);
         d.setDate(d.getDate() + 1);
         if (d.getDay() === 0) d.setDate(d.getDate() + 1); // skip sunday
-        updateData.target_date = d.toISOString().split('T')[0];
+        updateData.target_start_date = d.toISOString().split('T')[0];
+        if (plan.target_end_date) {
+          const dEnd = new Date(plan.target_end_date);
+          dEnd.setDate(dEnd.getDate() + 1);
+          if (dEnd.getDay() === 0) dEnd.setDate(dEnd.getDate() + 1);
+          updateData.target_end_date = dEnd.toISOString().split('T')[0];
+        }
       } else if (plan.academic_week) {
         updateData.academic_week = plan.academic_week + 1;
       }
       
       const { data, error } = await supabase
-        .from('lesson_plans')
+        .from('lesson_progress')
         .update(updateData)
         .eq('id', plan.id)
         .select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)');
       if (error) throw error;
       
-      if (plan.target_date) {
-        await supabase.from('lesson_plan_carry_forwards').insert([{
-           plan_id: plan.id,
-           teacher_id: teacher?.id,
-           original_date: plan.target_date,
-           new_date: updateData.target_date
-        }]);
+      if (plan.target_start_date) {
+        try {
+          await supabase.from('lesson_plan_carry_forwards').insert([{
+             plan_id: plan.id,
+             teacher_id: teacher?.id,
+             original_date: plan.target_start_date,
+             new_date: updateData.target_start_date
+          }]);
+        } catch (cfErr) {
+          console.warn('Carry forward log insert skipped or failed:', cfErr.message);
+        }
       }
 
       showToast('Lesson carried forward', 'success');

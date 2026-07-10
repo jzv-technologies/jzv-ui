@@ -10,7 +10,7 @@ import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents'
 import TimetableAdminView from './admin/timetable/TimetableAdminView';
 import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
-import LessonPlanner from './teacher/LessonPlanner';
+import LessonManager from './teacher/LessonManager/LessonManager';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -548,10 +548,10 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     {
       id: 'lesson-planner',
       title: 'Lesson Planner',
-      description: 'View and manage lesson plans across all classes, subjects, and teachers.',
+      description: 'Plan, track, and log syllabus progress all in one unified dashboard.',
       icon: 'fa-calendar-check',
-      buttonColor: 'bg-pink-600 text-white',
-      shadow: 'shadow-pink-200',
+      buttonColor: 'bg-indigo-600 text-white',
+      shadow: 'shadow-indigo-200',
       onClick: () => onSetSubView('lesson-planner'),
     },
     {
@@ -1413,7 +1413,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'take-test' ? renderTakeTestView() : null}
       {subView === 'syllabus-report' && <SyllabusProgressReport />}
       {subView === 'syllabus-manager' && <SyllabusManager role="management" user={user} />}
-      {subView === 'lesson-planner' && <LessonPlanner role="management" user={user} />}
+      {subView === 'lesson-planner' && <LessonManager role="management" user={user} />}
       {subView === 'timetable' &&
         (ttLoading ? (
           <div className="flex items-center justify-center py-24">

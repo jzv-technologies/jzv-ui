@@ -31,7 +31,7 @@ const ParentSyllabusView = ({ student }) => {
           [
             supabase.from('syllabus_books').select('*'),
             supabase.from('book_tracker').select('*').eq('class_id', classId),
-            supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
+            supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id').eq('class_id', classId),
             supabase.from('subjects').select('*'),
             supabase.from('subject_classifications').select('*'),
           ]
@@ -43,26 +43,20 @@ const ParentSyllabusView = ({ student }) => {
         if (resSubjects.error) throw resSubjects.error;
         if (resClassifications.error) throw resClassifications.error;
 
+        const mappedLogs = (resLogs.data || []).map(log => ({
+          ...log,
+          current_status: log.status,
+        }));
+
         setBooks(resBooks.data || []);
         setBookTrackers(resTrackers.data || []);
-        setLessonLogs(resLogs.data || []);
+        setLessonLogs(mappedLogs);
         setSubjects(resSubjects.data || []);
         setClassifications(resClassifications.data || []);
 
         const activeBookIds = [
-          ...new Set([
-            ...(resTrackers.data || []).map((t) => String(t.book_id)),
-            ...(resLogs.data || [])
-              .map((l) => {
-                const book = (resBooks.data || []).find((b) => {
-                  // We don't have book_id on lesson log, but we can resolve it.
-                  return false;
-                });
-                return null;
-              })
-              .filter(Boolean),
-          ]),
-        ].map(Number);
+          ...new Set(mappedLogs.map((l) => String(l.book_id))),
+        ].filter(Boolean).map(Number);
 
         let lessonsData = [];
         if (activeBookIds.length > 0) {
@@ -76,15 +70,20 @@ const ParentSyllabusView = ({ student }) => {
         setSyllabusData(lessonsData);
 
         // Fetch log items for this class (joined to get details)
-        const logIds = (resLogs.data || []).map((l) => l.id);
+        const logIds = mappedLogs.map((l) => l.id);
         if (logIds.length > 0) {
           const { data: items, error: itemsErr } = await supabase
-            .from('lesson_tracker_log_items')
+            .from('lesson_progress_items')
             .select('*, teacher:teachers(name)')
-            .in('lt_log_id', logIds)
+            .in('progress_id', logIds)
             .order('date', { ascending: false });
           if (itemsErr) throw itemsErr;
-          setLogItems(items || []);
+          
+          const mappedItems = (items || []).map(item => ({
+            ...item,
+            lt_log_id: item.progress_id
+          }));
+          setLogItems(mappedItems || []);
         } else {
           setLogItems([]);
         }

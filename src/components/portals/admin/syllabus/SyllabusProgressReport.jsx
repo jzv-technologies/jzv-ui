@@ -203,9 +203,9 @@ const SyllabusProgressReport = ({ role, student }) => {
           .eq('is_active', true)
           .order('name', { ascending: true }),
         supabase.from('book_tracker').select('*'),
-        supabase.from('lesson_tracker_log').select('*'),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'),
         supabase.from('syllabus_book_lessons').select('id, book_id'),
-        supabase.from('lesson_plans').select('*'),
+        supabase.from('lesson_progress').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').eq('status', 'planned'),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -230,10 +230,22 @@ const SyllabusProgressReport = ({ role, student }) => {
       const dbAssignments = resAssignments.data || [];
       const dbTeachers = resTeachers.data || [];
       const dbTrackers = resTrackers.data || [];
-      const dbLogs = resLogs.data || [];
       const dbLessons = resLessons.data || [];
-      const dbPlans = resPlans.data || [];
+      const rawLogs = resLogs.data || [];
+      const rawPlans = resPlans.data || [];
       const dbCarryForwards = resCarryForwards.data || [];
+
+      const dbLogs = rawLogs.map(log => ({
+        ...log,
+        current_status: log.status,
+      }));
+
+      const dbPlans = rawPlans.map(plan => ({
+        ...plan,
+        target_date: plan.target_start_date
+      }));
+
+
 
       let fetchedClasses = dbClasses;
       if (role === 'parent' && student?.class_id) {
@@ -327,7 +339,6 @@ const SyllabusProgressReport = ({ role, student }) => {
     setDailyLoading(true);
     try {
       let items = [];
-      let logs = [];
 
       // Determine date boundaries
       let startBound = null;
@@ -361,79 +372,59 @@ const SyllabusProgressReport = ({ role, student }) => {
         }
       }
 
+      let query = supabase
+        .from('lesson_progress_items')
+        .select(`
+          *,
+          teacher:teachers(name),
+          progress:lesson_progress(
+            *,
+            lesson:syllabus_book_lessons(*)
+          )
+        `);
+
       if (role === 'parent' && student?.class_id) {
-        let queryLogs = supabase
-          .from('lesson_tracker_log')
-          .select('*')
+        // Fetch progress IDs for the class first
+        const { data: progressRows } = await supabase
+          .from('lesson_progress')
+          .select('id')
           .eq('class_id', student.class_id);
-
-        const { data: dbLogs, error: dbLogsErr } = await queryLogs;
-        if (dbLogsErr) throw dbLogsErr;
-
-        logs = dbLogs || [];
-        const logIds = logs.map((l) => l.id);
-
-        if (logIds.length > 0) {
-          let queryItems = supabase
-            .from('lesson_tracker_log_items')
-            .select('*, teacher:teachers(name)')
-            .in('lt_log_id', logIds);
-
-          if (startBound && endBound) {
-            queryItems = queryItems.gte('date', startBound).lte('date', endBound);
-          }
-
-          const { data: dbItems, error: dbItemsErr } = await queryItems.order('date', { ascending: false });
-          if (dbItemsErr) throw dbItemsErr;
-          items = dbItems || [];
+        const progressIds = (progressRows || []).map(r => r.id);
+        
+        if (progressIds.length === 0) {
+          setDailyEntries([]);
+          setDailyLoading(false);
+          return;
         }
-      } else {
-        let queryItems = supabase
-          .from('lesson_tracker_log_items')
-          .select('*, teacher:teachers(name)');
-
-        if (startBound && endBound) {
-          queryItems = queryItems.gte('date', startBound).lte('date', endBound);
-        }
-
-        const { data: dbItems, error } = await queryItems
-          .order('date', { ascending: false })
-          .limit(200);
-        if (error) throw error;
-        items = dbItems || [];
-
-        const ltLogIds = [...new Set(items.map((i) => i.lt_log_id))];
-        if (ltLogIds.length > 0) {
-          const { data: dbLogs, error: logErr } = await supabase
-            .from('lesson_tracker_log')
-            .select('*')
-            .in('id', ltLogIds);
-          if (logErr) throw logErr;
-          logs = dbLogs || [];
-        }
+        query = query.in('progress_id', progressIds);
       }
 
-      if (!items || items.length === 0) {
-        setDailyEntries([]);
-        return;
+      if (startBound && endBound) {
+        query = query.gte('date', startBound).lte('date', endBound);
       }
 
-      const lessonIds = [...new Set((logs || []).map((l) => l.lesson_id))];
-      const { data: lessons, error: lesErr } = await supabase
-        .from('syllabus_book_lessons')
-        .select('*')
-        .in('id', lessonIds);
-      if (lesErr) throw lesErr;
+      const { data: dbItems, error } = await query
+        .order('date', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+      items = dbItems || [];
 
       const enriched = items.map((item) => {
-        const log = (logs || []).find((l) => l.id === item.lt_log_id);
-        const lesson = log ? (lessons || []).find((ls) => ls.id === log.lesson_id) : null;
-        const book = lesson ? books.find((b) => b.id === lesson.book_id) : null;
-        const subject = book ? subjects.find((s) => s.id === book.subject_id) : null;
-        const cls = log ? classes.find((c) => c.id === log.class_id) : null;
+        const progressObj = item.progress;
+        const log = progressObj ? {
+          ...progressObj,
+          current_status: progressObj.status
+        } : null;
+        
+        const lesson = progressObj ? progressObj.lesson : null;
+        const book = progressObj ? books.find((b) => b.id === progressObj.book_id) : null;
+        const subject = progressObj ? subjects.find((s) => s.id === progressObj.subject_id) : null;
+        const cls = progressObj ? classes.find((c) => c.id === progressObj.class_id) : null;
 
         return {
           ...item,
+          lt_log_id: item.progress_id,
           log,
           lesson,
           book,
@@ -500,7 +491,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     setDailyLoading(true);
     try {
       const { error } = await supabase
-        .from('lesson_tracker_log_items')
+        .from('lesson_progress_items')
         .delete()
         .eq('id', deleteModalConfig.id);
       if (error) throw error;
@@ -552,10 +543,15 @@ const SyllabusProgressReport = ({ role, student }) => {
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_tracker_log').select('*').eq('class_id', classId),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id').eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
+
+      const mappedLogs = (logs || []).map(log => ({
+        ...log,
+        current_status: log.status,
+      }));
 
       const bookLessons = (lessons || []).filter((l) => {
         if (l.level3) return true;
@@ -574,7 +570,7 @@ const SyllabusProgressReport = ({ role, student }) => {
         return false;
       });
 
-      const relevantLogs = (logs || []).filter((l) =>
+      const relevantLogs = mappedLogs.filter((l) =>
         bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
       );
 
@@ -592,9 +588,9 @@ const SyllabusProgressReport = ({ role, student }) => {
     if (!logItemsMap[logId]) {
       try {
         const { data, error } = await supabase
-          .from('lesson_tracker_log_items')
+          .from('lesson_progress_items')
           .select('*, teacher:teachers(name)')
-          .eq('lt_log_id', logId)
+          .eq('progress_id', logId)
           .order('date', { ascending: false });
         if (error) throw error;
         setLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
