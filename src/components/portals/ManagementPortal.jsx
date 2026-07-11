@@ -529,7 +529,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
     {
       id: 'syllabus-report',
-      title: 'Syllabus Progress Reports',
+      title: 'Syllabus Progress Tracker',
       description: 'View syllabus coverage, time spent on chapters/lessons, and revisions.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-indigo-600 text-white',
@@ -1411,7 +1411,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         ? renderTableView()
         : null}
       {subView === 'take-test' ? renderTakeTestView() : null}
-      {subView === 'syllabus-report' && <SyllabusProgressReport />}
+      {subView === 'syllabus-report' && <SyllabusProgressReport role="management" />}
       {subView === 'syllabus-manager' && <SyllabusManager role="management" user={user} />}
       {subView === 'lesson-planner' && <LessonManager role="management" user={user} />}
       {subView === 'timetable' &&

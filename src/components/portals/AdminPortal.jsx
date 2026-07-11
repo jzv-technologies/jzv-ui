@@ -508,7 +508,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {subView === 'syllabus' && <SyllabusManager role="admin" />}
 
       {/* Syllabus Progress Report view */}
-      {subView === 'syllabus-report' && <SyllabusProgressReport />}
+      {subView === 'syllabus-report' && <SyllabusProgressReport role="admin" />}
 
       {/* Lesson Manager view */}
       {subView === 'lesson-planner' && <LessonManager role="admin" user={user} />}

@@ -66,7 +66,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   const [coverMode, setCoverMode] = useState(false);
   const [activeTab, setActiveTab] = useState('teacher-activity');
 
-  // My Work tab â€” teacher's log entries
+  // My Work tab — teacher's log entries
   const [myWorkEntries, setMyWorkEntries] = useState(() =>
     isCacheValid && syllabusTrackerCache.myWorkEntries ? syllabusTrackerCache.myWorkEntries : []
   );
@@ -89,11 +89,30 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     end: getLocalDateStr(0),
   }));
 
-  // â”€â”€â”€ Tab 2: Syllabus Progress States â”€â”€â”€
+  // ─── Tab 2: Syllabus Progress States ───
   const [cpFilterClasses, setCpFilterClasses] = useState([]);
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
   const [cpFilterClassifications, setCpFilterClassifications] = useState([]);
   const [cpGroupingMode, setCpGroupingMode] = useState('none'); // 'classification' | 'subject' | 'none'
+
+  // Upcoming Lessons States
+  const [lessonPlans, setLessonPlans] = useState([]);
+  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('subject_date');
+  const [upFilterTeachers, setUpFilterTeachers] = useState(() =>
+    teacherRecord?.id ? [String(teacherRecord.id)] : teacher?.id ? [String(teacher.id)] : []
+  );
+  const [upFilterClasses, setUpFilterClasses] = useState([]);
+  const [upFilterSubjects, setUpFilterSubjects] = useState([]);
+  const [upcomingStartDate, setUpcomingStartDate] = useState(() => getLocalDateStr(0));
+  const [upcomingEndDate, setUpcomingEndDate] = useState(() => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 28);
+    const year = futureDate.getFullYear();
+    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const day = String(futureDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [isUpDatePopoverOpen, setIsUpDatePopoverOpen] = useState(false);
 
   const [allTrackers, setAllTrackers] = useState(() =>
     isCacheValid ? syllabusTrackerCache.allTrackers || [] : []
@@ -126,7 +145,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // â”€â”€â”€ Favorites DB Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Favorites DB Helpers ───
 
   const loadFavoritesFromDB = async (teacherId) => {
     try {
@@ -201,7 +220,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // â”€â”€â”€ Data Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Data Loading ───
 
   useEffect(() => {
     const initData = async () => {
@@ -260,6 +279,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         if (!teacherData) throw new Error('User not mapped to Teacher record.');
         setTeacher(teacherData);
         syllabusTrackerCache.teacher = teacherData;
+        setUpFilterTeachers([String(teacherData.id)]);
 
         const [
           { data: dbClasses },
@@ -283,7 +303,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
             .select(
               '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
             )
-            .eq('status', 'planned'),
+            .in('status', ['planned', 'in_progress']),
         ]);
 
         const fetchedClasses = dbClasses || [];
@@ -322,11 +342,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         setBookClasses(fetchedBookClasses);
         setAllLessons(fetchedAllLessons);
         setAllLogs(mappedAllLogs);
+        setLessonPlans(fetchedPlans);
 
         const todayStr = getLocalDateStr(0);
         // We include today's plans, PAST DUE plans (so they can be carried forward or completed), and weekly plans
         const activePlans = fetchedPlans.filter(
-          (p) => p.target_start_date === null || p.target_start_date <= todayStr
+          (p) => p.status === 'planned' && (p.target_start_date === null || p.target_start_date <= todayStr)
         );
         setTodaysPlans(activePlans);
 
@@ -408,7 +429,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     initData();
   }, [user, teacherRecord]);
 
-  // â”€â”€â”€ My Work: Fetch teacher's log entries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── My Work: Fetch teacher's log entries ───
 
   const fetchMyWorkEntries = useCallback(async () => {
     if (!teacher?.id) return;
@@ -594,7 +615,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // â”€â”€â”€ Refresh after Add Work â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Refresh after Add Work ───
 
   const handleAddWorkSuccess = async () => {
     if (activeTab === 'teacher-activity') {
@@ -616,24 +637,24 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   };
 
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
-    let className = 'â€”';
+    let className = '—';
     if (entry.class?.name || entry.class?.class_name) {
       className = entry.class.name || entry.class.class_name;
     } else if (parentLog) {
-      const cls = classes.find((c) => c.id === parentLog.class_id);
+      const cls = classes.find((c) => String(c.id) === String(parentLog.class_id));
       className = cls?.name || `Class ID ${parentLog.class_id}`;
     }
 
-    let subjectName = 'â€”';
+    let subjectName = '—';
     if (entry.subject?.name) {
       subjectName = entry.subject.name;
     } else if (book) {
       const sub = subjects.find((s) => String(s.id) === String(book.subject_id));
-      subjectName = sub?.name || 'â€”';
+      subjectName = sub?.name || '—';
     } else if (lesson) {
       const b = books.find((x) => String(x.id) === String(lesson.book_id));
       const sub = b ? subjects.find((s) => String(s.id) === String(b.subject_id)) : null;
-      subjectName = sub?.name || 'â€”';
+      subjectName = sub?.name || '—';
     }
 
     setDeleteModalConfig({
@@ -689,7 +710,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // â”€â”€â”€ Syllabus Progress Tab Logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Syllabus Progress Tab Logic ───
 
   const handleProgressBookClick = async (bookId, classId) => {
     if (progressExpandedBook === bookId && String(progressExpandedClass) === String(classId)) {
@@ -767,7 +788,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // â”€â”€â”€ Status Badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Status Badges ───
 
   const getStatusBadge = (status, isRev = false) => {
     if (isRev)
@@ -890,7 +911,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
                   </div>
                   <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
                   <p className="text-[11px] text-gray-500 font-semibold mb-3">
-                    {plan.subject?.name} â€¢ {plan.book?.name}
+                    {plan.subject?.name} • {plan.book?.name}
                   </p>
                 </div>
                 <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
@@ -926,7 +947,187 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     );
   }
 
-  // â”€â”€â”€ Main Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const renderUpcomingLessons = () => {
+    const upcoming = lessonPlans.filter((p) => {
+      // Date boundary
+      if (!p.target_date || p.target_date < upcomingStartDate || p.target_date > upcomingEndDate) {
+        return false;
+      }
+      // Status planned or in_progress
+      if (p.status !== 'planned' && p.status !== 'in_progress') {
+        return false;
+      }
+      
+      // Filter by teacher (always the logged in teacher)
+      if (upFilterTeachers.length > 0 && !upFilterTeachers.includes(String(p.teacher_id))) {
+        return false;
+      }
+      // Filter by class
+      if (upFilterClasses.length > 0 && !upFilterClasses.includes(String(p.class_id))) {
+        return false;
+      }
+      // Filter by subject
+      if (upFilterSubjects.length > 0 && !upFilterSubjects.includes(String(p.subject_id))) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const teacherClassIds = assignments.map((a) => String(a.class_id));
+    const teacherSubjectIds = assignments.map((a) => String(a.subject_id));
+    
+    const assignedClassOpts = classes
+      .filter((c) => teacherClassIds.includes(String(c.id)))
+      .map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
+
+    const assignedSubjectOpts = subjects
+      .filter((s) => teacherSubjectIds.includes(String(s.id)))
+      .map((s) => ({ id: String(s.id), label: s.name }));
+
+    const teacherOpts = teacher
+      ? [{ id: String(teacher.id), label: teacher.name }]
+      : [];
+
+    const renderCard = (plan) => {
+      const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
+        .filter(Boolean)
+        .join(' > ');
+
+      const classificationId = plan.subject?.classification_id;
+      const classification = classifications.find(
+        (c) => String(c.id) === String(classificationId)
+      );
+      const themeStyles =
+        classification?.theme && CARD_THEMES[classification.theme]
+          ? CARD_THEMES[classification.theme]
+          : CARD_THEMES.charcoal;
+
+      return (
+        <div
+          key={plan.id}
+          className={`bg-white border border-light-border border-l-[6px] rounded-xl p-4 shadow-sm flex flex-col justify-between border-l-${themeStyles.color} text-left`}
+        >
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+              {new Date(plan.target_date).toLocaleDateString()}
+            </span>
+            <div className="flex gap-1">
+              {plan.status === 'in_progress' && (
+                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
+                  In Progress
+                </span>
+              )}
+              {plan.carry_forward_count > 0 && (
+                <span className="text-[10px] text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">
+                  Delayed
+                </span>
+              )}
+            </div>
+          </div>
+          <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
+            {title}
+          </h4>
+          <p className="text-[11px] text-gray-500 font-semibold mt-1">
+            {plan.class?.name || plan.class?.class_name || '—'} • {plan.subject?.name} • {plan.book?.name}
+          </p>
+        </div>
+      );
+    };
+
+    const defaultEndDateStr = (() => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 28);
+      const year = futureDate.getFullYear();
+      const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+      const day = String(futureDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+
+    const hasActiveFilters = 
+      upFilterClasses.length > 0 || 
+      upFilterSubjects.length > 0 || 
+      upcomingStartDate !== getLocalDateStr(0) || 
+      upcomingEndDate !== defaultEndDateStr;
+
+    return (
+      <div className="space-y-6">
+        {upcoming.length === 0 ? (
+          <div className="text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
+            No upcoming lessons planned matching your filters.
+          </div>
+        ) : upcomingGroupingMode === 'subject_date' ? (
+          // Group by Subject and sort by date ascending
+          (() => {
+            const sortedPlans = [...upcoming].sort((a, b) => a.target_date.localeCompare(b.target_date));
+            const grouped = {};
+            sortedPlans.forEach((plan) => {
+              const key = plan.subject?.name || 'Other / General';
+              if (!grouped[key]) grouped[key] = [];
+              grouped[key].push(plan);
+            });
+            const sortedSubjs = Object.keys(grouped).sort();
+
+            return (
+              <div className="space-y-8 text-left">
+                {sortedSubjs.map((subjName) => (
+                  <div key={subjName} className="space-y-4">
+                    <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                      {subjName}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {grouped[subjName].map((plan) => renderCard(plan))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()
+        ) : (
+          // Group by Date and sort by subject name
+          (() => {
+            const sortedPlans = [...upcoming].sort((a, b) => {
+              const nameA = a.subject?.name || '';
+              const nameB = b.subject?.name || '';
+              return nameA.localeCompare(nameB);
+            });
+            const grouped = {};
+            sortedPlans.forEach((plan) => {
+              const key = plan.target_date;
+              if (!grouped[key]) grouped[key] = [];
+              grouped[key].push(plan);
+            });
+            const sortedDates = Object.keys(grouped).sort();
+
+            return (
+              <div className="space-y-8 text-left">
+                {sortedDates.map((dateKey) => {
+                  const dateDisplay = new Date(dateKey).toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  });
+                  return (
+                    <div key={dateKey} className="space-y-4">
+                      <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                        {dateDisplay}
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {grouped[dateKey].map((plan) => renderCard(plan))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
+        )}
+      </div>
+    );
+  };
+
+  // ———————————————————————————————— Main Render ——————————————————————————————————————————————————
   const progressClasses =
     coverMode || assignments.length === 0
       ? classes
@@ -941,6 +1142,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
             {[
               { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
               { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+              { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -957,8 +1159,32 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
             ))}
           </div>
 
+          {activeTab === 'upcoming-lessons' && (
+            <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none ml-auto">
+              {[
+                { key: 'subject_date', icon: 'fa-book', tooltip: 'Group by Subject, Sort by Date' },
+                { key: 'date_subject', icon: 'fa-calendar-alt', tooltip: 'Group by Date, Sort by Subject' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setUpcomingGroupingMode(t.key)}
+                  title={t.tooltip}
+                  aria-label={t.tooltip}
+                  className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
+                    upcomingGroupingMode === t.key
+                      ? 'bg-brand-primary text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  }`}
+                >
+                  <i className={`fas ${t.icon} text-xs`}></i>
+                </button>
+              ))}
+            </div>
+          )}
+
           {activeTab === 'teacher-activity' && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap ml-auto">
               <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                 {[
                   { key: '7_days', label: '7 Days' },
@@ -1017,45 +1243,8 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           )}
 
           {activeTab === 'class-progress' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <MultiSelectDropdown
-                label=""
-                placeholder="Class Filter"
-                options={progressClasses.map((c) => ({
-                  id: String(c.id),
-                  label: c.name || c.class_name,
-                }))}
-                selected={cpFilterClasses}
-                onChange={(val) => {
-                  setCpFilterClasses(val);
-                  setProgressExpandedBook(null);
-                  setProgressExpandedClass(null);
-                }}
-              />
-              <MultiSelectDropdown
-                label=""
-                placeholder="Book Filter"
-                options={books.map((b) => ({ id: String(b.id), label: b.name }))}
-                selected={cpFilterBooks}
-                onChange={(val) => {
-                  setCpFilterBooks(val);
-                  setProgressExpandedBook(null);
-                  setProgressExpandedClass(null);
-                }}
-              />
-              <MultiSelectDropdown
-                label=""
-                placeholder="Classification Filter"
-                options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
-                selected={cpFilterClassifications}
-                onChange={(val) => {
-                  setCpFilterClassifications(val);
-                  setProgressExpandedBook(null);
-                  setProgressExpandedClass(null);
-                }}
-              />
-
-              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7">
+            <div className="flex items-center gap-2 flex-wrap ml-auto">
+              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7 select-none">
                 {[
                   { key: 'none', label: 'No Group' },
                   { key: 'classification', label: 'Classification' },
@@ -1077,6 +1266,71 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
             </div>
           )}
         </div>
+
+        {/* Dedicated Responsive Filters sub-bar */}
+        {activeTab === 'class-progress' && (
+          <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Class Filter"
+                options={progressClasses.map((c) => ({
+                  id: String(c.id),
+                  label: c.name || c.class_name,
+                }))}
+                selected={cpFilterClasses}
+                onChange={(val) => {
+                  setCpFilterClasses(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Book Filter"
+                options={books.map((b) => ({ id: String(b.id), label: b.name }))}
+                selected={cpFilterBooks}
+                onChange={(val) => {
+                  setCpFilterBooks(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Classification Filter"
+                options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
+                selected={cpFilterClassifications}
+                onChange={(val) => {
+                  setCpFilterClassifications(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            {(cpFilterClasses.length > 0 || cpFilterBooks.length > 0 || cpFilterClassifications.length > 0) && (
+              <button
+                onClick={() => {
+                  setCpFilterClasses([]);
+                  setCpFilterBooks([]);
+                  setCpFilterClassifications([]);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+                className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
 
         {activeTab === 'teacher-activity' && (
           <>
@@ -1131,9 +1385,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
             expandedLogIds={expandedLogIds}
             toggleLogExpand={toggleLogExpand}
             logItemsMap={logItemsMap}
-            handleDeleteClick={handleDeleteClick}
           />
         )}
+        {activeTab === 'upcoming-lessons' && renderUpcomingLessons()}
       </div>
 
       <SyllabusAddWorkModal

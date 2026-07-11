@@ -29,7 +29,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     role === 'parent' ? 'today-class' : 'daily-activity'
   );
 
-  // â”€â”€â”€ Tab 1: Daily Activity States & Filters â”€â”€â”€
+  // ─── Tab 1: Daily Activity States & Filters ───
   const [dailyEntries, setDailyEntries] = useState([]);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [deleteModalConfig, setDeleteModalConfig] = useState(null);
@@ -59,7 +59,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     end: getLocalDateStr(0),
   }));
 
-  // â”€â”€â”€ Tab 2: Class Progress States (Syllabus Progress) â”€â”€â”€
+  // ─── Tab 2: Class Progress States (Syllabus Progress) ───
   const [cpFilterClasses, setCpFilterClasses] = useState(() =>
     role === 'parent' && student?.class_id ? [String(student.class_id)] : []
   );
@@ -76,8 +76,22 @@ const SyllabusProgressReport = ({ role, student }) => {
   const [expandedLogIds, setExpandedLogIds] = useState({});
   const [logItemsMap, setLogItemsMap] = useState({});
   const [showNotStarted, setShowNotStarted] = useState(false);
+  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('subject_date'); // 'subject_date' | 'date_subject'
+  const [upFilterTeachers, setUpFilterTeachers] = useState([]);
+  const [upFilterClasses, setUpFilterClasses] = useState([]);
+  const [upFilterSubjects, setUpFilterSubjects] = useState([]);
+  const [upcomingStartDate, setUpcomingStartDate] = useState(() => getLocalDateStr(0));
+  const [upcomingEndDate, setUpcomingEndDate] = useState(() => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 28);
+    const year = futureDate.getFullYear();
+    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const day = String(futureDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [isUpDatePopoverOpen, setIsUpDatePopoverOpen] = useState(false);
 
-  // â”€â”€â”€ Load Base Reference Data â”€â”€â”€
+  // ─── Load Base Reference Data ───
   const loadData = async () => {
     setLoading(true);
     try {
@@ -118,7 +132,7 @@ const SyllabusProgressReport = ({ role, student }) => {
           .select(
             '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
           )
-          .eq('status', 'planned'),
+          .in('status', ['planned', 'in_progress']),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -245,7 +259,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
   }, [student?.class_id, role]);
 
-  // â”€â”€â”€ Daily Activity: Fetch & Enrich Logs â”€â”€â”€
+  // ─── Daily Activity: Fetch & Enrich Logs ───
   const fetchDailyEntries = useCallback(async () => {
     setDailyLoading(true);
     try {
@@ -373,7 +387,7 @@ const SyllabusProgressReport = ({ role, student }) => {
   ]);
 
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
-    let className = 'â€”';
+    let className = '—';
     if (entry.class?.name || entry.class?.class_name) {
       className = entry.class.name || entry.class.class_name;
     } else if (parentLog) {
@@ -381,16 +395,16 @@ const SyllabusProgressReport = ({ role, student }) => {
       className = cls?.name || `Class ID ${parentLog.class_id}`;
     }
 
-    let subjectName = 'â€”';
+    let subjectName = '—';
     if (entry.subject?.name) {
       subjectName = entry.subject.name;
     } else if (book) {
       const sub = subjects.find((s) => String(s.id) === String(book.subject_id));
-      subjectName = sub?.name || 'â€”';
+      subjectName = sub?.name || '—';
     } else if (lesson) {
       const b = books.find((x) => String(x.id) === String(lesson.book_id));
       const sub = b ? subjects.find((s) => String(s.id) === String(b.subject_id)) : null;
-      subjectName = sub?.name || 'â€”';
+      subjectName = sub?.name || '—';
     }
 
     setDeleteModalConfig({
@@ -446,7 +460,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
   }, [activeTab, books, fetchDailyEntries]);
 
-  // â”€â”€â”€ Click Book Tile to Expand Lessons â”€â”€â”€
+  // ─── Click Book Tile to Expand Lessons ───
   const handleProgressBookClick = async (bookId, classId) => {
     if (progressExpandedBook === bookId && String(progressExpandedClass) === String(classId)) {
       setProgressExpandedBook(null);
@@ -532,54 +546,176 @@ const SyllabusProgressReport = ({ role, student }) => {
   }, [role, student?.class_id]);
 
   const renderUpcomingLessons = () => {
-    // get plans for student's class that have target_date >= today
-    const todayStr = getLocalDateStr(0);
-    const upcoming = lessonPlans
-      .filter(
-        (p) =>
-          String(p.class_id) === String(student?.class_id) &&
-          p.target_date &&
-          p.target_date >= todayStr &&
-          p.status !== 'completed'
-      )
-      .sort((a, b) => a.target_date.localeCompare(b.target_date));
+    const upcoming = lessonPlans.filter((p) => {
+      // Date boundary
+      if (!p.target_date || p.target_date < upcomingStartDate || p.target_date > upcomingEndDate) {
+        return false;
+      }
+      // Status planned or in_progress
+      if (p.status !== 'planned' && p.status !== 'in_progress') {
+        return false;
+      }
+      
+      // Role constraints
+      if (role === 'parent') {
+        return String(p.class_id) === String(student?.class_id);
+      }
 
-    if (upcoming.length === 0) {
+      // Filters for admin/management
+      if (upFilterTeachers.length > 0 && !upFilterTeachers.includes(String(p.teacher_id))) {
+        return false;
+      }
+      if (upFilterClasses.length > 0 && !upFilterClasses.includes(String(p.class_id))) {
+        return false;
+      }
+      if (upFilterSubjects.length > 0 && !upFilterSubjects.includes(String(p.subject_id))) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const classOpts = classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
+    const subjectOpts = subjects.map((s) => ({ id: String(s.id), label: s.name }));
+    const teacherOpts = teachers.map((t) => ({ id: String(t.id), label: t.name }));
+
+    const renderCard = (plan) => {
+      const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
+        .filter(Boolean)
+        .join(' > ');
+
+      const classificationId = plan.subject?.classification_id;
+      const classification = classifications.find(
+        (c) => String(c.id) === String(classificationId)
+      );
+      const themeStyles =
+        classification?.theme && CARD_THEMES[classification.theme]
+          ? CARD_THEMES[classification.theme]
+          : CARD_THEMES.charcoal;
+
       return (
-        <div className="text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-          No upcoming lessons planned.
+        <div
+          key={plan.id}
+          className={`bg-white border border-light-border border-l-[6px] rounded-xl p-4 shadow-sm flex flex-col justify-between border-l-${themeStyles.color} text-left`}
+        >
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+              {new Date(plan.target_date).toLocaleDateString()}
+            </span>
+            <div className="flex gap-1">
+              {plan.status === 'in_progress' && (
+                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
+                  In Progress
+                </span>
+              )}
+              {plan.carry_forward_count > 0 && (
+                <span className="text-[10px] text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">
+                  Delayed
+                </span>
+              )}
+            </div>
+          </div>
+          <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
+            {title}
+          </h4>
+          <p className="text-[11px] text-gray-500 font-semibold mt-1">
+            {role !== 'parent' && `${plan.class?.name || plan.class?.class_name || '—'} • `}
+            {plan.subject?.name} • {plan.book?.name}
+            {role !== 'parent' && plan.teacher?.name && ` • ${plan.teacher.name}`}
+          </p>
         </div>
       );
-    }
+    };
+
+    const defaultEndDateStr = (() => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 28);
+      const year = futureDate.getFullYear();
+      const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+      const day = String(futureDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })();
+
+    const hasActiveFilters = 
+      upFilterTeachers.length > 0 || 
+      upFilterClasses.length > 0 || 
+      upFilterSubjects.length > 0 || 
+      upcomingStartDate !== getLocalDateStr(0) || 
+      upcomingEndDate !== defaultEndDateStr;
 
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {upcoming.map((plan) => {
-          const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
-            .filter(Boolean)
-            .join(' > ');
-          return (
-            <div
-              key={plan.id}
-              className="bg-white border rounded-xl p-4 shadow-sm flex flex-col justify-between"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {new Date(plan.target_date).toLocaleDateString()}
-                </span>
-                {plan.carry_forward_count > 0 && (
-                  <span className="text-[10px] text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">
-                    Delayed
-                  </span>
-                )}
+      <div className="space-y-6">
+        {upcoming.length === 0 ? (
+          <div className="text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
+            No upcoming lessons planned matching your filters.
+          </div>
+        ) : upcomingGroupingMode === 'subject_date' ? (
+          // Group by Subject and sort by date ascending
+          (() => {
+            const sortedPlans = [...upcoming].sort((a, b) => a.target_date.localeCompare(b.target_date));
+            const grouped = {};
+            sortedPlans.forEach((plan) => {
+              const key = plan.subject?.name || 'Other / General';
+              if (!grouped[key]) grouped[key] = [];
+              grouped[key].push(plan);
+            });
+            const sortedSubjs = Object.keys(grouped).sort();
+
+            return (
+              <div className="space-y-8 text-left">
+                {sortedSubjs.map((subjName) => (
+                  <div key={subjName} className="space-y-4">
+                    <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                      {subjName}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {grouped[subjName].map((plan) => renderCard(plan))}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
-              <p className="text-[11px] text-gray-500 font-semibold">
-                {plan.subject?.name} â€¢ {plan.book?.name}
-              </p>
-            </div>
-          );
-        })}
+            );
+          })()
+        ) : (
+          // Group by Date and sort by subject name
+          (() => {
+            const sortedPlans = [...upcoming].sort((a, b) => {
+              const nameA = a.subject?.name || '';
+              const nameB = b.subject?.name || '';
+              return nameA.localeCompare(nameB);
+            });
+            const grouped = {};
+            sortedPlans.forEach((plan) => {
+              const key = plan.target_date;
+              if (!grouped[key]) grouped[key] = [];
+              grouped[key].push(plan);
+            });
+            const sortedDates = Object.keys(grouped).sort();
+
+            return (
+              <div className="space-y-8 text-left">
+                {sortedDates.map((dateKey) => {
+                  const dateDisplay = new Date(dateKey).toLocaleDateString(undefined, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  });
+                  return (
+                    <div key={dateKey} className="space-y-4">
+                      <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                        {dateDisplay}
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {grouped[dateKey].map((plan) => renderCard(plan))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()
+        )}
       </div>
     );
   };
@@ -688,7 +824,7 @@ const SyllabusProgressReport = ({ role, student }) => {
 
                   <td className="px-4 py-3 text-center bg-gray-50/30">
                     {stat.accuracy === '-' ? (
-                      <span className="text-gray-400">â€”</span>
+                      <span className="text-gray-400">—</span>
                     ) : (
                       <span
                         className={`px-2 py-0.5 rounded font-bold ${stat.accuracy >= 80 ? 'bg-emerald-100 text-emerald-700' : stat.accuracy >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}
@@ -743,7 +879,7 @@ const SyllabusProgressReport = ({ role, student }) => {
 
   const filteredDailyEntries = getFilteredDailyEntries();
 
-  // â”€â”€â”€ Main Render â”€â”€â”€
+  // ─── Main Render ───
   if (loading) {
     return (
       <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
@@ -791,6 +927,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                       icon: 'fa-clipboard-check',
                     },
                     { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+                    { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
                   ].map((tab) => (
                     <button
                       key={tab.key}
@@ -820,8 +957,32 @@ const SyllabusProgressReport = ({ role, student }) => {
               )}
           </div>
 
+          {activeTab === 'upcoming-lessons' && (
+            <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none ml-auto">
+              {[
+                { key: 'subject_date', icon: 'fa-book', tooltip: 'Group by Subject, Sort by Date' },
+                { key: 'date_subject', icon: 'fa-calendar-alt', tooltip: 'Group by Date, Sort by Subject' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setUpcomingGroupingMode(t.key)}
+                  title={t.tooltip}
+                  aria-label={t.tooltip}
+                  className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
+                    upcomingGroupingMode === t.key
+                      ? 'bg-brand-primary text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                  }`}
+                >
+                  <i className={`fas ${t.icon} text-xs`}></i>
+                </button>
+              ))}
+            </div>
+          )}
+
           {role !== 'parent' && activeTab === 'daily-activity' && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap ml-auto">
               <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                 {[
                   { key: '7_days', label: '7 Days' },
@@ -862,71 +1023,246 @@ const SyllabusProgressReport = ({ role, student }) => {
             </div>
           )}
 
-          {activeTab === 'class-progress' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {role !== 'parent' && (
-                <>
+          {activeTab === 'class-progress' && role !== 'parent' && (
+            <div className="flex items-center gap-2 flex-wrap ml-auto">
+              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-8 select-none">
+                {[
+                  { key: 'none', label: 'No Group' },
+                  { key: 'classification', label: 'Classification' },
+                  { key: 'subject', label: 'Subject' },
+                ].map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    onClick={() => setCpGroupingMode(g.key)}
+                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer h-7 flex items-center ${
+                      cpGroupingMode === g.key
+                        ? 'bg-brand-primary text-white shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Dedicated Responsive Filters sub-bar */}
+        {activeTab === 'class-progress' && role !== 'parent' && (
+          <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Class Filter"
+                options={classes.map((c) => ({
+                  id: String(c.id),
+                  label: c.name || c.class_name,
+                }))}
+                selected={cpFilterClasses}
+                onChange={(val) => {
+                  setCpFilterClasses(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Book Filter"
+                options={books.map((b) => ({ id: String(b.id), label: b.name }))}
+                selected={cpFilterBooks}
+                onChange={(val) => {
+                  setCpFilterBooks(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            <div className="min-w-[140px] flex-1 sm:flex-initial">
+              <MultiSelectDropdown
+                label=""
+                placeholder="Classification Filter"
+                options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
+                selected={cpFilterClassifications}
+                onChange={(val) => {
+                  setCpFilterClassifications(val);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+              />
+            </div>
+            {(cpFilterClasses.length > 0 || cpFilterBooks.length > 0 || cpFilterClassifications.length > 0) && (
+              <button
+                onClick={() => {
+                  setCpFilterClasses([]);
+                  setCpFilterBooks([]);
+                  setCpFilterClassifications([]);
+                  setProgressExpandedBook(null);
+                  setProgressExpandedClass(null);
+                }}
+                className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'upcoming-lessons' && (
+          <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+            </div>
+            {role !== 'parent' && (
+              <>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="Teacher Filter"
+                    options={teachers.map((t) => ({ id: String(t.id), label: t.name }))}
+                    selected={upFilterTeachers}
+                    onChange={setUpFilterTeachers}
+                  />
+                </div>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
                   <MultiSelectDropdown
                     label=""
                     placeholder="Class Filter"
-                    options={classes.map((c) => ({
-                      id: String(c.id),
-                      label: c.name || c.class_name,
-                    }))}
-                    selected={cpFilterClasses}
-                    onChange={(val) => {
-                      setCpFilterClasses(val);
-                      setProgressExpandedBook(null);
-                      setProgressExpandedClass(null);
-                    }}
+                    options={classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                    selected={upFilterClasses}
+                    onChange={setUpFilterClasses}
                   />
+                </div>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
                   <MultiSelectDropdown
                     label=""
-                    placeholder="Book Filter"
-                    options={books.map((b) => ({ id: String(b.id), label: b.name }))}
-                    selected={cpFilterBooks}
-                    onChange={(val) => {
-                      setCpFilterBooks(val);
-                      setProgressExpandedBook(null);
-                      setProgressExpandedClass(null);
-                    }}
+                    placeholder="Subject Filter"
+                    options={subjects.map((s) => ({ id: String(s.id), label: s.name }))}
+                    selected={upFilterSubjects}
+                    onChange={setUpFilterSubjects}
                   />
-                  <MultiSelectDropdown
-                    label=""
-                    placeholder="Classification Filter"
-                    options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
-                    selected={cpFilterClassifications}
-                    onChange={(val) => {
-                      setCpFilterClassifications(val);
-                      setProgressExpandedBook(null);
-                      setProgressExpandedClass(null);
-                    }}
-                  />
+                </div>
+              </>
+            )}
+            
+            {/* Compact Date Range Popover */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
+                className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                  upcomingStartDate !== getLocalDateStr(0) || upcomingEndDate !== defaultEndDateStr
+                    ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+                title="Select Date Range"
+              >
+                <i className="fas fa-calendar-alt text-xs"></i>
+                <span>
+                  {new Date(upcomingStartDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {' - '}
+                  {new Date(upcomingEndDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </span>
+                <i className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}></i>
+              </button>
 
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-7">
-                    {[
-                      { key: 'none', label: 'No Group' },
-                      { key: 'classification', label: 'Classification' },
-                      { key: 'subject', label: 'Subject' },
-                    ].map((g) => (
+              {isUpDatePopoverOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsUpDatePopoverOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
+                    <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+                      Date Range
+                    </h5>
+                    <div className="space-y-2">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">From:</span>
+                        <input
+                          type="date"
+                          value={upcomingStartDate}
+                          onChange={(e) => setUpcomingStartDate(e.target.value)}
+                          className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">To:</span>
+                        <input
+                          type="date"
+                          value={upcomingEndDate}
+                          onChange={(e) => setUpcomingEndDate(e.target.value)}
+                          className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t">
                       <button
-                        key={g.key}
-                        onClick={() => setCpGroupingMode(g.key)}
-                        className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all cursor-pointer h-full flex items-center ${
-                          cpGroupingMode === g.key
-                            ? 'bg-brand-primary text-white shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                        }`}
+                        type="button"
+                        onClick={() => {
+                          setUpcomingStartDate(getLocalDateStr(0));
+                          setUpcomingEndDate(defaultEndDateStr);
+                          setIsUpDatePopoverOpen(false);
+                        }}
+                        className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
                       >
-                        {g.label}
+                        Reset
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsUpDatePopoverOpen(false)}
+                        className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
+                      >
+                        Apply
+                      </button>
+                    </div>
                   </div>
                 </>
               )}
             </div>
-          )}
-        </div>
+
+            {(() => {
+              const defaultEndDateStr = (() => {
+                const futureDate = new Date();
+                futureDate.setDate(futureDate.getDate() + 28);
+                const year = futureDate.getFullYear();
+                const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+                const day = String(futureDate.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+              })();
+
+              const hasActiveFilters = 
+                upFilterTeachers.length > 0 || 
+                upFilterClasses.length > 0 || 
+                upFilterSubjects.length > 0 || 
+                upcomingStartDate !== getLocalDateStr(0) || 
+                upcomingEndDate !== defaultEndDateStr;
+
+              if (!hasActiveFilters) return null;
+
+              return (
+                <button
+                  onClick={() => {
+                    setUpFilterTeachers([]);
+                    setUpFilterClasses([]);
+                    setUpFilterSubjects([]);
+                    setUpcomingStartDate(getLocalDateStr(0));
+                    setUpcomingEndDate(defaultEndDateStr);
+                  }}
+                  className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+                >
+                  Reset
+                </button>
+              );
+            })()}
+          </div>
+        )}
 
         {(activeTab === 'daily-activity' ||
           activeTab === 'today-class' ||
