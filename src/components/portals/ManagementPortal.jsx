@@ -185,8 +185,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
   // UUID mapping
   const uuidMap = {
-    resumes: 'career',
-    complaints: 'complaint',
+    'job-applications': 'career',
+    'registered-complaints': 'complaint',
   };
 
   // ── Timetable data fetch (read-only) ─────────────────────────────────────
@@ -399,7 +399,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
   const getExcludedGridColumns = () => {
     const baseExcludes = ['uuid'];
-    if (subView === 'students') return baseExcludes;
+    if (subView === 'student-records') return baseExcludes;
     formFields.forEach((field) => {
       const fieldName = field['Field Name']?.trim();
       if (fieldName) {
@@ -442,7 +442,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
   const getExcludedDetailFields = () => {
     const baseExcludes = ['uuid'];
-    if (subView === 'students') return baseExcludes;
+    if (subView === 'student-records') return baseExcludes;
     formFields.forEach((field) => {
       const fieldName = field['Field Name']?.trim();
       if (fieldName) {
@@ -489,52 +489,52 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   };
 
   useEffect(() => {
-    if (subView === 'resumes' || subView === 'complaints') {
+    if (subView === 'job-applications' || subView === 'registered-complaints') {
       fetchSubmissions(uuidMap[subView]);
-    } else if (subView === 'students') {
+    } else if (subView === 'student-records') {
       fetchStudents();
-    } else if (subView === 'timetable') {
+    } else if (subView === 'timetable-viewer') {
       fetchTimetableData();
     }
   }, [subView]);
 
   const baseManagementTiles = [
     {
-      id: 'complaints',
+      id: 'registered-complaints',
       title: 'Registered Complaints',
       description: 'Track and review user complaints and feedback.',
       icon: 'fa-comments',
       buttonColor: 'bg-amber-600 text-white',
       shadow: 'shadow-amber-200',
-      onClick: () => onSetSubView('complaints'),
+      onClick: () => onSetSubView('registered-complaints'),
     },
     {
-      id: 'students',
+      id: 'student-records',
       title: 'Student Records',
       description: 'View and filter student records in the database.',
       icon: 'fa-user-graduate',
       buttonColor: 'bg-emerald-600 text-white',
       shadow: 'shadow-emerald-200',
-      onClick: () => onSetSubView('students'),
+      onClick: () => onSetSubView('student-records'),
     },
     {
-      id: 'timetable',
+      id: 'timetable-viewer',
       title: 'Timetable Viewer',
       description: 'View all class and teacher schedules across the school.',
       icon: 'fa-calendar-alt',
       buttonColor: 'bg-brand-primary text-white',
       shadow: 'shadow-brand-lbg',
-      onClick: () => onSetSubView('timetable'),
+      onClick: () => onSetSubView('timetable-viewer'),
     },
 
     {
-      id: 'syllabus-report',
+      id: 'syllabus-progress-tracker',
       title: 'Syllabus Progress Tracker',
       description: 'View syllabus coverage, time spent on chapters/lessons, and revisions.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-indigo-600 text-white',
       shadow: 'shadow-indigo-200',
-      onClick: () => onSetSubView('syllabus-report'),
+      onClick: () => onSetSubView('syllabus-progress-tracker'),
     },
     {
       id: 'syllabus-manager',
@@ -555,13 +555,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       onClick: () => onSetSubView('lesson-planner'),
     },
     {
-      id: 'resumes',
+      id: 'job-applications',
       title: 'Job Applications',
       description: 'View and review submitted teacher and staff resumes.',
       icon: 'fa-file-signature',
       buttonColor: 'bg-red-600 text-white',
       shadow: 'shadow-red-200',
-      onClick: () => onSetSubView('resumes'),
+      onClick: () => onSetSubView('job-applications'),
     },
     {
       id: 'take-test',
@@ -961,7 +961,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
     // 1. Build dynamic editableFields
     let modalEditableFields = null;
-    if (selectedRecord && subView !== 'students') {
+    if (selectedRecord && subView !== 'student-records') {
       // Find status field from form config
       const statusField = formFields.find(
         (f) =>
@@ -1111,7 +1111,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           loading={loading}
           error={error}
           onRetry={() =>
-            subView === 'students' ? fetchStudents() : fetchSubmissions(uuidMap[subView])
+            subView === 'student-records' ? fetchStudents() : fetchSubmissions(uuidMap[subView])
           }
           onRowClick={handleRowClick}
           excludeColumns={getExcludedGridColumns()}
@@ -1123,7 +1123,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
             record={selectedRecord}
             onClose={() => setSelectedRecord(null)}
             excludeFields={getExcludedDetailFields()}
-            onSave={subView === 'students' ? null : handleUpdateRecord}
+            onSave={subView === 'student-records' ? null : handleUpdateRecord}
             onPrevRecord={handlePrevRecord}
             onNextRecord={handleNextRecord}
             hasPrevRecord={hasPrev}
@@ -1132,9 +1132,9 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
             totalRecords={total}
             isSaving={savingRecord}
             title={
-              subView === 'resumes'
+              subView === 'job-applications'
                 ? 'Application Details'
-                : subView === 'complaints'
+                : subView === 'registered-complaints'
                   ? 'Complaint Details'
                   : 'Student Details'
             }
@@ -1407,14 +1407,14 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       subView={subView}
       onSetSubView={onSetSubView}
     >
-      {subView === 'resumes' || subView === 'complaints' || subView === 'students'
+      {subView === 'job-applications' || subView === 'registered-complaints' || subView === 'student-records'
         ? renderTableView()
         : null}
       {subView === 'take-test' ? renderTakeTestView() : null}
-      {subView === 'syllabus-report' && <SyllabusProgressReport role="management" />}
+      {subView === 'syllabus-progress-tracker' && <SyllabusProgressReport role="management" />}
       {subView === 'syllabus-manager' && <SyllabusManager role="management" user={user} />}
       {subView === 'lesson-planner' && <LessonManager role="management" user={user} />}
-      {subView === 'timetable' &&
+      {subView === 'timetable-viewer' &&
         (ttLoading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />

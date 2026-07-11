@@ -25,6 +25,7 @@ let syllabusTrackerCache = {
   allLogs: [],
   allLessons: [],
   todaysPlans: [],
+  loadingPromise: null,
 };
 
 import MultiSelectDropdown from '../syllabus-shared/MultiSelectDropdown';
@@ -80,6 +81,15 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDefaultEndDateStr = () => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 28);
+    const year = futureDate.getFullYear();
+    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const day = String(futureDate.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -224,13 +234,58 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
   useEffect(() => {
     const initData = async () => {
-      if (user?.id && syllabusTrackerCache.userId === user?.id && syllabusTrackerCache.teacher) {
+      if (!user || !user.id) return;
+
+      const isCacheValid = syllabusTrackerCache.userId === user.id && syllabusTrackerCache.teacher;
+
+      if (isCacheValid) {
+        // Cache is fully valid, set local states
+        setTeacher(syllabusTrackerCache.teacher);
+        setUpFilterTeachers([String(syllabusTrackerCache.teacher.id)]);
+        setClasses(syllabusTrackerCache.classes);
+        setSubjects(syllabusTrackerCache.subjects);
+        setAssignments(syllabusTrackerCache.assignments);
+        setBooks(syllabusTrackerCache.books);
+        setClassifications(syllabusTrackerCache.classifications);
+        setBookClasses(syllabusTrackerCache.bookClasses);
+        setAllLessons(syllabusTrackerCache.allLessons);
+        setAllLogs(syllabusTrackerCache.allLogs);
+        setLessonPlans(syllabusTrackerCache.todaysPlans);
+        setFavorites(syllabusTrackerCache.favorites);
+        setLoading(false);
         return;
       }
 
-      if (syllabusTrackerCache.userId !== user?.id) {
+      // If a fetch is already in progress for this user, wait for it
+      if (syllabusTrackerCache.loadingPromise && syllabusTrackerCache.userId === user.id) {
+        setLoading(true);
+        try {
+          const cache = await syllabusTrackerCache.loadingPromise;
+          setTeacher(cache.teacher);
+          setUpFilterTeachers([String(cache.teacher.id)]);
+          setClasses(cache.classes);
+          setSubjects(cache.subjects);
+          setAssignments(cache.assignments);
+          setBooks(cache.books);
+          setClassifications(cache.classifications);
+          setBookClasses(cache.bookClasses);
+          setAllLessons(cache.allLessons);
+          setAllLogs(cache.allLogs);
+          setLessonPlans(cache.todaysPlans);
+          setFavorites(cache.favorites);
+        } catch (err) {
+          console.warn('SyllabusTracker coalesced load failed:', err.message);
+          loadLocalFallback();
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Clear cache for new user
+      if (syllabusTrackerCache.userId !== user.id) {
         syllabusTrackerCache = {
-          userId: user?.id,
+          userId: user.id,
           teacher: null,
           classes: [],
           subjects: [],
@@ -248,6 +303,8 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           allTrackers: [],
           allLogs: [],
           allLessons: [],
+          todaysPlans: [],
+          loadingPromise: null,
         };
         setLoading(true);
         setTeacher(null);
@@ -264,9 +321,8 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         setBookClasses([]);
       }
 
-      try {
-        if (!user || !user.id) throw new Error('User session not found.');
-        let teacherData = teacherRecord || syllabusTrackerCache.teacher;
+      const fetchPromise = (async () => {
+        let teacherData = teacherRecord;
         if (!teacherData) {
           const { data, error: teachErr } = await supabase
             .from('teachers')
@@ -277,9 +333,6 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           teacherData = data;
         }
         if (!teacherData) throw new Error('User not mapped to Teacher record.');
-        setTeacher(teacherData);
-        syllabusTrackerCache.teacher = teacherData;
-        setUpFilterTeachers([String(teacherData.id)]);
 
         const [
           { data: dbClasses },
@@ -332,52 +385,64 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           current_status: log.status,
         }));
 
-        const fetchedAllLogs = dbAllLogs || [];
-
-        setClasses(fetchedClasses);
-        setSubjects(fetchedSubjects);
-        setAssignments(fetchedAssignments);
-        setBooks(fetchedBooks);
-        setClassifications(fetchedClassifications);
-        setBookClasses(fetchedBookClasses);
-        setAllLessons(fetchedAllLessons);
-        setAllLogs(mappedAllLogs);
-        setLessonPlans(fetchedPlans);
-
-        const todayStr = getLocalDateStr(0);
-        // We include today's plans, PAST DUE plans (so they can be carried forward or completed), and weekly plans
-        const activePlans = fetchedPlans.filter(
-          (p) => p.status === 'planned' && (p.target_start_date === null || p.target_start_date <= todayStr)
-        );
-        setTodaysPlans(activePlans);
-
-        syllabusTrackerCache.classes = fetchedClasses;
-        syllabusTrackerCache.subjects = fetchedSubjects;
-        syllabusTrackerCache.assignments = fetchedAssignments;
-        syllabusTrackerCache.books = fetchedBooks;
-        syllabusTrackerCache.classifications = fetchedClassifications;
-        syllabusTrackerCache.bookClasses = fetchedBookClasses;
-        syllabusTrackerCache.allLessons = fetchedAllLessons;
-        syllabusTrackerCache.allLogs = mappedAllLogs;
-        syllabusTrackerCache.todaysPlans = activePlans;
-
-        const filteredClasses = fetchedClasses.filter((c) =>
-          assignedClassIds.includes(String(c.id))
-        );
-        // Do not auto-select first class to default selectedProgressClassId to empty
-
         let dbFavs = await loadFavoritesFromDB(teacherData.id);
         if (dbFavs.length === 0) {
           const migrated = await migrateLocalStorageFavorites(teacherData.id);
           if (migrated) dbFavs = migrated;
         }
-        setFavorites(dbFavs);
-        syllabusTrackerCache.favorites = dbFavs;
+
+        const todayStr = getLocalDateStr(0);
+        const activePlans = fetchedPlans.filter(
+          (p) => p.status === 'planned' && (p.target_start_date === null || p.target_start_date <= todayStr)
+        );
+
+        return {
+          teacher: teacherData,
+          classes: fetchedClasses,
+          subjects: fetchedSubjects,
+          assignments: fetchedAssignments,
+          books: fetchedBooks,
+          classifications: fetchedClassifications,
+          bookClasses: fetchedBookClasses,
+          allLessons: fetchedAllLessons,
+          allLogs: mappedAllLogs,
+          todaysPlans: activePlans,
+          favorites: dbFavs,
+        };
+      })();
+
+      syllabusTrackerCache.loadingPromise = fetchPromise;
+
+      try {
+        const cacheData = await fetchPromise;
+        syllabusTrackerCache.teacher = cacheData.teacher;
+        syllabusTrackerCache.classes = cacheData.classes;
+        syllabusTrackerCache.subjects = cacheData.subjects;
+        syllabusTrackerCache.assignments = cacheData.assignments;
+        syllabusTrackerCache.books = cacheData.books;
+        syllabusTrackerCache.classifications = cacheData.classifications;
+        syllabusTrackerCache.bookClasses = cacheData.bookClasses;
+        syllabusTrackerCache.allLessons = cacheData.allLessons;
+        syllabusTrackerCache.allLogs = cacheData.allLogs;
+        syllabusTrackerCache.todaysPlans = cacheData.todaysPlans;
+        syllabusTrackerCache.favorites = cacheData.favorites;
+
+        setTeacher(cacheData.teacher);
+        setUpFilterTeachers([String(cacheData.teacher.id)]);
+        setClasses(cacheData.classes);
+        setSubjects(cacheData.subjects);
+        setAssignments(cacheData.assignments);
+        setBooks(cacheData.books);
+        setClassifications(cacheData.classifications);
+        setBookClasses(cacheData.bookClasses);
+        setAllLessons(cacheData.allLessons);
+        setAllLogs(cacheData.allLogs);
+        setLessonPlans(cacheData.todaysPlans);
+        setFavorites(cacheData.favorites);
       } catch (err) {
         console.warn('SyllabusTracker init failed:', err.message);
-        if (!syllabusTrackerCache.teacher) {
-          loadLocalFallback();
-        }
+        syllabusTrackerCache.loadingPromise = null;
+        loadLocalFallback();
       } finally {
         setLoading(false);
       }
@@ -1329,6 +1394,161 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
                 Reset
               </button>
             )}
+          </div>
+        )}
+
+        {activeTab === 'upcoming-lessons' && (
+          <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+            </div>
+            {(() => {
+              const teacherClassIds = assignments.map((a) => String(a.class_id));
+              const teacherSubjectIds = assignments.map((a) => String(a.subject_id));
+              
+              const assignedClassOpts = classes
+                .filter((c) => teacherClassIds.includes(String(c.id)))
+                .map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
+
+              const assignedSubjectOpts = subjects
+                .filter((s) => teacherSubjectIds.includes(String(s.id)))
+                .map((s) => ({ id: String(s.id), label: s.name }));
+
+              const teacherOpts = teacher
+                ? [{ id: String(teacher.id), label: teacher.name }]
+                : [];
+
+              const hasActiveFilters = 
+                upFilterClasses.length > 0 || 
+                upFilterSubjects.length > 0 || 
+                upcomingStartDate !== getLocalDateStr(0) || 
+                upcomingEndDate !== getDefaultEndDateStr();
+
+              return (
+                <>
+                  <div className="min-w-[140px] flex-1 sm:flex-initial">
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Teacher"
+                      options={teacherOpts}
+                      selected={upFilterTeachers}
+                      onChange={() => {}} // Read-only for teachers
+                      disabled={true}
+                    />
+                  </div>
+
+                  <div className="min-w-[140px] flex-1 sm:flex-initial">
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Class Filter"
+                      options={assignedClassOpts}
+                      selected={upFilterClasses}
+                      onChange={setUpFilterClasses}
+                    />
+                  </div>
+
+                  <div className="min-w-[140px] flex-1 sm:flex-initial">
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Subject Filter"
+                      options={assignedSubjectOpts}
+                      selected={upFilterSubjects}
+                      onChange={setUpFilterSubjects}
+                    />
+                  </div>
+
+                  {/* Compact Date Range Popover */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
+                      className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                        upcomingStartDate !== getLocalDateStr(0) || upcomingEndDate !== getDefaultEndDateStr()
+                          ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
+                          : 'bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                      title="Select Date Range"
+                    >
+                      <i className="fas fa-calendar-alt text-xs"></i>
+                      <span>
+                        {new Date(upcomingStartDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        {' - '}
+                        {new Date(upcomingEndDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                      <i className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}></i>
+                    </button>
+
+                    {isUpDatePopoverOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsUpDatePopoverOpen(false)}
+                        />
+                        <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
+                          <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+                            Date Range
+                          </h5>
+                          <div className="space-y-2">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase">From:</span>
+                              <input
+                                type="date"
+                                value={upcomingStartDate}
+                                onChange={(e) => setUpcomingStartDate(e.target.value)}
+                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[10px] font-bold text-gray-400 uppercase">To:</span>
+                              <input
+                                type="date"
+                                value={upcomingEndDate}
+                                onChange={(e) => setUpcomingEndDate(e.target.value)}
+                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-2 border-t">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUpcomingStartDate(getLocalDateStr(0));
+                                setUpcomingEndDate(getDefaultEndDateStr());
+                                setIsUpDatePopoverOpen(false);
+                              }}
+                              className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
+                            >
+                              Reset
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsUpDatePopoverOpen(false)}
+                              className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {hasActiveFilters && (
+                    <button
+                      onClick={() => {
+                        setUpFilterClasses([]);
+                        setUpFilterSubjects([]);
+                        setUpcomingStartDate(getLocalDateStr(0));
+                        setUpcomingEndDate(getDefaultEndDateStr());
+                      }}
+                      className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
 

@@ -385,10 +385,10 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   useEffect(() => {
     if (subView === lastSubViewRef.current) return;
     lastSubViewRef.current = subView;
-    if (subView === 'users') {
+    if (subView === 'user-management') {
       fetchAllUsers();
       fetchTeachers();
-    } else if (subView === 'configs') {
+    } else if (subView === 'form-configurations') {
       fetchConfigs();
     }
   }, [subView]);
@@ -396,62 +396,62 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // Admin tiles (same as before, but "Clear cache" removed – can be re-added if needed)
   const adminTiles = [
     {
-      id: 'users',
+      id: 'user-management',
       title: 'User Management',
       description: 'Manage roles and permissions for all users.',
       icon: 'fa-users',
       buttonColor: 'bg-orange-primary text-white',
       shadow: 'shadow-orange-200',
-      onClick: () => onSetSubView('users'),
+      onClick: () => onSetSubView('user-management'),
     },
     {
-      id: 'configs',
+      id: 'form-configurations',
       title: 'Form Configurations',
       description: 'Configure fields, validation, and overrides in the database.',
       icon: 'fa-sliders-h',
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
-      onClick: () => onSetSubView('configs'),
+      onClick: () => onSetSubView('form-configurations'),
     },
     {
-      id: 'students',
+      id: 'student-database',
       title: 'Student Database',
       description: 'View and assign student records to parents.',
       icon: 'fa-user-graduate',
       buttonColor: 'bg-green-dark text-white',
       shadow: 'shadow-green-200',
-      onClick: () => onSetSubView('students'),
+      onClick: () => onSetSubView('student-database'),
     },
     {
-      id: 'timetable',
+      id: 'timetable-planner',
       title: 'Timetable Planner',
       description: 'Manage classes, teachers, subjects, and schedule conflict-free timetables.',
       icon: 'fa-calendar-alt',
       buttonColor: 'bg-brand-primary text-white',
       shadow: 'shadow-brand-lbg',
-      onClick: () => onSetSubView('timetable'),
+      onClick: () => onSetSubView('timetable-planner'),
     },
     {
-      id: 'syllabus',
+      id: 'syllabus-manager',
       title: 'Syllabus Manager',
       description: 'Manage curriculum nodes, subjects, books, units, chapters, and lessons.',
       icon: 'fa-book-open',
       buttonColor: 'bg-purple-600 text-white',
       shadow: 'shadow-purple-200',
-      onClick: () => onSetSubView('syllabus'),
+      onClick: () => onSetSubView('syllabus-manager'),
     },
     {
-      id: 'syllabus-report',
-      title: 'Syllabus Progress Reports',
+      id: 'syllabus-progress-tracker',
+      title: 'Syllabus Progress Tracker',
       description: 'View coverage percentages, average class days spent, and revision metrics.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
-      onClick: () => onSetSubView('syllabus-report'),
+      onClick: () => onSetSubView('syllabus-progress-tracker'),
     },
     {
       id: 'lesson-planner',
-      title: 'Lesson PLanner',
+      title: 'Lesson Planner',
       description: 'View and manage lesson plans across all classes, subjects, and teachers.',
       icon: 'fa-calendar-check',
       buttonColor: 'bg-indigo-600 text-white',
@@ -469,7 +469,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       onSetSubView={onSetSubView}
     >
       {/* Users view (now using DataGrid + Modal) */}
-      {subView === 'users' && (
+      {subView === 'user-management' && (
         <AdminUsersView
           users={users}
           loading={loading}
@@ -482,7 +482,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       )}
 
       {/* Form configs view (kept as before) */}
-      {subView === 'configs' && (
+      {subView === 'form-configurations' && (
         <AdminFormConfigsView
           configs={configs}
           sheetMappings={sheetMappings}
@@ -499,16 +499,16 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       )}
 
       {/* Timetable Planner view */}
-      {subView === 'timetable' && <TimetableManager />}
+      {subView === 'timetable-planner' && <TimetableManager />}
 
       {/* Student Database view */}
-      {subView === 'students' && <AdminStudentsView />}
+      {subView === 'student-database' && <AdminStudentsView />}
 
       {/* Syllabus Manager view */}
-      {subView === 'syllabus' && <SyllabusManager role="admin" />}
+      {subView === 'syllabus-manager' && <SyllabusManager role="admin" />}
 
       {/* Syllabus Progress Report view */}
-      {subView === 'syllabus-report' && <SyllabusProgressReport role="admin" />}
+      {subView === 'syllabus-progress-tracker' && <SyllabusProgressReport role="admin" />}
 
       {/* Lesson Manager view */}
       {subView === 'lesson-planner' && <LessonManager role="admin" user={user} />}

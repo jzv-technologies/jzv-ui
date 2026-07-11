@@ -7,6 +7,11 @@ import MultiSelectDropdown from '../../syllabus-shared/MultiSelectDropdown';
 import DailyActivityTable from '../../syllabus-shared/DailyActivityTable';
 import SyllabusProgressGrid from '../../syllabus-shared/SyllabusProgressGrid';
 
+let syllabusReportCache = {
+  data: null,
+  loadingPromise: null,
+};
+
 const SyllabusProgressReport = ({ role, student }) => {
   const [loading, setLoading] = useState(true);
 
@@ -40,6 +45,15 @@ const SyllabusProgressReport = ({ role, student }) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDefaultEndDateStr = () => {
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 28);
+    const year = futureDate.getFullYear();
+    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
+    const day = String(futureDate.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -93,8 +107,84 @@ const SyllabusProgressReport = ({ role, student }) => {
 
   // ─── Load Base Reference Data ───
   const loadData = async () => {
+    // 1. If we already have the cache populated, use it immediately
+    if (syllabusReportCache.data) {
+      const cache = syllabusReportCache.data;
+      
+      let fetchedClasses = cache.classes;
+      if (role === 'parent' && student?.class_id) {
+        const hasClass = fetchedClasses.some((c) => String(c.id) === String(student.class_id));
+        if (!hasClass) {
+          fetchedClasses = [
+            ...fetchedClasses,
+            {
+              id: student.class_id,
+              name: student.class_name || 'Class ' + student.class_id,
+            },
+          ];
+        }
+      }
+
+      setClasses(fetchedClasses);
+      setSubjects(cache.subjects);
+      setBooks(cache.books);
+      setClassifications(cache.classifications);
+      setBookClasses(cache.bookClasses);
+      setAssignments(cache.assignments);
+      setTeachers(cache.teachers);
+      setBookTrackers(cache.bookTrackers);
+      setAllLogs(cache.allLogs);
+      setAllLessons(cache.allLessons);
+      setLessonPlans(cache.lessonPlans);
+      setCarryForwards(cache.carryForwards);
+      setLoading(false);
+      return;
+    }
+
+    // 2. If a loading promise is already active, wait for it
+    if (syllabusReportCache.loadingPromise) {
+      setLoading(true);
+      try {
+        const cache = await syllabusReportCache.loadingPromise;
+        
+        let fetchedClasses = cache.classes;
+        if (role === 'parent' && student?.class_id) {
+          const hasClass = fetchedClasses.some((c) => String(c.id) === String(student.class_id));
+          if (!hasClass) {
+            fetchedClasses = [
+              ...fetchedClasses,
+              {
+                id: student.class_id,
+                name: student.class_name || 'Class ' + student.class_id,
+              },
+            ];
+          }
+        }
+
+        setClasses(fetchedClasses);
+        setSubjects(cache.subjects);
+        setBooks(cache.books);
+        setClassifications(cache.classifications);
+        setBookClasses(cache.bookClasses);
+        setAssignments(cache.assignments);
+        setTeachers(cache.teachers);
+        setBookTrackers(cache.bookTrackers);
+        setAllLogs(cache.allLogs);
+        setAllLessons(cache.allLessons);
+        setLessonPlans(cache.lessonPlans);
+        setCarryForwards(cache.carryForwards);
+      } catch (err) {
+        console.warn('SyllabusProgressReport coalesced load failed:', err.message);
+        loadLocalFallback();
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // 3. Otherwise start load and set the promise
     setLoading(true);
-    try {
+    const fetchPromise = (async () => {
       const [
         resClasses,
         resSubjects,
@@ -172,7 +262,29 @@ const SyllabusProgressReport = ({ role, student }) => {
         target_date: plan.target_start_date,
       }));
 
-      let fetchedClasses = dbClasses;
+      return {
+        classes: dbClasses,
+        subjects: dbSubjects,
+        books: dbBooks,
+        classifications: dbClassifications,
+        bookClasses: dbBookClasses,
+        assignments: dbAssignments,
+        teachers: dbTeachers,
+        bookTrackers: dbTrackers,
+        allLogs: dbLogs,
+        allLessons: dbLessons,
+        lessonPlans: dbPlans,
+        carryForwards: dbCarryForwards,
+      };
+    })();
+
+    syllabusReportCache.loadingPromise = fetchPromise;
+
+    try {
+      const cacheData = await fetchPromise;
+      syllabusReportCache.data = cacheData;
+
+      let fetchedClasses = cacheData.classes;
       if (role === 'parent' && student?.class_id) {
         const hasClass = fetchedClasses.some((c) => String(c.id) === String(student.class_id));
         if (!hasClass) {
@@ -186,29 +298,21 @@ const SyllabusProgressReport = ({ role, student }) => {
         }
       }
 
-      if (
-        dbClasses.length === 0 &&
-        dbTeachers.length === 0 &&
-        dbBooks.length === 0 &&
-        role !== 'parent'
-      ) {
-        loadLocalFallback();
-      } else {
-        setClasses(fetchedClasses);
-        setSubjects(dbSubjects);
-        setBooks(dbBooks);
-        setClassifications(dbClassifications);
-        setBookClasses(dbBookClasses);
-        setAssignments(dbAssignments);
-        setTeachers(dbTeachers);
-      }
-      setBookTrackers(dbTrackers);
-      setAllLogs(dbLogs);
-      setAllLessons(dbLessons);
-      setLessonPlans(dbPlans);
-      setCarryForwards(dbCarryForwards);
+      setClasses(fetchedClasses);
+      setSubjects(cacheData.subjects);
+      setBooks(cacheData.books);
+      setClassifications(cacheData.classifications);
+      setBookClasses(cacheData.bookClasses);
+      setAssignments(cacheData.assignments);
+      setTeachers(cacheData.teachers);
+      setBookTrackers(cacheData.bookTrackers);
+      setAllLogs(cacheData.allLogs);
+      setAllLessons(cacheData.allLessons);
+      setLessonPlans(cacheData.lessonPlans);
+      setCarryForwards(cacheData.carryForwards);
     } catch (err) {
       console.warn('SyllabusProgressReport loadData failed:', err.message);
+      syllabusReportCache.loadingPromise = null;
       loadLocalFallback();
     } finally {
       setLoading(false);
@@ -1157,7 +1261,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                 type="button"
                 onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
                 className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                  upcomingStartDate !== getLocalDateStr(0) || upcomingEndDate !== defaultEndDateStr
+                  upcomingStartDate !== getLocalDateStr(0) || upcomingEndDate !== getDefaultEndDateStr()
                     ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
                     : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
@@ -1207,7 +1311,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                         type="button"
                         onClick={() => {
                           setUpcomingStartDate(getLocalDateStr(0));
-                          setUpcomingEndDate(defaultEndDateStr);
+                          setUpcomingEndDate(getDefaultEndDateStr());
                           setIsUpDatePopoverOpen(false);
                         }}
                         className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
@@ -1228,21 +1332,12 @@ const SyllabusProgressReport = ({ role, student }) => {
             </div>
 
             {(() => {
-              const defaultEndDateStr = (() => {
-                const futureDate = new Date();
-                futureDate.setDate(futureDate.getDate() + 28);
-                const year = futureDate.getFullYear();
-                const month = String(futureDate.getMonth() + 1).padStart(2, '0');
-                const day = String(futureDate.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-              })();
-
               const hasActiveFilters = 
                 upFilterTeachers.length > 0 || 
                 upFilterClasses.length > 0 || 
                 upFilterSubjects.length > 0 || 
                 upcomingStartDate !== getLocalDateStr(0) || 
-                upcomingEndDate !== defaultEndDateStr;
+                upcomingEndDate !== getDefaultEndDateStr();
 
               if (!hasActiveFilters) return null;
 
@@ -1253,7 +1348,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                     setUpFilterClasses([]);
                     setUpFilterSubjects([]);
                     setUpcomingStartDate(getLocalDateStr(0));
-                    setUpcomingEndDate(defaultEndDateStr);
+                    setUpcomingEndDate(getDefaultEndDateStr());
                   }}
                   className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
                 >
