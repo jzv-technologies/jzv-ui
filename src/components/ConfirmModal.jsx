@@ -3,13 +3,13 @@ import React from 'react';
 
 const ConfirmModal = ({
   isOpen,
-  title = "Confirm Action",
+  title = 'Confirm Action',
   message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
-  type = "danger", // danger, warning, info
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  type = 'danger', // danger, warning, info
   onConfirm,
-  onCancel
+  onCancel,
 }) => {
   if (!isOpen) return null;
 
@@ -42,13 +42,9 @@ const ConfirmModal = ({
   return (
     <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-200 p-6 flex flex-col items-center text-center space-y-4">
-        <div className="p-3 bg-light-bg/10 rounded-full shrink-0">
-          {getIcon()}
-        </div>
-        
         <div className="space-y-1">
           <h3 className="text-base font-extrabold text-dark-deepblue">
-            {title}
+            {getIcon()} {title}
           </h3>
           <p className="text-xs text-dark-soft font-semibold leading-relaxed whitespace-pre-line">
             {message}

@@ -5,3 +5,5 @@
 - CAN BE USED TO RECREATE THE DATABASE OR FOR TESTING PURPOSES
 - TO CALL THIS FUNCTION IN YOUR CODE
   supabase.rpc('get_database_context');
+
+---

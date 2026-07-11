@@ -27,102 +27,10 @@ let syllabusTrackerCache = {
   todaysPlans: [],
 };
 
-const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = 'All' }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState('');
-
-  const filteredOptions = options.filter((opt) =>
-    (opt.label || '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleToggle = (id) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((x) => x !== id));
-    } else {
-      onChange([...selected, id]);
-    }
-  };
-
-  const handleSelectAll = () => {
-    onChange(options.map((opt) => opt.id));
-  };
-
-  const handleClearAll = () => {
-    onChange([]);
-  };
-
-  return (
-    <div className="relative inline-block text-left w-full sm:w-44">
-      <div className="flex flex-col gap-0.5 font-sans">
-        {label && (
-          <span className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider">
-            {label}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-[11px] font-bold text-dark-primary flex justify-between items-center shadow-sm hover:bg-gray-50 cursor-pointer h-7"
-        >
-          <span className="truncate select-none">
-            {selected.length === 0 ? placeholder : `Selected (${selected.length})`}
-          </span>
-          <i className="fas fa-chevron-down text-[9px] text-gray-400 ml-1"></i>
-        </button>
-      </div>
-
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute left-0 mt-1 w-64 rounded-xl bg-white border border-gray-200 shadow-lg z-20 flex flex-col max-h-72 overflow-hidden font-sans">
-            <div className="p-2 border-b bg-gray-50 flex items-center justify-between gap-2">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary"
-              />
-            </div>
-            <div className="p-1.5 border-b bg-gray-50/50 flex justify-between text-[10px] font-black text-brand-primary uppercase px-3 select-none">
-              <button onClick={handleSelectAll} className="hover:underline cursor-pointer">
-                Select All
-              </button>
-              <button onClick={handleClearAll} className="hover:underline cursor-pointer">
-                Clear All
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 p-2 space-y-1">
-              {filteredOptions.length === 0 ? (
-                <p className="text-[10px] text-gray-400 font-semibold text-center py-2">
-                  No matching options
-                </p>
-              ) : (
-                filteredOptions.map((opt) => {
-                  const isChecked = selected.includes(opt.id);
-                  return (
-                    <label
-                      key={opt.id}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer select-none text-xs font-bold text-dark-primary"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => handleToggle(opt.id)}
-                        className="rounded text-brand-primary focus:ring-brand-primary w-4 h-4 cursor-pointer"
-                      />
-                      <span className="truncate">{opt.label}</span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
+import MultiSelectDropdown from '../syllabus-shared/MultiSelectDropdown';
+import SyllabusProgressGrid from '../syllabus-shared/SyllabusProgressGrid';
+import DailyActivityTable from '../syllabus-shared/DailyActivityTable';
+import SyllabusAddWorkModal from './components/SyllabusAddWorkModal';
 
 const SyllabusTracker = ({ user, teacherRecord }) => {
   const isCacheValid = syllabusTrackerCache.userId === user?.id;
@@ -130,7 +38,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   const [loading, setLoading] = useState(() => !isCacheValid || !syllabusTrackerCache.teacher);
   const [submitting, setSubmitting] = useState(false);
   const [teacher, setTeacher] = useState(() =>
-    isCacheValid ? syllabusTrackerCache.teacher : (teacherRecord || null)
+    isCacheValid ? syllabusTrackerCache.teacher : teacherRecord || null
   );
 
   // Reference data
@@ -149,12 +57,6 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     isCacheValid ? syllabusTrackerCache.bookClasses : []
   );
 
-  // Add Book Mapping form state (bottom of modal)
-  const [showAddBookMappingForm, setShowAddBookMappingForm] = useState(false);
-  const [abClassificationId, setAbClassificationId] = useState('');
-  const [abSubjectId, setAbSubjectId] = useState('');
-  const [abBookId, setAbBookId] = useState('');
-
   // Favorites (DB-backed via teacher_cache)
   const [favorites, setFavorites] = useState(() =>
     isCacheValid ? syllabusTrackerCache.favorites : []
@@ -164,7 +66,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   const [coverMode, setCoverMode] = useState(false);
   const [activeTab, setActiveTab] = useState('teacher-activity');
 
-  // My Work tab — teacher's log entries
+  // My Work tab â€” teacher's log entries
   const [myWorkEntries, setMyWorkEntries] = useState(() =>
     isCacheValid && syllabusTrackerCache.myWorkEntries ? syllabusTrackerCache.myWorkEntries : []
   );
@@ -187,11 +89,11 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     end: getLocalDateStr(0),
   }));
 
-  // ─── Tab 2: Syllabus Progress States ───
+  // â”€â”€â”€ Tab 2: Syllabus Progress States â”€â”€â”€
   const [cpFilterClasses, setCpFilterClasses] = useState([]);
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
   const [cpFilterClassifications, setCpFilterClassifications] = useState([]);
-  const [cpGroupingMode, setCpGroupingMode] = useState('classification'); // 'classification' | 'subject' | 'none'
+  const [cpGroupingMode, setCpGroupingMode] = useState('none'); // 'classification' | 'subject' | 'none'
 
   const [allTrackers, setAllTrackers] = useState(() =>
     isCacheValid ? syllabusTrackerCache.allTrackers || [] : []
@@ -220,36 +122,11 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
   // Add Work modal state
   const [isAddWorkModalOpen, setIsAddWorkModalOpen] = useState(false);
-  const [awClassId, setAwClassId] = useState('');
-  const [awClassificationId, setAwClassificationId] = useState('');
-  const [awSubjectId, setAwSubjectId] = useState('');
-  const [awBookId, setAwBookId] = useState('');
-  const [awLevel1, setAwLevel1] = useState('');
-  const [awLevel2, setAwLevel2] = useState('');
-  const [awLevel3, setAwLevel3] = useState('');
-  const [awStatus, setAwStatus] = useState('in_progress');
-  const [awProgress, setAwProgress] = useState(50);
-  const [awDate, setAwDate] = useState(new Date().toISOString().split('T')[0]);
-  const [awComments, setAwComments] = useState('');
-  const [awBookData, setAwBookData] = useState([]);
-  const [previousMaxProgress, setPreviousMaxProgress] = useState(0);
-
-  // Inline add level states
-  const [inlineAddType, setInlineAddType] = useState(null); // 'level1' | 'level2' | 'level3'
-  const [inlineAddName, setInlineAddName] = useState('');
-  const [inlineAddPageCount, setInlineAddPageCount] = useState(0);
-  const [inlineAddComplexity, setInlineAddComplexity] = useState('Easy');
-  const [inlineAddWithLevel3, setInlineAddWithLevel3] = useState(false); // toggle for level2 add
-  const [inlineAddLevel3Name, setInlineAddLevel3Name] = useState('');
-
-  // Favorites override modal
-  const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
-  const [overrideSelection, setOverrideSelection] = useState('');
-  const [pendingFavorite, setPendingFavorite] = useState(null);
+  const [plannedLessonToLog, setPlannedLessonToLog] = useState(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // ─── Favorites DB Helpers ──────────────────────────────────────────
+  // â”€â”€â”€ Favorites DB Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const loadFavoritesFromDB = async (teacherId) => {
     try {
@@ -324,7 +201,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // ─── Data Loading ──────────────────────────────────────────────────
+  // â”€â”€â”€ Data Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   useEffect(() => {
     const initData = async () => {
@@ -401,7 +278,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
           supabase.from('subject_classifications').select('*'),
           supabase.from('syllabus_book_classes').select('*'),
           supabase.from('syllabus_book_lessons').select('*'),
-          supabase.from('lesson_progress').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').eq('status', 'planned'),
+          supabase
+            .from('lesson_progress')
+            .select(
+              '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
+            )
+            .eq('status', 'planned'),
         ]);
 
         const fetchedClasses = dbClasses || [];
@@ -417,10 +299,15 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         const assignedClassIds = fetchedAssignments.map((a) => String(a.class_id));
         const { data: dbAllLogs } =
           assignedClassIds.length > 0
-            ? await supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').in('class_id', assignedClassIds)
+            ? await supabase
+                .from('lesson_progress')
+                .select(
+                  'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+                )
+                .in('class_id', assignedClassIds)
             : { data: [] };
 
-        const mappedAllLogs = (dbAllLogs || []).map(log => ({
+        const mappedAllLogs = (dbAllLogs || []).map((log) => ({
           ...log,
           current_status: log.status,
         }));
@@ -438,7 +325,9 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
         const todayStr = getLocalDateStr(0);
         // We include today's plans, PAST DUE plans (so they can be carried forward or completed), and weekly plans
-        const activePlans = fetchedPlans.filter(p => p.target_start_date === null || p.target_start_date <= todayStr);
+        const activePlans = fetchedPlans.filter(
+          (p) => p.target_start_date === null || p.target_start_date <= todayStr
+        );
         setTodaysPlans(activePlans);
 
         syllabusTrackerCache.classes = fetchedClasses;
@@ -519,7 +408,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     initData();
   }, [user, teacherRecord]);
 
-  // ─── My Work: Fetch teacher's log entries ──────────────────────────
+  // â”€â”€â”€ My Work: Fetch teacher's log entries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fetchMyWorkEntries = useCallback(async () => {
     if (!teacher?.id) return;
@@ -569,9 +458,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         query = query.gte('date', startBound).lte('date', endBound);
       }
 
-      const { data: items, error } = await query
-        .order('date', { ascending: false })
-        .limit(200);
+      const { data: items, error } = await query.order('date', { ascending: false }).limit(200);
 
       if (error) throw error;
 
@@ -585,9 +472,11 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       const enriched = items.map((item) => {
         const log = item.log;
         const lesson = log ? log.lesson : null;
-        const book = lesson ? books.find((b) => b.id === lesson.book_id) : null;
-        const subject = book ? subjects.find((s) => s.id === book.subject_id) : null;
-        const cls = log ? classes.find((c) => c.id === log.class_id) : null;
+        const book = lesson ? books.find((b) => String(b.id) === String(lesson.book_id)) : null;
+        const subject = book
+          ? subjects.find((s) => String(s.id) === String(book.subject_id))
+          : null;
+        const cls = log ? classes.find((c) => String(c.id) === String(log.class_id)) : null;
 
         return {
           ...item,
@@ -666,7 +555,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       if (trackerRes.error) throw trackerRes.error;
       if (logsRes.error) throw logsRes.error;
 
-      const mappedLogs = (logsRes.data || []).map(log => ({
+      const mappedLogs = (logsRes.data || []).map((log) => ({
         ...log,
         current_status: log.status,
       }));
@@ -705,748 +594,13 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // ─── Book labels helper ──────────────────────────────────────────
-
-  const getBookLabels = (book) => {
-    const rl = (book?.hierarchy_type || 'Unit, Chapter, Lesson')
-      .split(/[,>]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const bl = rl[0] && rl[0].toLowerCase().includes('book') && rl.length > 1 ? rl.slice(1) : rl;
-    return { lvl1: bl[0] || 'Unit', lvl2: bl[1] || 'Chapter', lvl3: bl[2] || 'Lesson', levels: bl };
-  };
-
-  // ─── Add Work Modal: cascading filter helpers ──────────────────────
-
-  const awClasses =
-    coverMode || assignments.length === 0
-      ? classes
-      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
-
-  // Filter books and subjects by classes mapped in syllabus_book_classes
-  const mappedBookIds = bookClasses
-    .filter((bc) => String(bc.class_id) === String(awClassId))
-    .map((bc) => String(bc.book_id));
-  const awClassBooks = books.filter((b) => mappedBookIds.includes(String(b.id)));
-
-  const awFilteredSubjects = subjects.filter((s) =>
-    awClassBooks.some((b) => String(b.subject_id) === String(s.id))
-  );
-  const awActiveClassifications = classifications.filter((c) =>
-    awFilteredSubjects.some((s) => String(s.classification_id) === String(c.id))
-  );
-  const awActiveSubjects = awClassificationId
-    ? awFilteredSubjects.filter((s) => String(s.classification_id) === String(awClassificationId))
-    : awFilteredSubjects;
-  const awFilteredBooks = awClassBooks.filter((b) => String(b.subject_id) === String(awSubjectId));
-  const awActiveBook = awFilteredBooks.find((b) => String(b.id) === String(awBookId));
-  const awLabels = getBookLabels(awActiveBook);
-
-  // Cascading filters for the "Add Book Mapping" section (abPrefix)
-  const abMappedBookIds = bookClasses
-    .filter((bc) => String(bc.class_id) === String(awClassId))
-    .map((bc) => String(bc.book_id));
-  const abAvailableBooks = books.filter((b) => !abMappedBookIds.includes(String(b.id)));
-  const abFilteredBooks = abSubjectId
-    ? abAvailableBooks.filter((b) => String(b.subject_id) === String(abSubjectId))
-    : abAvailableBooks;
-  const abFilteredSubjects = subjects;
-  const abActiveClassifications = classifications.filter((c) =>
-    abFilteredSubjects.some((s) => String(s.classification_id) === String(c.id))
-  );
-  const abActiveSubjects = abClassificationId
-    ? abFilteredSubjects.filter((s) => String(s.classification_id) === String(abClassificationId))
-    : abFilteredSubjects;
-
-  // Syllabus data for the selected book (non-revision items)
-  const awAllBookData = awBookData;
-  const awNonRevisionData = awBookData.filter((d) => d.level1 !== '_Revision');
-  const awRevisionData = awBookData.filter((d) => d.level1 === '_Revision');
-
-  const awLevel1s = [...new Set(awNonRevisionData.map((d) => d.level1).filter(Boolean))];
-  // Include _Revision as a special entry at end
-  const awLevel1sWithRevision = [...awLevel1s, ...(awRevisionData.length > 0 ? ['_Revision'] : [])];
-
-  const isRevisionMode = awLevel1 === '_Revision';
-
-  const awLevel2s = awLevel1
-    ? [...new Set(awBookData.filter((d) => d.level1 === awLevel1 && d.level2).map((d) => d.level2))]
-    : [];
-  const awLevel3s =
-    awLevel1 && awLevel2
-      ? [
-          ...new Set(
-            awBookData
-              .filter((d) => d.level1 === awLevel1 && d.level2 === awLevel2 && d.level3)
-              .map((d) => d.level3)
-          ),
-        ]
-      : [];
-
-  // Determine if selected path is a leaf node
-  const isLeafNodeSelected = (() => {
-    if (!awBookId || !awLevel1) return false;
-    if (isRevisionMode) return false; // revision doesn't use status/progress
-
-    // Check if this level has children
-    if (awLevel3) return true; // Level3 selected = always leaf
-    if (awLevel2) {
-      // Level2 is leaf if no Level3 exists under it
-      const hasL3 = awBookData.some(
-        (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && d.level3
-      );
-      return !hasL3;
-    }
-    if (awLevel1) {
-      // Level1 is leaf if no Level2 exists under it
-      const hasL2 = awBookData.some((d) => d.level1 === awLevel1 && d.level2);
-      return !hasL2;
-    }
-    return false;
-  })();
-
-  // Check if level3 exists under a given level1 (for Add Level2 toggle)
-  const level3ExistsForLevel1 = (l1) => {
-    return awBookData.some((d) => d.level1 === l1 && d.level3);
-  };
-
-  // ─── Load book data when book changes ──────────────────────────────
-
-  const loadAwBookData = async (bookId) => {
-    if (!bookId) {
-      setAwBookData([]);
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from('syllabus_book_lessons')
-        .select('*')
-        .eq('book_id', bookId);
-      if (error) throw error;
-      setAwBookData(data || []);
-    } catch (err) {
-      setAwBookData([]);
-    }
-  };
-
-  useEffect(() => {
-    if (isAddWorkModalOpen && awBookId) {
-      loadAwBookData(awBookId);
-      setAwLevel1('');
-      setAwLevel2('');
-      setAwLevel3('');
-    }
-  }, [awBookId, isAddWorkModalOpen]);
-
-  // ─── Fetch and default progress to previous max submission ──────
-  useEffect(() => {
-    const updateDefaultProgress = async () => {
-      if (!isAddWorkModalOpen) return;
-      if (!awClassId || !awBookId || !awLevel1) {
-        setPreviousMaxProgress(0);
-        setAwProgress(0);
-        setAwStatus('in_progress');
-        return;
-      }
-      if (isRevisionMode) {
-        setPreviousMaxProgress(0);
-        return;
-      }
-      if (!isLeafNodeSelected) {
-        setPreviousMaxProgress(0);
-        setAwProgress(0);
-        setAwStatus('in_progress');
-        return;
-      }
-
-      // Find the target lesson
-      let targetLesson = null;
-      if (awLevel3) {
-        targetLesson = awBookData.find(
-          (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && d.level3 === awLevel3
-        );
-      } else if (awLevel2) {
-        targetLesson = awBookData.find(
-          (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && !d.level3
-        );
-      } else if (awLevel1) {
-        targetLesson = awBookData.find((d) => d.level1 === awLevel1 && !d.level2 && !d.level3);
-      }
-
-      if (!targetLesson) {
-        console.warn('[Add Work Progress] Selected leaf node could not be resolved in awBookData.');
-        setPreviousMaxProgress(0);
-        setAwProgress(0);
-        setAwStatus('in_progress');
-        return;
-      }
-
-      console.log(
-        `[Add Work Progress] Querying progress for Class ID: ${awClassId}, Lesson ID: ${targetLesson.id} (${targetLesson.level1} > ${targetLesson.level2 || ''})`
-      );
-
-      try {
-        const { data, error } = await supabase
-          .from('lesson_progress')
-          .select('completion_percentage, status')
-          .eq('class_id', Number(awClassId))
-          .eq('lesson_id', Number(targetLesson.id))
-          .maybeSingle();
-
-        if (error) throw error;
-
-        console.log('[Add Work Progress] Query returned:', data);
-
-        const maxProgress = data ? Number(data.completion_percentage || 0) : 0;
-        const currentStatus = data ? data.status || 'in_progress' : 'in_progress';
-
-        setPreviousMaxProgress(maxProgress);
-        setAwProgress(maxProgress);
-        setAwStatus(currentStatus);
-      } catch (err) {
-        console.warn('[Add Work Progress] Failed to fetch previous max progress:', err.message);
-        setPreviousMaxProgress(0);
-        setAwProgress(0);
-        setAwStatus('in_progress');
-      }
-    };
-
-    updateDefaultProgress();
-  }, [
-    awClassId,
-    awBookId,
-    awLevel1,
-    awLevel2,
-    awLevel3,
-    awBookData,
-    isLeafNodeSelected,
-    isAddWorkModalOpen,
-  ]);
-
-  // ─── Close Add Work Modal with Escape Key ──────────────────────────
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isAddWorkModalOpen) {
-        setIsAddWorkModalOpen(false);
-      }
-    };
-    if (isAddWorkModalOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isAddWorkModalOpen]);
-
-  // ─── Status ↔ Progress sync ──────────────────────────────────────
-
-  const handleAwStatusChange = (newStatus) => {
-    setAwStatus(newStatus);
-    if (newStatus === 'completed') {
-      setAwProgress(100);
-    } else if (newStatus === 'in_progress' && awProgress === 100) {
-      const defaultProgress = Math.max(50, previousMaxProgress);
-      setAwProgress(defaultProgress);
-    }
-  };
-
-  const handleAwProgressChange = (newProgress) => {
-    const p = Number(newProgress);
-    if (p < previousMaxProgress) return;
-    setAwProgress(p);
-    if (p === 100) {
-      setAwStatus('completed');
-    } else if (awStatus === 'completed' && p < 100) {
-      setAwStatus('in_progress');
-    }
-  };
-
-  // ─── Core Actions ──────────────────────────────────────────────────
-
-  const ensureLessonLog = async (classId, lessonId, date, subjectId, bookId) => {
-    // Check existing
-    const { data: existing } = await supabase
-      .from('lesson_progress')
-      .select('*')
-      .eq('class_id', classId)
-      .eq('lesson_id', lessonId)
-      .maybeSingle();
-    if (existing) return existing;
-
-    const { data, error } = await supabase
-      .from('lesson_progress')
-      .upsert(
-        [
-          {
-            id: crypto.randomUUID(),
-            class_id: classId,
-            subject_id: subjectId,
-            book_id: bookId,
-            lesson_id: lessonId,
-            status: 'not_started',
-          },
-        ],
-        { onConflict: 'class_id,lesson_id' }
-      )
-      .select();
-    if (error) throw error;
-    return data[0];
-  };
-
-  const addLogItem = async (progressId, date, teacherId, status, progress, comments, isRevision) => {
-    const { error } = await supabase.from('lesson_progress_items').insert([
-      {
-        progress_id: progressId,
-        date: date,
-        teacher_id: teacherId,
-        current_status: status,
-        progress: progress,
-        is_revision: isRevision ? 'Y' : 'N',
-        comments: comments || null,
-      },
-    ]);
-    if (error) throw error;
-  };
-
-  // ─── Add Work Modal: open/reset ──────────────────────────────────
-
-  const handleMapBookToClass = async () => {
-    if (!awClassId) return showToast('Please select a class first.', 'warning');
-    if (!abBookId) return showToast('Please select a book to map.', 'warning');
-
-    setSubmitting(true);
-    try {
-      const bookId = Number(abBookId);
-      const classId = Number(awClassId);
-
-      // Save to Supabase
-      try {
-        const { error } = await supabase
-          .from('syllabus_book_classes')
-          .insert([{ book_id: bookId, class_id: classId }]);
-        if (error && error.code !== '23505') throw error; // ignore duplicates
-      } catch (e) {
-        console.warn('DB mapping failed, fallback to LocalStorage:', e.message);
-      }
-
-      // Save to local state and LocalStorage
-      const exists = bookClasses.some(
-        (bc) => String(bc.book_id) === String(bookId) && String(bc.class_id) === String(classId)
-      );
-      if (!exists) {
-        const updated = [...bookClasses, { book_id: bookId, class_id: classId }];
-        setBookClasses(updated);
-        syllabusTrackerCache.bookClasses = updated;
-        localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(updated));
-      }
-
-      // Automatically select the newly mapped book
-      const targetBook = books.find((b) => String(b.id) === String(bookId));
-      if (targetBook) {
-        const targetSubj = subjects.find((s) => String(s.id) === String(targetBook.subject_id));
-        if (targetSubj) {
-          setAwClassificationId(String(targetSubj.classification_id || ''));
-          setAwSubjectId(String(targetSubj.id));
-        }
-        setAwBookId(String(targetBook.id));
-      }
-
-      showToast('Book mapped successfully!', 'success');
-      setShowAddBookMappingForm(false);
-      setAbClassificationId('');
-      setAbSubjectId('');
-      setAbBookId('');
-    } catch (err) {
-      showToast('Error mapping book: ' + err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openAddWorkModal = () => {
-    setAwClassId('');
-    setAwClassificationId('');
-    setAwSubjectId('');
-    setAwBookId('');
-    setAwLevel1('');
-    setAwLevel2('');
-    setAwLevel3('');
-    setAwStatus('in_progress');
-    setAwProgress(50);
-    setAwDate(new Date().toISOString().split('T')[0]);
-    setAwComments('');
-    setAwBookData([]);
-    setInlineAddType(null);
-    setInlineAddName('');
-    setInlineAddPageCount(0);
-    setInlineAddComplexity('Easy');
-    setInlineAddWithLevel3(false);
-    setInlineAddLevel3Name('');
-    setShowAddBookMappingForm(false);
-    setPreviousMaxProgress(0);
-    setAbClassificationId('');
-    setAbSubjectId('');
-    setAbBookId('');
-    setIsAddWorkModalOpen(true);
-  };
-
-  const resetAddWorkModal = () => {
-    setAwClassId('');
-    setAwClassificationId('');
-    setAwSubjectId('');
-    setAwBookId('');
-    setAwLevel1('');
-    setAwLevel2('');
-    setAwLevel3('');
-    setAwStatus('in_progress');
-    setAwProgress(50);
-    setAwDate(new Date().toISOString().split('T')[0]);
-    setAwComments('');
-    setAwBookData([]);
-    setInlineAddType(null);
-    setShowAddBookMappingForm(false);
-    setAbClassificationId('');
-    setAbSubjectId('');
-    setAbBookId('');
-  };
-
-  // ─── Favorites ──────────────────────────────────────────────────
-
-  const handleAddToFavorite = async (classId, classificationId, subjectId, bookId) => {
-    if (!classId || !subjectId || !bookId) return;
-    const cName = classes.find((c) => String(c.id) === String(classId))?.name || 'Class';
-    const sName = subjects.find((s) => String(s.id) === String(subjectId))?.name || 'Subject';
-    const bName = books.find((b) => String(b.id) === String(bookId))?.name || 'Book';
-    const favKey = `${cName} - ${bName}`;
-
-    // Check if already a favorite
-    const existsIdx = favorites.findIndex(
-      (f) => String(f.classId) === String(classId) && String(f.bookId) === String(bookId)
-    );
-    if (existsIdx > -1) {
-      const newFavs = favorites.filter((_, i) => i !== existsIdx);
-      setFavorites(newFavs);
-      syllabusTrackerCache.favorites = newFavs;
-      if (teacher?.id) await saveFavoritesToDB(teacher.id, newFavs);
-      showToast('Removed from Favorites', 'info');
-      return;
-    }
-
-    const newFav = {
-      key: favKey,
-      classId,
-      classificationId: classificationId || '',
-      subjectId,
-      bookId,
-      className: cName,
-      subjectName: sName,
-      bookName: bName,
-    };
-
-    if (favorites.length >= 8) {
-      setPendingFavorite(newFav);
-      setOverrideSelection('');
-      setIsOverrideModalOpen(true);
-      return;
-    }
-
-    const newFavs = [...favorites, newFav];
-    setFavorites(newFavs);
-    syllabusTrackerCache.favorites = newFavs;
-    if (teacher?.id) await saveFavoritesToDB(teacher.id, newFavs);
-    showToast('Added to Favorites!', 'success');
-  };
-
-  const handleOverrideFavorite = async () => {
-    if (!overrideSelection || !pendingFavorite) return;
-    const newFavs = favorites.map((f) => (f.key === overrideSelection ? pendingFavorite : f));
-    setFavorites(newFavs);
-    syllabusTrackerCache.favorites = newFavs;
-    if (teacher?.id) await saveFavoritesToDB(teacher.id, newFavs);
-    setIsOverrideModalOpen(false);
-    setPendingFavorite(null);
-    setOverrideSelection('');
-    showToast('Favorite overridden!', 'success');
-  };
-
-  const applyFavorite = (fav) => {
-    setAwClassId(String(fav.classId));
-    const subObj = subjects.find((s) => String(s.id) === String(fav.subjectId));
-    if (subObj && subObj.classification_id) {
-      setAwClassificationId(String(subObj.classification_id));
-    } else {
-      setAwClassificationId('');
-    }
-    setAwSubjectId(String(fav.subjectId));
-    setAwBookId(String(fav.bookId));
-    setAwLevel1('');
-    setAwLevel2('');
-    setAwLevel3('');
-  };
-
-  // ─── Inline Add Level ──────────────────────────────────────────────
-
-  const handleInlineAddLevel = async () => {
-    if (!inlineAddName.trim()) return showToast(`Name is required.`, 'warning');
-    if (!awBookId) return showToast('Please select a book first.', 'warning');
-
-    setSubmitting(true);
-    try {
-      let targetLevel1 = '';
-      let targetLevel2 = null;
-      let targetLevel3 = null;
-
-      if (inlineAddType === 'level1') {
-        // Level1: name only, no page/complexity
-        targetLevel1 = inlineAddName.trim();
-        const exists = awBookData.some((d) => d.level1 === targetLevel1);
-        if (exists) throw new Error(`${awLabels.lvl1} "${targetLevel1}" already exists.`);
-
-        const { data: insRes, error } = await supabase
-          .from('syllabus_book_lessons')
-          .insert([
-            {
-              book_id: awBookId,
-              level1: targetLevel1,
-              level2: null,
-              level3: null,
-              page_count: 0,
-              complexity: 'Easy',
-            },
-          ])
-          .select();
-        if (error) throw error;
-
-        setAwBookData((prev) => [...prev, insRes[0]]);
-        showToast(`${awLabels.lvl1} added!`, 'success');
-        setAwLevel1(targetLevel1);
-      } else if (inlineAddType === 'level2') {
-        if (!awLevel1) return showToast(`Please select a ${awLabels.lvl1} first.`, 'warning');
-        targetLevel1 = awLevel1;
-        targetLevel2 = inlineAddName.trim();
-
-        if (inlineAddWithLevel3 && inlineAddLevel3Name.trim()) {
-          // Add Level2 + Level3 together
-          targetLevel3 = inlineAddLevel3Name.trim();
-
-          // Add placeholder level2 if doesn't exist, then add level3
-          const l2Exists = awBookData.some(
-            (d) => d.level1 === targetLevel1 && d.level2 === targetLevel2
-          );
-          let updatedData = [...awBookData];
-
-          if (!l2Exists) {
-            const { data: l2Res, error: l2Err } = await supabase
-              .from('syllabus_book_lessons')
-              .insert([
-                {
-                  book_id: awBookId,
-                  level1: targetLevel1,
-                  level2: targetLevel2,
-                  level3: null,
-                  page_count: 0,
-                  complexity: 'Easy',
-                },
-              ])
-              .select();
-            if (l2Err) throw l2Err;
-            updatedData.push(l2Res[0]);
-          }
-
-          const { data: l3Res, error: l3Err } = await supabase
-            .from('syllabus_book_lessons')
-            .insert([
-              {
-                book_id: awBookId,
-                level1: targetLevel1,
-                level2: targetLevel2,
-                level3: targetLevel3,
-                page_count: Number(inlineAddPageCount) || 0,
-                complexity: inlineAddComplexity || 'Easy',
-              },
-            ])
-            .select();
-          if (l3Err) throw l3Err;
-          updatedData.push(l3Res[0]);
-
-          setAwBookData(updatedData);
-          showToast(`${awLabels.lvl2} + ${awLabels.lvl3} added!`, 'success');
-          setAwLevel2(targetLevel2);
-          setAwLevel3(targetLevel3);
-        } else {
-          // Add Level2 as leaf (with page/complexity)
-          const recordData = {
-            book_id: awBookId,
-            level1: targetLevel1,
-            level2: targetLevel2,
-            level3: null,
-            page_count: Number(inlineAddPageCount) || 0,
-            complexity: inlineAddComplexity || 'Easy',
-          };
-
-          // Placeholder logic
-          const placeholder = awBookData.find(
-            (d) =>
-              String(d.book_id) === String(awBookId) &&
-              d.level1 === targetLevel1 &&
-              !d.level2 &&
-              !d.level3
-          );
-
-          let updatedData = [...awBookData];
-          if (placeholder) {
-            const { data: updRes, error } = await supabase
-              .from('syllabus_book_lessons')
-              .update(recordData)
-              .eq('id', placeholder.id)
-              .select();
-            if (error) throw error;
-            updatedData = updatedData.map((d) =>
-              String(d.id) === String(placeholder.id) ? updRes[0] : d
-            );
-          } else {
-            const { data: insRes, error } = await supabase
-              .from('syllabus_book_lessons')
-              .insert([recordData])
-              .select();
-            if (error) throw error;
-            updatedData.push(insRes[0]);
-          }
-
-          setAwBookData(updatedData);
-          showToast(`${awLabels.lvl2} added!`, 'success');
-          setAwLevel2(targetLevel2);
-        }
-      } else if (inlineAddType === 'level3') {
-        if (!awLevel1) return showToast(`Please select a ${awLabels.lvl1} first.`, 'warning');
-        targetLevel1 = awLevel1;
-        targetLevel2 = awLevel2 || 'General';
-        targetLevel3 = inlineAddName.trim();
-
-        const recordData = {
-          book_id: awBookId,
-          level1: targetLevel1,
-          level2: targetLevel2,
-          level3: targetLevel3,
-          page_count: Number(inlineAddPageCount) || 0,
-          complexity: inlineAddComplexity || 'Easy',
-        };
-
-        const placeholder = awBookData.find(
-          (d) =>
-            String(d.book_id) === String(awBookId) &&
-            d.level1 === targetLevel1 &&
-            (d.level2 || 'General') === targetLevel2 &&
-            !d.level3
-        );
-
-        let updatedData = [...awBookData];
-        if (placeholder) {
-          const { data: updRes, error } = await supabase
-            .from('syllabus_book_lessons')
-            .update(recordData)
-            .eq('id', placeholder.id)
-            .select();
-          if (error) throw error;
-          updatedData = updatedData.map((d) =>
-            String(d.id) === String(placeholder.id) ? updRes[0] : d
-          );
-        } else {
-          const { data: insRes, error } = await supabase
-            .from('syllabus_book_lessons')
-            .insert([recordData])
-            .select();
-          if (error) throw error;
-          updatedData.push(insRes[0]);
-        }
-
-        setAwBookData(updatedData);
-        showToast(`${awLabels.lvl3} added!`, 'success');
-        setAwLevel3(targetLevel3);
-      }
-
-      // Reset inline form
-      setInlineAddType(null);
-      setInlineAddName('');
-      setInlineAddPageCount(0);
-      setInlineAddComplexity('Easy');
-      setInlineAddWithLevel3(false);
-      setInlineAddLevel3Name('');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ─── Submit Add Work ──────────────────────────────────────────────
-
-  const handleAddWorkSubmit = async (e) => {
-    e.preventDefault();
-    if (!awClassId || !awBookId) return showToast('Please select Class and Book.', 'warning');
-
-    // Find the target lesson node
-    let targetLesson = null;
-    if (awLevel3) {
-      targetLesson = awBookData.find(
-        (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && d.level3 === awLevel3
-      );
-    } else if (awLevel2) {
-      targetLesson = awBookData.find(
-        (d) => d.level1 === awLevel1 && d.level2 === awLevel2 && !d.level3
-      );
-    } else if (awLevel1) {
-      targetLesson = awBookData.find((d) => d.level1 === awLevel1 && !d.level2 && !d.level3);
-    }
-
-    if (!targetLesson) return showToast('Please select a valid lesson/topic to log.', 'warning');
-    if (awDate > todayStr) return showToast('Date cannot be a future date.', 'warning');
-
-    // Determine status and progress
-    let finalStatus = awStatus;
-    let finalProgress = awProgress;
-    let finalIsRevision = false;
-
-    if (isRevisionMode) {
-      finalStatus = 'completed'; // revision entries are always "completed"
-      finalProgress = 100;
-      finalIsRevision = true;
-    } else if (!isLeafNodeSelected) {
-      return showToast('Please select a leaf-level node to log progress.', 'warning');
-    }
-
-    if (!isRevisionMode && finalProgress < previousMaxProgress) {
-      return showToast(
-        `Progress percentage cannot be lesser than the previous max of ${previousMaxProgress}%.`,
-        'warning'
-      );
-    }
-
-    setSubmitting(true);
-    try {
-      const log = await ensureLessonLog(awClassId, targetLesson.id, awDate, awSubjectId, targetLesson.book_id);
-      await addLogItem(
-        log.id,
-        awDate,
-        teacher?.id,
-        finalStatus,
-        finalProgress,
-        awComments,
-        finalIsRevision
-      );
-
-      showToast(isRevisionMode ? 'Revision logged!' : 'Log entry added!', 'success');
-      setIsAddWorkModalOpen(false);
-      // Refresh current tab data
-      if (activeTab === 'teacher-activity') {
-        await fetchMyWorkEntries();
-      } else if (activeTab === 'class-progress') {
-        await fetchTeacherProgressData();
-      }
-    } catch (err) {
-      showToast('Error: ' + err.message, 'error');
-    } finally {
-      setSubmitting(false);
+  // â”€â”€â”€ Refresh after Add Work â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleAddWorkSuccess = async () => {
+    if (activeTab === 'teacher-activity') {
+      await fetchMyWorkEntries();
+    } else if (activeTab === 'class-progress') {
+      await fetchTeacherProgressData();
     }
   };
 
@@ -1462,7 +616,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   };
 
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
-    let className = '—';
+    let className = 'â€”';
     if (entry.class?.name || entry.class?.class_name) {
       className = entry.class.name || entry.class.class_name;
     } else if (parentLog) {
@@ -1470,16 +624,16 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       className = cls?.name || `Class ID ${parentLog.class_id}`;
     }
 
-    let subjectName = '—';
+    let subjectName = 'â€”';
     if (entry.subject?.name) {
       subjectName = entry.subject.name;
     } else if (book) {
-      const sub = subjects.find((s) => s.id === book.subject_id);
-      subjectName = sub?.name || '—';
+      const sub = subjects.find((s) => String(s.id) === String(book.subject_id));
+      subjectName = sub?.name || 'â€”';
     } else if (lesson) {
-      const b = books.find((x) => x.id === lesson.book_id);
-      const sub = b ? subjects.find((s) => s.id === b.subject_id) : null;
-      subjectName = sub?.name || '—';
+      const b = books.find((x) => String(x.id) === String(lesson.book_id));
+      const sub = b ? subjects.find((s) => String(s.id) === String(b.subject_id)) : null;
+      subjectName = sub?.name || 'â€”';
     }
 
     setDeleteModalConfig({
@@ -1535,7 +689,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  // ─── Syllabus Progress Tab Logic ──────────────────────────────────
+  // â”€â”€â”€ Syllabus Progress Tab Logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleProgressBookClick = async (bookId, classId) => {
     if (progressExpandedBook === bookId && String(progressExpandedClass) === String(classId)) {
@@ -1551,7 +705,12 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').eq('class_id', classId),
+        supabase
+          .from('lesson_progress')
+          .select(
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+          )
+          .eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
@@ -1573,7 +732,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         return false;
       });
 
-      const mappedLogs = (logs || []).map(log => ({
+      const mappedLogs = (logs || []).map((log) => ({
         ...log,
         current_status: log.status,
       }));
@@ -1587,7 +746,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     } catch (err) {
       console.warn('Progress book expand failed:', err.message);
     } finally {
-      setProgressLoading(false);
+      setDetailsLoading(false);
     }
   };
 
@@ -1608,78 +767,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     }
   };
 
-  const handleMyProgressBookClick = async (bookId, classId) => {
-    if (myProgressExpandedBook === bookId && myProgressExpandedClass === classId) {
-      setMyProgressExpandedBook(null);
-      setMyProgressExpandedClass(null);
-      return;
-    }
-    setMyProgressExpandedBook(bookId);
-    setMyProgressExpandedClass(classId);
-    setMyProgressLoading(true);
-    setMyProgressShowNotStarted(false);
-    setMyProgressExpandedLogIds({});
-    try {
-      const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
-        supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').eq('class_id', classId),
-      ]);
-      if (lessErr) throw lessErr;
-      if (logErr) throw logErr;
-
-      const bookLessons = (lessons || []).filter((l) => {
-        if (l.level3) return true;
-        if (l.level2 && !l.level3) {
-          const hasL3 = (lessons || []).some(
-            (o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3
-          );
-          return !hasL3;
-        }
-        if (l.level1 && !l.level2 && !l.level3) {
-          const hasL2orL3 = (lessons || []).some(
-            (o) => o.level1 === l.level1 && (o.level2 || o.level3)
-          );
-          return !hasL2orL3;
-        }
-        return false;
-      });
-
-      const mappedLogs = (logs || []).map(log => ({
-        ...log,
-        current_status: log.status,
-      }));
-
-      const relevantLogs = mappedLogs.filter((l) =>
-        bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
-      );
-
-      setMyProgressBookLessons(bookLessons);
-      setMyProgressBookLogs(relevantLogs);
-    } catch (err) {
-      console.warn('My progress book expand failed:', err.message);
-    } finally {
-      setMyProgressLoading(false);
-    }
-  };
-
-  const toggleMyProgressLogExpand = async (logId) => {
-    setMyProgressExpandedLogIds((prev) => ({ ...prev, [logId]: !prev[logId] }));
-    if (!myProgressLogItemsMap[logId]) {
-      try {
-        const { data, error } = await supabase
-          .from('lesson_progress_items')
-          .select('*, teacher:teachers(name)')
-          .eq('progress_id', logId)
-          .order('date', { ascending: false });
-        if (error) throw error;
-        setMyProgressLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
-      } catch (err) {
-        console.warn('Failed to load log items:', err.message);
-      }
-    }
-  };
-
-  // ─── Status Badges ──────────────────────────────────────────────
+  // â”€â”€â”€ Status Badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const getStatusBadge = (status, isRev = false) => {
     if (isRev)
@@ -1708,20 +796,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
   };
 
   const handleSubmitPlannedLesson = (plan) => {
-    setAwClassId(String(plan.class_id));
-    setAwClassificationId(String(plan.subject?.classification_id || ''));
-    setAwSubjectId(String(plan.subject_id));
-    setAwBookId(String(plan.book_id));
-    setAwLevel1(plan.lesson?.level1 || '');
-    setAwLevel2(plan.lesson?.level2 || '');
-    setAwLevel3(plan.lesson?.level3 || '');
-    setAwStatus('completed');
-    setAwProgress(100);
-    setAwDate(getLocalDateStr(0)); // today
-    
-    // Auto load book data so the modal resolves it
-    loadAwBookData(plan.book_id);
-    
+    setPlannedLessonToLog(plan);
     setIsAddWorkModalOpen(true);
   };
 
@@ -1744,30 +819,34 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
       } else if (plan.academic_week) {
         updateData.academic_week = plan.academic_week + 1;
       }
-      
+
       const { data, error } = await supabase
         .from('lesson_progress')
         .update(updateData)
         .eq('id', plan.id)
-        .select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)');
+        .select(
+          '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
+        );
       if (error) throw error;
-      
+
       if (plan.target_start_date) {
         try {
-          await supabase.from('lesson_plan_carry_forwards').insert([{
-             plan_id: plan.id,
-             teacher_id: teacher?.id,
-             original_date: plan.target_start_date,
-             new_date: updateData.target_start_date
-          }]);
+          await supabase.from('lesson_plan_carry_forwards').insert([
+            {
+              plan_id: plan.id,
+              teacher_id: teacher?.id,
+              original_date: plan.target_start_date,
+              new_date: updateData.target_start_date,
+            },
+          ]);
         } catch (cfErr) {
           console.warn('Carry forward log insert skipped or failed:', cfErr.message);
         }
       }
 
       showToast('Lesson carried forward', 'success');
-      
-      const newPlans = todaysPlans.filter(p => p.id !== plan.id);
+
+      const newPlans = todaysPlans.filter((p) => p.id !== plan.id);
       setTodaysPlans(newPlans);
       syllabusTrackerCache.todaysPlans = newPlans;
     } catch (e) {
@@ -1779,826 +858,64 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
 
   const renderPlannedForToday = () => {
     if (!todaysPlans || todaysPlans.length === 0) return null;
-    
+
     return (
       <div className="mb-8">
         <h3 className="text-sm font-black text-dark-primary mb-4 flex items-center gap-2">
           <i className="fas fa-calendar-check text-brand-primary"></i> Planned for Today
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {todaysPlans.map(plan => {
-             const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3].filter(Boolean).join(' > ');
-             return (
-               <div key={plan.id} className="bg-white border border-brand-primary/20 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-                  <div>
-                     <div className="flex justify-between items-start mb-2">
-                        <span className="text-[10px] font-extrabold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full uppercase">
-                           {plan.class?.name || plan.class?.class_name}
-                        </span>
-                        {plan.carry_forward_count > 0 && (
-                           <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full" title="Carried Forward">
-                              CF x{plan.carry_forward_count}
-                           </span>
-                        )}
-                     </div>
-                     <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
-                     <p className="text-[11px] text-gray-500 font-semibold mb-3">{plan.subject?.name} • {plan.book?.name}</p>
+          {todaysPlans.map((plan) => {
+            const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
+              .filter(Boolean)
+              .join(' > ');
+            return (
+              <div
+                key={plan.id}
+                className="bg-white border border-brand-primary/20 rounded-xl p-4 shadow-sm flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-[10px] font-extrabold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full uppercase">
+                      {plan.class?.name || plan.class?.class_name}
+                    </span>
+                    {plan.carry_forward_count > 0 && (
+                      <span
+                        className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full"
+                        title="Carried Forward"
+                      >
+                        CF x{plan.carry_forward_count}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
-                     <button onClick={() => handleSubmitPlannedLesson(plan)} className="flex-1 py-1.5 bg-brand-primary text-white text-[10px] font-bold rounded-lg hover:bg-brand-primary/90 transition-colors cursor-pointer">
-                        <i className="fas fa-check mr-1"></i> Submit Log
-                     </button>
-                     <button onClick={() => handleCarryForward(plan)} className="flex-1 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors cursor-pointer">
-                        <i className="fas fa-forward mr-1"></i> Carry Forward
-                     </button>
-                  </div>
-               </div>
-             );
+                  <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2">{title}</h4>
+                  <p className="text-[11px] text-gray-500 font-semibold mb-3">
+                    {plan.subject?.name} â€¢ {plan.book?.name}
+                  </p>
+                </div>
+                <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => handleSubmitPlannedLesson(plan)}
+                    className="flex-1 py-1.5 bg-brand-primary text-white text-[10px] font-bold rounded-lg hover:bg-brand-primary/90 transition-colors cursor-pointer"
+                  >
+                    <i className="fas fa-check mr-1"></i> Submit Log
+                  </button>
+                  <button
+                    onClick={() => handleCarryForward(plan)}
+                    className="flex-1 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors cursor-pointer"
+                  >
+                    <i className="fas fa-forward mr-1"></i> Carry Forward
+                  </button>
+                </div>
+              </div>
+            );
           })}
         </div>
       </div>
     );
   };
 
-  // ─── Render: My Work Tab ──────────────────────────────────────────
-
-  const renderMyWork = () => {
-    if (myWorkLoading) {
-      return (
-        <div className="flex items-center justify-center p-12 bg-white border border-light-border rounded-2xl shadow-sm">
-          <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
-          <span className="text-xs font-bold text-gray-500">Loading your entries...</span>
-        </div>
-      );
-    }
-
-    if (myWorkEntries.length === 0) {
-      return (
-        <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-          <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 block"></i>
-          No log entries found for the selected date period.
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-light-border">
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Date
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Class
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Subject
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Book
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Lesson Path
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Progress
-                  </th>
-                  <th className="text-left px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px]">
-                    Comments
-                  </th>
-                  <th className="text-center px-4 py-3 font-extrabold text-dark-soft uppercase text-[10px] min-w-[60px]">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {myWorkEntries.map((entry, idx) => (
-                  <tr
-                    key={entry.id}
-                    className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                  >
-                    <td className="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">
-                      {new Date(entry.date).toLocaleDateString()}
-                      {entry.late_reporting === 'Y' && (
-                        <span className="ml-1 text-red-500 text-[8px] font-bold bg-red-50 px-1 py-0.5 rounded border border-red-100">
-                          Late
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-gray-700">
-                      {entry.class?.name || '—'}
-                    </td>
-                    <td className="px-4 py-3 font-semibold text-gray-600">
-                      {entry.subject?.name || '—'}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-dark-primary">
-                      {entry.book?.name || '—'}
-                    </td>
-                    <td
-                      className="px-4 py-3 font-semibold text-gray-600 max-w-[250px] truncate"
-                      title={entry.lessonPath}
-                    >
-                      {entry.lessonPath}
-                    </td>
-                    <td className="px-4 py-3">
-                      {getStatusBadge(entry.current_status, entry.isRevision)}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-gray-700">
-                      {entry.isRevision ? '—' : `${Number(entry.progress).toFixed(0)}%`}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-gray-500 max-w-[200px] truncate"
-                      title={entry.comments || ''}
-                    >
-                      {entry.comments || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-center whitespace-nowrap">
-                      {isCreatedToday(entry.created_at) && (
-                        <button
-                          onClick={() => handleDeleteClick(entry)}
-                          className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"
-                          title="Delete Log Entry"
-                        >
-                          <i className="fas fa-trash-alt text-xs"></i>
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    };
-
-  // ─── Render: Syllabus Progress Tab ────────────────────────────────
-
-  const renderSyllabusProgress = () => {
-    const progressClasses =
-      coverMode || assignments.length === 0
-        ? classes
-        : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
-
-    // 1. Filter classes based on Class Filter selection
-    const classesToRender = progressClasses.filter((c) => {
-      if (cpFilterClasses.length > 0) {
-        return cpFilterClasses.includes(String(c.id));
-      }
-      return true;
-    });
-
-    // 2. Sub-renderer for a class's books grid
-    const renderBooksGrid = (classObj) => {
-      const classBookIds = bookClasses
-        .filter((bc) => String(bc.class_id) === String(classObj.id))
-        .map((bc) => String(bc.book_id));
-
-      const classBooks = books.filter((book) => {
-        if (!classBookIds.includes(String(book.id))) return false;
-
-        // Apply Book Filter
-        if (cpFilterBooks.length > 0 && !cpFilterBooks.includes(String(book.id))) {
-          return false;
-        }
-
-        // Apply Classification Filter
-        if (cpFilterClassifications.length > 0) {
-          const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-          if (!subj || !cpFilterClassifications.includes(String(subj.classification_id))) {
-            return false;
-          }
-        }
-
-        return true;
-      });
-
-      if (classBooks.length === 0) {
-        return null; // Don't show anything if no books match filters for this class
-      }
-
-      // Group books within this class
-      const booksByGroup = {};
-      if (cpGroupingMode === 'classification') {
-        classBooks.forEach((book) => {
-          const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-          const classificationId = subj?.classification_id;
-          const classification = classifications.find(
-            (cl) => String(cl.id) === String(classificationId)
-          );
-          const groupName = classification ? classification.name : 'Other / Unclassified';
-          if (!booksByGroup[groupName]) {
-            booksByGroup[groupName] = [];
-          }
-          booksByGroup[groupName].push(book);
-        });
-      } else if (cpGroupingMode === 'subject') {
-        classBooks.forEach((book) => {
-          const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-          const groupName = subj ? subj.name : 'General / Unclassified';
-          if (!booksByGroup[groupName]) {
-            booksByGroup[groupName] = [];
-          }
-          booksByGroup[groupName].push(book);
-        });
-      } else {
-        booksByGroup['All Books'] = classBooks;
-      }
-
-      const isClassExpanded = progressExpandedClass === classObj.id;
-
-      return (
-        <div
-          key={classObj.id}
-          className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden p-6 space-y-4 text-left"
-        >
-          <h3 className="text-base font-black text-dark-primary border-b pb-2 flex items-center gap-2">
-            <i className="fas fa-graduation-cap text-brand-primary"></i>
-            {classObj.name || classObj.class_name}
-          </h3>
-
-          <div className="space-y-6">
-            {Object.keys(booksByGroup).map((groupName) => {
-              const groupedBooks = booksByGroup[groupName];
-              return (
-                <div key={groupName} className="space-y-3 text-left">
-                  {cpGroupingMode !== 'none' && (
-                    <h4 className="text-xs font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
-                      {groupName}
-                    </h4>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {groupedBooks.map((book) => {
-                      const bt = allTrackers.find(
-                        (t) =>
-                          String(t.book_id) === String(book.id) &&
-                          String(t.class_id) === String(classObj.id)
-                      );
-                      const pct = Number(bt?.completion_percentage || 0);
-                      const isExpanded =
-                        progressExpandedBook === book.id && progressExpandedClass === classObj.id;
-                      const pctColor =
-                        pct >= 70
-                          ? 'text-emerald-600'
-                          : pct >= 30
-                            ? 'text-amber-600'
-                            : 'text-red-500';
-                      const pctBg =
-                        pct >= 70
-                          ? 'bg-emerald-50 border-emerald-200'
-                          : pct >= 30
-                            ? 'bg-amber-50 border-amber-200'
-                            : 'bg-red-50 border-red-200';
-                      const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
-
-                      const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-                      const classificationId = subj?.classification_id;
-                      const classification = classifications.find(
-                        (cl) => String(cl.id) === String(classificationId)
-                      );
-                      const themeStyles =
-                        classification?.theme && CARD_THEMES[classification.theme]
-                          ? CARD_THEMES[classification.theme]
-                          : CARD_THEMES.charcoal;
-
-                      // Compute lesson counts dynamically for revisions count
-                      const bookLessons = allLessons.filter(
-                        (l) => String(l.book_id) === String(book.id)
-                      );
-                      const bookLessonIds = bookLessons.map((l) => String(l.id));
-                      const bookLogs = allLogs.filter(
-                        (log) =>
-                          String(log.class_id) === String(classObj.id) &&
-                          bookLessonIds.includes(String(log.lesson_id))
-                      );
-                      const revisionCount = bookLogs.reduce(
-                        (sum, log) => sum + (log.revision_counter || 0),
-                        0
-                      );
-
-                      const activeBookLogs = bookLogs.filter(
-                        (log) => log.current_status !== 'not_started'
-                      );
-
-                      let bookStartDate = null;
-                      activeBookLogs.forEach((log) => {
-                        if (log.start_date) {
-                          if (
-                            !bookStartDate ||
-                            new Date(log.start_date) < new Date(bookStartDate)
-                          ) {
-                            bookStartDate = log.start_date;
-                          }
-                        }
-                      });
-
-                      let bookEndDate = null;
-                      activeBookLogs.forEach((log) => {
-                        if (log.end_date) {
-                          if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
-                            bookEndDate = log.end_date;
-                          }
-                        }
-                      });
-
-                      let bookUpdatedAt = null;
-                      bookLogs.forEach((log) => {
-                        if (log.updated_at) {
-                          if (
-                            !bookUpdatedAt ||
-                            new Date(log.updated_at) > new Date(bookUpdatedAt)
-                          ) {
-                            bookUpdatedAt = log.updated_at;
-                          }
-                        }
-                      });
-
-                      const cumulativeDaysTaken = bookLogs.reduce(
-                        (sum, log) => sum + (log.days_taken || 0),
-                        0
-                      );
-
-                      const total = bt?.total_lessons || bookLessons.length;
-                      const completed = bt?.completed || 0;
-                      const inProgress = bt?.in_progress || 0;
-                      const notStarted = bt?.not_started || 0;
-
-                      return (
-                        <div
-                          key={book.id}
-                          onClick={() => handleProgressBookClick(book.id, classObj.id)}
-                          className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
-                            isExpanded
-                              ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
-                              : 'bg-white'
-                          } border-l-${themeStyles.color}`}
-                        >
-                          <div>
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1 min-w-0">
-                                {subj && (
-                                  <h3 className=" font-semibold text-gray-500 mt-0.5">
-                                    {subj.name}
-                                  </h3>
-                                )}
-                                <h4 className="text-sm font-black text-dark-primary truncate">
-                                  {book.name}
-                                </h4>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0 ml-2">
-                                <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
-                                  {cumulativeDaysTaken} Days
-                                </span>
-                                <div
-                                  className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
-                                >
-                                  <span className={`text-sm font-black ${pctColor}`}>
-                                    {pct.toFixed(0)}%
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
-                              <div
-                                className="h-1.5 rounded-full transition-all duration-500"
-                                style={{ width: `${pct}%`, backgroundColor: barColor }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
-                            <div className="flex justify-between text-emerald-600">
-                              <span>Completed:</span>
-                              <span>{completed}</span>
-                            </div>
-                            <div className="flex justify-between text-blue-600">
-                              <span>In-progress:</span>
-                              <span>{inProgress}</span>
-                            </div>
-                            <div className="flex justify-between text-gray-400">
-                              <span>Not Started:</span>
-                              <span>{notStarted}</span>
-                            </div>
-                            <div className="flex justify-between text-purple-600">
-                              <span>Revision Days:</span>
-                              <span>{revisionCount}</span>
-                            </div>
-
-                            <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
-                              <span>Total Lessons:</span>
-                              <span>{total}</span>
-                            </div>
-                            <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
-                              <div className="flex justify-between">
-                                <span>
-                                  Started:{' '}
-                                  {bookStartDate
-                                    ? new Date(bookStartDate).toLocaleDateString()
-                                    : '—'}
-                                </span>
-                                {pct === 100 ? (
-                                  <span>
-                                    Ended:{' '}
-                                    {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
-                                  </span>
-                                ) : (
-                                  <span>
-                                    Updated:{' '}
-                                    {bookUpdatedAt
-                                      ? new Date(bookUpdatedAt).toLocaleDateString()
-                                      : '—'}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Expanded details container inside class block */}
-            {isClassExpanded && progressExpandedBook && renderExpandedDetails()}
-          </div>
-        </div>
-      );
-    };
-
-    // Sub-renderer for expanded lessons checklist
-    const renderExpandedDetails = () => {
-      return (
-        <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4 text-left">
-          {detailsLoading ? (
-            <div className="flex items-center justify-center p-8">
-              <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
-              <span className="text-xs font-bold text-gray-500">Loading lessons...</span>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 className="text-sm font-black text-dark-primary">
-                  {books.find((b) => b.id === progressExpandedBook)?.name} — Lesson Details
-                </h3>
-                <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showNotStarted}
-                    onChange={(e) => setShowNotStarted(e.target.checked)}
-                    className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
-                  />
-                  Show Not Started Lessons
-                </label>
-              </div>
-
-              {/* Level-1 Progress Breakdown */}
-              <div className="mb-6 border-b border-light-border pb-6">
-                <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
-                  Level-1 Unit Progress
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {(() => {
-                    const uniqueLevel1s = [
-                      ...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean)),
-                    ];
-                    if (uniqueLevel1s.length === 0) {
-                      return (
-                        <p className="text-xs text-gray-400 font-semibold col-span-full">
-                          No level-1 sections defined for this book.
-                        </p>
-                      );
-                    }
-
-                    return uniqueLevel1s.map((lvl1) => {
-                      const lvl1Lessons = progressBookLessons.filter((l) => l.level1 === lvl1);
-                      const total = lvl1Lessons.length;
-
-                      let completedCount = 0;
-                      let inProgressCount = 0;
-                      let totalProgressSum = 0;
-                      let cumulativeDaysTaken = 0;
-
-                      lvl1Lessons.forEach((lesson) => {
-                        const log = progressBookLogs.find(
-                          (l) => String(l.lesson_id) === String(lesson.id)
-                        );
-                        if (log) {
-                          if (log.days_taken) {
-                            cumulativeDaysTaken += Number(log.days_taken);
-                          }
-                          if (log.current_status === 'completed') {
-                            completedCount++;
-                            totalProgressSum += 100;
-                          } else if (log.current_status === 'in_progress') {
-                            inProgressCount++;
-                            totalProgressSum += Number(log.completion_percentage) || 0;
-                          }
-                        }
-                      });
-
-                      const progressPct = total > 0 ? totalProgressSum / total : 0;
-                      const barColor =
-                        progressPct >= 70 ? '#10b981' : progressPct >= 30 ? '#f59e0b' : '#ef4444';
-
-                      return (
-                        <div
-                          key={lvl1}
-                          className="bg-white border rounded-xl p-3 shadow-sm flex flex-col justify-between"
-                        >
-                          <div>
-                            <div className="flex justify-between items-start mb-1.5 gap-2">
-                              <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
-                                {lvl1}
-                              </span>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
-                                  {cumulativeDaysTaken} Days
-                                </span>
-                                <span className="font-black text-xs text-dark-soft">
-                                  {progressPct.toFixed(0)}%
-                                </span>
-                              </div>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
-                              <div
-                                className="h-1 rounded-full transition-all duration-300"
-                                style={{ width: `${progressPct}%`, backgroundColor: barColor }}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
-                            <span>
-                              Completed: {completedCount}/{total}
-                            </span>
-                            {inProgressCount > 0 && (
-                              <span className="text-blue-600">In-progress: {inProgressCount}</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* Detailed lessons list */}
-              <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-dark-soft font-extrabold text-[10px] uppercase tracking-wider">
-                      <th className="pb-2.5 font-extrabold text-left min-w-[200px]">
-                        Lesson Details
-                      </th>
-                      <th className="pb-2.5 font-extrabold text-center min-w-[80px]">Progress</th>
-                      <th className="pb-2.5 font-extrabold text-center min-w-[85px]">Days Taken</th>
-                      <th className="pb-2.5 font-extrabold text-center min-w-[90px]">Status</th>
-                      <th className="pb-2.5 font-extrabold text-right min-w-[90px]">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {(() => {
-                      const lessonsToRender = showNotStarted
-                        ? progressBookLessons.filter((node) => {
-                            const log = progressBookLogs.find(
-                              (l) => String(l.lesson_id) === String(node.id)
-                            );
-                            const isNotStarted = !log || log.current_status === 'not_started';
-                            if (isNotStarted) {
-                              const isRev = [node.level1, node.level2, node.level3]
-                                .filter(Boolean)
-                                .some(
-                                  (lvl) =>
-                                    lvl.toLowerCase().includes('_revision') ||
-                                    lvl.toLowerCase() === 'revision'
-                                );
-                              return !isRev;
-                            }
-                            return true;
-                          })
-                        : progressBookLessons.filter((node) => {
-                            const log = progressBookLogs.find(
-                              (l) => String(l.lesson_id) === String(node.id)
-                            );
-                            return log && log.current_status !== 'not_started';
-                          });
-
-                      if (lessonsToRender.length === 0) {
-                        return (
-                          <tr>
-                            <td
-                              colSpan={5}
-                              className="text-xs text-gray-400 font-semibold py-8 text-center"
-                            >
-                              {showNotStarted
-                                ? 'No lessons found for this book.'
-                                : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      return lessonsToRender.map((node) => {
-                        const log = progressBookLogs.find(
-                          (l) => String(l.lesson_id) === String(node.id)
-                        );
-                        const status = log?.current_status || 'not_started';
-                        const title = [node.level1, node.level2, node.level3]
-                          .filter(Boolean)
-                          .join(' > ');
-                        const isLogExpanded = log && expandedLogIds[log.id];
-
-                        return (
-                          <React.Fragment key={node.id}>
-                            <tr className="hover:bg-gray-50/50 transition-colors">
-                              <td className="py-3 pr-2">
-                                <div className="font-bold text-dark-primary text-xs">{title}</div>
-                                {log && (
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap text-[9px] text-gray-400 font-bold">
-                                    <span>
-                                      Started:{' '}
-                                      {log.start_date
-                                        ? new Date(log.start_date).toLocaleDateString()
-                                        : '—'}
-                                    </span>
-                                    <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                    {log.completion_percentage === 100 || status === 'completed' ? (
-                                      <span>
-                                        Ended:{' '}
-                                        {log.end_date
-                                          ? new Date(log.end_date).toLocaleDateString()
-                                          : '—'}
-                                      </span>
-                                    ) : (
-                                      <span>
-                                        Last Updated:{' '}
-                                        {log.updated_at
-                                          ? new Date(log.updated_at).toLocaleDateString()
-                                          : '—'}
-                                      </span>
-                                    )}
-                                    {log.revision_counter > 0 && (
-                                      <>
-                                        <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                        <span className="text-purple-600 bg-purple-50 px-1 py-0.5 rounded border border-purple-100">
-                                          Revisions: {log.revision_counter}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-3 px-2 text-center">
-                                {log ? (
-                                  <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded border">
-                                    {Number(log.completion_percentage).toFixed(0)}%
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400">—</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-2 text-center">
-                                {log ? (
-                                  <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded border">
-                                    {log.days_taken || 0}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400">—</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-2 text-center flex items-center justify-center h-full">
-                                <div className="mt-1">{getStatusBadge(status)}</div>
-                              </td>
-                              <td className="py-3 pl-2 text-right">
-                                {log && (
-                                  <button
-                                    onClick={() => toggleLogExpand(log.id)}
-                                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-[10px] font-extrabold transition-colors cursor-pointer border"
-                                  >
-                                    <i
-                                      className={`fas fa-${isLogExpanded ? 'eye-slash' : 'eye'} mr-1`}
-                                    ></i>
-                                    {isLogExpanded ? 'Hide' : 'View'}
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                            {isLogExpanded && log && (
-                              <tr>
-                                <td colSpan={5} className="pb-3 bg-gray-50/50">
-                                  <div className="mt-2 space-y-2 border-t border-dashed pt-3 pl-4">
-                                    <p className="text-[9px] font-extrabold text-dark-soft uppercase tracking-wider mb-2">
-                                      Logged Daily Entries
-                                    </p>
-                                    {!logItemsMap[log.id] ? (
-                                      <div className="flex items-center text-[10px] text-gray-400 font-bold">
-                                        <div className="w-3 h-3 border-2 border-brand-primary border-t-transparent rounded-full animate-spin mr-1.5"></div>
-                                        Loading details...
-                                      </div>
-                                    ) : logItemsMap[log.id].length === 0 ? (
-                                      <p className="text-[10px] text-gray-400 font-semibold">
-                                        No daily entries found.
-                                      </p>
-                                    ) : (
-                                      logItemsMap[log.id].map((item) => (
-                                        <div
-                                          key={item.id}
-                                          className="p-2 bg-gray-50 rounded-lg border border-gray-100 text-[10px] font-semibold text-gray-600 flex justify-between items-start gap-4"
-                                        >
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                                              <span className="font-bold text-dark-primary">
-                                                {new Date(item.date).toLocaleDateString()}
-                                              </span>
-                                              {getStatusBadge(item.current_status)}
-                                              <span className="text-gray-500 font-bold">
-                                                {Number(item.progress).toFixed(0)}%
-                                              </span>
-                                              {item.teacher?.name && (
-                                                <span className="text-gray-400 font-bold">
-                                                  by {item.teacher.name}
-                                                </span>
-                                              )}
-                                              {item.is_revision === 'Y' && (
-                                                <span className="text-purple-600 font-black bg-purple-50 px-1 py-0.5 rounded border border-purple-100 text-[8px] uppercase tracking-wider">
-                                                  Revision
-                                                </span>
-                                              )}
-                                              {item.late_reporting === 'Y' && (
-                                                <span className="text-red-600 font-black bg-red-50 px-1 py-0.5 rounded border border-red-100 text-[8px] uppercase tracking-wider">
-                                                  Late Reporting
-                                                </span>
-                                              )}
-                                            </div>
-                                            {item.comments && (
-                                              <p className="text-dark-soft mt-1 bg-white p-1.5 border rounded-md">
-                                                {item.comments}
-                                              </p>
-                                            )}
-                                          </div>
-                                          {String(item.teacher_id) === String(teacher?.id) &&
-                                            isCreatedToday(item.created_at) && (
-                                              <button
-                                                onClick={() =>
-                                                  handleDeleteClick(item, log, node, book)
-                                                }
-                                                className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
-                                                title="Delete Log Entry"
-                                              >
-                                                <i className="fas fa-trash-alt text-[10px]"></i>
-                                              </button>
-                                            )}
-                                        </div>
-                                      ))
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-      );
-    };
-
-    if (progressLoading) {
-      return (
-        <div className="flex items-center justify-center p-12">
-          <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
-          <span className="text-xs font-bold text-gray-500">Loading syllabus progress...</span>
-        </div>
-      );
-    }
-
-    const renderedGrids = classesToRender.map((c) => renderBooksGrid(c)).filter(Boolean);
-
-    return (
-      <div className="space-y-6">
-        {renderedGrids.length === 0 ? (
-          <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-            No matching progress records found.
-          </div>
-        ) : (
-          renderedGrids
-        )}
-      </div>
-    );
-  };
-
-  // ─── Loading State ──────────────────────────────────────────────
+  // ————————————————————————————————————————————————— Loading State ——————————————————————————————————————————————————
 
   if (loading) {
     return (
@@ -2609,7 +926,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
     );
   }
 
-  // ─── Main Render ──────────────────────────────────────────────
+  // â”€â”€â”€ Main Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const progressClasses =
     coverMode || assignments.length === 0
       ? classes
@@ -2682,7 +999,7 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
               )}
 
               <button
-                onClick={openAddWorkModal}
+                onClick={() => setIsAddWorkModalOpen(true)}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
               >
                 <i className="fas fa-plus"></i> Add Work
@@ -2764,695 +1081,85 @@ const SyllabusTracker = ({ user, teacherRecord }) => {
         {activeTab === 'teacher-activity' && (
           <>
             {renderPlannedForToday()}
-            {renderMyWork()}
+            <DailyActivityTable
+              role="teacher"
+              activeTab={activeTab}
+              dailyEntries={myWorkEntries}
+              dailyLoading={myWorkLoading}
+              classes={classes}
+              subjects={subjects}
+              books={books}
+              filteredDailyEntries={myWorkEntries}
+              handleDeleteClick={handleDeleteClick}
+              isCreatedToday={isCreatedToday}
+            />
           </>
         )}
-        {activeTab === 'class-progress' && renderSyllabusProgress()}
+        {activeTab === 'class-progress' && (
+          <SyllabusProgressGrid
+            role="teacher"
+            classesToRender={(() => {
+              const progressClasses =
+                coverMode || assignments.length === 0
+                  ? classes
+                  : classes.filter((c) =>
+                      assignments.some((a) => String(a.class_id) === String(c.id))
+                    );
+              return progressClasses.filter((c) => {
+                if (cpFilterClasses.length > 0) return cpFilterClasses.includes(String(c.id));
+                return true;
+              });
+            })()}
+            books={books}
+            bookClasses={bookClasses}
+            subjects={subjects}
+            classifications={classifications}
+            allTrackers={allTrackers}
+            allLogs={allLogs}
+            allLessons={allLessons}
+            cpGroupingMode={cpGroupingMode}
+            cpFilterBooks={cpFilterBooks}
+            cpFilterClassifications={cpFilterClassifications}
+            progressExpandedBook={progressExpandedBook}
+            progressExpandedClass={progressExpandedClass}
+            handleProgressBookClick={handleProgressBookClick}
+            progressLoading={detailsLoading}
+            progressBookLessons={progressBookLessons}
+            progressBookLogs={progressBookLogs}
+            showNotStarted={showNotStarted}
+            setShowNotStarted={setShowNotStarted}
+            expandedLogIds={expandedLogIds}
+            toggleLogExpand={toggleLogExpand}
+            logItemsMap={logItemsMap}
+            handleDeleteClick={handleDeleteClick}
+          />
+        )}
       </div>
 
-      {/* ─── Add Work Modal ─── */}
-      {isAddWorkModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-light-border max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-light-border">
-              <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">
-                Add Log Entry
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsAddWorkModalOpen(false)}
-                className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1 cursor-pointer"
-              >
-                <i className="fas fa-times" />
-              </button>
-            </div>
-
-            {/* Favorites pills */}
-            {favorites.length > 0 && (
-              <div className="mb-4 p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl">
-                <p className="text-[9px] font-extrabold text-amber-800 uppercase mb-2 flex items-center gap-1">
-                  <i className="fas fa-star text-amber-500" /> Favorites
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {favorites.map((fav, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => applyFavorite(fav)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                        String(awClassId) === String(fav.classId) &&
-                        String(awBookId) === String(fav.bookId)
-                          ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
-                          : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50 hover:text-amber-800'
-                      }`}
-                    >
-                      <i className="fas fa-star text-amber-400 text-[8px] mr-1" />
-                      {fav.className} - {fav.bookName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleAddWorkSubmit} className="space-y-4">
-              {/* Class */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Class
-                </label>
-                <select
-                  value={awClassId}
-                  onChange={(e) => {
-                    setAwClassId(e.target.value);
-                    setAwClassificationId('');
-                    setAwSubjectId('');
-                    setAwBookId('');
-                    setAwBookData([]);
-                    setAwLevel1('');
-                    setAwLevel2('');
-                    setAwLevel3('');
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="">Select Class</option>
-                  {awClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name || c.class_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Classification */}
-              {awClassId && (
-                <div>
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                    Classification
-                  </label>
-                  <select
-                    value={awClassificationId}
-                    onChange={(e) => {
-                      setAwClassificationId(e.target.value);
-                      setAwSubjectId('');
-                      setAwBookId('');
-                      setAwBookData([]);
-                      setAwLevel1('');
-                      setAwLevel2('');
-                      setAwLevel3('');
-                    }}
-                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                  >
-                    <option value="">All Classifications</option>
-                    {awActiveClassifications.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Subject */}
-              {awClassId && (
-                <div>
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                    Subject
-                  </label>
-                  <select
-                    value={awSubjectId}
-                    onChange={(e) => {
-                      setAwSubjectId(e.target.value);
-                      setAwBookId('');
-                      setAwBookData([]);
-                      setAwLevel1('');
-                      setAwLevel2('');
-                      setAwLevel3('');
-                    }}
-                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                  >
-                    <option value="">Select Subject</option>
-                    {awActiveSubjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Book + Add Level1 */}
-              {awSubjectId && (
-                <div>
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                        Book
-                      </label>
-                      <select
-                        value={awBookId}
-                        onChange={(e) => setAwBookId(e.target.value)}
-                        className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                      >
-                        <option value="">Select Book</option>
-                        {awFilteredBooks.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {awBookId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInlineAddType('level1');
-                          setInlineAddName('');
-                        }}
-                        className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[10px] font-bold border border-emerald-200 transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        + Add {awLabels.lvl1}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Level1 + Add Level2 */}
-              {awBookId && awLevel1sWithRevision.length > 0 && (
-                <div>
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                        {awLabels.lvl1}
-                      </label>
-                      <select
-                        value={awLevel1}
-                        onChange={(e) => {
-                          setAwLevel1(e.target.value);
-                          setAwLevel2('');
-                          setAwLevel3('');
-                        }}
-                        className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                      >
-                        <option value="">Select {awLabels.lvl1}</option>
-                        {awLevel1sWithRevision.map((l) => (
-                          <option key={l} value={l}>
-                            {l === '_Revision' ? '📝 Revision' : l}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {awLevel1 && !isRevisionMode && awLabels.levels.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInlineAddType('level2');
-                          setInlineAddName('');
-                          setInlineAddPageCount(0);
-                          setInlineAddComplexity('Easy');
-                          setInlineAddWithLevel3(false);
-                          setInlineAddLevel3Name('');
-                        }}
-                        className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[10px] font-bold border border-emerald-200 transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        + Add {awLabels.lvl2}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Revision mode indicator */}
-              {isRevisionMode && awLevel1 && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
-                  <p className="text-[10px] font-extrabold text-purple-800 uppercase flex items-center gap-1.5">
-                    <i className="fas fa-rotate text-purple-500" /> Revision Mode
-                  </p>
-                  <p className="text-[10px] text-purple-600 mt-1">
-                    Select reason and type below. Progress is not tracked for revisions.
-                  </p>
-                </div>
-              )}
-
-              {/* Level2 + Add Level3 */}
-              {awLevel1 && awLevel2s.length > 0 && (
-                <div>
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                        {isRevisionMode ? 'Reason' : awLabels.lvl2}
-                      </label>
-                      <select
-                        value={awLevel2}
-                        onChange={(e) => {
-                          setAwLevel2(e.target.value);
-                          setAwLevel3('');
-                        }}
-                        className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                      >
-                        <option value="">Select {isRevisionMode ? 'Reason' : awLabels.lvl2}</option>
-                        {awLevel2s.map((l) => (
-                          <option key={l} value={l}>
-                            {l}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {awLevel2 && !isRevisionMode && awLabels.levels.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInlineAddType('level3');
-                          setInlineAddName('');
-                          setInlineAddPageCount(0);
-                          setInlineAddComplexity('Easy');
-                        }}
-                        className="px-2.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-[10px] font-bold border border-emerald-200 transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        + Add {awLabels.lvl3}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Level3 */}
-              {awLevel2 && awLevel3s.length > 0 && (
-                <div>
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                    {isRevisionMode ? 'Type' : awLabels.lvl3}
-                  </label>
-                  <select
-                    value={awLevel3}
-                    onChange={(e) => setAwLevel3(e.target.value)}
-                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                  >
-                    <option value="">Select {isRevisionMode ? 'Type' : awLabels.lvl3}</option>
-                    {awLevel3s.map((l) => (
-                      <option key={l} value={l}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Inline Add Level Form */}
-              {inlineAddType && (
-                <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] font-extrabold text-emerald-800 uppercase">
-                      New{' '}
-                      {inlineAddType === 'level1'
-                        ? awLabels.lvl1
-                        : inlineAddType === 'level2'
-                          ? awLabels.lvl2
-                          : awLabels.lvl3}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setInlineAddType(null)}
-                      className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
-                    >
-                      <i className="fas fa-times" />
-                    </button>
-                  </div>
-
-                  {/* Name field (always shown) */}
-                  <input
-                    type="text"
-                    placeholder={`${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3} Name`}
-                    value={inlineAddName}
-                    onChange={(e) => setInlineAddName(e.target.value)}
-                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300"
-                  />
-
-                  {/* Level1: NO page/complexity */}
-
-                  {/* Level2: Conditional page/complexity based on Level3 existence */}
-                  {inlineAddType === 'level2' && level3ExistsForLevel1(awLevel1) && (
-                    <label className="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 p-2 rounded-xl border border-indigo-100 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={inlineAddWithLevel3}
-                        onChange={(e) => {
-                          setInlineAddWithLevel3(e.target.checked);
-                          setInlineAddLevel3Name('');
-                        }}
-                        className="w-4 h-4 rounded text-indigo-600"
-                      />
-                      Add with {awLabels.lvl3}?
-                    </label>
-                  )}
-
-                  {/* Level3 name when toggle is on */}
-                  {inlineAddType === 'level2' && inlineAddWithLevel3 && (
-                    <input
-                      type="text"
-                      placeholder={`${awLabels.lvl3} Name`}
-                      value={inlineAddLevel3Name}
-                      onChange={(e) => setInlineAddLevel3Name(e.target.value)}
-                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300"
-                    />
-                  )}
-
-                  {/* Page/Complexity: shown for Level3 always, Level2 always (it's leaf or has toggle), but NOT for Level1 */}
-                  {inlineAddType !== 'level1' && (
-                    <div className="flex gap-3">
-                      <div className="flex-1">
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                          Page Count
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={inlineAddPageCount}
-                          onChange={(e) => setInlineAddPageCount(Number(e.target.value))}
-                          className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                          Complexity
-                        </label>
-                        <select
-                          value={inlineAddComplexity}
-                          onChange={(e) => setInlineAddComplexity(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300"
-                        >
-                          <option value="Easy">Easy</option>
-                          <option value="Moderate">Moderate</option>
-                          <option value="Complex">Complex</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleInlineAddLevel}
-                    disabled={submitting}
-                    className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {submitting
-                      ? 'Adding...'
-                      : `Add ${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3}`}
-                  </button>
-                </div>
-              )}
-
-              {/* Status & Progress — only for leaf nodes in non-revision mode */}
-              {isLeafNodeSelected && !isRevisionMode && (
-                <>
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Status
-                    </label>
-                    <select
-                      value={awStatus}
-                      onChange={(e) => handleAwStatusChange(e.target.value)}
-                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                    >
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Progress ({awProgress}%)
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={awProgress}
-                      onChange={(e) => handleAwProgressChange(Number(e.target.value))}
-                      className="w-full accent-brand-primary"
-                    />
-                    <div className="flex justify-between text-[9px] text-gray-400 font-bold mt-1">
-                      <span>0%</span>
-                      <span>50%</span>
-                      <span>100%</span>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Revision status indicator */}
-              {isRevisionMode && awLevel3 && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center gap-2">
-                  <span className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-lg text-[10px] font-bold">
-                    Status: Revision
-                  </span>
-                  <span className="text-[10px] text-purple-600 font-semibold">
-                    Revision counter will be incremented
-                  </span>
-                </div>
-              )}
-
-              {/* Date */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={awDate}
-                  max={todayStr}
-                  onChange={(e) => setAwDate(e.target.value)}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft"
-                />
-              </div>
-
-              {/* Comments */}
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Comments
-                </label>
-                <textarea
-                  value={awComments}
-                  onChange={(e) => setAwComments(e.target.value)}
-                  placeholder="Optional comments..."
-                  rows={2}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft resize-none"
-                />
-              </div>
-
-              {/* Map Book to Class section */}
-              {awClassId && (
-                <div className="pt-2 border-t border-light-border">
-                  {!showAddBookMappingForm ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowAddBookMappingForm(true)}
-                      className="text-xs font-bold text-brand-primary hover:text-brand-primary/80 flex items-center gap-1 cursor-pointer"
-                    >
-                      <i className="fas fa-plus-circle" /> Add Book (Map to Class)
-                    </button>
-                  ) : (
-                    <div className="bg-blue-50/50 p-3 rounded-2xl border border-blue-150 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <p className="text-[10px] font-extrabold text-blue-800 uppercase tracking-wider">
-                          Map Book to Class
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAddBookMappingForm(false);
-                            setAbClassificationId('');
-                            setAbSubjectId('');
-                            setAbBookId('');
-                          }}
-                          className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
-                        >
-                          <i className="fas fa-times" />
-                        </button>
-                      </div>
-
-                      {/* Map Book: Classification */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                          Classification
-                        </label>
-                        <select
-                          value={abClassificationId}
-                          onChange={(e) => {
-                            setAbClassificationId(e.target.value);
-                            setAbSubjectId('');
-                            setAbBookId('');
-                          }}
-                          className="w-full bg-white border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-300"
-                        >
-                          <option value="">Select Classification</option>
-                          {abActiveClassifications.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Map Book: Subject */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                          Subject
-                        </label>
-                        <select
-                          value={abSubjectId}
-                          onChange={(e) => {
-                            setAbSubjectId(e.target.value);
-                            setAbBookId('');
-                          }}
-                          className="w-full bg-white border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-300"
-                          disabled={!abClassificationId}
-                        >
-                          <option value="">Select Subject</option>
-                          {abActiveSubjects.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Map Book: Book */}
-                      <div>
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                          Book
-                        </label>
-                        <select
-                          value={abBookId}
-                          onChange={(e) => setAbBookId(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-2.5 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-300"
-                          disabled={!abSubjectId}
-                        >
-                          <option value="">Select Book</option>
-                          {abFilteredBooks.map((b) => (
-                            <option key={b.id} value={b.id}>
-                              {b.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleMapBookToClass}
-                        disabled={submitting || !abBookId}
-                        className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-colors disabled:opacity-50 cursor-pointer"
-                      >
-                        {submitting ? 'Mapping...' : 'Add Mapping'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex justify-between items-center gap-2 pt-3 border-t border-light-border">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleAddToFavorite(awClassId, awClassificationId, awSubjectId, awBookId)
-                  }
-                  disabled={!awClassId || !awBookId}
-                  className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl text-xs font-bold border border-amber-200 transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <i className="fas fa-star text-amber-500 text-[10px]" /> Add to Favorite
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={resetAddWorkModal}
-                    className="px-4 py-2 border border-light-border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-                  >
-                    {submitting ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Favorites Override Modal ─── */}
-      {isOverrideModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl border border-light-border">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b border-light-border">
-              <h3 className="text-sm font-black text-dark-deepblue uppercase tracking-wider">
-                Maximum Favorites Reached
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOverrideModalOpen(false);
-                  setPendingFavorite(null);
-                }}
-                className="text-gray-400 hover:text-dark-primary font-bold text-lg p-1 cursor-pointer"
-              >
-                <i className="fas fa-times" />
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mb-4 font-semibold">
-              You can have up to 8 favorites. Select one to override:
-            </p>
-            <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-              {favorites.map((fav, idx) => (
-                <label
-                  key={idx}
-                  className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${
-                    overrideSelection === fav.key
-                      ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-300'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="override-fav"
-                    value={fav.key}
-                    checked={overrideSelection === fav.key}
-                    onChange={() => setOverrideSelection(fav.key)}
-                    className="w-4 h-4 text-amber-500 focus:ring-amber-400"
-                  />
-                  <div>
-                    <p className="text-xs font-bold text-dark-primary">{fav.key}</p>
-                    <p className="text-[10px] text-gray-500">{fav.subjectName}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOverrideModalOpen(false);
-                  setPendingFavorite(null);
-                }}
-                className="px-4 py-2 border hover:bg-light-ui rounded-xl text-xs font-bold text-dark-soft transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleOverrideFavorite}
-                disabled={!overrideSelection}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                Override Selected
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SyllabusAddWorkModal
+        isOpen={isAddWorkModalOpen}
+        onClose={() => {
+          setIsAddWorkModalOpen(false);
+          setPlannedLessonToLog(null);
+        }}
+        onSuccess={handleAddWorkSuccess}
+        teacher={teacher}
+        classes={classes}
+        books={books}
+        bookClasses={bookClasses}
+        setBookClasses={setBookClasses}
+        subjects={subjects}
+        classifications={classifications}
+        favorites={favorites}
+        setFavorites={(newFavs) => {
+          setFavorites(newFavs);
+          syllabusTrackerCache.favorites = newFavs;
+          if (teacher?.id) saveFavoritesToDB(teacher.id, newFavs);
+        }}
+        coverMode={coverMode}
+        assignments={assignments}
+        initialPlan={plannedLessonToLog}
+      />
 
       <ConfirmModal
         isOpen={!!deleteModalConfig}

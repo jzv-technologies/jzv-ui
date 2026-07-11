@@ -227,15 +227,15 @@ const SyllabusTreePanel = ({
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
       {/* Panel Header */}
-      <div className="p-3 bg-white border-b flex justify-between items-center shrink-0 shadow-sm z-10">
-        <div className="flex items-center gap-4">
+      <div className="p-3 bg-white border-b flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between shrink-0 shadow-sm z-10">
+        <div className="flex items-center justify-between sm:justify-start gap-4 w-full sm:w-auto">
           <h2 className="text-sm font-black text-dark-primary uppercase tracking-wider flex items-center gap-2">
-            <i className="fas fa-list-tree text-brand-primary"></i>
+            <i className="fas fa-list text-brand-primary"></i>
             Lessons
           </h2>
           
           {/* Status Filters */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
+          <div className="flex bg-gray-100 rounded-lg p-0.5 shrink-0">
             <button onClick={() => setFilterStatus('all')} className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-all ${filterStatus === 'all' ? 'bg-white shadow text-gray-400' : 'text-gray-700 hover:bg-gray-200'}`} title="All">
               <i className="fas fa-border-all"></i>
             </button>
@@ -259,7 +259,7 @@ const SyllabusTreePanel = ({
         <button
           onClick={() => isBulkAssignEnabled && onAssign(leafLessons.filter(l => selectedLessonIds.has(String(l.id))))}
           disabled={!isBulkAssignEnabled}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
+          className={`w-full sm:w-auto justify-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ${
             isBulkAssignEnabled 
             ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow' 
             : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'

@@ -277,6 +277,44 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
           {/* Main Portal Selection Dashboard */}
           {authMode === "main" && (
             <div className="flex flex-col gap-6 py-4">
+              {import.meta.env.DEV && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-2xl flex flex-col gap-2 shadow-sm">
+                  <span className="text-[10px] font-bold text-yellow-800 uppercase tracking-wider flex items-center gap-1">
+                    <i className="fas fa-bug text-yellow-600"></i> Dev Mode - Mock Bypass
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem("jzv_admin_session", JSON.stringify({
+                          user: { id: "bec0f709-c42e-4172-9672-6e340fda54a7", email: "teacher@test.com" },
+                          roles: ["teacher"],
+                          fullName: "JZV Teacher"
+                        }));
+                        window.location.reload();
+                      }}
+                      className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-xs py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
+                    >
+                      Login as Teacher
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem("jzv_admin_session", JSON.stringify({
+                          user: { id: "admin-1", email: "admin@test.com" },
+                          roles: ["admin"],
+                          fullName: "Admin User"
+                        }));
+                        window.location.reload();
+                      }}
+                      className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-xs py-2 px-3 rounded-lg transition-colors cursor-pointer text-center"
+                    >
+                      Login as Admin
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Associate Login card */}
               <button
                 onClick={handleGoogleLogin}

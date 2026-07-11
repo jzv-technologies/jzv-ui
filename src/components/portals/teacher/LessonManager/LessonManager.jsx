@@ -311,15 +311,33 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
             String(p.lesson_id) === String(lesson.id)
         );
 
+        let startD, endD;
+        if (planningMode === 'date') {
+          startD = targetVal;
+          endD = targetVal;
+        } else {
+          // Compute Monday and Saturday of the selected weekDate
+          const d = new Date(targetVal);
+          const day = d.getDay();
+          const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+          const monday = new Date(d.setDate(diff));
+
+          const saturday = new Date(monday);
+          saturday.setDate(monday.getDate() + 5);
+
+          startD = monday.toISOString().split('T')[0];
+          endD = saturday.toISOString().split('T')[0];
+        }
+
         return {
           id: existing ? existing.id : undefined,
           class_id: selectedClassId,
           subject_id: selectedSubjectId,
           book_id: selectedBookId,
           lesson_id: lesson.id,
-          target_start_date: planningMode === 'date' ? targetVal : null,
-          target_end_date: planningMode === 'date' ? targetVal : null,
-          academic_week: planningMode === 'week' ? Number(targetVal) : null,
+          target_start_date: startD,
+          target_end_date: endD,
+          academic_week: existing ? existing.academic_week : null,
           status: existing && existing.status !== 'not_started' ? existing.status : 'planned',
         };
       });
@@ -382,7 +400,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-130px)] min-h-[600px] bg-light-bg font-sans pb-20 lg:pb-0">
+    <div className="flex flex-col h-auto lg:h-[calc(100vh-130px)] lg:min-h-[600px] bg-light-bg font-sans pb-24 lg:pb-0">
       {/* Header and Selectors */}
       <div className="bg-white border-b px-4 py-4 md:px-6 shadow-sm shrink-0">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -400,9 +418,9 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto pb-2 md:pb-0">
+          <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto pb-2 md:pb-0">
             {isAdminView && (
-              <div className="min-w-[150px]">
+              <div className="col-span-2 md:col-span-1 md:min-w-[150px] w-full md:w-auto">
                 <select
                   value={selectedTeacherId}
                   onChange={(e) => {
@@ -424,20 +442,20 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
             )}
 
             {!isAdminView && (
-              <div className="min-w-[140px]">
-                <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors h-[34px]">
+              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+                <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors h-[34px] w-full">
                   <input
                     type="checkbox"
                     checked={showAllClasses}
                     onChange={(e) => setShowAllClasses(e.target.checked)}
-                    className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer"
+                    className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer shrink-0"
                   />
-                  <span>Show All Classes</span>
+                  <span className="truncate">Show All Classes</span>
                 </label>
               </div>
             )}
 
-            <div className="min-w-[140px]">
+            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
               <select
                 value={selectedClassId}
                 onChange={(e) => {
@@ -456,7 +474,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
               </select>
             </div>
 
-            <div className="min-w-[140px]">
+            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
               <select
                 value={selectedSubjectId}
                 onChange={(e) => {
@@ -475,38 +493,32 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
               </select>
             </div>
 
-            <div className="min-w-[160px]">
-              <div className="flex items-center gap-1">
-                <select
-                  value={selectedBookId}
-                  onChange={(e) => setSelectedBookId(e.target.value)}
-                  disabled={!selectedSubjectId}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
-                >
-                  <option value="">Select Book...</option>
-                  {availableBooks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => setIsMapBookModalOpen(true)}
-                  disabled={!selectedClassId || !selectedSubjectId}
-                  className="bg-white border border-gray-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 rounded-lg h-[34px] w-[34px] flex items-center justify-center transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shrink-0"
-                  title="Map Book to Class"
-                >
-                  <i className="fas fa-link"></i>
-                </button>
-              </div>
+            <div className="col-span-1 md:min-w-[160px] w-full md:w-auto">
+              <select
+                value={selectedBookId}
+                onChange={(e) => {
+                  if (e.target.value === 'map-new-book') {
+                    setIsMapBookModalOpen(true);
+                  } else {
+                    setSelectedBookId(e.target.value);
+                  }
+                }}
+                disabled={!selectedSubjectId}
+                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50 shadow-sm"
+              >
+                <option value="">Select Book...</option>
+                {availableBooks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+                {selectedClassId && selectedSubjectId && (
+                  <option value="map-new-book" className="text-indigo-600 font-bold">
+                    + Map Book to Class...
+                  </option>
+                )}
+              </select>
             </div>
-
-            <button
-              onClick={() => setAddWorkTarget(true)}
-              className="flex items-center justify-center gap-2 bg-brand-primary text-white font-bold text-xs px-4 py-2 rounded-lg shadow-sm hover:shadow-md hover:bg-brand-secondary transition-all shrink-0 h-[34px]"
-            >
-              <i className="fas fa-plus"></i> Add Work Log
-            </button>
           </div>
         </div>
       </div>
@@ -565,27 +577,27 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
       </div>
 
       {/* Mobile Tab Switcher */}
-      <div className="lg:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 p-2 flex justify-around shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-2 flex justify-around shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-40">
         <button
           onClick={() => setActiveMobileTab('syllabus')}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+          className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
             activeMobileTab === 'syllabus'
               ? 'bg-brand-primary/10 text-brand-primary'
               : 'text-gray-500'
           }`}
         >
-          <i className="fas fa-list-tree text-lg"></i>
+          <i className="fas fa-list text-base"></i>
           Lessons
         </button>
         <button
           onClick={() => setActiveMobileTab('timeline')}
-          className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold flex flex-col items-center gap-1 transition-all ${
+          className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
             activeMobileTab === 'timeline'
               ? 'bg-brand-primary/10 text-brand-primary'
               : 'text-gray-500'
           }`}
         >
-          <i className="fas fa-calendar-alt text-lg"></i>
+          <i className="fas fa-calendar-alt text-base"></i>
           Timeline
         </button>
       </div>
