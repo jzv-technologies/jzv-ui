@@ -14,7 +14,6 @@ import TeacherStudentsViewer from './portals/teacher/TeacherStudentsViewer';
 import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
 import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import ReporterTicketsView from './portals/ReporterTicketsView';
-import ParentSyllabusView from './portals/parent/ParentSyllabusView';
 import LessonManager from './portals/teacher/LessonManager/LessonManager';
 import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
 import CandidatePortal from './portals/CandidatePortal';

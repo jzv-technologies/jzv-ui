@@ -1,21 +1,5 @@
 import React from 'react';
-
-const CARD_THEMES = {
-  emerald: { color: 'emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-  blue: { color: 'blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
-  purple: { color: 'purple-500', text: 'text-purple-700', bg: 'bg-purple-50' },
-  indigo: { color: 'indigo-500', text: 'text-indigo-700', bg: 'bg-indigo-50' },
-  rose: { color: 'rose-500', text: 'text-rose-700', bg: 'bg-rose-50' },
-  amber: { color: 'amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
-  orange: { color: 'orange-500', text: 'text-orange-700', bg: 'bg-orange-50' },
-  teal: { color: 'teal-500', text: 'text-teal-700', bg: 'bg-teal-50' },
-  cyan: { color: 'cyan-500', text: 'text-cyan-700', bg: 'bg-cyan-50' },
-  pink: { color: 'pink-500', text: 'text-pink-700', bg: 'bg-pink-50' },
-  sky: { color: 'sky-500', text: 'text-sky-700', bg: 'bg-sky-50' },
-  violet: { color: 'violet-500', text: 'text-violet-700', bg: 'bg-violet-50' },
-  fuchsia: { color: 'fuchsia-500', text: 'text-fuchsia-700', bg: 'bg-fuchsia-50' },
-  charcoal: { color: 'gray-700', text: 'text-gray-700', bg: 'bg-gray-50' },
-};
+import { CARD_THEMES } from '../../../utils/cardTheme';
 
 const getStatusBadge = (status, isRev = false) => {
   if (isRev)

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import { CARD_THEMES } from '../../../../utils/cardTheme';
@@ -933,6 +933,7 @@ const SyllabusProgressReport = ({ role, student }) => {
           activeTab === 'two-weeks-class') && (
           <DailyActivityTable
             role={role}
+            student={student}
             activeTab={activeTab}
             dailyEntries={dailyEntries}
             dailyLoading={dailyLoading}
@@ -964,6 +965,7 @@ const SyllabusProgressReport = ({ role, student }) => {
         {activeTab === 'class-progress' && (
           <SyllabusProgressGrid
             role={role}
+            student={student}
             classesToRender={classes.filter((c) => {
               if (cpFilterClasses.length > 0) return cpFilterClasses.includes(String(c.id));
               return bookClasses.some(

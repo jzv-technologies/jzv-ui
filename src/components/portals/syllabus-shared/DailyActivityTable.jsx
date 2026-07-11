@@ -1,22 +1,6 @@
 import React from 'react';
 import MultiSelectDropdown from './MultiSelectDropdown';
-
-const CARD_THEMES = {
-  emerald: { color: 'emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50' },
-  blue: { color: 'blue-500', text: 'text-blue-700', bg: 'bg-blue-50' },
-  purple: { color: 'purple-500', text: 'text-purple-700', bg: 'bg-purple-50' },
-  indigo: { color: 'indigo-500', text: 'text-indigo-700', bg: 'bg-indigo-50' },
-  rose: { color: 'rose-500', text: 'text-rose-700', bg: 'bg-rose-50' },
-  amber: { color: 'amber-500', text: 'text-amber-700', bg: 'bg-amber-50' },
-  orange: { color: 'orange-500', text: 'text-orange-700', bg: 'bg-orange-50' },
-  teal: { color: 'teal-500', text: 'text-teal-700', bg: 'bg-teal-50' },
-  cyan: { color: 'cyan-500', text: 'text-cyan-700', bg: 'bg-cyan-50' },
-  pink: { color: 'pink-500', text: 'text-pink-700', bg: 'bg-pink-50' },
-  sky: { color: 'sky-500', text: 'text-sky-700', bg: 'bg-sky-50' },
-  violet: { color: 'violet-500', text: 'text-violet-700', bg: 'bg-violet-50' },
-  fuchsia: { color: 'fuchsia-500', text: 'text-fuchsia-700', bg: 'bg-fuchsia-50' },
-  charcoal: { color: 'gray-700', text: 'text-gray-700', bg: 'bg-gray-50' },
-};
+import { CARD_THEMES } from '../../../utils/cardTheme';
 
 const getStatusBadge = (status, isRev = false) => {
   if (isRev)
@@ -219,91 +203,92 @@ const DailyActivityTable = ({
                 <tr className="bg-gray-50 border-b border-light-border text-dark-muted font-extrabold text-[10px] uppercase tracking-wider whitespace-nowrap">
                   <th className="px-4 py-3 min-w-[90px]">Date</th>
                   <th className="px-4 py-3 min-w-[80px]">Class</th>
-                  <th className="px-4 py-3 min-w-[90px]">Subject</th>
-                  <th className="px-4 py-3 min-w-[110px]">Book</th>
-                  <th className="px-4 py-3 min-w-[115px]">Teacher</th>
+                  <th className="px-4 py-3 min-w-[150px]">Subject \ Book</th>
+                  {role !== 'teacher' && <th className="px-4 py-3 min-w-[115px]">Teacher</th>}
                   <th className="px-4 py-3 min-w-[140px]">Topic / Path</th>
                   <th className="px-4 py-3 min-w-[95px]">Status</th>
                   <th className="px-4 py-3 min-w-[70px]">Progress</th>
                   <th className="px-4 py-3 min-w-[140px]">Comments</th>
                   <th className="px-4 py-3 min-w-[60px] text-center">Action</th>
                 </tr>
-                {/* Filter inputs row */}
-                <tr className="bg-gray-100/50 border-b border-light-border">
-                  <th className="px-2 py-1">
-                    <div className="text-[10px] text-gray-400 text-center py-1 font-bold">
-                      Filtered
-                    </div>
-                  </th>
-                  <th className="px-2 py-1">
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="All"
-                      options={classOpts}
-                      selected={filterClasses}
-                      onChange={setFilterClasses}
-                    />
-                  </th>
-                  <th className="px-2 py-1">
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="All"
-                      options={subjectOpts}
-                      selected={filterSubjects}
-                      onChange={setFilterSubjects}
-                    />
-                  </th>
-                  <th className="px-2 py-1">
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="All"
-                      options={bookOpts}
-                      selected={filterBooks}
-                      onChange={setFilterBooks}
-                    />
-                  </th>
-                  <th className="px-2 py-1">
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="All"
-                      options={teacherOpts}
-                      selected={filterTeachers}
-                      onChange={setFilterTeachers}
-                    />
-                  </th>
-                  <th className="px-2 py-1">
-                    <input
-                      type="text"
-                      value={filterTopic}
-                      onChange={(e) => setFilterTopic(e.target.value)}
-                      placeholder="Filter topic..."
-                      className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary h-7 bg-white"
-                    />
-                  </th>
-                  <th className="px-2 py-1">
-                    <select
-                      value={filterStatus}
-                      onChange={(e) => setFilterStatus(e.target.value)}
-                      className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary bg-white h-7 cursor-pointer"
-                    >
-                      <option value="">All Statuses</option>
-                      <option value="completed">Completed</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="not_started">Not Started</option>
-                    </select>
-                  </th>
-                  <th className="px-2 py-1"></th>
-                  <th className="px-2 py-1 text-center">
-                    <button
-                      onClick={clearDailyFilters}
-                      className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] uppercase px-2 py-1 rounded-lg border border-red-100 transition-colors cursor-pointer w-full h-7 flex items-center justify-center gap-1 shadow-sm font-black"
-                      title="Clear all filters"
-                    >
-                      <i className="fas fa-trash-can text-[9px]"></i> Clear
-                    </button>
-                  </th>
-                  <th className="px-2 py-1"></th>
-                </tr>
+                {/* Filter inputs row (only for non-teachers) */}
+                {role !== 'teacher' && (
+                  <tr className="bg-gray-100/50 border-b border-light-border">
+                    <th className="px-2 py-1">
+                      <div className="text-[10px] text-gray-400 text-center py-1 font-bold">
+                        Filtered
+                      </div>
+                    </th>
+                    <th className="px-2 py-1">
+                      <MultiSelectDropdown
+                        label=""
+                        placeholder="All"
+                        options={classOpts}
+                        selected={filterClasses}
+                        onChange={setFilterClasses}
+                      />
+                    </th>
+                    <th className="px-2 py-1">
+                      <div className="flex gap-1.5">
+                        <MultiSelectDropdown
+                          label=""
+                          placeholder="Subject"
+                          options={subjectOpts}
+                          selected={filterSubjects}
+                          onChange={setFilterSubjects}
+                        />
+                        <MultiSelectDropdown
+                          label=""
+                          placeholder="Book"
+                          options={bookOpts}
+                          selected={filterBooks}
+                          onChange={setFilterBooks}
+                        />
+                      </div>
+                    </th>
+                    <th className="px-2 py-1">
+                      <MultiSelectDropdown
+                        label=""
+                        placeholder="All"
+                        options={teacherOpts}
+                        selected={filterTeachers}
+                        onChange={setFilterTeachers}
+                      />
+                    </th>
+                    <th className="px-2 py-1">
+                      <input
+                        type="text"
+                        value={filterTopic}
+                        onChange={(e) => setFilterTopic(e.target.value)}
+                        placeholder="Filter topic..."
+                        className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary h-7 bg-white"
+                      />
+                    </th>
+                    <th className="px-2 py-1">
+                      <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="w-full border p-1 rounded font-bold text-[11px] outline-none focus:ring-1 focus:ring-brand-primary bg-white h-7 cursor-pointer"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="not_started">Not Started</option>
+                      </select>
+                    </th>
+                    <th className="px-2 py-1"></th>
+                    <th className="px-2 py-1 text-center">
+                      <button
+                        onClick={clearDailyFilters}
+                        className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold text-[10px] uppercase px-2 py-1 rounded-lg border border-red-100 transition-colors cursor-pointer w-full h-7 flex items-center justify-center gap-1 shadow-sm font-black"
+                        title="Clear all filters"
+                      >
+                        <i className="fas fa-trash-can text-[9px]"></i> Clear
+                      </button>
+                    </th>
+                    <th className="px-2 py-1"></th>
+                  </tr>
+                )}
               </>
             )}
           </thead>
@@ -311,7 +296,7 @@ const DailyActivityTable = ({
             {filteredDailyEntries.length === 0 ? (
               <tr>
                 <td
-                  colSpan={isParent ? 5 : 10}
+                  colSpan={isParent ? 5 : (role === 'teacher' ? 8 : 9)}
                   className="text-center py-6 text-gray-400 font-semibold"
                 >
                   No entries match your search filters.
@@ -362,15 +347,22 @@ const DailyActivityTable = ({
                       <td className="px-4 py-3 font-extrabold text-brand-primary whitespace-nowrap">
                         {entry.class?.name || entry.class?.class_name || '—'}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                        {entry.subject?.name || '—'}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <span className="font-extrabold text-brand-primary">
+                            {entry.subject?.name || '—'}
+                          </span>
+                          <span className="text-gray-300 font-normal">\</span>
+                          <span className="font-semibold text-gray-500">
+                            {entry.book?.name || '—'}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 font-bold text-dark-primary whitespace-nowrap">
-                        {entry.book?.name || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-blue-600 font-extrabold whitespace-nowrap">
-                        {entry.teacher?.name || '—'}
-                      </td>
+                      {role !== 'teacher' && (
+                        <td className="px-4 py-3 text-blue-600 font-extrabold whitespace-nowrap">
+                          {entry.teacher?.name || '—'}
+                        </td>
+                      )}
                       <td
                         className="px-4 py-3 font-semibold text-gray-600 max-w-[250px] truncate whitespace-nowrap"
                         title={entry.lessonPath}
