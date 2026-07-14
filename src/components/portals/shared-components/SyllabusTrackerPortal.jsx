@@ -42,7 +42,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [activeTab, setActiveTab] = useState(() => {
     if (role === 'parent') return 'today-class';
     if (role === 'teacher') return 'teacher-activity';
-    return 'daily-activity';
+    return 'teacher-activity';
   });
 
   // ─── Tab 1: Daily Activity States & Filters ───
@@ -276,11 +276,24 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syllabus_book_classes').select('*'),
         supabase.from('class_assignments').select('*'),
-        supabase.from('teachers').select('*').eq('is_active', true).order('name', { ascending: true }),
+        supabase
+          .from('teachers')
+          .select('*')
+          .eq('is_active', true)
+          .order('name', { ascending: true }),
         supabase.from('book_tracker').select('*'),
-        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'),
+        supabase
+          .from('lesson_progress')
+          .select(
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
+          ),
         supabase.from('syllabus_book_lessons').select('id, book_id'),
-        supabase.from('lesson_progress').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').in('status', ['planned', 'in_progress']),
+        supabase
+          .from('lesson_progress')
+          .select(
+            '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
+          )
+          .in('status', ['planned', 'in_progress']),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -517,12 +530,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         const progressObj = item.progress;
         const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
         const lesson = progressObj ? progressObj.lesson : null;
-        const book = progressObj ? books.find((b) => String(b.id) === String(progressObj.book_id)) : null;
+        const book = progressObj
+          ? books.find((b) => String(b.id) === String(progressObj.book_id))
+          : null;
         const subject = progressObj
           ? subjects.find((s) => String(s.id) === String(progressObj.subject_id)) ||
             (book ? subjects.find((s) => String(s.id) === String(book.subject_id)) : null)
           : null;
-        const cls = progressObj ? classes.find((c) => String(c.id) === String(progressObj.class_id)) : null;
+        const cls = progressObj
+          ? classes.find((c) => String(c.id) === String(progressObj.class_id))
+          : null;
 
         return {
           ...item,
@@ -533,8 +550,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           subject,
           class: cls,
           lessonPath: lesson
-             ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
-             : 'Unknown',
+            ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
+            : 'Unknown',
           isRevision: lesson?.level1 === '_Revision',
         };
       });
@@ -581,13 +598,21 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
       const [trackerRes, logsRes] = await Promise.all([
         supabase.from('book_tracker').select('*').in('class_id', classIds),
-        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').in('class_id', classIds),
+        supabase
+          .from('lesson_progress')
+          .select(
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
+          )
+          .in('class_id', classIds),
       ]);
 
       if (trackerRes.error) throw trackerRes.error;
       if (logsRes.error) throw logsRes.error;
 
-      const mappedLogs = (logsRes.data || []).map((log) => ({ ...log, current_status: log.status }));
+      const mappedLogs = (logsRes.data || []).map((log) => ({
+        ...log,
+        current_status: log.status,
+      }));
       setBookTrackers(trackerRes.data || []);
       setAllLogs(mappedLogs);
     } catch (err) {
@@ -613,7 +638,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
   useEffect(() => {
     if (
-      (activeTab === 'daily-activity' ||
+      (activeTab === 'teacher-activity' ||
         activeTab === 'teacher-activity' ||
         activeTab === 'today-class' ||
         activeTab === 'two-weeks-class') &&
@@ -658,7 +683,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     if (!deleteModalConfig) return;
     setDailyLoading(true);
     try {
-      const { error } = await supabase.from('lesson_progress_items').delete().eq('id', deleteModalConfig.id);
+      const { error } = await supabase
+        .from('lesson_progress_items')
+        .delete()
+        .eq('id', deleteModalConfig.id);
       if (error) throw error;
 
       showToast('Log entry deleted successfully!', 'success');
@@ -703,7 +731,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id').eq('class_id', classId),
+        supabase
+          .from('lesson_progress')
+          .select(
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
+          )
+          .eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
@@ -712,17 +745,23 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       const bookLessons = (lessons || []).filter((l) => {
         if (l.level3) return true;
         if (l.level2 && !l.level3) {
-          const hasL3 = (lessons || []).some((o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3);
+          const hasL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3
+          );
           return !hasL3;
         }
         if (l.level1 && !l.level2 && !l.level3) {
-          const hasL2orL3 = (lessons || []).some((o) => o.level1 === l.level1 && (o.level2 || o.level3));
+          const hasL2orL3 = (lessons || []).some(
+            (o) => o.level1 === l.level1 && (o.level2 || o.level3)
+          );
           return !hasL2orL3;
         }
         return false;
       });
 
-      const relevantLogs = mappedLogs.filter((l) => bookLessons.some((bl) => String(bl.id) === String(l.lesson_id)));
+      const relevantLogs = mappedLogs.filter((l) =>
+        bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
+      );
       setProgressBookLessons(bookLessons);
       setProgressBookLogs(relevantLogs);
     } catch (err) {
@@ -736,7 +775,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setExpandedLogIds((prev) => ({ ...prev, [logId]: !prev[logId] }));
     if (!logItemsMap[logId]) {
       try {
-        const { data, error } = await supabase.from('lesson_progress_items').select('*, teacher:teachers(name)').eq('progress_id', logId).order('date', { ascending: false });
+        const { data, error } = await supabase
+          .from('lesson_progress_items')
+          .select('*, teacher:teachers(name)')
+          .eq('progress_id', logId)
+          .order('date', { ascending: false });
         if (error) throw error;
         setLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
       } catch (err) {
@@ -849,9 +892,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
       if (plan.target_start_date) {
         try {
-          await supabase.from('lesson_plan_carry_forwards').insert([
-            { plan_id: plan.id, teacher_id: teacher?.id, original_date: plan.target_start_date, new_date: updateData.target_start_date },
-          ]);
+          await supabase
+            .from('lesson_plan_carry_forwards')
+            .insert([
+              {
+                plan_id: plan.id,
+                teacher_id: teacher?.id,
+                original_date: plan.target_start_date,
+                new_date: updateData.target_start_date,
+              },
+            ]);
         } catch (cfErr) {
           console.warn('Carry forward log insert skipped or failed:', cfErr.message);
         }
@@ -877,15 +927,20 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     if (role === 'parent' && student?.class_id) {
       baseClasses = classes.filter((c) => String(c.id) === String(student.class_id));
     } else if (role === 'teacher') {
-      baseClasses = coverMode || assignments.length === 0
-        ? classes
-        : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+      baseClasses =
+        coverMode || assignments.length === 0
+          ? classes
+          : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
     }
 
     return baseClasses.filter((c) => {
       if (cpFilterClasses.length > 0) return cpFilterClasses.includes(String(c.id));
       if (role === 'parent' || role === 'teacher') return true;
-      return bookClasses.some((bc) => String(bc.class_id) === String(c.id) && books.some((fb) => String(fb.id) === String(bc.book_id)));
+      return bookClasses.some(
+        (bc) =>
+          String(bc.class_id) === String(c.id) &&
+          books.some((fb) => String(fb.id) === String(bc.book_id))
+      );
     });
   };
 
@@ -911,13 +966,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
     ],
     admin: [
-      { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
+      { key: 'teacher-activity', label: 'Teacher Activity', icon: 'fa-list-check' },
       { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
       { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
       { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
     ],
     management: [
-      { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
+      { key: 'teacher-activity', label: 'Teacher Activity', icon: 'fa-list-check' },
       { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
       { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
       { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
@@ -949,7 +1004,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               ))}
             </div>
 
-            {role !== 'parent' && activeTab === 'daily-activity' && (
+            {role !== 'parent' && activeTab === 'teacher-activity' && (
               <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
                 Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
               </span>
@@ -966,7 +1021,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none ml-auto">
               {[
                 { key: 'subject_date', icon: 'fa-book', tooltip: 'Group by Subject, Sort by Date' },
-                { key: 'date_subject', icon: 'fa-calendar-alt', tooltip: 'Group by Date, Sort by Subject' },
+                {
+                  key: 'date_subject',
+                  icon: 'fa-calendar-alt',
+                  tooltip: 'Group by Date, Sort by Subject',
+                },
               ].map((t) => (
                 <button
                   key={t.key}
@@ -986,7 +1045,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             </div>
           )}
 
-          {(activeTab === 'daily-activity' || activeTab === 'teacher-activity') && (
+          {(activeTab === 'teacher-activity' || activeTab === 'teacher-activity') && (
             <div className="flex items-center gap-3 flex-wrap ml-auto">
               <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                 {[
@@ -1078,13 +1137,18 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         {activeTab === 'class-progress' && role !== 'parent' && (
           <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Filters:
+              </span>
             </div>
             <div className="min-w-[140px] flex-1 sm:flex-initial">
               <MultiSelectDropdown
                 label=""
                 placeholder="Class Filter"
-                options={getClassesToRender().map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                options={getClassesToRender().map((c) => ({
+                  id: String(c.id),
+                  label: c.name || c.class_name,
+                }))}
                 selected={cpFilterClasses}
                 onChange={(val) => {
                   setCpFilterClasses(val);
@@ -1119,7 +1183,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                 }}
               />
             </div>
-            {(cpFilterClasses.length > 0 || cpFilterBooks.length > 0 || cpFilterClassifications.length > 0) && (
+            {(cpFilterClasses.length > 0 ||
+              cpFilterBooks.length > 0 ||
+              cpFilterClassifications.length > 0) && (
               <button
                 onClick={() => {
                   setCpFilterClasses([]);
@@ -1140,7 +1206,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         {activeTab === 'upcoming-lessons' && (
           <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
+              <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Filters:
+              </span>
             </div>
             {role === 'parent' ? null : role === 'teacher' ? (
               <>
@@ -1158,7 +1226,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Class Filter"
-                    options={classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id))).map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                    options={classes
+                      .filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)))
+                      .map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
                     selected={upFilterClasses}
                     onChange={setUpFilterClasses}
                   />
@@ -1167,7 +1237,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Subject Filter"
-                    options={subjects.filter((s) => assignments.some((a) => String(a.subject_id) === String(s.id))).map((s) => ({ id: String(s.id), label: s.name }))}
+                    options={subjects
+                      .filter((s) => assignments.some((a) => String(a.subject_id) === String(s.id)))
+                      .map((s) => ({ id: String(s.id), label: s.name }))}
                     selected={upFilterSubjects}
                     onChange={setUpFilterSubjects}
                   />
@@ -1188,7 +1260,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Class Filter"
-                    options={classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                    options={classes.map((c) => ({
+                      id: String(c.id),
+                      label: c.name || c.class_name,
+                    }))}
                     selected={upFilterClasses}
                     onChange={setUpFilterClasses}
                   />
@@ -1210,7 +1285,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                 type="button"
                 onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
                 className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                  upcomingStartDate !== getLocalDateStr(0) || upcomingEndDate !== getDefaultEndDateStr()
+                  upcomingStartDate !== getLocalDateStr(0) ||
+                  upcomingEndDate !== getDefaultEndDateStr()
                     ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
                     : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
@@ -1218,18 +1294,31 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               >
                 <i className="fas fa-calendar-alt text-xs"></i>
                 <span>
-                  {new Date(upcomingStartDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {new Date(upcomingStartDate).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                   {' - '}
-                  {new Date(upcomingEndDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  {new Date(upcomingEndDate).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </span>
-                <i className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}></i>
+                <i
+                  className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
+                ></i>
               </button>
 
               {isUpDatePopoverOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsUpDatePopoverOpen(false)} />
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsUpDatePopoverOpen(false)}
+                  />
                   <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
-                    <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">Date Range</h5>
+                    <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+                      Date Range
+                    </h5>
                     <div className="space-y-2">
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-bold text-gray-400 uppercase">From:</span>
@@ -1262,7 +1351,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                       >
                         Reset
                       </button>
-                      <button type="button" onClick={() => setIsUpDatePopoverOpen(false)} className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90">Apply</button>
+                      <button
+                        type="button"
+                        onClick={() => setIsUpDatePopoverOpen(false)}
+                        className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
+                      >
+                        Apply
+                      </button>
                     </div>
                   </div>
                 </>
@@ -1270,11 +1365,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             </div>
 
             {(() => {
-              const hasActiveFilters = 
+              const hasActiveFilters =
                 (role !== 'parent' && upFilterTeachers.length > 0) ||
-                upFilterClasses.length > 0 || 
-                upFilterSubjects.length > 0 || 
-                upcomingStartDate !== getLocalDateStr(0) || 
+                upFilterClasses.length > 0 ||
+                upFilterSubjects.length > 0 ||
+                upcomingStartDate !== getLocalDateStr(0) ||
                 upcomingEndDate !== getDefaultEndDateStr();
 
               if (!hasActiveFilters) return null;
@@ -1320,7 +1415,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           </>
         )}
 
-        {(activeTab === 'daily-activity' || activeTab === 'today-class' || activeTab === 'two-weeks-class') && (
+        {(activeTab === 'teacher-activity' ||
+          activeTab === 'today-class' ||
+          activeTab === 'two-weeks-class') && (
           <DailyActivityTable
             role={role}
             student={student}
