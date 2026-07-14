@@ -15,7 +15,7 @@ import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
 import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import LessonManager from './portals/teacher/LessonManager/LessonManager';
-import SyllabusTrackerPortal from './portals/syllabus-shared/SyllabusTrackerPortal';
+import SyllabusTrackerPortal from './portals/shared-components/SyllabusTrackerPortal';
 import CandidatePortal from './portals/CandidatePortal';
 
 const portalRouteFallback = (

@@ -8,7 +8,7 @@ import DetailModal from '../DetailModal';
 import { supabase } from '../../utils/supabase';
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents';
 import TimetableAdminView from './admin/timetable/TimetableAdminView';
-import SyllabusTrackerPortal from './syllabus-shared/SyllabusTrackerPortal';
+import SyllabusTrackerPortal from './shared-components/SyllabusTrackerPortal';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import { CARD_THEMES } from '../../utils/cardTheme';

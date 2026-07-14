@@ -7,7 +7,7 @@ import AdminFormConfigsView from './admin/AdminFormConfigsView';
 import TimetableManager from './admin/timetable/TimetableManager';
 import AdminStudentsView from './admin/AdminStudentsView';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
-import SyllabusTrackerPortal from './syllabus-shared/SyllabusTrackerPortal';
+import SyllabusTrackerPortal from './shared-components/SyllabusTrackerPortal';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import ConfirmModal from '../ConfirmModal';
 import { showToast } from '../../utils/toast';
