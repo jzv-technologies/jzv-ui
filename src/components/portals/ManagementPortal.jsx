@@ -1407,31 +1407,56 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       subView={subView}
       onSetSubView={onSetSubView}
     >
-      {subView === 'job-applications' || subView === 'registered-complaints' || subView === 'student-records'
-        ? renderTableView()
-        : null}
-      {subView === 'take-test' ? renderTakeTestView() : null}
-      {subView === 'syllabus-progress-tracker' && <SyllabusTrackerPortal role="management" />}
-      {subView === 'syllabus-manager' && <SyllabusManager role="management" user={user} />}
-      {subView === 'lesson-planner' && <LessonManager role="management" user={user} />}
-      {subView === 'timetable-viewer' &&
-        (ttLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <TimetableAdminView
-            classes={ttClasses}
-            teachers={ttTeachers}
-            subjects={ttSubjects}
-            periods={ttPeriods}
-            slots={ttSlots}
-            assignments={ttAssignments}
-            onRefresh={fetchTimetableData}
-            refreshing={ttLoading}
-            // no onUpdateSlot = read-only
-          />
-        ))}
+      {subView === 'job-applications' || subView === 'registered-complaints' || subView === 'student-records' ? (
+        <div
+          data-job-applications={subView === 'job-applications' ? "true" : undefined}
+          data-registered-complaints={subView === 'registered-complaints' ? "true" : undefined}
+          data-student-records={subView === 'student-records' ? "true" : undefined}
+        >
+          {renderTableView()}
+        </div>
+      ) : null}
+      {subView === 'take-test' ? (
+        <div data-take-test="true">
+          {renderTakeTestView()}
+        </div>
+      ) : null}
+      {subView === 'syllabus-progress-tracker' && (
+        <div data-syllabus-progress-tracker="true">
+          <SyllabusTrackerPortal role="management" />
+        </div>
+      )}
+      {subView === 'syllabus-manager' && (
+        <div data-syllabus-manager="true">
+          <SyllabusManager role="management" user={user} />
+        </div>
+      )}
+      {subView === 'lesson-planner' && (
+        <div data-lesson-planner="true">
+          <LessonManager role="management" user={user} />
+        </div>
+      )}
+      {subView === 'timetable-viewer' && (
+        <div data-timetable-viewer="true">
+          {ttLoading ? (
+            <div className="flex items-center justify-center py-24">
+              <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <TimetableAdminView
+              classes={ttClasses}
+              teachers={ttTeachers}
+              subjects={ttSubjects}
+              periods={ttPeriods}
+              slots={ttSlots}
+              assignments={ttAssignments}
+              onRefresh={fetchTimetableData}
+              refreshing={ttLoading}
+              // no onUpdateSlot = read-only
+            />
+          )}
+        </div>
+      )}
     </RolePortal>
   );
 };

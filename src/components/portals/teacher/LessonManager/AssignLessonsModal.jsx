@@ -92,9 +92,9 @@ const AssignLessonsModal = ({
         };
       });
 
-      // Assign randomUUID to new records so bulk upsert doesn't fail on null constraint
+      // Remove id from new records so Postgres uses its bigint sequence default
       upsertData.forEach(d => {
-        if (!d.id) d.id = crypto.randomUUID();
+        if (!d.id) delete d.id;
       });
 
       const { data, error } = await supabase

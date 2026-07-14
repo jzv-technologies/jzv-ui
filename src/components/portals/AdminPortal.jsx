@@ -470,48 +470,72 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     >
       {/* Users view (now using DataGrid + Modal) */}
       {subView === 'user-management' && (
-        <AdminUsersView
-          users={users}
-          loading={loading}
-          onUpdateUser={handleUpdateUser}
-          saving={saving}
-          teachers={teachers}
-          onAddTeacher={handleAddTeacherFromUser}
-          onToggleTeacherActive={handleToggleTeacherActiveFromUser}
-        />
+        <div data-user-management="true">
+          <AdminUsersView
+            users={users}
+            loading={loading}
+            onUpdateUser={handleUpdateUser}
+            saving={saving}
+            teachers={teachers}
+            onAddTeacher={handleAddTeacherFromUser}
+            onToggleTeacherActive={handleToggleTeacherActiveFromUser}
+          />
+        </div>
       )}
 
       {/* Form configs view (kept as before) */}
       {subView === 'form-configurations' && (
-        <AdminFormConfigsView
-          configs={configs}
-          sheetMappings={sheetMappings}
-          loading={configsLoading}
-          dbTableMissing={dbTableMissing}
-          appsScriptError={appsScriptError}
-          onRefresh={fetchConfigs}
-          onSaveConfig={handleSaveConfig}
-          onDeleteConfig={handleDeleteConfig}
-          onSaveMapping={handleSaveMapping}
-          onDeleteMapping={handleDeleteMapping}
-          onBack={() => onSetSubView(null)}
-        />
+        <div data-form-configurations="true">
+          <AdminFormConfigsView
+            configs={configs}
+            sheetMappings={sheetMappings}
+            loading={configsLoading}
+            dbTableMissing={dbTableMissing}
+            appsScriptError={appsScriptError}
+            onRefresh={fetchConfigs}
+            onSaveConfig={handleSaveConfig}
+            onDeleteConfig={handleDeleteConfig}
+            onSaveMapping={handleSaveMapping}
+            onDeleteMapping={handleDeleteMapping}
+            onBack={() => onSetSubView(null)}
+          />
+        </div>
       )}
 
       {/* Timetable Planner view */}
-      {subView === 'timetable-planner' && <TimetableManager />}
+      {subView === 'timetable-planner' && (
+        <div data-timetable-planner="true">
+          <TimetableManager />
+        </div>
+      )}
 
       {/* Student Database view */}
-      {subView === 'student-database' && <AdminStudentsView />}
+      {subView === 'student-database' && (
+        <div data-student-database="true">
+          <AdminStudentsView />
+        </div>
+      )}
 
       {/* Syllabus Manager view */}
-      {subView === 'syllabus-manager' && <SyllabusManager role="admin" />}
+      {subView === 'syllabus-manager' && (
+        <div data-syllabus-manager="true">
+          <SyllabusManager role="admin" />
+        </div>
+      )}
 
       {/* Syllabus Progress Report view */}
-      {subView === 'syllabus-progress-tracker' && <SyllabusTrackerPortal role="admin" />}
+      {subView === 'syllabus-progress-tracker' && (
+        <div data-syllabus-progress-tracker="true">
+          <SyllabusTrackerPortal role="admin" />
+        </div>
+      )}
 
       {/* Lesson Manager view */}
-      {subView === 'lesson-planner' && <LessonManager role="admin" user={user} />}
+      {subView === 'lesson-planner' && (
+        <div data-lesson-planner="true">
+          <LessonManager role="admin" user={user} />
+        </div>
+      )}
 
       <ConfirmModal
         isOpen={confirmConfig !== null}

@@ -39,6 +39,9 @@ const SyllabusProgressGrid = ({
   allLogs,
   allLessons,
   cpGroupingMode,
+  cpFilterBooks = [],
+  cpFilterSubjects = [],
+  cpFilterClassifications = [],
   progressExpandedBook,
   progressExpandedClass,
   handleProgressBookClick,
@@ -397,7 +400,29 @@ const SyllabusProgressGrid = ({
   };
 
   const renderBooksGrid = (classObj, classBooks) => {
-    if (classBooks.length === 0) {
+    // Apply Class Progress filters
+    let filteredBooks = classBooks;
+
+    if (cpFilterClassifications && cpFilterClassifications.length > 0) {
+      filteredBooks = filteredBooks.filter((book) => {
+        const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+        return subj && cpFilterClassifications.includes(String(subj.classification_id));
+      });
+    }
+
+    if (cpFilterSubjects && cpFilterSubjects.length > 0) {
+      filteredBooks = filteredBooks.filter((book) =>
+        cpFilterSubjects.includes(String(book.subject_id))
+      );
+    }
+
+    if (cpFilterBooks && cpFilterBooks.length > 0) {
+      filteredBooks = filteredBooks.filter((book) =>
+        cpFilterBooks.includes(String(book.id))
+      );
+    }
+
+    if (filteredBooks.length === 0) {
       return (
         <div className="p-8 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
           No syllabus books found for this class.
@@ -408,7 +433,7 @@ const SyllabusProgressGrid = ({
     // Group books within this class
     const booksByGroup = {};
     if (cpGroupingMode === 'classification') {
-      classBooks.forEach((book) => {
+      filteredBooks.forEach((book) => {
         const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
         const classificationId = subj?.classification_id;
         const classification = classifications.find(
@@ -421,7 +446,7 @@ const SyllabusProgressGrid = ({
         booksByGroup[groupName].push(book);
       });
     } else if (cpGroupingMode === 'subject') {
-      classBooks.forEach((book) => {
+      filteredBooks.forEach((book) => {
         const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
         const groupName = subj ? subj.name : 'General / Unclassified';
         if (!booksByGroup[groupName]) {
@@ -430,7 +455,7 @@ const SyllabusProgressGrid = ({
         booksByGroup[groupName].push(book);
       });
     } else {
-      booksByGroup['All Books'] = classBooks;
+      booksByGroup['All Books'] = filteredBooks;
     }
 
     const isClassExpanded = progressExpandedClass === classObj.id;

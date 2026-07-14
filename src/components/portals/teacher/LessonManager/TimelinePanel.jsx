@@ -291,7 +291,8 @@ const TimelinePanel = ({
         status: existing && existing.status !== 'not_started' ? existing.status : 'planned',
       };
 
-      if (!upsertData.id) upsertData.id = crypto.randomUUID();
+      // Remove id from new records so Postgres uses its bigint sequence default
+      if (!upsertData.id) delete upsertData.id;
 
       const { data, error } = await supabase
         .from('lesson_progress')

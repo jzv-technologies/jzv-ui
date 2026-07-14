@@ -208,12 +208,20 @@ export const AppRoutes = ({
                 onSetSubView={setParentSubView}
                 openModal={openModal}
               >
-                {parentSubView === 'timetable' && <ParentTimetableViewer student={user?.student} />}
+                {parentSubView === 'timetable' && (
+                  <div data-timetable="true">
+                    <ParentTimetableViewer student={user?.student} />
+                  </div>
+                )}
                 {parentSubView === 'tickets' && (
-                  <ReporterTicketsView user={user} fullName={fullName} />
+                  <div data-tickets="true">
+                    <ReporterTicketsView user={user} fullName={fullName} />
+                  </div>
                 )}
                 {parentSubView === 'progress-tracker' && (
-                  <SyllabusTrackerPortal role="parent" student={user?.student} />
+                  <div data-progress-tracker="true">
+                    <SyllabusTrackerPortal role="parent" student={user?.student} />
+                  </div>
                 )}
               </RolePortal>
             ) : (
@@ -297,19 +305,35 @@ export const AppRoutes = ({
                 onSetSubView={setTeacherSubView}
                 openModal={openModal}
               >
-                {teacherSubView === 'timetable' && <TeacherTimetableViewer user={user} />}
-                {teacherSubView === 'students' && <TeacherStudentsViewer />}
+                {teacherSubView === 'timetable' && (
+                  <div data-timetable="true">
+                    <TeacherTimetableViewer user={user} />
+                  </div>
+                )}
+                {teacherSubView === 'students' && (
+                  <div data-students="true">
+                    <TeacherStudentsViewer />
+                  </div>
+                )}
                 {teacherSubView === 'syllabus' && (
-                  <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />
+                  <div data-syllabus="true">
+                    <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />
+                  </div>
                 )}
                 {teacherSubView === 'lesson-planner' && (
-                  <LessonManager user={user} teacherRecord={teacherRecord} />
+                  <div data-lesson-planner="true">
+                    <LessonManager user={user} teacherRecord={teacherRecord} />
+                  </div>
                 )}
                 {teacherSubView === 'progress-tracker' && (
-                  <SyllabusTrackerPortal role="teacher" user={user} teacherRecord={teacherRecord} />
+                  <div data-progress-tracker="true">
+                    <SyllabusTrackerPortal role="teacher" user={user} teacherRecord={teacherRecord} />
+                  </div>
                 )}
                 {teacherSubView === 'tickets' && (
-                  <ReporterTicketsView user={user} fullName={fullName} />
+                  <div data-tickets="true">
+                    <ReporterTicketsView user={user} fullName={fullName} />
+                  </div>
                 )}
               </RolePortal>
             ) : (

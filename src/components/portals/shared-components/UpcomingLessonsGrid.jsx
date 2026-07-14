@@ -4,15 +4,22 @@ import { CARD_THEMES } from '../../../utils/cardTheme';
 const UpcomingLessonsGrid = ({
   role,
   student,
+  teacher,
   upcomingGroupingMode = 'subject_date',
   upcomingStartDate,
   upcomingEndDate,
   upFilterTeachers = [],
   upFilterClasses = [],
+  upFilterClassifications = [],
   upFilterSubjects = [],
+  upFilterBooks = [],
   lessonPlans = [],
   classifications = [],
   teachers = [],
+  assignments = [],
+  subjects = [],
+  handleSubmitPlannedLesson = () => {},
+  handleCarryForward = () => {},
 }) => {
   const upcoming = lessonPlans.filter((p) => {
     // Date boundary
@@ -23,19 +30,43 @@ const UpcomingLessonsGrid = ({
     if (p.status !== 'planned' && p.status !== 'in_progress') {
       return false;
     }
-    
+
+    // Find the teacher ID for this class and subject from assignments
+    const assignment = assignments.find(
+      (a) =>
+        String(a.class_id) === String(p.class_id) && String(a.subject_id) === String(p.subject_id)
+    );
+    const planTeacherId = assignment ? String(assignment.teacher_id) : null;
+
     // Role constraints
     if (role === 'parent') {
       return String(p.class_id) === String(student?.class_id);
     }
+    if (role === 'teacher') {
+      if (!teacher || String(planTeacherId) !== String(teacher.id)) {
+        return false;
+      }
+    }
 
-    if (upFilterTeachers.length > 0 && !upFilterTeachers.includes(String(p.teacher_id))) {
+    if (
+      upFilterTeachers.length > 0 &&
+      (!planTeacherId || !upFilterTeachers.includes(String(planTeacherId)))
+    ) {
       return false;
     }
     if (upFilterClasses.length > 0 && !upFilterClasses.includes(String(p.class_id))) {
       return false;
     }
+    if (upFilterClassifications.length > 0) {
+      const subj = subjects.find((s) => String(s.id) === String(p.subject_id));
+      if (!subj || !upFilterClassifications.includes(String(subj.classification_id))) {
+        return false;
+      }
+    }
     if (upFilterSubjects.length > 0 && !upFilterSubjects.includes(String(p.subject_id))) {
+      return false;
+    }
+    if (upFilterBooks.length > 0 && !upFilterBooks.includes(String(p.book_id))) {
       return false;
     }
 
@@ -48,9 +79,7 @@ const UpcomingLessonsGrid = ({
       .join(' > ');
 
     const classificationId = plan.subject?.classification_id;
-    const classification = classifications.find(
-      (c) => String(c.id) === String(classificationId)
-    );
+    const classification = classifications.find((c) => String(c.id) === String(classificationId));
     const themeStyles =
       classification?.theme && CARD_THEMES[classification.theme]
         ? CARD_THEMES[classification.theme]
@@ -81,11 +110,31 @@ const UpcomingLessonsGrid = ({
         <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
           {title}
         </h4>
-        <p className="text-[11px] text-gray-500 font-semibold mt-1">
+        <p className="text-[11px] text-gray-500 font-semibold mt-1 mb-3">
           {role !== 'parent' && `${plan.class?.name || plan.class?.class_name || '—'} • `}
           {plan.subject?.name} • {plan.book?.name}
-          {role !== 'parent' && role !== 'teacher' && plan.teacher?.name && ` • ${plan.teacher.name}`}
+          {role !== 'parent' &&
+            role !== 'teacher' &&
+            plan.teacher?.name &&
+            ` • ${plan.teacher.name}`}
         </p>
+
+        {role === 'teacher' && (
+          <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
+            <button
+              onClick={() => handleSubmitPlannedLesson(plan)}
+              className="flex-1 py-1.5 bg-brand-primary text-white text-[10px] font-bold rounded-lg hover:bg-brand-primary/90 transition-colors cursor-pointer text-center"
+            >
+              <i className="fas fa-check mr-1"></i> Update Progress
+            </button>
+            <button
+              onClick={() => handleCarryForward(plan)}
+              className="flex-1 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors cursor-pointer text-center"
+            >
+              <i className="fas fa-forward mr-1"></i> Carry Forward
+            </button>
+          </div>
+        )}
       </div>
     );
   };

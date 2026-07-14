@@ -71,6 +71,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   const [selectedClassId, setSelectedClassId] = useState(() =>
     lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedClassId : ''
   );
+  const [selectedClassificationId, setSelectedClassificationId] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState(() =>
     lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedSubjectId : ''
   );
@@ -265,12 +266,20 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
       .map((a) => String(a.subject_id));
 
     // If showAllClasses is true or admin view, we might want to show all subjects for the class
-    if (showAllClasses || (isAdminView && !selectedTeacherId)) {
-      return subjects;
+    let filteredSubjects = subjects;
+    if (!(showAllClasses || (isAdminView && !selectedTeacherId))) {
+      filteredSubjects = subjects.filter((s) => assignmentSubjects.includes(String(s.id)));
     }
 
-    return subjects.filter((s) => assignmentSubjects.includes(String(s.id)));
-  }, [subjects, assignments, selectedClassId, filterTeacherId, isAdminView, showAllClasses]);
+    // Filter by selected classification
+    if (selectedClassificationId) {
+      filteredSubjects = filteredSubjects.filter(
+        (s) => String(s.classification_id) === String(selectedClassificationId)
+      );
+    }
+
+    return filteredSubjects;
+  }, [subjects, assignments, selectedClassId, filterTeacherId, isAdminView, showAllClasses, selectedClassificationId]);
 
   const availableBooks = useMemo(() => {
     if (!selectedClassId || !selectedSubjectId) return [];
@@ -342,8 +351,9 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
         };
       });
 
+      // Remove id from new records so Postgres uses its bigint sequence default
       upsertData.forEach((d) => {
-        if (!d.id) d.id = crypto.randomUUID();
+        if (!d.id) delete d.id;
       });
 
       const { data, error } = await supabase
@@ -460,6 +470,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
                 value={selectedClassId}
                 onChange={(e) => {
                   setSelectedClassId(e.target.value);
+                  setSelectedClassificationId('');
                   setSelectedSubjectId('');
                   setSelectedBookId('');
                 }}
@@ -469,6 +480,26 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
                 {availableClasses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+              <select
+                value={selectedClassificationId}
+                onChange={(e) => {
+                  setSelectedClassificationId(e.target.value);
+                  setSelectedSubjectId('');
+                  setSelectedBookId('');
+                }}
+                disabled={!selectedClassId}
+                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
+              >
+                <option value="">Select Classification...</option>
+                {classifications.map((cl) => (
+                  <option key={cl.id} value={cl.id}>
+                    {cl.name}
                   </option>
                 ))}
               </select>
