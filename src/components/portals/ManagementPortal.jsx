@@ -8,7 +8,7 @@ import DetailModal from '../DetailModal';
 import { supabase } from '../../utils/supabase';
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents';
 import TimetableAdminView from './admin/timetable/TimetableAdminView';
-import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
+import SyllabusTrackerPortal from './syllabus-shared/SyllabusTrackerPortal';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import { CARD_THEMES } from '../../utils/cardTheme';
@@ -1411,7 +1411,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         ? renderTableView()
         : null}
       {subView === 'take-test' ? renderTakeTestView() : null}
-      {subView === 'syllabus-progress-tracker' && <SyllabusProgressReport role="management" />}
+      {subView === 'syllabus-progress-tracker' && <SyllabusTrackerPortal role="management" />}
       {subView === 'syllabus-manager' && <SyllabusManager role="management" user={user} />}
       {subView === 'lesson-planner' && <LessonManager role="management" user={user} />}
       {subView === 'timetable-viewer' &&

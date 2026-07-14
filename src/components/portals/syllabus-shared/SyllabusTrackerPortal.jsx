@@ -1,18 +1,22 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '../../../../utils/supabase';
-import { showToast } from '../../../../utils/toast';
-import { CARD_THEMES } from '../../../../utils/cardTheme';
-import ConfirmModal from '../../../ConfirmModal';
-import MultiSelectDropdown from '../../syllabus-shared/MultiSelectDropdown';
-import DailyActivityTable from '../../syllabus-shared/DailyActivityTable';
-import SyllabusProgressGrid from '../../syllabus-shared/SyllabusProgressGrid';
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../../utils/supabase';
+import { showToast } from '../../../utils/toast';
+import ConfirmModal from '../../ConfirmModal';
+import MultiSelectDropdown from './MultiSelectDropdown';
+import DailyActivityTable from './DailyActivityTable';
+import SyllabusProgressGrid from './SyllabusProgressGrid';
+import SyllabusAddWorkModal from '../teacher/components/SyllabusAddWorkModal';
 
-let syllabusReportCache = {
+import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
+import UpcomingLessonsGrid from './UpcomingLessonsGrid';
+import PlannedForToday from './PlannedForToday';
+
+let syllabusTrackerPortalCache = {
   data: null,
   loadingPromise: null,
 };
 
-const SyllabusProgressReport = ({ role, student }) => {
+const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [loading, setLoading] = useState(true);
 
   // Reference data lists
@@ -28,11 +32,18 @@ const SyllabusProgressReport = ({ role, student }) => {
   const [allLessons, setAllLessons] = useState([]);
   const [lessonPlans, setLessonPlans] = useState([]);
   const [carryForwards, setCarryForwards] = useState([]);
+  const [teacher, setTeacher] = useState(teacherRecord || null);
 
-  // Active Tab: 'daily-activity' | 'book-progress' | 'class-progress'
-  const [activeTab, setActiveTab] = useState(() =>
-    role === 'parent' ? 'today-class' : 'daily-activity'
-  );
+  // Favorites & Cover Mode (Teacher only)
+  const [favorites, setFavorites] = useState([]);
+  const [coverMode, setCoverMode] = useState(false);
+
+  // Active Tab
+  const [activeTab, setActiveTab] = useState(() => {
+    if (role === 'parent') return 'today-class';
+    if (role === 'teacher') return 'teacher-activity';
+    return 'daily-activity';
+  });
 
   // ─── Tab 1: Daily Activity States & Filters ───
   const [dailyEntries, setDailyEntries] = useState([]);
@@ -80,51 +91,118 @@ const SyllabusProgressReport = ({ role, student }) => {
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
   const [cpFilterClassifications, setCpFilterClassifications] = useState([]);
   const [cpGroupingMode, setCpGroupingMode] = useState('none'); // 'classification' | 'subject' | 'none'
-  const [classLogs, setClassLogs] = useState([]);
-  const [classLessons, setClassLessons] = useState([]);
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
   const [progressExpandedClass, setProgressExpandedClass] = useState(null);
   const [progressLoading, setProgressLoading] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [progressBookLessons, setProgressBookLessons] = useState([]);
   const [progressBookLogs, setProgressBookLogs] = useState([]);
   const [expandedLogIds, setExpandedLogIds] = useState({});
   const [logItemsMap, setLogItemsMap] = useState({});
   const [showNotStarted, setShowNotStarted] = useState(false);
-  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('subject_date'); // 'subject_date' | 'date_subject'
+
+  // ─── Tab 3: Upcoming Lessons Filters & Grouping ───
+  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('subject_date');
   const [upFilterTeachers, setUpFilterTeachers] = useState([]);
   const [upFilterClasses, setUpFilterClasses] = useState([]);
   const [upFilterSubjects, setUpFilterSubjects] = useState([]);
   const [upcomingStartDate, setUpcomingStartDate] = useState(() => getLocalDateStr(0));
-  const [upcomingEndDate, setUpcomingEndDate] = useState(() => {
-    const futureDate = new Date();
-    futureDate.setDate(futureDate.getDate() + 28);
-    const year = futureDate.getFullYear();
-    const month = String(futureDate.getMonth() + 1).padStart(2, '0');
-    const day = String(futureDate.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  });
+  const [upcomingEndDate, setUpcomingEndDate] = useState(() => getDefaultEndDateStr());
   const [isUpDatePopoverOpen, setIsUpDatePopoverOpen] = useState(false);
+
+  // Teacher Modals
+  const [isAddWorkModalOpen, setIsAddWorkModalOpen] = useState(false);
+  const [plannedLessonToLog, setPlannedLessonToLog] = useState(null);
+  const [todaysPlans, setTodaysPlans] = useState([]);
+
+  // ─── Favorites DB Helpers ───
+  const loadFavoritesFromDB = async (teacherId) => {
+    try {
+      const { data, error } = await supabase
+        .from('teacher_cache')
+        .select('cache_data')
+        .eq('teacher_id', teacherId)
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.cache_data?.favorites) {
+        return Object.entries(data.cache_data.favorites).map(([key, val]) => ({ key, ...val }));
+      }
+      return [];
+    } catch (err) {
+      console.warn('Failed to load favorites from DB:', err.message);
+      return [];
+    }
+  };
+
+  const saveFavoritesToDB = async (teacherId, favsArray) => {
+    try {
+      const favsObj = {};
+      favsArray.forEach((fav) => {
+        const key = fav.key || `${fav.className} - ${fav.bookName}`;
+        favsObj[key] = {
+          classId: fav.classId,
+          classificationId: fav.classificationId || '',
+          subjectId: fav.subjectId,
+          bookId: fav.bookId,
+          className: fav.className,
+          subjectName: fav.subjectName,
+          bookName: fav.bookName,
+        };
+      });
+      const { error } = await supabase.from('teacher_cache').upsert(
+        {
+          teacher_id: teacherId,
+          cache_data: { favorites: favsObj },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'teacher_id' }
+      );
+      if (error) throw error;
+    } catch (err) {
+      console.warn('Failed to save favorites to DB:', err.message);
+    }
+  };
+
+  const migrateLocalStorageFavorites = async (teacherId) => {
+    try {
+      const localKey = `jzv_syllabus_favorites_${teacherId}`;
+      const raw = localStorage.getItem(localKey);
+      if (!raw) return null;
+      const localFavs = JSON.parse(raw);
+      if (!Array.isArray(localFavs) || localFavs.length === 0) return null;
+      const migrated = localFavs.map((fav) => ({
+        key: `${fav.className} - ${fav.bookName}`,
+        classId: fav.classId,
+        classificationId: fav.classificationId || '',
+        subjectId: fav.subjectId,
+        bookId: fav.bookId,
+        className: fav.className,
+        subjectName: fav.subjectName,
+        bookName: fav.bookName,
+      }));
+      await saveFavoritesToDB(teacherId, migrated);
+      localStorage.removeItem(localKey);
+      return migrated;
+    } catch (e) {
+      console.warn('Favorites migration failed:', e);
+      return null;
+    }
+  };
 
   // ─── Load Base Reference Data ───
   const loadData = async () => {
-    // 1. If we already have the cache populated, use it immediately
-    if (syllabusReportCache.data) {
-      const cache = syllabusReportCache.data;
-      
+    if (syllabusTrackerPortalCache.data) {
+      const cache = syllabusTrackerPortalCache.data;
       let fetchedClasses = cache.classes;
       if (role === 'parent' && student?.class_id) {
         const hasClass = fetchedClasses.some((c) => String(c.id) === String(student.class_id));
         if (!hasClass) {
           fetchedClasses = [
             ...fetchedClasses,
-            {
-              id: student.class_id,
-              name: student.class_name || 'Class ' + student.class_id,
-            },
+            { id: student.class_id, name: student.class_name || 'Class ' + student.class_id },
           ];
         }
       }
-
       setClasses(fetchedClasses);
       setSubjects(cache.subjects);
       setBooks(cache.books);
@@ -141,26 +219,20 @@ const SyllabusProgressReport = ({ role, student }) => {
       return;
     }
 
-    // 2. If a loading promise is already active, wait for it
-    if (syllabusReportCache.loadingPromise) {
+    if (syllabusTrackerPortalCache.loadingPromise) {
       setLoading(true);
       try {
-        const cache = await syllabusReportCache.loadingPromise;
-        
+        const cache = await syllabusTrackerPortalCache.loadingPromise;
         let fetchedClasses = cache.classes;
         if (role === 'parent' && student?.class_id) {
           const hasClass = fetchedClasses.some((c) => String(c.id) === String(student.class_id));
           if (!hasClass) {
             fetchedClasses = [
               ...fetchedClasses,
-              {
-                id: student.class_id,
-                name: student.class_name || 'Class ' + student.class_id,
-              },
+              { id: student.class_id, name: student.class_name || 'Class ' + student.class_id },
             ];
           }
         }
-
         setClasses(fetchedClasses);
         setSubjects(cache.subjects);
         setBooks(cache.books);
@@ -174,7 +246,7 @@ const SyllabusProgressReport = ({ role, student }) => {
         setLessonPlans(cache.lessonPlans);
         setCarryForwards(cache.carryForwards);
       } catch (err) {
-        console.warn('SyllabusProgressReport coalesced load failed:', err.message);
+        console.warn('SyllabusTrackerPortal coalesced load failed:', err.message);
         loadLocalFallback();
       } finally {
         setLoading(false);
@@ -182,7 +254,6 @@ const SyllabusProgressReport = ({ role, student }) => {
       return;
     }
 
-    // 3. Otherwise start load and set the promise
     setLoading(true);
     const fetchPromise = (async () => {
       const [
@@ -205,24 +276,11 @@ const SyllabusProgressReport = ({ role, student }) => {
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syllabus_book_classes').select('*'),
         supabase.from('class_assignments').select('*'),
-        supabase
-          .from('teachers')
-          .select('*')
-          .eq('is_active', true)
-          .order('name', { ascending: true }),
+        supabase.from('teachers').select('*').eq('is_active', true).order('name', { ascending: true }),
         supabase.from('book_tracker').select('*'),
-        supabase
-          .from('lesson_progress')
-          .select(
-            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
-          ),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'),
         supabase.from('syllabus_book_lessons').select('id, book_id'),
-        supabase
-          .from('lesson_progress')
-          .select(
-            '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
-          )
-          .in('status', ['planned', 'in_progress']),
+        supabase.from('lesson_progress').select('*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)').in('status', ['planned', 'in_progress']),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -252,15 +310,8 @@ const SyllabusProgressReport = ({ role, student }) => {
       const rawPlans = resPlans.data || [];
       const dbCarryForwards = resCarryForwards.data || [];
 
-      const dbLogs = rawLogs.map((log) => ({
-        ...log,
-        current_status: log.status,
-      }));
-
-      const dbPlans = rawPlans.map((plan) => ({
-        ...plan,
-        target_date: plan.target_start_date,
-      }));
+      const dbLogs = rawLogs.map((log) => ({ ...log, current_status: log.status }));
+      const dbPlans = rawPlans.map((plan) => ({ ...plan, target_date: plan.target_start_date }));
 
       return {
         classes: dbClasses,
@@ -278,11 +329,11 @@ const SyllabusProgressReport = ({ role, student }) => {
       };
     })();
 
-    syllabusReportCache.loadingPromise = fetchPromise;
+    syllabusTrackerPortalCache.loadingPromise = fetchPromise;
 
     try {
       const cacheData = await fetchPromise;
-      syllabusReportCache.data = cacheData;
+      syllabusTrackerPortalCache.data = cacheData;
 
       let fetchedClasses = cacheData.classes;
       if (role === 'parent' && student?.class_id) {
@@ -290,10 +341,7 @@ const SyllabusProgressReport = ({ role, student }) => {
         if (!hasClass) {
           fetchedClasses = [
             ...fetchedClasses,
-            {
-              id: student.class_id,
-              name: student.class_name || 'Class ' + student.class_id,
-            },
+            { id: student.class_id, name: student.class_name || 'Class ' + student.class_id },
           ];
         }
       }
@@ -311,8 +359,8 @@ const SyllabusProgressReport = ({ role, student }) => {
       setLessonPlans(cacheData.lessonPlans);
       setCarryForwards(cacheData.carryForwards);
     } catch (err) {
-      console.warn('SyllabusProgressReport loadData failed:', err.message);
-      syllabusReportCache.loadingPromise = null;
+      console.warn('SyllabusTrackerPortal loadData failed:', err.message);
+      syllabusTrackerPortalCache.loadingPromise = null;
       loadLocalFallback();
     } finally {
       setLoading(false);
@@ -347,6 +395,39 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
   };
 
+  // ─── Initialize Teacher Specific Record & Favorites ───
+  useEffect(() => {
+    const initTeacher = async () => {
+      if (role !== 'teacher' || !user?.id) return;
+      try {
+        let teacherData = teacherRecord;
+        if (!teacherData) {
+          const { data, error: teachErr } = await supabase
+            .from('teachers')
+            .select('*')
+            .eq('auth_id', user.id)
+            .maybeSingle();
+          if (teachErr) throw teachErr;
+          teacherData = data;
+        }
+        if (teacherData) {
+          setTeacher(teacherData);
+          setUpFilterTeachers([String(teacherData.id)]);
+
+          let dbFavs = await loadFavoritesFromDB(teacherData.id);
+          if (dbFavs.length === 0) {
+            const migrated = await migrateLocalStorageFavorites(teacherData.id);
+            if (migrated) dbFavs = migrated;
+          }
+          setFavorites(dbFavs);
+        }
+      } catch (err) {
+        console.warn('Teacher init failed:', err.message);
+      }
+    };
+    initTeacher();
+  }, [role, user?.id, teacherRecord]);
+
   useEffect(() => {
     loadData();
   }, [student?.id, student?.class_id]);
@@ -363,13 +444,11 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
   }, [student?.class_id, role]);
 
-  // ─── Daily Activity: Fetch & Enrich Logs ───
+  // ─── Fetch Daily Entries ───
   const fetchDailyEntries = useCallback(async () => {
     setDailyLoading(true);
     try {
       let items = [];
-
-      // Determine date boundaries
       let startBound = null;
       let endBound = null;
 
@@ -393,7 +472,6 @@ const SyllabusProgressReport = ({ role, student }) => {
           endBound = dateRange.end;
         }
 
-        // If range is selected but not completely filled, clear and skip query
         if (timeFilter === 'range' && (!dateRange.start || !dateRange.end)) {
           setDailyEntries([]);
           setDailyLoading(false);
@@ -411,7 +489,6 @@ const SyllabusProgressReport = ({ role, student }) => {
         `);
 
       if (role === 'parent' && student?.class_id) {
-        // Fetch progress IDs for the class first
         const { data: progressRows } = await supabase
           .from('lesson_progress')
           .select('id')
@@ -424,6 +501,8 @@ const SyllabusProgressReport = ({ role, student }) => {
           return;
         }
         query = query.in('progress_id', progressIds);
+      } else if (role === 'teacher' && teacher?.id && !coverMode) {
+        query = query.eq('teacher_id', teacher.id);
       }
 
       if (startBound && endBound) {
@@ -431,30 +510,19 @@ const SyllabusProgressReport = ({ role, student }) => {
       }
 
       const { data: dbItems, error } = await query.order('date', { ascending: false }).limit(200);
-
       if (error) throw error;
       items = dbItems || [];
 
       const enriched = items.map((item) => {
         const progressObj = item.progress;
-        const log = progressObj
-          ? {
-              ...progressObj,
-              current_status: progressObj.status,
-            }
-          : null;
-
+        const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
         const lesson = progressObj ? progressObj.lesson : null;
-        const book = progressObj
-          ? books.find((b) => String(b.id) === String(progressObj.book_id))
-          : null;
+        const book = progressObj ? books.find((b) => String(b.id) === String(progressObj.book_id)) : null;
         const subject = progressObj
           ? subjects.find((s) => String(s.id) === String(progressObj.subject_id)) ||
             (book ? subjects.find((s) => String(s.id) === String(book.subject_id)) : null)
           : null;
-        const cls = progressObj
-          ? classes.find((c) => String(c.id) === String(progressObj.class_id))
-          : null;
+        const cls = progressObj ? classes.find((c) => String(c.id) === String(progressObj.class_id)) : null;
 
         return {
           ...item,
@@ -465,8 +533,8 @@ const SyllabusProgressReport = ({ role, student }) => {
           subject,
           class: cls,
           lessonPath: lesson
-            ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
-            : 'Unknown',
+             ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
+             : 'Unknown',
           isRevision: lesson?.level1 === '_Revision',
         };
       });
@@ -482,6 +550,8 @@ const SyllabusProgressReport = ({ role, student }) => {
     role,
     activeTab,
     student?.class_id,
+    teacher?.id,
+    coverMode,
     timeFilter,
     dateRange.start,
     dateRange.end,
@@ -490,6 +560,70 @@ const SyllabusProgressReport = ({ role, student }) => {
     classes,
   ]);
 
+  // ─── Fetch Teacher Class Progress Logs & Trackers ───
+  const fetchTeacherProgressData = async (overrideCoverMode = null) => {
+    if (role !== 'teacher') return;
+    setProgressLoading(true);
+    try {
+      const isCover = overrideCoverMode !== null ? overrideCoverMode : coverMode;
+      const progressClasses =
+        isCover || assignments.length === 0
+          ? classes
+          : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+      const classIds = progressClasses.map((c) => c.id);
+
+      if (classIds.length === 0) {
+        setBookTrackers([]);
+        setAllLogs([]);
+        setProgressLoading(false);
+        return;
+      }
+
+      const [trackerRes, logsRes] = await Promise.all([
+        supabase.from('book_tracker').select('*').in('class_id', classIds),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at').in('class_id', classIds),
+      ]);
+
+      if (trackerRes.error) throw trackerRes.error;
+      if (logsRes.error) throw logsRes.error;
+
+      const mappedLogs = (logsRes.data || []).map((log) => ({ ...log, current_status: log.status }));
+      setBookTrackers(trackerRes.data || []);
+      setAllLogs(mappedLogs);
+    } catch (err) {
+      console.warn('Failed to fetch teacher progress data:', err.message);
+    } finally {
+      setProgressLoading(false);
+    }
+  };
+
+  // ─── Fetch Teacher's Today Plans ───
+  useEffect(() => {
+    if (role === 'teacher' && lessonPlans.length > 0) {
+      const todayStr = getLocalDateStr(0);
+      const filtered = lessonPlans.filter(
+        (p) =>
+          p.status === 'planned' &&
+          (p.target_start_date === null || p.target_start_date <= todayStr) &&
+          String(p.teacher_id) === String(teacher?.id)
+      );
+      setTodaysPlans(filtered);
+    }
+  }, [role, lessonPlans, teacher?.id]);
+
+  useEffect(() => {
+    if (
+      (activeTab === 'daily-activity' ||
+        activeTab === 'teacher-activity' ||
+        activeTab === 'today-class' ||
+        activeTab === 'two-weeks-class') &&
+      books.length > 0
+    ) {
+      fetchDailyEntries();
+    }
+  }, [activeTab, books, fetchDailyEntries]);
+
+  // ─── Delete Actions ───
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
     let className = '—';
     if (entry.class?.name || entry.class?.class_name) {
@@ -524,13 +658,11 @@ const SyllabusProgressReport = ({ role, student }) => {
     if (!deleteModalConfig) return;
     setDailyLoading(true);
     try {
-      const { error } = await supabase
-        .from('lesson_progress_items')
-        .delete()
-        .eq('id', deleteModalConfig.id);
+      const { error } = await supabase.from('lesson_progress_items').delete().eq('id', deleteModalConfig.id);
       if (error) throw error;
 
       showToast('Log entry deleted successfully!', 'success');
+      setDailyEntries((prev) => prev.filter((item) => item.id !== deleteModalConfig.id));
 
       if (deleteModalConfig.logId) {
         setLogItemsMap((prev) => {
@@ -546,23 +678,15 @@ const SyllabusProgressReport = ({ role, student }) => {
 
       setDeleteModalConfig(null);
       await fetchDailyEntries();
+      if (role === 'teacher') {
+        await fetchTeacherProgressData();
+      }
     } catch (err) {
       showToast('Error deleting log entry: ' + err.message, 'error');
     } finally {
       setDailyLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (
-      (activeTab === 'daily-activity' ||
-        activeTab === 'today-class' ||
-        activeTab === 'two-weeks-class') &&
-      books.length > 0
-    ) {
-      fetchDailyEntries();
-    }
-  }, [activeTab, books, fetchDailyEntries]);
 
   // ─── Click Book Tile to Expand Lessons ───
   const handleProgressBookClick = async (bookId, classId) => {
@@ -573,54 +697,38 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
     setProgressExpandedBook(bookId);
     setProgressExpandedClass(classId);
-    setProgressLoading(true);
+    setDetailsLoading(true);
     setShowNotStarted(false);
     setExpandedLogIds({});
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
         supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
-        supabase
-          .from('lesson_progress')
-          .select(
-            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
-          )
-          .eq('class_id', classId),
+        supabase.from('lesson_progress').select('id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id').eq('class_id', classId),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
 
-      const mappedLogs = (logs || []).map((log) => ({
-        ...log,
-        current_status: log.status,
-      }));
-
+      const mappedLogs = (logs || []).map((log) => ({ ...log, current_status: log.status }));
       const bookLessons = (lessons || []).filter((l) => {
         if (l.level3) return true;
         if (l.level2 && !l.level3) {
-          const hasL3 = (lessons || []).some(
-            (o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3
-          );
+          const hasL3 = (lessons || []).some((o) => o.level1 === l.level1 && (o.level2 || 'General') === l.level2 && o.level3);
           return !hasL3;
         }
         if (l.level1 && !l.level2 && !l.level3) {
-          const hasL2orL3 = (lessons || []).some(
-            (o) => o.level1 === l.level1 && (o.level2 || o.level3)
-          );
+          const hasL2orL3 = (lessons || []).some((o) => o.level1 === l.level1 && (o.level2 || o.level3));
           return !hasL2orL3;
         }
         return false;
       });
 
-      const relevantLogs = mappedLogs.filter((l) =>
-        bookLessons.some((bl) => String(bl.id) === String(l.lesson_id))
-      );
-
+      const relevantLogs = mappedLogs.filter((l) => bookLessons.some((bl) => String(bl.id) === String(l.lesson_id)));
       setProgressBookLessons(bookLessons);
       setProgressBookLogs(relevantLogs);
     } catch (err) {
       console.warn('Progress book expand failed:', err.message);
     } finally {
-      setProgressLoading(false);
+      setDetailsLoading(false);
     }
   };
 
@@ -628,11 +736,7 @@ const SyllabusProgressReport = ({ role, student }) => {
     setExpandedLogIds((prev) => ({ ...prev, [logId]: !prev[logId] }));
     if (!logItemsMap[logId]) {
       try {
-        const { data, error } = await supabase
-          .from('lesson_progress_items')
-          .select('*, teacher:teachers(name)')
-          .eq('progress_id', logId)
-          .order('date', { ascending: false });
+        const { data, error } = await supabase.from('lesson_progress_items').select('*, teacher:teachers(name)').eq('progress_id', logId).order('date', { ascending: false });
         if (error) throw error;
         setLogItemsMap((prev) => ({ ...prev, [logId]: data || [] }));
       } catch (err) {
@@ -641,309 +745,46 @@ const SyllabusProgressReport = ({ role, student }) => {
     }
   };
 
-  useEffect(() => {
-    if (role === 'parent' && student?.class_id) {
-      setCpFilterClasses([String(student.class_id)]);
-      setFilterClasses([String(student.class_id)]);
-      setCpGroupingMode('none');
+  const handleTabChange = async (tabKey) => {
+    setActiveTab(tabKey);
+    if (role === 'teacher') {
+      if (tabKey === 'teacher-activity') {
+        await fetchDailyEntries();
+      } else if (tabKey === 'class-progress') {
+        await fetchTeacherProgressData();
+        setProgressExpandedBook(null);
+        setProgressExpandedClass(null);
+      }
     }
-  }, [role, student?.class_id]);
-
-  const renderUpcomingLessons = () => {
-    const upcoming = lessonPlans.filter((p) => {
-      // Date boundary
-      if (!p.target_date || p.target_date < upcomingStartDate || p.target_date > upcomingEndDate) {
-        return false;
-      }
-      // Status planned or in_progress
-      if (p.status !== 'planned' && p.status !== 'in_progress') {
-        return false;
-      }
-      
-      // Role constraints
-      if (role === 'parent') {
-        return String(p.class_id) === String(student?.class_id);
-      }
-
-      // Filters for admin/management
-      if (upFilterTeachers.length > 0 && !upFilterTeachers.includes(String(p.teacher_id))) {
-        return false;
-      }
-      if (upFilterClasses.length > 0 && !upFilterClasses.includes(String(p.class_id))) {
-        return false;
-      }
-      if (upFilterSubjects.length > 0 && !upFilterSubjects.includes(String(p.subject_id))) {
-        return false;
-      }
-
-      return true;
-    });
-
-    const classOpts = classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
-    const subjectOpts = subjects.map((s) => ({ id: String(s.id), label: s.name }));
-    const teacherOpts = teachers.map((t) => ({ id: String(t.id), label: t.name }));
-
-    const renderCard = (plan) => {
-      const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
-        .filter(Boolean)
-        .join(' > ');
-
-      const classificationId = plan.subject?.classification_id;
-      const classification = classifications.find(
-        (c) => String(c.id) === String(classificationId)
-      );
-      const themeStyles =
-        classification?.theme && CARD_THEMES[classification.theme]
-          ? CARD_THEMES[classification.theme]
-          : CARD_THEMES.charcoal;
-
-      return (
-        <div
-          key={plan.id}
-          className={`bg-white border border-light-border border-l-[6px] rounded-xl p-4 shadow-sm flex flex-col justify-between border-l-${themeStyles.color} text-left`}
-        >
-          <div className="flex justify-between items-start mb-2">
-            <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {new Date(plan.target_date).toLocaleDateString()}
-            </span>
-            <div className="flex gap-1">
-              {plan.status === 'in_progress' && (
-                <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
-                  In Progress
-                </span>
-              )}
-              {plan.carry_forward_count > 0 && (
-                <span className="text-[10px] text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">
-                  Delayed
-                </span>
-              )}
-            </div>
-          </div>
-          <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
-            {title}
-          </h4>
-          <p className="text-[11px] text-gray-500 font-semibold mt-1">
-            {role !== 'parent' && `${plan.class?.name || plan.class?.class_name || '—'} • `}
-            {plan.subject?.name} • {plan.book?.name}
-            {role !== 'parent' && plan.teacher?.name && ` • ${plan.teacher.name}`}
-          </p>
-        </div>
-      );
-    };
-
-    const defaultEndDateStr = (() => {
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 28);
-      const year = futureDate.getFullYear();
-      const month = String(futureDate.getMonth() + 1).padStart(2, '0');
-      const day = String(futureDate.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    })();
-
-    const hasActiveFilters = 
-      upFilterTeachers.length > 0 || 
-      upFilterClasses.length > 0 || 
-      upFilterSubjects.length > 0 || 
-      upcomingStartDate !== getLocalDateStr(0) || 
-      upcomingEndDate !== defaultEndDateStr;
-
-    return (
-      <div className="space-y-6">
-        {upcoming.length === 0 ? (
-          <div className="text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-            No upcoming lessons planned matching your filters.
-          </div>
-        ) : upcomingGroupingMode === 'subject_date' ? (
-          // Group by Subject and sort by date ascending
-          (() => {
-            const sortedPlans = [...upcoming].sort((a, b) => a.target_date.localeCompare(b.target_date));
-            const grouped = {};
-            sortedPlans.forEach((plan) => {
-              const key = plan.subject?.name || 'Other / General';
-              if (!grouped[key]) grouped[key] = [];
-              grouped[key].push(plan);
-            });
-            const sortedSubjs = Object.keys(grouped).sort();
-
-            return (
-              <div className="space-y-8 text-left">
-                {sortedSubjs.map((subjName) => (
-                  <div key={subjName} className="space-y-4">
-                    <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
-                      {subjName}
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {grouped[subjName].map((plan) => renderCard(plan))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()
-        ) : (
-          // Group by Date and sort by subject name
-          (() => {
-            const sortedPlans = [...upcoming].sort((a, b) => {
-              const nameA = a.subject?.name || '';
-              const nameB = b.subject?.name || '';
-              return nameA.localeCompare(nameB);
-            });
-            const grouped = {};
-            sortedPlans.forEach((plan) => {
-              const key = plan.target_date;
-              if (!grouped[key]) grouped[key] = [];
-              grouped[key].push(plan);
-            });
-            const sortedDates = Object.keys(grouped).sort();
-
-            return (
-              <div className="space-y-8 text-left">
-                {sortedDates.map((dateKey) => {
-                  const dateDisplay = new Date(dateKey).toLocaleDateString(undefined, {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  });
-                  return (
-                    <div key={dateKey} className="space-y-4">
-                      <h3 className="text-sm font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
-                        {dateDisplay}
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {grouped[dateKey].map((plan) => renderCard(plan))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()
-        )}
-      </div>
-    );
   };
 
-  const renderTeacherAdherence = () => {
-    // Determine time boundaries
-    const now = new Date();
-    const oneWeekAgo = new Date(now);
-    oneWeekAgo.setDate(now.getDate() - 7);
-    const oneMonthAgo = new Date(now);
-    oneMonthAgo.setDate(now.getDate() - 30);
-    const oneYearAgo = new Date(now);
-    oneYearAgo.setDate(now.getDate() - 365);
+  const handleCoverModeChange = async (checked) => {
+    setCoverMode(checked);
+    if (activeTab === 'teacher-activity') {
+      await fetchDailyEntries();
+    } else if (activeTab === 'class-progress') {
+      await fetchTeacherProgressData(checked);
+      setProgressExpandedBook(null);
+      setProgressExpandedClass(null);
+    }
+  };
 
-    // group plans by teacher
-    const teacherStats = teachers
-      .map((t) => {
-        const tPlans = lessonPlans.filter((p) => String(p.teacher_id) === String(t.id));
-        const totalPlans = tPlans.length;
-        const completedPlans = tPlans.filter((p) => p.status === 'completed').length;
+  const handleAddWorkSuccess = async () => {
+    await fetchDailyEntries();
+    if (role === 'teacher') {
+      await fetchTeacherProgressData();
+    }
+  };
 
-        const tCarryForwards = carryForwards.filter((c) => String(c.teacher_id) === String(t.id));
-
-        const cfWeek = tCarryForwards.filter((c) => new Date(c.created_at) >= oneWeekAgo).length;
-        const cfMonth = tCarryForwards.filter((c) => new Date(c.created_at) >= oneMonthAgo).length;
-        const cfYear = tCarryForwards.filter((c) => new Date(c.created_at) >= oneYearAgo).length;
-
-        const carryForwardTotal = tCarryForwards.length;
-
-        const accuracy =
-          totalPlans > 0 ? Math.max(0, 100 - (carryForwardTotal / totalPlans) * 20) : 0; // heuristic: 20% penalty per CF
-        return {
-          ...t,
-          totalPlans,
-          completedPlans,
-          carryForwardTotal,
-          cfWeek,
-          cfMonth,
-          cfYear,
-          accuracy: totalPlans > 0 ? accuracy.toFixed(0) : '-',
-        };
-      })
-      .sort((a, b) => b.totalPlans - a.totalPlans);
-
-    return (
-      <div className="bg-white border rounded-2xl shadow-sm p-4 text-left overflow-x-auto">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-bold text-gray-700 text-sm">Teacher Planning Adherence</h3>
-          <div className="text-xs text-gray-500 font-semibold bg-gray-50 px-3 py-1.5 rounded-full border">
-            Metrics derived from automated Carry-Forward tracking
-          </div>
-        </div>
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-gray-50 border-y border-light-border text-dark-muted font-extrabold text-[10px] uppercase tracking-wider">
-              <th className="px-4 py-3 border-r">Teacher</th>
-              <th className="px-4 py-3 text-center border-r" colSpan="2">
-                Overall Planning
-              </th>
-              <th className="px-4 py-3 text-center border-r" colSpan="4">
-                Carry Forward Analytics
-              </th>
-              <th className="px-4 py-3 text-center">Health</th>
-            </tr>
-            <tr className="bg-gray-50 border-b border-light-border text-dark-muted font-bold text-[9px] uppercase tracking-wider">
-              <th className="px-4 py-2 border-r"></th>
-              <th className="px-4 py-2 text-center text-gray-500">Total Planned</th>
-              <th className="px-4 py-2 text-center text-gray-500 border-r">Completed</th>
-
-              <th className="px-4 py-2 text-center text-orange-600/80">7 Days</th>
-              <th className="px-4 py-2 text-center text-orange-600/80">30 Days</th>
-              <th className="px-4 py-2 text-center text-orange-600/80">Year</th>
-              <th className="px-4 py-2 text-center text-orange-700 border-r">Lifetime Total</th>
-
-              <th className="px-4 py-2 text-center">Accuracy %</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {teacherStats.length === 0 ? (
-              <tr>
-                <td colSpan="8" className="text-center py-8 text-gray-500">
-                  No teacher data.
-                </td>
-              </tr>
-            ) : (
-              teacherStats.map((stat) => (
-                <tr key={stat.id} className="hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-bold text-dark-primary border-r">{stat.name}</td>
-                  <td className="px-4 py-3 text-center text-gray-600">{stat.totalPlans}</td>
-                  <td className="px-4 py-3 text-center text-emerald-600 font-bold border-r">
-                    {stat.completedPlans}
-                  </td>
-
-                  <td className="px-4 py-3 text-center text-orange-500 font-semibold">
-                    {stat.cfWeek}
-                  </td>
-                  <td className="px-4 py-3 text-center text-orange-500 font-semibold">
-                    {stat.cfMonth}
-                  </td>
-                  <td className="px-4 py-3 text-center text-orange-500 font-semibold">
-                    {stat.cfYear}
-                  </td>
-                  <td className="px-4 py-3 text-center text-orange-600 font-bold border-r">
-                    {stat.carryForwardTotal}
-                  </td>
-
-                  <td className="px-4 py-3 text-center bg-gray-50/30">
-                    {stat.accuracy === '-' ? (
-                      <span className="text-gray-400">—</span>
-                    ) : (
-                      <span
-                        className={`px-2 py-0.5 rounded font-bold ${stat.accuracy >= 80 ? 'bg-emerald-100 text-emerald-700' : stat.accuracy >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}
-                      >
-                        {stat.accuracy}%
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
+  const isCreatedToday = (createdAtStr) => {
+    if (!createdAtStr) return false;
+    try {
+      const entryDate = new Date(createdAtStr).toLocaleDateString();
+      const today = new Date().toLocaleDateString();
+      return entryDate === today;
+    } catch (e) {
+      return false;
+    }
   };
 
   const clearDailyFilters = () => {
@@ -983,69 +824,129 @@ const SyllabusProgressReport = ({ role, student }) => {
 
   const filteredDailyEntries = getFilteredDailyEntries();
 
-  // ─── Main Render ───
+  // ─── Teacher Carry Forward Action ───
+  const handleCarryForward = async (plan) => {
+    try {
+      setDailyLoading(true);
+      let updateData = { carry_forward_count: (plan.carry_forward_count || 0) + 1 };
+      if (plan.target_start_date) {
+        const d = new Date(plan.target_start_date);
+        d.setDate(d.getDate() + 1);
+        if (d.getDay() === 0) d.setDate(d.getDate() + 1); // skip Sunday
+        updateData.target_start_date = d.toISOString().split('T')[0];
+        if (plan.target_end_date) {
+          const dEnd = new Date(plan.target_end_date);
+          dEnd.setDate(dEnd.getDate() + 1);
+          if (dEnd.getDay() === 0) dEnd.setDate(dEnd.getDate() + 1);
+          updateData.target_end_date = dEnd.toISOString().split('T')[0];
+        }
+      } else if (plan.academic_week) {
+        updateData.academic_week = plan.academic_week + 1;
+      }
+
+      const { error } = await supabase.from('lesson_progress').update(updateData).eq('id', plan.id);
+      if (error) throw error;
+
+      if (plan.target_start_date) {
+        try {
+          await supabase.from('lesson_plan_carry_forwards').insert([
+            { plan_id: plan.id, teacher_id: teacher?.id, original_date: plan.target_start_date, new_date: updateData.target_start_date },
+          ]);
+        } catch (cfErr) {
+          console.warn('Carry forward log insert skipped or failed:', cfErr.message);
+        }
+      }
+
+      showToast('Lesson carried forward', 'success');
+      const newPlans = todaysPlans.filter((p) => p.id !== plan.id);
+      setTodaysPlans(newPlans);
+    } catch (e) {
+      showToast('Failed to carry forward: ' + e.message, 'error');
+    } finally {
+      setDailyLoading(false);
+    }
+  };
+
+  const handleSubmitPlannedLesson = (plan) => {
+    setPlannedLessonToLog(plan);
+    setIsAddWorkModalOpen(true);
+  };
+
+  const getClassesToRender = () => {
+    let baseClasses = classes;
+    if (role === 'parent' && student?.class_id) {
+      baseClasses = classes.filter((c) => String(c.id) === String(student.class_id));
+    } else if (role === 'teacher') {
+      baseClasses = coverMode || assignments.length === 0
+        ? classes
+        : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+    }
+
+    return baseClasses.filter((c) => {
+      if (cpFilterClasses.length > 0) return cpFilterClasses.includes(String(c.id));
+      if (role === 'parent' || role === 'teacher') return true;
+      return bookClasses.some((bc) => String(bc.class_id) === String(c.id) && books.some((fb) => String(fb.id) === String(bc.book_id)));
+    });
+  };
+
   if (loading) {
     return (
       <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
         <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin mr-3"></div>
-        Loading Syllabus Reports...
+        Loading Syllabus Dashboard...
       </div>
     );
   }
 
+  const roleTabs = {
+    parent: [
+      { key: 'today-class', label: "Today's Class", icon: 'fa-calendar-day' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+      { key: 'two-weeks-class', label: 'Last 2 Weeks Classes', icon: 'fa-calendar-week' },
+      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+    ],
+    teacher: [
+      { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+    ],
+    admin: [
+      { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
+      { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+    ],
+    management: [
+      { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
+      { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+    ],
+  };
+
+  const currentTabs = roleTabs[role] || roleTabs.admin;
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
       <div className="p-6 overflow-y-auto pb-24 flex-1">
+        {/* Tab Headers */}
         <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap">
           <div className="flex gap-4 items-center flex-wrap">
             <div className="flex gap-2">
-              {role === 'parent'
-                ? [
-                    { key: 'today-class', label: "Today's Class", icon: 'fa-calendar-day' },
-                    { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
-                    {
-                      key: 'two-weeks-class',
-                      label: 'Last 2 Weeks Classes',
-                      icon: 'fa-calendar-week',
-                    },
-                    { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
-                        activeTab === tab.key
-                          ? 'bg-brand-primary text-white'
-                          : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                      }`}
-                    >
-                      <i className={`fas ${tab.icon} text-xs`}></i>
-                      {tab.label}
-                    </button>
-                  ))
-                : [
-                    { key: 'daily-activity', label: 'Teacher Progress', icon: 'fa-list-check' },
-                    {
-                      key: 'teacher-adherence',
-                      label: 'Planning Adherence',
-                      icon: 'fa-clipboard-check',
-                    },
-                    { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-                    { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
-                      className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
-                        activeTab === tab.key
-                          ? 'bg-brand-primary text-white'
-                          : 'bg-white text-gray-600 hover:bg-gray-100 border'
-                      }`}
-                    >
-                      <i className={`fas ${tab.icon} text-xs`}></i>
-                      {tab.label}
-                    </button>
-                  ))}
+              {currentTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => handleTabChange(tab.key)}
+                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
+                    activeTab === tab.key
+                      ? 'bg-brand-primary text-white'
+                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon} text-xs`}></i>
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
             {role !== 'parent' && activeTab === 'daily-activity' && (
@@ -1085,7 +986,7 @@ const SyllabusProgressReport = ({ role, student }) => {
             </div>
           )}
 
-          {role !== 'parent' && activeTab === 'daily-activity' && (
+          {(activeTab === 'daily-activity' || activeTab === 'teacher-activity') && (
             <div className="flex items-center gap-3 flex-wrap ml-auto">
               <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                 {[
@@ -1124,6 +1025,26 @@ const SyllabusProgressReport = ({ role, student }) => {
                   />
                 </div>
               )}
+
+              {role === 'teacher' && (
+                <>
+                  <button
+                    onClick={() => setIsAddWorkModalOpen(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
+                  >
+                    <i className="fas fa-plus"></i> Add Work
+                  </button>
+                  <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors h-8">
+                    <input
+                      type="checkbox"
+                      checked={coverMode}
+                      onChange={(e) => handleCoverModeChange(e.target.checked)}
+                      className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
+                    />
+                    Cover for Absent Teacher
+                  </label>
+                </>
+              )}
             </div>
           )}
 
@@ -1153,7 +1074,7 @@ const SyllabusProgressReport = ({ role, student }) => {
           )}
         </div>
 
-        {/* Dedicated Responsive Filters sub-bar */}
+        {/* Dedicated Class Progress Filters sub-bar */}
         {activeTab === 'class-progress' && role !== 'parent' && (
           <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
             <div className="flex items-center gap-2">
@@ -1163,10 +1084,7 @@ const SyllabusProgressReport = ({ role, student }) => {
               <MultiSelectDropdown
                 label=""
                 placeholder="Class Filter"
-                options={classes.map((c) => ({
-                  id: String(c.id),
-                  label: c.name || c.class_name,
-                }))}
+                options={getClassesToRender().map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
                 selected={cpFilterClasses}
                 onChange={(val) => {
                   setCpFilterClasses(val);
@@ -1218,12 +1136,44 @@ const SyllabusProgressReport = ({ role, student }) => {
           </div>
         )}
 
+        {/* Dedicated Upcoming Lessons Filters sub-bar */}
         {activeTab === 'upcoming-lessons' && (
           <div className="bg-white border rounded-2xl shadow-sm p-4 text-left flex flex-wrap items-center gap-3 mb-6">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Filters:</span>
             </div>
-            {role !== 'parent' && (
+            {role === 'parent' ? null : role === 'teacher' ? (
+              <>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="Teacher"
+                    options={teacher ? [{ id: String(teacher.id), label: teacher.name }] : []}
+                    selected={upFilterTeachers}
+                    onChange={() => {}}
+                    disabled={true}
+                  />
+                </div>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="Class Filter"
+                    options={classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id))).map((c) => ({ id: String(c.id), label: c.name || c.class_name }))}
+                    selected={upFilterClasses}
+                    onChange={setUpFilterClasses}
+                  />
+                </div>
+                <div className="min-w-[140px] flex-1 sm:flex-initial">
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="Subject Filter"
+                    options={subjects.filter((s) => assignments.some((a) => String(a.subject_id) === String(s.id))).map((s) => ({ id: String(s.id), label: s.name }))}
+                    selected={upFilterSubjects}
+                    onChange={setUpFilterSubjects}
+                  />
+                </div>
+              </>
+            ) : (
               <>
                 <div className="min-w-[140px] flex-1 sm:flex-initial">
                   <MultiSelectDropdown
@@ -1254,8 +1204,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                 </div>
               </>
             )}
-            
-            {/* Compact Date Range Popover */}
+
             <div className="relative">
               <button
                 type="button"
@@ -1278,14 +1227,9 @@ const SyllabusProgressReport = ({ role, student }) => {
 
               {isUpDatePopoverOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setIsUpDatePopoverOpen(false)}
-                  />
+                  <div className="fixed inset-0 z-40" onClick={() => setIsUpDatePopoverOpen(false)} />
                   <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
-                    <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
-                      Date Range
-                    </h5>
+                    <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">Date Range</h5>
                     <div className="space-y-2">
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-bold text-gray-400 uppercase">From:</span>
@@ -1318,13 +1262,7 @@ const SyllabusProgressReport = ({ role, student }) => {
                       >
                         Reset
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsUpDatePopoverOpen(false)}
-                        className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
-                      >
-                        Apply
-                      </button>
+                      <button type="button" onClick={() => setIsUpDatePopoverOpen(false)} className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90">Apply</button>
                     </div>
                   </div>
                 </>
@@ -1333,7 +1271,7 @@ const SyllabusProgressReport = ({ role, student }) => {
 
             {(() => {
               const hasActiveFilters = 
-                upFilterTeachers.length > 0 || 
+                (role !== 'parent' && upFilterTeachers.length > 0) ||
                 upFilterClasses.length > 0 || 
                 upFilterSubjects.length > 0 || 
                 upcomingStartDate !== getLocalDateStr(0) || 
@@ -1344,7 +1282,7 @@ const SyllabusProgressReport = ({ role, student }) => {
               return (
                 <button
                   onClick={() => {
-                    setUpFilterTeachers([]);
+                    if (role !== 'teacher') setUpFilterTeachers([]);
                     setUpFilterClasses([]);
                     setUpFilterSubjects([]);
                     setUpcomingStartDate(getLocalDateStr(0));
@@ -1359,9 +1297,30 @@ const SyllabusProgressReport = ({ role, student }) => {
           </div>
         )}
 
-        {(activeTab === 'daily-activity' ||
-          activeTab === 'today-class' ||
-          activeTab === 'two-weeks-class') && (
+        {/* Tab Contents */}
+        {activeTab === 'teacher-activity' && (
+          <>
+            <PlannedForToday
+              todaysPlans={todaysPlans}
+              handleSubmitPlannedLesson={handleSubmitPlannedLesson}
+              handleCarryForward={handleCarryForward}
+            />
+            <DailyActivityTable
+              role="teacher"
+              activeTab={activeTab}
+              dailyEntries={dailyEntries}
+              dailyLoading={dailyLoading}
+              classes={classes}
+              subjects={subjects}
+              books={books}
+              filteredDailyEntries={dailyEntries}
+              handleDeleteClick={handleDeleteClick}
+              isCreatedToday={isCreatedToday}
+            />
+          </>
+        )}
+
+        {(activeTab === 'daily-activity' || activeTab === 'today-class' || activeTab === 'two-weeks-class') && (
           <DailyActivityTable
             role={role}
             student={student}
@@ -1388,23 +1347,39 @@ const SyllabusProgressReport = ({ role, student }) => {
             setFilterStatus={setFilterStatus}
             clearDailyFilters={clearDailyFilters}
             handleDeleteClick={handleDeleteClick}
-            isCreatedToday={() => true}
+            isCreatedToday={role === 'teacher' ? isCreatedToday : undefined}
           />
         )}
-        {activeTab === 'upcoming-lessons' && renderUpcomingLessons()}
-        {activeTab === 'teacher-adherence' && renderTeacherAdherence()}
+
+        {activeTab === 'upcoming-lessons' && (
+          <UpcomingLessonsGrid
+            role={role}
+            student={student}
+            upcomingGroupingMode={upcomingGroupingMode}
+            upcomingStartDate={upcomingStartDate}
+            upcomingEndDate={upcomingEndDate}
+            upFilterTeachers={upFilterTeachers}
+            upFilterClasses={upFilterClasses}
+            upFilterSubjects={upFilterSubjects}
+            lessonPlans={lessonPlans}
+            classifications={classifications}
+            teachers={teachers}
+          />
+        )}
+
+        {activeTab === 'teacher-adherence' && (
+          <SyllabusTeacherAdherence
+            teachers={teachers}
+            lessonPlans={lessonPlans}
+            carryForwards={carryForwards}
+          />
+        )}
+
         {activeTab === 'class-progress' && (
           <SyllabusProgressGrid
             role={role}
             student={student}
-            classesToRender={classes.filter((c) => {
-              if (cpFilterClasses.length > 0) return cpFilterClasses.includes(String(c.id));
-              return bookClasses.some(
-                (bc) =>
-                  String(bc.class_id) === String(c.id) &&
-                  books.some((fb) => String(fb.id) === String(bc.book_id))
-              );
-            })}
+            classesToRender={getClassesToRender()}
             books={books}
             bookClasses={bookClasses}
             subjects={subjects}
@@ -1418,7 +1393,7 @@ const SyllabusProgressReport = ({ role, student }) => {
             progressExpandedBook={progressExpandedBook}
             progressExpandedClass={progressExpandedClass}
             handleProgressBookClick={handleProgressBookClick}
-            progressLoading={progressLoading}
+            progressLoading={progressLoading || detailsLoading}
             progressBookLessons={progressBookLessons}
             progressBookLogs={progressBookLogs}
             showNotStarted={showNotStarted}
@@ -1430,6 +1405,32 @@ const SyllabusProgressReport = ({ role, student }) => {
           />
         )}
       </div>
+
+      {role === 'teacher' && (
+        <SyllabusAddWorkModal
+          isOpen={isAddWorkModalOpen}
+          onClose={() => {
+            setIsAddWorkModalOpen(false);
+            setPlannedLessonToLog(null);
+          }}
+          onSuccess={handleAddWorkSuccess}
+          teacher={teacher}
+          classes={classes}
+          books={books}
+          bookClasses={bookClasses}
+          setBookClasses={setBookClasses}
+          subjects={subjects}
+          classifications={classifications}
+          favorites={favorites}
+          setFavorites={(newFavs) => {
+            setFavorites(newFavs);
+            if (teacher?.id) saveFavoritesToDB(teacher.id, newFavs);
+          }}
+          coverMode={coverMode}
+          assignments={assignments}
+          initialPlan={plannedLessonToLog}
+        />
+      )}
 
       <ConfirmModal
         isOpen={!!deleteModalConfig}
@@ -1445,4 +1446,4 @@ const SyllabusProgressReport = ({ role, student }) => {
   );
 };
 
-export default SyllabusProgressReport;
+export default SyllabusTrackerPortal;

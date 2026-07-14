@@ -7,7 +7,7 @@ import AdminFormConfigsView from './admin/AdminFormConfigsView';
 import TimetableManager from './admin/timetable/TimetableManager';
 import AdminStudentsView from './admin/AdminStudentsView';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
-import SyllabusProgressReport from './admin/syllabus/SyllabusProgressReport';
+import SyllabusTrackerPortal from './syllabus-shared/SyllabusTrackerPortal';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import ConfirmModal from '../ConfirmModal';
 import { showToast } from '../../utils/toast';
@@ -508,7 +508,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {subView === 'syllabus-manager' && <SyllabusManager role="admin" />}
 
       {/* Syllabus Progress Report view */}
-      {subView === 'syllabus-progress-tracker' && <SyllabusProgressReport role="admin" />}
+      {subView === 'syllabus-progress-tracker' && <SyllabusTrackerPortal role="admin" />}
 
       {/* Lesson Manager view */}
       {subView === 'lesson-planner' && <LessonManager role="admin" user={user} />}

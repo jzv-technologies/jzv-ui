@@ -15,9 +15,8 @@ import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
 import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import LessonManager from './portals/teacher/LessonManager/LessonManager';
-import SyllabusProgressReport from './portals/admin/syllabus/SyllabusProgressReport';
+import SyllabusTrackerPortal from './portals/syllabus-shared/SyllabusTrackerPortal';
 import CandidatePortal from './portals/CandidatePortal';
-import SyllabusTracker from './portals/teacher/SyllabusTracker';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -214,7 +213,7 @@ export const AppRoutes = ({
                   <ReporterTicketsView user={user} fullName={fullName} />
                 )}
                 {parentSubView === 'progress-tracker' && (
-                  <SyllabusProgressReport role="parent" student={user?.student} />
+                  <SyllabusTrackerPortal role="parent" student={user?.student} />
                 )}
               </RolePortal>
             ) : (
@@ -307,7 +306,7 @@ export const AppRoutes = ({
                   <LessonManager user={user} teacherRecord={teacherRecord} />
                 )}
                 {teacherSubView === 'progress-tracker' && (
-                  <SyllabusTracker user={user} teacherRecord={teacherRecord} />
+                  <SyllabusTrackerPortal role="teacher" user={user} teacherRecord={teacherRecord} />
                 )}
                 {teacherSubView === 'tickets' && (
                   <ReporterTicketsView user={user} fullName={fullName} />
