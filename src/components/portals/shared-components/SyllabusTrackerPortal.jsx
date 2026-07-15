@@ -6,6 +6,7 @@ import MultiSelectDropdown from './MultiSelectDropdown';
 import DailyActivityTable from './DailyActivityTable';
 import SyllabusProgressGrid from './SyllabusProgressGrid';
 import AddWorkModalCompactView from '../teacher/LessonManager/AddWorkModalCompactView';
+import AddWorkModalCompleteView from '../teacher/components/AddWorkModalCompleteView';
 
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
@@ -103,7 +104,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [showNotStarted, setShowNotStarted] = useState(false);
 
   // ─── Tab 3: Upcoming Lessons Filters & Grouping ───
-  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('subject_date');
+  const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('class_subject');
   const [upFilterTeachers, setUpFilterTeachers] = useState([]);
   const [upFilterClasses, setUpFilterClasses] = useState([]);
   const [upFilterClassifications, setUpFilterClassifications] = useState([]);
@@ -288,7 +289,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         supabase
           .from('lesson_progress')
           .select(
-            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
+            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
           ),
         supabase.from('syllabus_book_lessons').select('*'),
         supabase
@@ -873,13 +874,20 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const handleCarryForward = async (plan, newStartDate = null, newEndDate = null) => {
     try {
       setDailyLoading(true);
-      let updateData = { carry_forward_count: (plan.carry_forward_count || 0) + 1 };
       
+      const todayStr = new Date().toISOString().split('T')[0];
+      const oldStart = plan.target_start_date ? String(plan.target_start_date).split('T')[0] : null;
+      const oldEnd = plan.target_end_date ? String(plan.target_end_date).split('T')[0] : null;
+      const oldCreated = plan.created_at ? String(plan.created_at).split('T')[0] : null;
+
+      let newStart = plan.target_start_date;
+      let newEnd = plan.target_end_date;
+
       if (plan.status === 'planned') {
         if (!newStartDate) {
           throw new Error('New start date is required to change plan.');
         }
-        updateData.target_start_date = newStartDate;
+        newStart = newStartDate;
         
         if (plan.target_start_date && plan.target_end_date) {
           const startD = new Date(plan.target_start_date);
@@ -889,23 +897,53 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           
           const newEndD = new Date(newStartDate);
           newEndD.setDate(newEndD.getDate() + (diffDays > 0 ? diffDays : 0));
-          updateData.target_end_date = newEndD.toISOString().split('T')[0];
+          newEnd = newEndD.toISOString().split('T')[0];
         } else {
-          updateData.target_end_date = newStartDate;
+          newEnd = newStartDate;
         }
       } else {
         if (newEndDate) {
-          updateData.target_end_date = newEndDate;
+          newEnd = newEndDate;
         } else {
           const currentEnd = plan.target_end_date || plan.target_start_date;
           if (currentEnd) {
             const dEnd = new Date(currentEnd);
             dEnd.setDate(dEnd.getDate() + 1);
             if (dEnd.getDay() === 0) dEnd.setDate(dEnd.getDate() + 1); // skip Sunday
-            updateData.target_end_date = dEnd.toISOString().split('T')[0];
+            newEnd = dEnd.toISOString().split('T')[0];
           }
         }
       }
+
+      let replanIncrement = 0;
+      if (oldStart === todayStr && newStart > todayStr && oldCreated !== todayStr) {
+        replanIncrement = 1;
+      }
+
+      let carryForwardIncrement = 0;
+      if (plan.status === 'in_progress' && newEnd !== oldEnd) {
+        carryForwardIncrement = 1;
+      }
+
+      const getDaysDiff = (dateA, dateB) => {
+        if (!dateA || !dateB) return 0;
+        const dA = new Date(String(dateA).split('T')[0]);
+        const dB = new Date(String(dateB).split('T')[0]);
+        return Math.ceil((dA - dB) / (1000 * 60 * 60 * 24));
+      };
+
+      const delay_start = plan.start_date ? getDaysDiff(plan.start_date, newStart) : 0;
+      const delay_end = plan.end_date ? getDaysDiff(plan.end_date, newEnd) : 0;
+
+      let updateData = {
+        target_start_date: newStart,
+        target_end_date: newEnd,
+        replan_counter: (plan.replan_counter || 0) + replanIncrement,
+        carry_forward_counter: (plan.carry_forward_counter || 0) + carryForwardIncrement,
+        carry_forward_count: (plan.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
+        delay_start,
+        delay_end,
+      };
 
       const { error } = await supabase.from('lesson_progress').update(updateData).eq('id', plan.id);
       if (error) throw error;
@@ -1465,11 +1503,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           {activeTab === 'upcoming-lessons' && (
             <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none ml-auto">
               {[
-                { key: 'subject_date', icon: 'fa-book', tooltip: 'Group by Subject, Sort by Date' },
+                { key: 'class_subject', icon: 'fa-graduation-cap', tooltip: 'Sort by Class & Subject' },
                 {
-                  key: 'date_subject',
-                  icon: 'fa-calendar-alt',
-                  tooltip: 'Group by Date, Sort by Subject',
+                  key: 'subject_class',
+                  icon: 'fa-book',
+                  tooltip: 'Sort by Subject & Class',
                 },
               ].map((t) => (
                 <button
@@ -1710,25 +1748,51 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       </div>
 
       {isAddWorkModalOpen && (
-        <AddWorkModalCompactView
-          onClose={() => {
-            setIsAddWorkModalOpen(false);
-            setPlannedLessonToLog(null);
-          }}
-          classes={classes}
-          subjects={subjects}
-          books={books}
-          bookClasses={bookClasses}
-          allLessons={allLessons}
-          progressRecords={allLogs}
-          setProgressRecords={setAllLogs}
-          initialClassId={plannedLessonToLog?.class_id}
-          initialSubjectId={plannedLessonToLog?.subject_id}
-          initialBookId={plannedLessonToLog?.book_id}
-          teacherId={teacher?.id}
-          initialRecord={plannedLessonToLog}
-          onSuccess={handleAddWorkSuccess}
-        />
+        plannedLessonToLog ? (
+          <AddWorkModalCompactView
+            onClose={() => {
+              setIsAddWorkModalOpen(false);
+              setPlannedLessonToLog(null);
+            }}
+            classes={classes}
+            subjects={subjects}
+            books={books}
+            bookClasses={bookClasses}
+            allLessons={allLessons}
+            progressRecords={allLogs}
+            setProgressRecords={setAllLogs}
+            initialClassId={plannedLessonToLog?.class_id}
+            initialSubjectId={plannedLessonToLog?.subject_id}
+            initialBookId={plannedLessonToLog?.book_id}
+            teacherId={teacher?.id}
+            initialRecord={plannedLessonToLog}
+            onSuccess={handleAddWorkSuccess}
+          />
+        ) : (
+          <AddWorkModalCompleteView
+            isOpen={isAddWorkModalOpen}
+            onClose={() => {
+              setIsAddWorkModalOpen(false);
+              setPlannedLessonToLog(null);
+            }}
+            onSuccess={handleAddWorkSuccess}
+            teacher={teacher}
+            classes={classes}
+            books={books}
+            bookClasses={bookClasses}
+            setBookClasses={setBookClasses}
+            subjects={subjects}
+            classifications={classifications}
+            favorites={favorites}
+            setFavorites={(newFavs) => {
+              setFavorites(newFavs);
+              if (teacher?.id) saveFavoritesToDB(teacher.id, newFavs);
+            }}
+            coverMode={coverMode}
+            assignments={assignments}
+            initialPlan={null}
+          />
+        )
       )}
 
       <ConfirmModal

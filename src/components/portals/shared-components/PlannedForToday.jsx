@@ -29,9 +29,25 @@ const PlannedForToday = ({
                   <span className="text-[10px] font-extrabold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full uppercase">
                     {plan.class?.name || plan.class?.class_name}
                   </span>
-                  {plan.carry_forward_count > 0 && (
+                  {plan.replan_counter > 0 && (
                     <span
-                      className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full"
+                      className="text-[10px] font-bold text-red-650 bg-red-50 px-2 py-0.5 rounded-full"
+                      title="Replanned"
+                    >
+                      Replan x{plan.replan_counter}
+                    </span>
+                  )}
+                  {plan.carry_forward_counter > 0 && (
+                    <span
+                      className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
+                      title="Carried Forward"
+                    >
+                      CF x{plan.carry_forward_counter}
+                    </span>
+                  )}
+                  {!plan.replan_counter && !plan.carry_forward_counter && plan.carry_forward_count > 0 && (
+                    <span
+                      className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full"
                       title="Carried Forward"
                     >
                       CF x{plan.carry_forward_count}

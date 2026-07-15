@@ -25,6 +25,8 @@ const TimelinePanel = ({
   const [updatingReplanId, setUpdatingReplanId] = useState(null);
   const [replanDate, setReplanDate] = useState('');
   const [updateMode, setUpdateMode] = useState('replan'); // 'replan' | 'carry_forward'
+  const [updatingDateLevelStr, setUpdatingDateLevelStr] = useState(null);
+
 
   const [startDateStr, setStartDateStr] = useState(() => {
     const d = new Date();
@@ -197,9 +199,10 @@ const TimelinePanel = ({
     );
   };
 
-  const renderDateUpdateIcon = (record) => {
+  const renderDateUpdateIcon = (record, allPlanned = false) => {
     if (record.status === 'completed') return null;
     if (!record.target_start_date) return null;
+    if (allPlanned && record.status === 'planned') return null;
 
     let mode = null;
     let title = '';
@@ -292,7 +295,7 @@ const TimelinePanel = ({
         .from('lesson_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id', ignoreDuplicates: false })
         .select(
-          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage'
+          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
         )
         .single();
 
@@ -339,7 +342,7 @@ const TimelinePanel = ({
         .from('lesson_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
         .select(
-          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage'
+          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
         )
         .single();
 
@@ -379,19 +382,48 @@ const TimelinePanel = ({
         newEnd = getLocalISODate(newEndD);
       }
 
+      const todayStr = new Date().toISOString().split('T')[0];
+      const oldStart = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
+      const oldEnd = record.target_end_date ? String(record.target_end_date).split('T')[0] : null;
+      const oldCreated = record.created_at ? String(record.created_at).split('T')[0] : null;
+
+      let replanIncrement = 0;
+      if (oldStart === todayStr && newStart > todayStr && oldCreated !== todayStr) {
+        replanIncrement = 1;
+      }
+
+      let carryForwardIncrement = 0;
+      if (record.status === 'in_progress' && newEnd !== oldEnd) {
+        carryForwardIncrement = 1;
+      }
+
+      const getDaysDiff = (dateA, dateB) => {
+        if (!dateA || !dateB) return 0;
+        const dA = new Date(String(dateA).split('T')[0]);
+        const dB = new Date(String(dateB).split('T')[0]);
+        return Math.ceil((dA - dB) / (1000 * 60 * 60 * 24));
+      };
+
+      const delay_start = record.start_date ? getDaysDiff(record.start_date, newStart) : 0;
+      const delay_end = record.end_date ? getDaysDiff(record.end_date, newEnd) : 0;
+
       const upsertData = {
         ...record,
         target_start_date: newStart,
         target_end_date: newEnd,
         status: record.status,
-        carry_forward_count: (record.carry_forward_count || 0) + 1,
+        replan_counter: (record.replan_counter || 0) + replanIncrement,
+        carry_forward_counter: (record.carry_forward_counter || 0) + carryForwardIncrement,
+        carry_forward_count: (record.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
+        delay_start,
+        delay_end,
       };
 
       const { data, error } = await supabase
         .from('lesson_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
         .select(
-          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage'
+          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
         )
         .single();
 
@@ -405,6 +437,98 @@ const TimelinePanel = ({
       showToast('Failed to update dates: ' + err.message, 'error');
     }
   };
+
+  const handleUpdateDateLevel = async (records) => {
+    if (!replanDate) {
+      showToast('Please select a new date.', 'error');
+      return;
+    }
+    try {
+      const promises = records.map(async (record) => {
+        let newStart = record.target_start_date;
+        let newEnd = record.target_end_date;
+
+        newStart = replanDate;
+        const startD = record.target_start_date
+          ? new Date(String(record.target_start_date).split('T')[0])
+          : new Date();
+        const endD = record.target_end_date
+          ? new Date(String(record.target_end_date).split('T')[0])
+          : startD;
+        const diffTime = endD - startD;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const newEndD = new Date(newStart);
+        newEndD.setDate(newEndD.getDate() + (diffDays > 0 ? diffDays : 0));
+        newEnd = getLocalISODate(newEndD);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const oldStart = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
+        const oldEnd = record.target_end_date ? String(record.target_end_date).split('T')[0] : null;
+        const oldCreated = record.created_at ? String(record.created_at).split('T')[0] : null;
+
+        let replanIncrement = 0;
+        if (oldStart === todayStr && newStart > todayStr && oldCreated !== todayStr) {
+          replanIncrement = 1;
+        }
+
+        let carryForwardIncrement = 0;
+        if (record.status === 'in_progress' && newEnd !== oldEnd) {
+          carryForwardIncrement = 1;
+        }
+
+        const getDaysDiff = (dateA, dateB) => {
+          if (!dateA || !dateB) return 0;
+          const dA = new Date(String(dateA).split('T')[0]);
+          const dB = new Date(String(dateB).split('T')[0]);
+          return Math.ceil((dA - dB) / (1000 * 60 * 60 * 24));
+        };
+
+        const delay_start = record.start_date ? getDaysDiff(record.start_date, newStart) : 0;
+        const delay_end = record.end_date ? getDaysDiff(record.end_date, newEnd) : 0;
+
+        const upsertData = {
+          ...record,
+          target_start_date: newStart,
+          target_end_date: newEnd,
+          replan_counter: (record.replan_counter || 0) + replanIncrement,
+          carry_forward_counter: (record.carry_forward_counter || 0) + carryForwardIncrement,
+          carry_forward_count: (record.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
+          delay_start,
+          delay_end,
+        };
+
+        const { data, error } = await supabase
+          .from('lesson_progress')
+          .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
+          .select(
+            'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
+          )
+          .single();
+
+        if (error) throw error;
+        return data;
+      });
+
+      const updatedRows = await Promise.all(promises);
+
+      const updatedRecords = [...progressRecords];
+      updatedRows.forEach((data) => {
+        const index = updatedRecords.findIndex((r) => String(r.id) === String(data.id));
+        if (index >= 0) {
+          updatedRecords[index] = data;
+        } else {
+          updatedRecords.push(data);
+        }
+      });
+
+      setProgressRecords(updatedRecords);
+      showToast('Lessons rescheduled successfully!', 'success');
+      setUpdatingDateLevelStr(null);
+    } catch (err) {
+      showToast('Failed to update lesson dates: ' + err.message, 'error');
+    }
+  };
+
 
   if (!selectedClassId || !selectedSubjectId || !selectedBookId) {
     return (
@@ -612,6 +736,7 @@ const TimelinePanel = ({
               return dateStr >= start && dateStr <= end;
             });
 
+            const allPlanned = recordsForDate.length > 0 && recordsForDate.every((r) => r.status === 'planned');
             const isSelected = activeTargetDate === dateStr;
             const isDraggedOver = draggedOverTarget === dateStr;
             const isToday = dateStr === getLocalISODate(new Date());
@@ -655,15 +780,60 @@ const TimelinePanel = ({
                       </span>
                     )}
                   </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (onAddLessonClick) onAddLessonClick('date', dateStr);
-                    }}
-                    className="bg-white hover:bg-gray-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300 rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors flex items-center gap-1"
-                  >
-                    <i className="fas fa-plus text-[10px]"></i> Add Lesson
-                  </button>
+                  {updatingDateLevelStr === dateStr ? (
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="date"
+                        value={replanDate}
+                        onChange={(e) => setReplanDate(e.target.value)}
+                        className="text-xs border border-gray-300 rounded px-1.5 py-0.5 outline-none font-semibold text-gray-700 bg-white"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateDateLevel(recordsForDate);
+                        }}
+                        className="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px] hover:bg-emerald-250"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUpdatingDateLevelStr(null);
+                        }}
+                        className="bg-gray-100 text-gray-600 font-bold px-2 py-0.5 rounded text-[10px] hover:bg-gray-255"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      {allPlanned && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUpdatingDateLevelStr(dateStr);
+                            setReplanDate(dateStr);
+                            setUpdateMode('replan');
+                          }}
+                          className="text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-150 px-2 py-1 text-[11px] font-bold rounded-lg transition-colors flex items-center gap-1"
+                          title="Change Plan Date for All"
+                        >
+                          <i className="fas fa-edit"></i> Change Plan
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onAddLessonClick) onAddLessonClick('date', dateStr);
+                        }}
+                        className="bg-white hover:bg-gray-55 text-indigo-700 border border-indigo-200 hover:border-indigo-300 rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors flex items-center gap-1"
+                      >
+                        <i className="fas fa-plus text-[10px]"></i> Add Lesson
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card Content (Progress Records) */}
@@ -724,7 +894,7 @@ const TimelinePanel = ({
                             ) : (
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {renderStatusBadge(record, lesson)}
-                                {renderDateUpdateIcon(record)}
+                                {renderDateUpdateIcon(record, allPlanned)}
                               </div>
                             )}
                           </div>

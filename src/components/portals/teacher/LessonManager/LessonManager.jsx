@@ -161,7 +161,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
           supabase
             .from('lesson_progress')
             .select(
-              'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage'
+              'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
             ),
           supabase.from('subject_classifications').select('*'),
         ];
@@ -360,7 +360,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
         .from('lesson_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id', ignoreDuplicates: false })
         .select(
-          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage'
+          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
         );
 
       if (error) throw error;

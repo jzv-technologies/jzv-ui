@@ -415,12 +415,14 @@ const AddWorkModalCompactView = ({
             {!isRevisionItem && !isForceRevision ? (
               <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-end mb-1">
-                  <label className="text-xs font-bold text-gray-700">Progress Up To (%)</label>
+                  <label className="text-xs font-bold text-gray-700">
+                    Progress Up To ({progress}%)
+                  </label>
                 </div>
                 <div className="flex items-center gap-3 mb-2">
                   <input
                     type="range"
-                    min="0"
+                    min={selectedRecord?.status === 'in_progress' ? Math.floor(selectedRecord?.completion_percentage || 0) : 0}
                     max="100"
                     step="5"
                     value={progress}

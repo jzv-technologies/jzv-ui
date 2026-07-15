@@ -100,7 +100,7 @@ const AssignLessonsModal = ({
       const { data, error } = await supabase
         .from('lesson_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id', ignoreDuplicates: false })
-        .select('id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage');
+        .select('id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end');
 
       if (error) throw error;
 

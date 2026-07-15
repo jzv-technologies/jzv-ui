@@ -39,7 +39,7 @@ const AddWorkModalCompleteView = ({
   const [awLevel1, setAwLevel1] = useState('');
   const [awLevel2, setAwLevel2] = useState('');
   const [awLevel3, setAwLevel3] = useState('');
-  const [awProgress, setAwProgress] = useState(0);
+  const [awProgress, setAwProgress] = useState(10);
   const [awStatus, setAwStatus] = useState('in_progress');
   const [awComments, setAwComments] = useState('');
   const [awDate, setAwDate] = useState(todayStr);
@@ -218,7 +218,7 @@ const AddWorkModalCompleteView = ({
       if (!awClassId || !awBookId || !awLevel1) {
         setPreviousMaxProgress(0);
         if (!initialPlan) {
-          setAwProgress(0);
+          setAwProgress(10);
           setAwStatus('in_progress');
         }
         return;
@@ -230,7 +230,7 @@ const AddWorkModalCompleteView = ({
       if (!isLeafNodeSelected) {
         setPreviousMaxProgress(0);
         if (!initialPlan) {
-          setAwProgress(0);
+          setAwProgress(10);
           setAwStatus('in_progress');
         }
         return;
@@ -252,7 +252,7 @@ const AddWorkModalCompleteView = ({
       if (!targetLesson) {
         setPreviousMaxProgress(0);
         if (!initialPlan) {
-          setAwProgress(0);
+          setAwProgress(10);
           setAwStatus('in_progress');
         }
         return;
@@ -273,13 +273,13 @@ const AddWorkModalCompleteView = ({
 
         setPreviousMaxProgress(maxProgress);
         if (!initialPlan) {
-          setAwProgress(maxProgress);
+          setAwProgress(maxProgress || 10);
           setAwStatus(currentStatus);
         }
       } catch (err) {
         setPreviousMaxProgress(0);
         if (!initialPlan) {
-          setAwProgress(0);
+          setAwProgress(10);
           setAwStatus('in_progress');
         }
       }
@@ -294,7 +294,7 @@ const AddWorkModalCompleteView = ({
     if (newStatus === 'completed') {
       setAwProgress(100);
     } else if (newStatus === 'in_progress' && awProgress === 100) {
-      const defaultProgress = Math.max(50, previousMaxProgress);
+      const defaultProgress = Math.max(10, previousMaxProgress);
       setAwProgress(defaultProgress);
     }
   };
@@ -1145,7 +1145,7 @@ const AddWorkModalCompleteView = ({
                     </div>
                     <input
                       type="range"
-                      min="0"
+                      min={awStatus === 'in_progress' ? previousMaxProgress : 0}
                       max="100"
                       value={awProgress}
                       onChange={(e) => handleAwProgressChange(e.target.value)}
