@@ -75,6 +75,11 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const [modalSelectedIds, setModalSelectedIds] = useState(new Set());
   const [modalCollapsedNodes, setModalCollapsedNodes] = useState(new Set());
 
+  // Inline rescheduling state for planned lessons
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const [editWeek, setEditWeek] = useState('');
+
   // Drag over tracking
   const [draggedOverDate, setDraggedOverDate] = useState(null);
   const [draggedOverWeek, setDraggedOverWeek] = useState(null);
@@ -740,6 +745,62 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       showToast('Lesson unassigned', 'success');
     } catch (err) {
       showToast('Failed to unassign: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdatePlanDate = async (planId, newDate) => {
+    if (!newDate) {
+      showToast('Please select a date', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('lesson_plans')
+        .update({ target_date: newDate })
+        .eq('id', planId)
+        .select();
+      if (error) throw error;
+      
+      setLessonPlans(prev => {
+        const next = prev.map(p => p.id === planId ? data[0] : p);
+        lessonPlannerCache.lessonPlans = next;
+        return next;
+      });
+      showToast('Lesson date updated successfully', 'success');
+      setEditingPlanId(null);
+    } catch (err) {
+      showToast('Failed to update date: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdatePlanWeek = async (planId, newWeek) => {
+    if (!newWeek) {
+      showToast('Please select a week', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('lesson_plans')
+        .update({ academic_week: newWeek })
+        .eq('id', planId)
+        .select();
+      if (error) throw error;
+      
+      setLessonPlans(prev => {
+        const next = prev.map(p => p.id === planId ? data[0] : p);
+        lessonPlannerCache.lessonPlans = next;
+        return next;
+      });
+      showToast('Lesson week updated successfully', 'success');
+      setEditingPlanId(null);
+    } catch (err) {
+      showToast('Failed to update week: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -1435,21 +1496,66 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           {plansForDate.map(plan => {
                             const lesson = allLessons.find(l => String(l.id) === String(plan.lesson_id));
                             const fullPath = getFullLessonPath(lesson);
+                            const isEditing = editingPlanId === plan.id;
+
                             return (
-                              <div key={plan.id} className="flex justify-between items-center p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
-                                <span className="font-semibold text-pink-800 text-xs break-words max-w-[85%]" title={fullPath}>
-                                  {fullPath}
-                                </span>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  {plan.carry_forward_count > 0 && (
-                                    <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
-                                      CF x{plan.carry_forward_count}
+                              <div key={plan.id} className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
+                                {isEditing ? (
+                                  <div className="flex flex-col gap-1.5 w-full" onClick={e => e.stopPropagation()}>
+                                    <span className="font-semibold text-pink-800 text-xs break-words" title={fullPath}>
+                                      {fullPath}
                                     </span>
-                                  )}
-                                  <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
-                                    <i className="fas fa-times"></i>
-                                  </button>
-                                </div>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <input
+                                        type="date"
+                                        value={editDate}
+                                        onChange={e => setEditDate(e.target.value)}
+                                        className="text-xs border border-pink-200 rounded px-1.5 py-0.5 outline-none font-semibold text-pink-800 bg-white flex-1"
+                                      />
+                                      <button
+                                        onClick={() => handleUpdatePlanDate(plan.id, editDate)}
+                                        className="bg-pink-600 hover:bg-pink-700 text-white font-bold px-2 py-0.5 rounded text-[10px]"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingPlanId(null)}
+                                        className="bg-gray-150 hover:bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded text-[10px]"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-between items-center w-full" onClick={(e) => e.stopPropagation()}>
+                                    <span className="font-semibold text-pink-800 text-xs break-words max-w-[70%]" title={fullPath}>
+                                      {fullPath}
+                                    </span>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      {plan.status === 'planned' && (
+                                        <button
+                                          onClick={() => {
+                                            setEditingPlanId(plan.id);
+                                            setEditDate(plan.target_date || new Date().toISOString().split('T')[0]);
+                                          }}
+                                          disabled={saving}
+                                          className="text-pink-600 hover:text-pink-800 p-1 disabled:opacity-50"
+                                          title="Change Date"
+                                        >
+                                          <i className="fas fa-edit"></i>
+                                        </button>
+                                      )}
+                                      {plan.carry_forward_count > 0 && (
+                                        <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
+                                          CF x{plan.carry_forward_count}
+                                        </span>
+                                      )}
+                                      <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
+                                        <i className="fas fa-times"></i>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1516,21 +1622,69 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           {plansForWeek.map(plan => {
                             const lesson = allLessons.find(l => String(l.id) === String(plan.lesson_id));
                             const fullPath = getFullLessonPath(lesson);
+                            const isEditing = editingPlanId === plan.id;
+
                             return (
-                              <div key={plan.id} className="flex justify-between items-center p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
-                                <span className="font-semibold text-pink-800 text-xs break-words max-w-[85%]" title={fullPath}>
-                                  {fullPath}
-                                </span>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  {plan.carry_forward_count > 0 && (
-                                    <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
-                                      CF x{plan.carry_forward_count}
+                              <div key={plan.id} className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
+                                {isEditing ? (
+                                  <div className="flex flex-col gap-1.5 w-full" onClick={e => e.stopPropagation()}>
+                                    <span className="font-semibold text-pink-800 text-xs break-words" title={fullPath}>
+                                      {fullPath}
                                     </span>
-                                  )}
-                                  <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
-                                    <i className="fas fa-times"></i>
-                                  </button>
-                                </div>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <select
+                                        value={editWeek}
+                                        onChange={e => setEditWeek(e.target.value)}
+                                        className="text-xs border border-pink-200 rounded px-1.5 py-0.5 outline-none font-semibold text-pink-800 bg-white flex-1"
+                                      >
+                                        {timelineWeeksList.map(w => (
+                                          <option key={w} value={w}>Week {w}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={() => handleUpdatePlanWeek(plan.id, parseInt(editWeek))}
+                                        className="bg-pink-600 hover:bg-pink-700 text-white font-bold px-2 py-0.5 rounded text-[10px]"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingPlanId(null)}
+                                        className="bg-gray-150 hover:bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded text-[10px]"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-between items-center w-full" onClick={(e) => e.stopPropagation()}>
+                                    <span className="font-semibold text-pink-800 text-xs break-words max-w-[70%]" title={fullPath}>
+                                      {fullPath}
+                                    </span>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      {plan.status === 'planned' && (
+                                        <button
+                                          onClick={() => {
+                                            setEditingPlanId(plan.id);
+                                            setEditWeek(plan.academic_week || '1');
+                                          }}
+                                          disabled={saving}
+                                          className="text-pink-600 hover:text-pink-800 p-1 disabled:opacity-50"
+                                          title="Change Week"
+                                        >
+                                          <i className="fas fa-edit"></i>
+                                        </button>
+                                      )}
+                                      {plan.carry_forward_count > 0 && (
+                                        <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
+                                          CF x{plan.carry_forward_count}
+                                        </span>
+                                      )}
+                                      <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
+                                        <i className="fas fa-times"></i>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

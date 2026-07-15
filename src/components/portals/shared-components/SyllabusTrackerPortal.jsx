@@ -5,7 +5,7 @@ import ConfirmModal from '../../ConfirmModal';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import DailyActivityTable from './DailyActivityTable';
 import SyllabusProgressGrid from './SyllabusProgressGrid';
-import SyllabusAddWorkModal from '../teacher/components/SyllabusAddWorkModal';
+import AddWorkModalCompactView from '../teacher/LessonManager/AddWorkModalCompactView';
 
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
@@ -290,13 +290,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           .select(
             'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
           ),
-        supabase.from('syllabus_book_lessons').select('id, book_id'),
+        supabase.from('syllabus_book_lessons').select('*'),
         supabase
           .from('lesson_progress')
           .select(
             '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
           )
-          .in('status', ['planned', 'in_progress']),
+          .in('status', ['planned', 'in_progress', 'completed']),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -870,29 +870,47 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const filteredDailyEntries = getFilteredDailyEntries();
 
   // ─── Teacher Carry Forward Action ───
-  const handleCarryForward = async (plan) => {
+  const handleCarryForward = async (plan, newStartDate = null, newEndDate = null) => {
     try {
       setDailyLoading(true);
       let updateData = { carry_forward_count: (plan.carry_forward_count || 0) + 1 };
-      if (plan.target_start_date) {
-        const d = new Date(plan.target_start_date);
-        d.setDate(d.getDate() + 1);
-        if (d.getDay() === 0) d.setDate(d.getDate() + 1); // skip Sunday
-        updateData.target_start_date = d.toISOString().split('T')[0];
-        if (plan.target_end_date) {
-          const dEnd = new Date(plan.target_end_date);
-          dEnd.setDate(dEnd.getDate() + 1);
-          if (dEnd.getDay() === 0) dEnd.setDate(dEnd.getDate() + 1);
-          updateData.target_end_date = dEnd.toISOString().split('T')[0];
+      
+      if (plan.status === 'planned') {
+        if (!newStartDate) {
+          throw new Error('New start date is required to change plan.');
         }
-      } else if (plan.academic_week) {
-        updateData.academic_week = plan.academic_week + 1;
+        updateData.target_start_date = newStartDate;
+        
+        if (plan.target_start_date && plan.target_end_date) {
+          const startD = new Date(plan.target_start_date);
+          const endD = new Date(plan.target_end_date);
+          const diffTime = endD - startD;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          const newEndD = new Date(newStartDate);
+          newEndD.setDate(newEndD.getDate() + (diffDays > 0 ? diffDays : 0));
+          updateData.target_end_date = newEndD.toISOString().split('T')[0];
+        } else {
+          updateData.target_end_date = newStartDate;
+        }
+      } else {
+        if (newEndDate) {
+          updateData.target_end_date = newEndDate;
+        } else {
+          const currentEnd = plan.target_end_date || plan.target_start_date;
+          if (currentEnd) {
+            const dEnd = new Date(currentEnd);
+            dEnd.setDate(dEnd.getDate() + 1);
+            if (dEnd.getDay() === 0) dEnd.setDate(dEnd.getDate() + 1); // skip Sunday
+            updateData.target_end_date = dEnd.toISOString().split('T')[0];
+          }
+        }
       }
 
       const { error } = await supabase.from('lesson_progress').update(updateData).eq('id', plan.id);
       if (error) throw error;
 
-      if (plan.target_start_date) {
+      if (plan.target_start_date && updateData.target_start_date) {
         try {
           await supabase.from('lesson_plan_carry_forwards').insert([
             {
@@ -907,14 +925,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         }
       }
 
-      showToast('Lesson carried forward', 'success');
+      showToast(plan.status === 'planned' ? 'Lesson plan changed' : 'Lesson carried forward', 'success');
       const newPlans = todaysPlans.filter((p) => p.id !== plan.id);
       setTodaysPlans(newPlans);
       syllabusTrackerPortalCache.data = null;
       syllabusTrackerPortalCache.loadingPromise = null;
       loadData();
     } catch (e) {
-      showToast('Failed to carry forward: ' + e.message, 'error');
+      showToast('Failed to update lesson plan: ' + e.message, 'error');
     } finally {
       setDailyLoading(false);
     }
@@ -1692,28 +1710,24 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       </div>
 
       {isAddWorkModalOpen && (
-        <SyllabusAddWorkModal
-          isOpen={isAddWorkModalOpen}
+        <AddWorkModalCompactView
           onClose={() => {
             setIsAddWorkModalOpen(false);
             setPlannedLessonToLog(null);
           }}
-          onSuccess={handleAddWorkSuccess}
-          teacher={teacher}
           classes={classes}
+          subjects={subjects}
           books={books}
           bookClasses={bookClasses}
-          setBookClasses={setBookClasses}
-          subjects={subjects}
-          classifications={classifications}
-          favorites={favorites}
-          setFavorites={(newFavs) => {
-            setFavorites(newFavs);
-            if (teacher?.id) saveFavoritesToDB(teacher.id, newFavs);
-          }}
-          coverMode={coverMode}
-          assignments={assignments}
-          initialPlan={plannedLessonToLog}
+          allLessons={allLessons}
+          progressRecords={allLogs}
+          setProgressRecords={setAllLogs}
+          initialClassId={plannedLessonToLog?.class_id}
+          initialSubjectId={plannedLessonToLog?.subject_id}
+          initialBookId={plannedLessonToLog?.book_id}
+          teacherId={teacher?.id}
+          initialRecord={plannedLessonToLog}
+          onSuccess={handleAddWorkSuccess}
         />
       )}
 

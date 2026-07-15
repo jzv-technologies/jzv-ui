@@ -201,21 +201,15 @@ const TimelinePanel = ({
     if (record.status === 'completed') return null;
     if (!record.target_start_date) return null;
 
-    const startStr = String(record.target_start_date).split('T')[0];
-    const todayStr = getLocalISODate(new Date());
-
     let mode = null;
     let title = '';
 
-    if (startStr > todayStr) {
+    if (record.status === 'planned') {
       mode = 'replan';
-      title = 'Re-plan';
-    } else if (startStr < todayStr && record.status === 'in_progress') {
+      title = 'Change Plan';
+    } else if (record.status === 'in_progress') {
       mode = 'carry_forward';
-      title = 'Carry Forward';
-    } else if (startStr < todayStr && record.status === 'planned') {
-      mode = 'replan';
-      title = 'Re-plan';
+      title = 'Change End Date';
     } else {
       return null;
     }
@@ -231,7 +225,7 @@ const TimelinePanel = ({
         className="text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors ml-1 focus:outline-none"
         title={title}
       >
-        <i className="fas fa-calendar-edit"></i>
+        <i className="fas fa-edit"></i>
       </button>
     );
   };
@@ -389,7 +383,7 @@ const TimelinePanel = ({
         ...record,
         target_start_date: newStart,
         target_end_date: newEnd,
-        status: 'planned',
+        status: record.status,
         carry_forward_count: (record.carry_forward_count || 0) + 1,
       };
 

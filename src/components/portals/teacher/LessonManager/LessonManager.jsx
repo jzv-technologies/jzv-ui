@@ -4,7 +4,7 @@ import { showToast } from '../../../../utils/toast';
 
 import SyllabusTreePanel from './SyllabusTreePanel';
 import TimelinePanel from './TimelinePanel';
-import AddWorkModal from './AddWorkModal';
+import AddWorkModalCompactView from './AddWorkModalCompactView';
 import AssignLessonsModal from './AssignLessonsModal';
 import MapBookModal from './MapBookModal';
 import ProgressPanel from './ProgressPanel';
@@ -635,7 +635,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
 
       {/* Modals */}
       {addWorkTarget && (
-        <AddWorkModal
+        <AddWorkModalCompactView
           onClose={() => setAddWorkTarget(null)}
           classes={availableClasses}
           subjects={subjects}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CARD_THEMES } from '../../../utils/cardTheme';
 
 const UpcomingLessonsGrid = ({
@@ -21,13 +21,15 @@ const UpcomingLessonsGrid = ({
   handleSubmitPlannedLesson = () => {},
   handleCarryForward = () => {},
 }) => {
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [newDate, setNewDate] = useState('');
   const upcoming = lessonPlans.filter((p) => {
     // Date boundary
     if (!p.target_date || p.target_date < upcomingStartDate || p.target_date > upcomingEndDate) {
       return false;
     }
-    // Status planned or in_progress
-    if (p.status !== 'planned' && p.status !== 'in_progress') {
+    // Status planned, in_progress or completed
+    if (p.status !== 'planned' && p.status !== 'in_progress' && p.status !== 'completed') {
       return false;
     }
 
@@ -91,13 +93,21 @@ const UpcomingLessonsGrid = ({
         className={`bg-white border border-light-border border-l-[6px] rounded-xl p-4 shadow-sm flex flex-col justify-between border-l-${themeStyles.color} text-left`}
       >
         <div className="flex justify-between items-start mb-2">
+          <div className={`rounded-md bg-${themeStyles.bg} text-${themeStyles.color} px-2 py-0.5`}>
+            {role !== 'parent' && `${plan.class?.name || plan.class?.class_name || '—'} `}
+          </div>
           <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-            {new Date(plan.target_date).toLocaleDateString()}
+            Planned for {new Date(plan.target_date).toLocaleDateString()}
           </span>
           <div className="flex gap-1">
             {plan.status === 'in_progress' && (
               <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
                 In Progress
+              </span>
+            )}
+            {plan.status === 'completed' && (
+              <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
+                Completed
               </span>
             )}
             {plan.carry_forward_count > 0 && (
@@ -107,34 +117,106 @@ const UpcomingLessonsGrid = ({
             )}
           </div>
         </div>
-        <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
-          {title}
-        </h4>
         <p className="text-[11px] text-gray-500 font-semibold mt-1 mb-3">
-          {role !== 'parent' && `${plan.class?.name || plan.class?.class_name || '—'} • `}
-          {plan.subject?.name} • {plan.book?.name}
           {role !== 'parent' &&
             role !== 'teacher' &&
             plan.teacher?.name &&
             ` • ${plan.teacher.name}`}
         </p>
+        <h4 className="font-bold text-sm text-dark-primary mb-1 line-clamp-2" title={title}>
+          {plan.subject?.name} <i className={`text-${themeStyles.color} fa fa-arrow-right`}></i>{' '}
+          {plan.book?.name} <i className={`text-${themeStyles.color} fa fa-arrow-right`}></i>{' '}
+          {title}
+        </h4>
 
-        {role === 'teacher' && (
-          <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
-            <button
-              onClick={() => handleSubmitPlannedLesson(plan)}
-              className="flex-1 py-1.5 bg-brand-primary text-white text-[10px] font-bold rounded-lg hover:bg-brand-primary/90 transition-colors cursor-pointer text-center"
-            >
-              <i className="fas fa-check mr-1"></i> Update Progress
-            </button>
-            <button
-              onClick={() => handleCarryForward(plan)}
-              className="flex-1 py-1.5 bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-100 transition-colors cursor-pointer text-center"
-            >
-              <i className="fas fa-forward mr-1"></i> Carry Forward
-            </button>
-          </div>
-        )}
+        {role === 'teacher' &&
+          (editingPlanId === plan.id ? (
+            <div className="flex flex-col gap-1.5 mt-auto pt-3 border-t border-gray-100">
+              <span className="text-[10px] font-bold text-gray-500">
+                {plan.status === 'planned' ? 'New Start Date:' : 'New End Date:'}
+              </span>
+              <div className="flex gap-1.5">
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="flex-1 text-[11px] border border-gray-300 rounded px-1.5 py-0.5 outline-none font-semibold text-gray-700 bg-white"
+                />
+                <button
+                  onClick={() => {
+                    if (!newDate) return;
+                    if (plan.status === 'planned') {
+                      handleCarryForward(plan, newDate, null);
+                    } else {
+                      handleCarryForward(plan, null, newDate);
+                    }
+                    setEditingPlanId(null);
+                  }}
+                  className="bg-brand-primary hover:bg-brand-primary/95 text-white font-bold px-2 py-0.5 rounded text-[10px]"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingPlanId(null)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded text-[10px]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
+              {plan.status === 'planned' && (
+                <button
+                  onClick={() => handleSubmitPlannedLesson(plan)}
+                  className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-750 transition-colors cursor-pointer text-center"
+                >
+                  <i className="fas fa-check mr-1"></i> Add Progress
+                </button>
+              )}
+              {plan.status === 'in_progress' && (
+                <button
+                  onClick={() => handleSubmitPlannedLesson(plan)}
+                  className="flex-1 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-750 transition-colors cursor-pointer text-center"
+                >
+                  <i className="fas fa-check mr-1"></i> Update Progress
+                </button>
+              )}
+              {plan.status === 'completed' && (
+                <button
+                  onClick={() => handleSubmitPlannedLesson(plan)}
+                  className="flex-1 py-1.5 bg-purple-600 text-white text-[10px] font-bold rounded-lg hover:bg-purple-750 transition-colors cursor-pointer text-center"
+                >
+                  <i className="fas fa-history mr-1"></i> Add Revision
+                </button>
+              )}
+              {plan.status === 'planned' ? (
+                <button
+                  onClick={() => {
+                    setEditingPlanId(plan.id);
+                    setNewDate(plan.target_date || new Date().toISOString().split('T')[0]);
+                  }}
+                  className="flex-1 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors cursor-pointer text-center"
+                >
+                  <i className="fas fa-edit mr-1"></i> Change Plan
+                </button>
+              ) : plan.status === 'in_progress' ? (
+                <button
+                  onClick={() => {
+                    setEditingPlanId(plan.id);
+                    setNewDate(
+                      plan.target_end_date ||
+                        plan.target_start_date ||
+                        new Date().toISOString().split('T')[0]
+                    );
+                  }}
+                  className="flex-1 py-1.5 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg hover:bg-pink-100 transition-colors cursor-pointer text-center"
+                >
+                  <i className="fas fa-edit mr-1"></i> Change End Date
+                </button>
+              ) : null}
+            </div>
+          ))}
       </div>
     );
   };
