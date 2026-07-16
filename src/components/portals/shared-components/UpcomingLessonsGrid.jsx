@@ -201,11 +201,13 @@ const UpcomingLessonsGrid = ({
                 CF x{plan.carry_forward_counter}
               </span>
             )}
-            {!plan.replan_counter && !plan.carry_forward_counter && plan.carry_forward_count > 0 && (
-              <span className="text-[10px] text-orange-650 font-bold bg-orange-50 px-2 py-0.5 rounded">
-                Delayed
-              </span>
-            )}
+            {!plan.replan_counter &&
+              !plan.carry_forward_counter &&
+              plan.carry_forward_count > 0 && (
+                <span className="text-[10px] text-orange-650 font-bold bg-orange-50 px-2 py-0.5 rounded">
+                  Delayed
+                </span>
+              )}
           </div>
         </div>
         <div className="flex-1 min-h-[4.5rem]">
@@ -347,7 +349,7 @@ const UpcomingLessonsGrid = ({
   return (
     <div className="space-y-8 text-left">
       {hasActionRequired && (
-        <div className="p-5 bg-red-50/40 border border-red-200 rounded-2xl space-y-4">
+        <div className="p-5 bg-red-100 border border-red-200 rounded-2xl space-y-4">
           <h3 className="text-xs font-black text-red-800 uppercase tracking-wider flex items-center gap-1.5">
             <i className="fas fa-exclamation-triangle text-red-500 animate-pulse"></i> Action
             Required

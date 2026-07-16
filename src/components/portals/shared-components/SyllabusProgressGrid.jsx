@@ -56,21 +56,218 @@ const SyllabusProgressGrid = ({
   handleDeleteClick,
 }) => {
   
-  // Sub-renderer for expanded lessons checklist
-  const renderExpandedDetails = () => {
+  const [selectedLevel1, setSelectedLevel1] = React.useState('all');
+  const detailsRef = React.useRef(null);
+
+  React.useEffect(() => {
+    setSelectedLevel1('all');
+  }, [progressExpandedBook]);
+
+  React.useEffect(() => {
+    if (progressExpandedBook && detailsRef.current) {
+      setTimeout(() => {
+        detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 150);
+    }
+  }, [progressExpandedBook]);
+
+
+  // Middle Panel: Level-1 progress breakdown list
+  const renderLevel1Panel = (classObj) => {
+    const uniqueLevel1s = [
+      ...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean)),
+    ];
+
+    // Compute book-level stats for the "All Units" selection card
+    const totalBookLessons = progressBookLessons.length;
+    let bookCompletedCount = 0;
+    let bookInProgressCount = 0;
+    let bookProgressSum = 0;
+    let bookCumulativeDaysTaken = 0;
+
+    progressBookLessons.forEach((lesson) => {
+      const log = progressBookLogs.find((l) => String(l.lesson_id) === String(lesson.id));
+      if (log) {
+        if (log.days_taken) {
+          bookCumulativeDaysTaken += Number(log.days_taken);
+        }
+        if (log.current_status === 'completed') {
+          bookCompletedCount++;
+          bookProgressSum += 100;
+        } else if (log.current_status === 'in_progress') {
+          bookInProgressCount++;
+          bookProgressSum += Number(log.completion_percentage) || 0;
+        }
+      }
+    });
+
+    const bookProgressPct = totalBookLessons > 0 ? bookProgressSum / totalBookLessons : 0;
+    const bookBarColor = bookProgressPct >= 70 ? '#10b981' : bookProgressPct >= 30 ? '#f59e0b' : '#ef4444';
+
     return (
-      <div className="bg-gray-50/50 border border-dashed rounded-2xl p-5 mt-4 text-left">
+      <div className="w-full lg:w-[35%] bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-left">
+        <div>
+          <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
+            <i className="fas fa-list-ul text-brand-primary"></i>
+            Level-1 Unit Progress
+          </h3>
+          <p className="text-[11px] font-medium text-gray-400 mt-0.5">
+            Select a Unit to filter details, or click "All Level 1 Units".
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1">
+          {/* Card: All Level 1 Units */}
+          <div
+            onClick={() => setSelectedLevel1('all')}
+            className={`p-3 border rounded-xl shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer active:scale-[0.98] flex flex-col justify-between ${
+              selectedLevel1 === 'all'
+                ? 'ring-2 ring-brand-primary bg-brand-primary/5 border-brand-primary/30 shadow-md shadow-brand-primary/5'
+                : 'bg-white hover:bg-gray-50/50'
+            }`}
+          >
+            <div>
+              <div className="flex justify-between items-start mb-1.5 gap-2">
+                <span className="font-extrabold text-xs text-dark-primary flex items-center gap-1.5">
+                  <i className="fas fa-layer-group text-[10px] text-gray-400"></i>
+                  All Level 1 Units
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
+                    {bookCumulativeDaysTaken} Days
+                  </span>
+                  <span className="font-black text-xs text-dark-soft">
+                    {bookProgressPct.toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
+                <div
+                  className="h-1 rounded-full transition-all duration-300"
+                  style={{ width: `${bookProgressPct}%`, backgroundColor: bookBarColor }}
+                />
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
+              <span>
+                Completed: {bookCompletedCount}/{totalBookLessons}
+              </span>
+              {bookInProgressCount > 0 && (
+                <span className="text-blue-600">In-progress: {bookInProgressCount}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Individual Level 1 Unit Cards */}
+          {uniqueLevel1s.length === 0 ? (
+            <p className="text-xs text-gray-400 font-semibold py-4 text-center">
+              No level-1 sections defined for this book.
+            </p>
+          ) : (
+            uniqueLevel1s.map((lvl1) => {
+              const lvl1Lessons = progressBookLessons.filter((l) => l.level1 === lvl1);
+              const total = lvl1Lessons.length;
+
+              let completedCount = 0;
+              let inProgressCount = 0;
+              let totalProgressSum = 0;
+              let cumulativeDaysTaken = 0;
+
+              lvl1Lessons.forEach((lesson) => {
+                const log = progressBookLogs.find(
+                  (l) => String(l.lesson_id) === String(lesson.id)
+                );
+                if (log) {
+                  if (log.days_taken) {
+                    cumulativeDaysTaken += Number(log.days_taken);
+                  }
+                  if (log.current_status === 'completed') {
+                    completedCount++;
+                    totalProgressSum += 100;
+                  } else if (log.current_status === 'in_progress') {
+                    inProgressCount++;
+                    totalProgressSum += Number(log.completion_percentage) || 0;
+                  }
+                }
+              });
+
+              const progressPct = total > 0 ? totalProgressSum / total : 0;
+              const barColor =
+                progressPct >= 70 ? '#10b981' : progressPct >= 30 ? '#f59e0b' : '#ef4444';
+
+              const isSelected = selectedLevel1 === lvl1;
+
+              return (
+                <div
+                  key={lvl1}
+                  onClick={() => setSelectedLevel1(lvl1)}
+                  className={`p-3 border rounded-xl shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 cursor-pointer active:scale-[0.98] flex flex-col justify-between ${
+                    isSelected
+                      ? 'ring-2 ring-brand-primary bg-brand-primary/5 border-brand-primary/30 shadow-md shadow-brand-primary/5'
+                      : 'bg-white hover:bg-gray-50/50'
+                  }`}
+                >
+                  <div>
+                    <div className="flex justify-between items-start mb-1.5 gap-2">
+                      <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
+                        {lvl1}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
+                          {cumulativeDaysTaken} Days
+                        </span>
+                        <span className="font-black text-xs text-dark-soft">
+                          {progressPct.toFixed(0)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
+                      <div
+                        className="h-1 rounded-full transition-all duration-300"
+                        style={{ width: `${progressPct}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
+                    <span>
+                      Completed: {completedCount}/{total}
+                    </span>
+                    {inProgressCount > 0 && (
+                      <span className="text-blue-600">In-progress: {inProgressCount}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Right Panel: Filtered detailed lessons table
+  const renderLessonsDetailsPanel = () => {
+    const bookObj = books.find((b) => String(b.id) === String(progressExpandedBook));
+    const titleHeader = selectedLevel1 === 'all' ? 'All Level 1 Units' : selectedLevel1;
+
+    return (
+      <div className="flex-1 bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-right overflow-hidden w-full">
         {progressLoading ? (
-          <div className="flex items-center justify-center p-8">
-            <div className="w-6 h-6 border-3 border-brand-primary border-t-transparent rounded-full animate-spin mr-2" />
+          <div className="flex flex-col items-center justify-center p-12 gap-2 w-full">
+            <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
             <span className="text-xs font-bold text-gray-500">Loading lessons...</span>
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <h3 className="text-sm font-black text-dark-primary">
-                {books.find((b) => String(b.id) === String(progressExpandedBook))?.name} — Lesson Details
-              </h3>
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2 border-b pb-3">
+              <div>
+                <h3 className="text-sm font-black text-dark-primary truncate max-w-[280px]" title={bookObj?.name}>
+                  {bookObj?.name}
+                </h3>
+                <p className="text-xs font-extrabold text-brand-primary mt-0.5 truncate max-w-[280px]" title={titleHeader}>
+                  {titleHeader}
+                </p>
+              </div>
               <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -78,102 +275,11 @@ const SyllabusProgressGrid = ({
                   onChange={(e) => setShowNotStarted(e.target.checked)}
                   className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
                 />
-                Show Not Started Lessons
+                Show Not Started
               </label>
             </div>
 
-            {/* Level-1 Progress Breakdown */}
-            <div className="mb-6 border-b border-light-border pb-6">
-              <h4 className="text-[10px] font-extrabold text-dark-soft uppercase tracking-wider mb-3">
-                Level-1 Unit Progress
-              </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {(() => {
-                  const uniqueLevel1s = [
-                    ...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean)),
-                  ];
-                  if (uniqueLevel1s.length === 0) {
-                    return (
-                      <p className="text-xs text-gray-400 font-semibold col-span-full">
-                        No level-1 sections defined for this book.
-                      </p>
-                    );
-                  }
-
-                  return uniqueLevel1s.map((lvl1) => {
-                    const lvl1Lessons = progressBookLessons.filter((l) => l.level1 === lvl1);
-                    const total = lvl1Lessons.length;
-
-                    let completedCount = 0;
-                    let inProgressCount = 0;
-                    let totalProgressSum = 0;
-                    let cumulativeDaysTaken = 0;
-
-                    lvl1Lessons.forEach((lesson) => {
-                      const log = progressBookLogs.find(
-                        (l) => String(l.lesson_id) === String(lesson.id)
-                      );
-                      if (log) {
-                        if (log.days_taken) {
-                          cumulativeDaysTaken += Number(log.days_taken);
-                        }
-                        if (log.current_status === 'completed') {
-                          completedCount++;
-                          totalProgressSum += 100;
-                        } else if (log.current_status === 'in_progress') {
-                          inProgressCount++;
-                          totalProgressSum += Number(log.completion_percentage) || 0;
-                        }
-                      }
-                    });
-
-                    const progressPct = total > 0 ? totalProgressSum / total : 0;
-                    const barColor =
-                      progressPct >= 70 ? '#10b981' : progressPct >= 30 ? '#f59e0b' : '#ef4444';
-
-                    return (
-                      <div
-                        key={lvl1}
-                        className="bg-white border rounded-xl p-3 shadow-sm flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="flex justify-between items-start mb-1.5 gap-2">
-                            <span className="font-extrabold text-xs text-dark-primary truncate flex-1">
-                              {lvl1}
-                            </span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-[9px] text-gray-500 font-bold bg-gray-100 px-1.5 py-0.5 rounded border whitespace-nowrap">
-                                {cumulativeDaysTaken} Days
-                              </span>
-                              <span className="font-black text-xs text-dark-soft">
-                                {progressPct.toFixed(0)}%
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1 mb-2">
-                            <div
-                              className="h-1 rounded-full transition-all duration-300"
-                              style={{ width: `${progressPct}%`, backgroundColor: barColor }}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 mt-1 border-t pt-1.5 flex-wrap gap-1">
-                          <span>
-                            Completed: {completedCount}/{total}
-                          </span>
-                          {inProgressCount > 0 && (
-                            <span className="text-blue-600">In-progress: {inProgressCount}</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-
-            {/* Detailed lessons list */}
-            <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <div className="overflow-x-auto w-full">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200 text-dark-soft font-extrabold text-[10px] uppercase tracking-wider">
@@ -188,8 +294,12 @@ const SyllabusProgressGrid = ({
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {(() => {
+                    const filteredByLvl1 = selectedLevel1 === 'all'
+                      ? progressBookLessons
+                      : progressBookLessons.filter((l) => l.level1 === selectedLevel1);
+
                     const lessonsToRender = showNotStarted
-                      ? progressBookLessons.filter((node) => {
+                      ? filteredByLvl1.filter((node) => {
                           const log = progressBookLogs.find(
                             (l) => String(l.lesson_id) === String(node.id)
                           );
@@ -206,7 +316,7 @@ const SyllabusProgressGrid = ({
                           }
                           return true;
                         })
-                      : progressBookLessons.filter((node) => {
+                      : filteredByLvl1.filter((node) => {
                           const log = progressBookLogs.find(
                             (l) => String(l.lesson_id) === String(node.id)
                           );
@@ -221,14 +331,12 @@ const SyllabusProgressGrid = ({
                             className="text-xs text-gray-400 font-semibold py-8 text-center"
                           >
                             {showNotStarted
-                              ? 'No lessons found for this book.'
-                              : "No active (completed/in-progress) lessons. Check 'Show Not Started Lessons' to view all."}
+                              ? 'No lessons found for this unit.'
+                              : "No active lessons. Check 'Show Not Started' to view all."}
                           </td>
                         </tr>
                       );
                     }
-
-                    const currentBookObj = books.find((b) => String(b.id) === String(progressExpandedBook));
 
                     return lessonsToRender.map((node) => {
                       const log = progressBookLogs.find(
@@ -272,7 +380,7 @@ const SyllabusProgressGrid = ({
                                   {log.revision_counter > 0 && (
                                     <>
                                       <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                      <span className="text-purple-600 bg-purple-50 px-1 py-0.5 rounded border border-purple-100">
+                                      <span className="text-purple-600 bg-purple-50 px-1 py-0.5 rounded border border-purple-100 font-bold">
                                         Revisions: {log.revision_counter}
                                       </span>
                                     </>
@@ -371,7 +479,7 @@ const SyllabusProgressGrid = ({
                                         {role !== 'parent' && handleDeleteClick && (
                                           <button
                                             onClick={() =>
-                                              handleDeleteClick(item, log, node, currentBookObj)
+                                              handleDeleteClick(item, log, node, bookObj)
                                             }
                                             className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0"
                                             title="Delete Log Entry"
@@ -398,6 +506,16 @@ const SyllabusProgressGrid = ({
       </div>
     );
   };
+
+  const renderSplitPanels = (classObj) => {
+    return (
+      <div className="flex-1 flex flex-col md:flex-row gap-6 w-full items-start">
+        {renderLevel1Panel(classObj)}
+        {renderLessonsDetailsPanel()}
+      </div>
+    );
+  };
+
 
   const renderBooksGrid = (classObj, classBooks) => {
     // Apply Class Progress filters
@@ -458,212 +576,274 @@ const SyllabusProgressGrid = ({
       booksByGroup['All Books'] = filteredBooks;
     }
 
-    const isClassExpanded = progressExpandedClass === classObj.id;
+    const isExpanded = progressExpandedClass === classObj.id && progressExpandedBook;
 
-    return (
-      <div className="space-y-6">
-        {Object.keys(booksByGroup).map((groupName) => {
-          const groupedBooks = booksByGroup[groupName];
-          return (
-            <div key={groupName} className="space-y-3 text-left">
-              {cpGroupingMode !== 'none' && (
-                <h4 className="text-xs font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
-                  {groupName}
+    const renderBookCard = (book, classObj) => {
+      const bt = allTrackers.find(
+        (t) =>
+          String(t.book_id) === String(book.id) &&
+          String(t.class_id) === String(classObj.id)
+      );
+      const pct = Number(bt?.completion_percentage || 0);
+      const isBookSelected =
+        progressExpandedBook === book.id && progressExpandedClass === classObj.id;
+      const pctColor =
+        pct >= 70
+          ? 'text-emerald-600'
+          : pct >= 30
+            ? 'text-amber-600'
+            : 'text-red-500';
+      const pctBg =
+        pct >= 70
+          ? 'bg-emerald-50 border-emerald-200'
+          : pct >= 30
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-red-50 border-red-200';
+      const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
+
+      const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
+      const classificationId = subj?.classification_id;
+      const classification = classifications.find(
+        (cl) => String(cl.id) === String(classificationId)
+      );
+      const themeStyles =
+        classification?.theme && CARD_THEMES[classification.theme]
+          ? CARD_THEMES[classification.theme]
+          : CARD_THEMES.charcoal;
+
+      // Compute lesson counts dynamically for revisions count
+      const bookLessons = allLessons.filter(
+        (l) => String(l.book_id) === String(book.id)
+      );
+      const bookLessonIds = bookLessons.map((l) => String(l.id));
+      const bookLogs = allLogs.filter(
+        (log) =>
+          String(log.class_id) === String(classObj.id) &&
+          bookLessonIds.includes(String(log.lesson_id))
+      );
+      const revisionCount = bookLogs.reduce(
+        (sum, log) => sum + (log.revision_counter || 0),
+        0
+      );
+
+      const activeBookLogs = bookLogs.filter(
+        (log) => log.current_status !== 'not_started'
+      );
+
+      let bookStartDate = null;
+      activeBookLogs.forEach((log) => {
+        if (log.start_date) {
+          if (
+            !bookStartDate ||
+            new Date(log.start_date) < new Date(bookStartDate)
+          ) {
+            bookStartDate = log.start_date;
+          }
+        }
+      });
+
+      let bookEndDate = null;
+      activeBookLogs.forEach((log) => {
+        if (log.end_date) {
+          if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
+            bookEndDate = log.end_date;
+          }
+        }
+      });
+
+      let bookUpdatedAt = null;
+      bookLogs.forEach((log) => {
+        if (log.updated_at) {
+          if (
+            !bookUpdatedAt ||
+            new Date(log.updated_at) > new Date(bookUpdatedAt)
+          ) {
+            bookUpdatedAt = log.updated_at;
+          }
+        }
+      });
+
+      const cumulativeDaysTaken = bookLogs.reduce(
+        (sum, log) => sum + (log.days_taken || 0),
+        0
+      );
+
+      const total = bt?.total_lessons || bookLessons.length;
+      const completed = bt?.completed || 0;
+      const inProgress = bt?.in_progress || 0;
+      const notStarted = bt?.not_started || 0;
+
+      return (
+        <div
+          key={book.id}
+          onClick={() => handleProgressBookClick(book.id, classObj.id)}
+          className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all duration-300 hover:shadow-md hover:-translate-y-1 active:scale-[0.98] flex flex-col justify-between ${
+            isBookSelected
+              ? 'ring-2 ring-brand-primary bg-brand-primary/5 border-brand-primary/30 shadow-md shadow-brand-primary/5'
+              : 'bg-white'
+          } border-l-${themeStyles.color}`}
+        >
+          <div>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0">
+                {subj && (
+                  <h3 className=" font-semibold text-gray-500 mt-0.5 block">
+                    {subj.name}
+                  </h3>
+                )}
+                <h4 className="text-sm font-black text-dark-primary truncate">
+                  {book.name}
                 </h4>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {groupedBooks.map((book) => {
-                  const bt = allTrackers.find(
-                    (t) =>
-                      String(t.book_id) === String(book.id) &&
-                      String(t.class_id) === String(classObj.id)
-                  );
-                  const pct = Number(bt?.completion_percentage || 0);
-                  const isExpanded =
-                    progressExpandedBook === book.id && progressExpandedClass === classObj.id;
-                  const pctColor =
-                    pct >= 70
-                      ? 'text-emerald-600'
-                      : pct >= 30
-                        ? 'text-amber-600'
-                        : 'text-red-500';
-                  const pctBg =
-                    pct >= 70
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : pct >= 30
-                        ? 'bg-amber-50 border-amber-200'
-                        : 'bg-red-50 border-red-200';
-                  const barColor = pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#ef4444';
-
-                  const subj = subjects.find((s) => String(s.id) === String(book.subject_id));
-                  const classificationId = subj?.classification_id;
-                  const classification = classifications.find(
-                    (cl) => String(cl.id) === String(classificationId)
-                  );
-                  const themeStyles =
-                    classification?.theme && CARD_THEMES[classification.theme]
-                      ? CARD_THEMES[classification.theme]
-                      : CARD_THEMES.charcoal;
-
-                  // Compute lesson counts dynamically for revisions count
-                  const bookLessons = allLessons.filter(
-                    (l) => String(l.book_id) === String(book.id)
-                  );
-                  const bookLessonIds = bookLessons.map((l) => String(l.id));
-                  const bookLogs = allLogs.filter(
-                    (log) =>
-                      String(log.class_id) === String(classObj.id) &&
-                      bookLessonIds.includes(String(log.lesson_id))
-                  );
-                  const revisionCount = bookLogs.reduce(
-                    (sum, log) => sum + (log.revision_counter || 0),
-                    0
-                  );
-
-                  const activeBookLogs = bookLogs.filter(
-                    (log) => log.current_status !== 'not_started'
-                  );
-
-                  let bookStartDate = null;
-                  activeBookLogs.forEach((log) => {
-                    if (log.start_date) {
-                      if (
-                        !bookStartDate ||
-                        new Date(log.start_date) < new Date(bookStartDate)
-                      ) {
-                        bookStartDate = log.start_date;
-                      }
-                    }
-                  });
-
-                  let bookEndDate = null;
-                  activeBookLogs.forEach((log) => {
-                    if (log.end_date) {
-                      if (!bookEndDate || new Date(log.end_date) > new Date(bookEndDate)) {
-                        bookEndDate = log.end_date;
-                      }
-                    }
-                  });
-
-                  let bookUpdatedAt = null;
-                  bookLogs.forEach((log) => {
-                    if (log.updated_at) {
-                      if (
-                        !bookUpdatedAt ||
-                        new Date(log.updated_at) > new Date(bookUpdatedAt)
-                      ) {
-                        bookUpdatedAt = log.updated_at;
-                      }
-                    }
-                  });
-
-                  const cumulativeDaysTaken = bookLogs.reduce(
-                    (sum, log) => sum + (log.days_taken || 0),
-                    0
-                  );
-
-                  const total = bt?.total_lessons || bookLessons.length;
-                  const completed = bt?.completed || 0;
-                  const inProgress = bt?.in_progress || 0;
-                  const notStarted = bt?.not_started || 0;
-
-                  return (
-                    <div
-                      key={book.id}
-                      onClick={() => handleProgressBookClick(book.id, classObj.id)}
-                      className={`p-4 border border-light-border border-l-[6px] rounded-2xl shadow-sm cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] flex flex-col justify-between ${
-                        isExpanded
-                          ? 'ring-2 ring-brand-primary/40 bg-brand-primary/5 border-brand-primary/30'
-                          : 'bg-white'
-                      } border-l-${themeStyles.color}`}
-                    >
-                      <div>
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1 min-w-0">
-                            {subj && (
-                              <h3 className=" font-semibold text-gray-500 mt-0.5">
-                                {subj.name}
-                              </h3>
-                            )}
-                            <h4 className="text-sm font-black text-dark-primary truncate">
-                              {book.name}
-                            </h4>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 ml-2">
-                            <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
-                              {cumulativeDaysTaken} Days
-                            </span>
-                            <div
-                              className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
-                            >
-                              <span className={`text-sm font-black ${pctColor}`}>
-                                {pct.toFixed(0)}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
-                          <div
-                            className="h-1.5 rounded-full transition-all duration-500"
-                            style={{ width: `${pct}%`, backgroundColor: barColor }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
-                        <div className="flex justify-between text-emerald-600">
-                          <span>Completed:</span>
-                          <span>{completed}</span>
-                        </div>
-                        <div className="flex justify-between text-blue-600">
-                          <span>In-progress:</span>
-                          <span>{inProgress}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-400">
-                          <span>Not Started:</span>
-                          <span>{notStarted}</span>
-                        </div>
-                        <div className="flex justify-between text-purple-600">
-                          <span>Revision Days:</span>
-                          <span>{revisionCount}</span>
-                        </div>
-
-                        <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
-                          <span>Total Lessons:</span>
-                          <span>{total}</span>
-                        </div>
-                        <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
-                          <div className="flex justify-between">
-                            <span>
-                              Started:{' '}
-                              {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}
-                            </span>
-                            {pct === 100 ? (
-                              <span>
-                                Ended:{' '}
-                                {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
-                              </span>
-                            ) : (
-                              <span>
-                                Updated:{' '}
-                                {bookUpdatedAt
-                                  ? new Date(bookUpdatedAt).toLocaleDateString()
-                                  : '—'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">
+                  {cumulativeDaysTaken} Days
+                </span>
+                <div
+                  className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
+                >
+                  <span className={`text-sm font-black ${pctColor}`}>
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
               </div>
             </div>
-          );
-        })}
+            <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+              <div
+                className="h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${pct}%`, backgroundColor: barColor }}
+              />
+            </div>
+          </div>
 
-        {/* Expanded details container for this class */}
-        {isClassExpanded && progressExpandedBook && renderExpandedDetails()}
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[10px] font-bold border-t pt-2 mt-auto">
+            <div className="flex justify-between text-emerald-600">
+              <span>Completed:</span>
+              <span>{completed}</span>
+            </div>
+            <div className="flex justify-between text-blue-600">
+              <span>In-progress:</span>
+              <span>{inProgress}</span>
+            </div>
+            <div className="flex justify-between text-gray-400">
+              <span>Not Started:</span>
+              <span>{notStarted}</span>
+            </div>
+            <div className="flex justify-between text-purple-600">
+              <span>Revision Days:</span>
+              <span>{revisionCount}</span>
+            </div>
+
+            <div className="flex justify-between text-dark-muted border-t border-dashed pt-1.5 mt-0.5 col-span-2">
+              <span>Total Lessons:</span>
+              <span>{total}</span>
+            </div>
+            <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
+              <div className="flex justify-between">
+                <span>
+                  Started:{' '}
+                  {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}
+                </span>
+                {pct === 100 ? (
+                  <span>
+                    Ended:{' '}
+                    {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
+                  </span>
+                ) : (
+                  <span>
+                    Updated:{' '}
+                    {bookUpdatedAt
+                      ? new Date(bookUpdatedAt).toLocaleDateString()
+                      : '—'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div ref={isExpanded ? detailsRef : null} className="w-full">
+        {/* Desktop View (lg and above) */}
+        <div className="hidden lg:flex lg:flex-row gap-6 items-start w-full transition-all duration-500 ease-in-out">
+          {/* Left Column: Books Grid / List */}
+          <div className={`transition-all duration-500 ease-in-out ${isExpanded ? 'w-[25%] shrink-0' : 'w-full'}`}>
+            <div className="space-y-6">
+              {Object.keys(booksByGroup).map((groupName) => {
+                const groupedBooks = booksByGroup[groupName];
+                return (
+                  <div key={groupName} className="space-y-3 text-left">
+                    {cpGroupingMode !== 'none' && (
+                      <h4 className="text-xs font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                        {groupName}
+                      </h4>
+                    )}
+                    <div className={`grid gap-4 transition-all duration-500 ease-in-out ${
+                      isExpanded
+                        ? 'grid-cols-1'
+                        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                    }`}>
+                      {groupedBooks.map((book) => renderBookCard(book, classObj))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Level 1 Progress and Lesson Details split views */}
+          {isExpanded && renderSplitPanels(classObj)}
+        </div>
+
+        {/* Mobile/Tablet View (below lg) */}
+        <div className="lg:hidden w-full flex flex-col gap-6">
+          {isExpanded ? (
+            <div className="w-full flex flex-col gap-4 animate-slide-up">
+              {/* Back Button */}
+              <button
+                onClick={() => handleProgressBookClick(progressExpandedBook, classObj.id)}
+                className="flex items-center gap-1.5 text-xs font-black text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/15 px-3.5 py-2 rounded-xl active:scale-95 transition-all self-start border border-brand-primary/20 shadow-sm"
+              >
+                <i className="fas fa-arrow-left text-[10px]"></i>
+                Back to Books
+              </button>
+
+              {/* Selected Book Card in Compact Mode */}
+              <div className="w-full">
+                {(() => {
+                  const selectedBookObj = classBooks.find((b) => String(b.id) === String(progressExpandedBook));
+                  return selectedBookObj ? renderBookCard(selectedBookObj, classObj) : null;
+                })()}
+              </div>
+
+              {/* Split Panels: Level 1 and Details Stacked */}
+              <div className="w-full flex flex-col gap-6">
+                {renderLevel1Panel(classObj)}
+                {renderLessonsDetailsPanel()}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.keys(booksByGroup).map((groupName) => {
+                const groupedBooks = booksByGroup[groupName];
+                return (
+                  <div key={groupName} className="space-y-3 text-left">
+                    {cpGroupingMode !== 'none' && (
+                      <h4 className="text-xs font-black text-dark-soft border-l-[3px] border-brand-primary pl-2 uppercase tracking-wider">
+                        {groupName}
+                      </h4>
+                    )}
+                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+                      {groupedBooks.map((book) => renderBookCard(book, classObj))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   };

@@ -414,15 +414,6 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       onClick: () => onSetSubView('form-configurations'),
     },
     {
-      id: 'student-database',
-      title: 'Student Database',
-      description: 'View and assign student records to parents.',
-      icon: 'fa-user-graduate',
-      buttonColor: 'bg-green-dark text-white',
-      shadow: 'shadow-green-200',
-      onClick: () => onSetSubView('student-database'),
-    },
-    {
       id: 'timetable-planner',
       title: 'Timetable Planner',
       description: 'Manage classes, teachers, subjects, and schedule conflict-free timetables.',
@@ -454,11 +445,30 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       title: 'Lesson Planner',
       description: 'View and manage lesson plans across all classes, subjects, and teachers.',
       icon: 'fa-calendar-check',
-      buttonColor: 'bg-indigo-600 text-white',
-      shadow: 'shadow-indigo-200',
+      buttonColor: 'bg-pink-600 text-white',
+      shadow: 'shadow-pink-200',
       onClick: () => onSetSubView('lesson-planner'),
     },
+    {
+      id: 'student-database',
+      title: 'Student Database',
+      description: 'View and assign student records to parents.',
+      icon: 'fa-user-graduate',
+      buttonColor: 'bg-green-dark text-white',
+      shadow: 'shadow-green-200',
+      onClick: () => onSetSubView('student-database'),
+    },
+    {
+      id: 'display-dashboard',
+      title: 'TV Display Board',
+      description: 'Open the full-screen auto-navigating TV display dashboard.',
+      icon: 'fa-tv',
+      buttonColor: 'bg-emerald-600 text-white',
+      shadow: 'shadow-emerald-200',
+      onClick: () => window.open('/portal/display', '_blank'),
+    },
   ];
+
 
   return (
     <RolePortal

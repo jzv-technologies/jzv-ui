@@ -17,6 +17,8 @@ import ReporterTicketsView from './portals/ReporterTicketsView';
 import LessonManager from './portals/teacher/LessonManager/LessonManager';
 import SyllabusTrackerPortal from './portals/shared-components/SyllabusTrackerPortal';
 import CandidatePortal from './portals/CandidatePortal';
+import TVDisplayDashboard from './portals/shared-components/TVDisplayDashboard';
+
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -277,8 +279,8 @@ export const AppRoutes = ({
                     description:
                       'Plan, track, and log syllabus progress all in one unified dashboard.',
                     icon: 'fa-calendar-check',
-                    buttonColor: 'bg-indigo-600 text-white',
-                    shadow: 'shadow-indigo-200',
+                    buttonColor: 'bg-pink-600 text-white',
+                    shadow: 'shadow-pink-200',
                     onClick: () => setTeacherSubView('lesson-planner'),
                   },
                   {
@@ -286,9 +288,9 @@ export const AppRoutes = ({
                     title: 'Progress Tracker',
                     description:
                       'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
-                    icon: 'fa-graduation-cap',
-                    buttonColor: 'bg-teal-600 text-white',
-                    shadow: 'shadow-teal-200',
+                    icon: 'fa-chart-line',
+                    buttonColor: 'bg-blue-600 text-white',
+                    shadow: 'shadow-blue-200',
                     onClick: () => setTeacherSubView('progress-tracker'),
                   },
                   {
@@ -296,8 +298,8 @@ export const AppRoutes = ({
                     title: 'My Tickets',
                     description: 'View status and update comments on your submitted tickets.',
                     icon: 'fa-comments',
-                    buttonColor: 'bg-indigo-600 text-white',
-                    shadow: 'shadow-indigo-200',
+                    buttonColor: 'bg-red-600 text-white',
+                    shadow: 'shadow-red-200',
                     onClick: () => setTeacherSubView('tickets'),
                   },
                 ])}
@@ -327,7 +329,11 @@ export const AppRoutes = ({
                 )}
                 {teacherSubView === 'progress-tracker' && (
                   <div data-progress-tracker="true">
-                    <SyllabusTrackerPortal role="teacher" user={user} teacherRecord={teacherRecord} />
+                    <SyllabusTrackerPortal
+                      role="teacher"
+                      user={user}
+                      teacherRecord={teacherRecord}
+                    />
                   </div>
                 )}
                 {teacherSubView === 'tickets' && (
@@ -360,6 +366,10 @@ export const AppRoutes = ({
             </div>
           </div>
         }
+      />
+      <Route
+        path="/portal/display"
+        element={<TVDisplayDashboard />}
       />
       <Route
         path="/portal/candidate"

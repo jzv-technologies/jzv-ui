@@ -16,6 +16,7 @@ const App = () => {
   useGoogleTranslate();
 
   const navigate = useNavigate();
+  const location = useLocation();
   const hasRedirectedRef = useRef(false);
 
   const { user, userRoles, fullName, rolesLoading, authLoading, handleLogout, loginAsParent, loginAsCandidate, switchParentStudent, teacherRecord } =
@@ -59,6 +60,12 @@ const App = () => {
     const rolesReady = !rolesLoading;
 
     if (isNowLoggedIn && rolesReady && !hasRedirectedRef.current) {
+      // If already on a deep link/portal page (like /portal/display), don't force redirect
+      if (location.pathname !== '/' && location.pathname !== '/portal') {
+        hasRedirectedRef.current = true;
+        return;
+      }
+
       if (userRoles.length === 1) {
         hasRedirectedRef.current = true;
         navigate(`/portal/${userRoles[0]}`, { replace: true });
@@ -70,7 +77,7 @@ const App = () => {
         hasRedirectedRef.current = true;
       }
     }
-  }, [user, userRoles, rolesLoading, navigate]);
+  }, [user, userRoles, rolesLoading, navigate, location.pathname]);
 
   // Reset redirect flag on logout
   useEffect(() => {
@@ -79,7 +86,7 @@ const App = () => {
     }
   }, [user]);
 
-  const location = useLocation();
+
 
   // Reset portal subview states when navigating to main selection portal or homepage
   useEffect(() => {
@@ -133,23 +140,29 @@ const App = () => {
 
   if (authLoading) return <LoadingFallback />;
 
+  const isDisplayBoard = location.pathname === '/portal/display';
+
+
   return (
-    <div id="dashboard-section" className="min-h-screen pb-16">
-      <Header
-        user={user}
-        userRoles={userRoles}
-        fullName={fullName}
-        onLogout={handleLogout}
-        onLoginClick={() => setShowLoginPortal(true)}
-        onLogoClick={() => {
-          navigate("/");
-          setAdminSubView(null);
-          setManagementSubView(null);
-          setTeacherSubView(null);
-          setParentSubView(null);
-        }}
-        switchParentStudent={switchParentStudent}
-      />
+    <div id="dashboard-section" className={isDisplayBoard ? "min-h-screen bg-[#064e3b]" : "min-h-screen pb-16"}>
+      {!isDisplayBoard && (
+        <Header
+          user={user}
+          userRoles={userRoles}
+          fullName={fullName}
+          onLogout={handleLogout}
+          onLoginClick={() => setShowLoginPortal(true)}
+          onLogoClick={() => {
+            navigate("/");
+            setAdminSubView(null);
+            setManagementSubView(null);
+            setTeacherSubView(null);
+            setParentSubView(null);
+          }}
+          switchParentStudent={switchParentStudent}
+        />
+      )}
+
 
       <main className="relative">
         <AppRoutes

@@ -532,8 +532,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       title: 'Syllabus Progress Tracker',
       description: 'View syllabus coverage, time spent on chapters/lessons, and revisions.',
       icon: 'fa-chart-line',
-      buttonColor: 'bg-indigo-600 text-white',
-      shadow: 'shadow-indigo-200',
+      buttonColor: 'bg-blue-600 text-white',
+      shadow: 'shadow-blue-200',
       onClick: () => onSetSubView('syllabus-progress-tracker'),
     },
     {
@@ -572,7 +572,17 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       shadow: 'shadow-dark-200',
       onClick: () => onSetSubView('take-test'),
     },
+    {
+      id: 'display-dashboard',
+      title: 'TV Display Board',
+      description: 'Open the full-screen auto-navigating TV display dashboard.',
+      icon: 'fa-tv',
+      buttonColor: 'bg-emerald-600 text-white',
+      shadow: 'shadow-emerald-200',
+      onClick: () => window.open('/portal/display', '_blank'),
+    },
   ];
+
 
   const dynamicTiles = dynamicConfigs
     .filter((config) => {
@@ -1407,20 +1417,18 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       subView={subView}
       onSetSubView={onSetSubView}
     >
-      {subView === 'job-applications' || subView === 'registered-complaints' || subView === 'student-records' ? (
+      {subView === 'job-applications' ||
+      subView === 'registered-complaints' ||
+      subView === 'student-records' ? (
         <div
-          data-job-applications={subView === 'job-applications' ? "true" : undefined}
-          data-registered-complaints={subView === 'registered-complaints' ? "true" : undefined}
-          data-student-records={subView === 'student-records' ? "true" : undefined}
+          data-job-applications={subView === 'job-applications' ? 'true' : undefined}
+          data-registered-complaints={subView === 'registered-complaints' ? 'true' : undefined}
+          data-student-records={subView === 'student-records' ? 'true' : undefined}
         >
           {renderTableView()}
         </div>
       ) : null}
-      {subView === 'take-test' ? (
-        <div data-take-test="true">
-          {renderTakeTestView()}
-        </div>
-      ) : null}
+      {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}
       {subView === 'syllabus-progress-tracker' && (
         <div data-syllabus-progress-tracker="true">
           <SyllabusTrackerPortal role="management" />
