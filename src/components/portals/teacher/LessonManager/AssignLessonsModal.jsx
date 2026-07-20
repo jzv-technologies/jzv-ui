@@ -326,7 +326,7 @@ const AssignLessonsModal = ({
 
             {planningMode === 'date' ? (
               <div className="flex flex-col gap-3">
-                {!directTarget && (
+                <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex-1">
                     <label className="block text-xs font-bold text-gray-700 mb-1">Target Start Date</label>
                     <input
@@ -339,9 +339,22 @@ const AssignLessonsModal = ({
                       className="w-full bg-white border border-gray-300 text-gray-800 text-sm font-semibold rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                     />
                   </div>
-                )}
-                
-                <div className="flex items-center gap-2">
+
+                  {isMultiDay && (
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Target End Date</label>
+                      <input
+                        type="date"
+                        value={targetEndDate}
+                        min={targetDate}
+                        onChange={(e) => setTargetEndDate(e.target.value)}
+                        className="w-full bg-white border border-gray-300 text-gray-800 text-sm font-semibold rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
                   <input 
                     type="checkbox" 
                     id="multiday" 
@@ -350,22 +363,12 @@ const AssignLessonsModal = ({
                       setIsMultiDay(e.target.checked);
                       if (!e.target.checked) setTargetEndDate(targetDate);
                     }} 
+                    className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer h-4 w-4"
                   />
-                  <label htmlFor="multiday" className="text-xs font-bold text-gray-700 cursor-pointer">Plan for Multi-days</label>
+                  <label htmlFor="multiday" className="text-xs font-bold text-indigo-900 cursor-pointer flex items-center gap-1.5 select-none">
+                    <i className="fas fa-calendar-week text-indigo-600"></i> Plan for Multi-days (Date Range)
+                  </label>
                 </div>
-                
-                {isMultiDay && (
-                  <div className="flex-1">
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Target End Date</label>
-                    <input
-                      type="date"
-                      value={targetEndDate}
-                      min={targetDate}
-                      onChange={(e) => setTargetEndDate(e.target.value)}
-                      className="w-full bg-white border border-gray-300 text-gray-800 text-sm font-semibold rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    />
-                  </div>
-                )}
               </div>
             ) : (
               <div>

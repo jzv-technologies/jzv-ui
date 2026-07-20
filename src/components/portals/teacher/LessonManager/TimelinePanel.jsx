@@ -24,6 +24,7 @@ const TimelinePanel = ({
   const [customWeekDates, setCustomWeekDates] = useState({});
   const [updatingReplanId, setUpdatingReplanId] = useState(null);
   const [replanDate, setReplanDate] = useState('');
+  const [replanEndDate, setReplanEndDate] = useState('');
   const [updateMode, setUpdateMode] = useState('replan'); // 'replan' | 'carry_forward'
   const [updatingDateLevelStr, setUpdatingDateLevelStr] = useState(null);
 
@@ -202,33 +203,23 @@ const TimelinePanel = ({
   const renderDateUpdateIcon = (record, allPlanned = false) => {
     if (record.status === 'completed') return null;
     if (!record.target_start_date) return null;
-    if (allPlanned && record.status === 'planned') return null;
 
-    let mode = null;
-    let title = '';
-
-    if (record.status === 'planned') {
-      mode = 'replan';
-      title = 'Change Plan';
-    } else if (record.status === 'in_progress') {
-      mode = 'carry_forward';
-      title = 'Change End Date';
-    } else {
-      return null;
-    }
+    const start = record.target_start_date ? String(record.target_start_date).split('T')[0] : getLocalISODate(new Date());
+    const end = record.target_end_date ? String(record.target_end_date).split('T')[0] : start;
 
     return (
       <button
         onClick={(e) => {
           e.stopPropagation();
           setUpdatingReplanId(record.id);
-          setReplanDate(getLocalISODate(new Date()));
-          setUpdateMode(mode);
+          setReplanDate(start);
+          setReplanEndDate(end);
         }}
-        className="text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors ml-1 focus:outline-none"
-        title={title}
+        className="text-gray-400 hover:text-indigo-600 p-1 rounded transition-colors ml-1 focus:outline-none flex items-center gap-1 text-xs font-medium"
+        title="Edit or Convert Plan Dates"
       >
         <i className="fas fa-edit"></i>
+        <span className="text-[10px] underline">Edit Dates</span>
       </button>
     );
   };
@@ -315,8 +306,78 @@ const TimelinePanel = ({
     }
   };
 
-  const handleUnplanLesson = async (e, record) => {
+  const updateRecordDateRange = async (record, newStart, newEnd) => {
+    try {
+      let calcDue = record.due_date || newEnd;
+      if (record.due_date && new Date(record.due_date) < new Date(newEnd)) {
+        calcDue = newEnd;
+      }
+
+      const upsertData = {
+        ...record,
+        target_start_date: newStart,
+        target_end_date: newEnd,
+        due_date: calcDue,
+      };
+
+      const { data, error } = await supabase
+        .from('lesson_progress')
+        .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
+        .select(
+          'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
+        )
+        .single();
+
+      if (error) throw error;
+
+      const updatedRecords = progressRecords.map((r) => (r.id === data.id ? data : r));
+      setProgressRecords(updatedRecords);
+      showToast(`Updated plan range: ${newStart} to ${newEnd}`, 'success');
+    } catch (err) {
+      showToast('Failed to update plan range: ' + err.message, 'error');
+    }
+  };
+
+  const handleUnplanLesson = async (e, record, currentCardDateStr = null) => {
     e.stopPropagation();
+
+    const startStr = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
+    const endStr = record.target_end_date ? String(record.target_end_date).split('T')[0] : startStr;
+    const isMultiDay = startStr && endStr && startStr !== endStr;
+
+    if (isMultiDay && currentCardDateStr) {
+      if (currentCardDateStr === startStr) {
+        // Shift start date forward by 1 day
+        const d = new Date(startStr);
+        d.setDate(d.getDate() + 1);
+        const newStart = getLocalISODate(d);
+
+        const confirmMsg = `Remove ${startStr} from this multi-day plan?\n\nThe updated plan range will be ${newStart} to ${endStr}.`;
+        if (!window.confirm(confirmMsg)) return;
+
+        return updateRecordDateRange(record, newStart, endStr);
+      } else if (currentCardDateStr === endStr) {
+        // Shift end date backward by 1 day
+        const d = new Date(endStr);
+        d.setDate(d.getDate() - 1);
+        const newEnd = getLocalISODate(d);
+
+        const confirmMsg = `Remove ${endStr} from this multi-day plan?\n\nThe updated plan range will be ${startStr} to ${newEnd}.`;
+        if (!window.confirm(confirmMsg)) return;
+
+        return updateRecordDateRange(record, startStr, newEnd);
+      } else if (currentCardDateStr > startStr && currentCardDateStr < endStr) {
+        // Intermediate day clicked
+        const confirmMsg = `Remove ${currentCardDateStr} from this plan?\n\nClick OK to shorten plan to end on day before (${currentCardDateStr}), or Cancel to delete full plan.`;
+        if (window.confirm(confirmMsg)) {
+          const dEnd = new Date(currentCardDateStr);
+          dEnd.setDate(dEnd.getDate() - 1);
+          const newEnd = getLocalISODate(dEnd);
+          return updateRecordDateRange(record, startStr, newEnd);
+        }
+      }
+    }
+
     const confirmed = window.confirm('Delete planned lesson?');
     if (!confirmed) return;
     try {
@@ -358,65 +419,28 @@ const TimelinePanel = ({
 
   const handleUpdateReplan = async (record) => {
     if (!replanDate) {
-      showToast('Please select a new date.', 'error');
+      showToast('Please select a valid start date.', 'error');
       return;
     }
+    const newStart = replanDate;
+    const newEnd = replanEndDate || replanDate;
+
+    if (newEnd < newStart) {
+      showToast('End date cannot be earlier than start date.', 'error');
+      return;
+    }
+
     try {
-      let newStart = record.target_start_date;
-      let newEnd = record.target_end_date;
-
-      if (updateMode === 'carry_forward') {
-        newEnd = replanDate;
-      } else {
-        newStart = replanDate;
-        const startD = record.target_start_date
-          ? new Date(String(record.target_start_date).split('T')[0])
-          : new Date();
-        const endD = record.target_end_date
-          ? new Date(String(record.target_end_date).split('T')[0])
-          : startD;
-        const diffTime = endD - startD;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        const newEndD = new Date(newStart);
-        newEndD.setDate(newEndD.getDate() + (diffDays > 0 ? diffDays : 0));
-        newEnd = getLocalISODate(newEndD);
+      let calcDue = record.due_date || newEnd;
+      if (record.due_date && new Date(record.due_date) < new Date(newEnd)) {
+        calcDue = newEnd;
       }
-
-      const todayStr = new Date().toISOString().split('T')[0];
-      const oldStart = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
-      const oldEnd = record.target_end_date ? String(record.target_end_date).split('T')[0] : null;
-      const oldCreated = record.created_at ? String(record.created_at).split('T')[0] : null;
-
-      let replanIncrement = 0;
-      if (oldStart === todayStr && newStart > todayStr && oldCreated !== todayStr) {
-        replanIncrement = 1;
-      }
-
-      let carryForwardIncrement = 0;
-      if (record.status === 'in_progress' && newEnd !== oldEnd) {
-        carryForwardIncrement = 1;
-      }
-
-      const getDaysDiff = (dateA, dateB) => {
-        if (!dateA || !dateB) return 0;
-        const dA = new Date(String(dateA).split('T')[0]);
-        const dB = new Date(String(dateB).split('T')[0]);
-        return Math.ceil((dA - dB) / (1000 * 60 * 60 * 24));
-      };
-
-      const delay_start = record.start_date ? getDaysDiff(record.start_date, newStart) : 0;
-      const delay_end = record.end_date ? getDaysDiff(record.end_date, newEnd) : 0;
 
       const upsertData = {
         ...record,
         target_start_date: newStart,
         target_end_date: newEnd,
-        status: record.status,
-        replan_counter: (record.replan_counter || 0) + replanIncrement,
-        carry_forward_counter: (record.carry_forward_counter || 0) + carryForwardIncrement,
-        carry_forward_count: (record.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
-        delay_start,
-        delay_end,
+        due_date: calcDue,
       };
 
       const { data, error } = await supabase
@@ -431,10 +455,15 @@ const TimelinePanel = ({
 
       const updatedRecords = progressRecords.map((r) => (r.id === data.id ? data : r));
       setProgressRecords(updatedRecords);
-      showToast('Lesson dates updated successfully!', 'success');
       setUpdatingReplanId(null);
+      showToast(
+        newStart !== newEnd
+          ? `Plan updated to multi-day range (${newStart} to ${newEnd})`
+          : 'Plan date updated successfully!',
+        'success'
+      );
     } catch (err) {
-      showToast('Failed to update dates: ' + err.message, 'error');
+      showToast('Failed to update plan dates: ' + err.message, 'error');
     }
   };
 
@@ -865,31 +894,60 @@ const TimelinePanel = ({
                             >
                               {fullPath}
                             </div>
+
+                            {/* Multi-Day Range Badge */}
+                            {record.target_start_date && record.target_end_date && String(record.target_start_date).split('T')[0] !== String(record.target_end_date).split('T')[0] && (
+                              <div className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-150 px-1.5 py-0.5 rounded inline-flex items-center gap-1 my-1">
+                                <i className="fas fa-calendar-week text-indigo-500"></i>
+                                {formatCustomDate(record.target_start_date)} - {formatCustomDate(record.target_end_date)}
+                              </div>
+                            )}
+
                             {updatingReplanId === record.id ? (
-                              <div className="mt-2 flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-gray-500">
-                                  {updateMode === 'carry_forward'
-                                    ? 'New End Date:'
-                                    : 'New Start Date:'}
-                                </span>
-                                <input
-                                  type="date"
-                                  value={replanDate}
-                                  onChange={(e) => setReplanDate(e.target.value)}
-                                  className="text-xs border border-gray-300 rounded px-2 py-1 outline-none"
-                                />
-                                <button
-                                  onClick={() => handleUpdateReplan(record)}
-                                  className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded hover:bg-emerald-200"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => setUpdatingReplanId(null)}
-                                  className="text-[10px] bg-gray-100 text-gray-600 font-bold px-2 py-1 rounded hover:bg-gray-200"
-                                >
-                                  Cancel
-                                </button>
+                              <div className="mt-2.5 p-2 bg-indigo-50/90 border border-indigo-200 rounded-xl space-y-2" onClick={(e) => e.stopPropagation()}>
+                                <div className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
+                                  <i className="fas fa-edit text-indigo-600"></i> Edit / Convert Plan Dates
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                  <div className="flex-1">
+                                    <label className="text-[10px] font-bold text-indigo-700 block mb-0.5 uppercase">Start Date</label>
+                                    <input
+                                      type="date"
+                                      value={replanDate}
+                                      onChange={(e) => {
+                                        setReplanDate(e.target.value);
+                                        if (!replanEndDate || replanEndDate < e.target.value) {
+                                          setReplanEndDate(e.target.value);
+                                        }
+                                      }}
+                                      className="w-full text-xs border border-indigo-200 rounded px-2 py-1 outline-none font-semibold text-gray-800 bg-white"
+                                    />
+                                  </div>
+                                  <div className="flex-1">
+                                    <label className="text-[10px] font-bold text-indigo-700 block mb-0.5 uppercase">End Date (Multi-Day)</label>
+                                    <input
+                                      type="date"
+                                      value={replanEndDate}
+                                      min={replanDate}
+                                      onChange={(e) => setReplanEndDate(e.target.value)}
+                                      className="w-full text-xs border border-indigo-200 rounded px-2 py-1 outline-none font-semibold text-gray-800 bg-white"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex justify-end gap-1.5 pt-1">
+                                  <button
+                                    onClick={() => setUpdatingReplanId(null)}
+                                    className="text-xs bg-gray-150 hover:bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded-lg transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateReplan(record)}
+                                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-0.5 rounded-lg shadow-sm transition-colors flex items-center gap-1"
+                                  >
+                                    <i className="fas fa-check text-[10px]"></i> Save Dates
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -912,10 +970,10 @@ const TimelinePanel = ({
                             {!updatingReplanId && record.status === 'planned' && (
                               <button
                                 onClick={(e) => {
-                                  handleUnplanLesson(e, record);
+                                  handleUnplanLesson(e, record, dateStr);
                                 }}
-                                className="text-red-500 hover:text-red-700   rounded transition-colors text-xl"
-                                title="Remove from plan"
+                                className="text-red-500 hover:text-red-700 rounded transition-colors text-xl"
+                                title="Remove date from plan"
                               >
                                 <i className="fas fa-circle-xmark"></i>
                               </button>
@@ -1049,7 +1107,7 @@ const TimelinePanel = ({
                               {record.status === 'planned' && (
                                 <button
                                   onClick={(e) => {
-                                    handleUnplanLesson(e, record);
+                                    handleUnplanLesson(e, record, weekStartStr);
                                   }}
                                   className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors text-[11px]"
                                   title="Remove from plan"
@@ -1060,33 +1118,50 @@ const TimelinePanel = ({
                             </div>
                           </div>
                           {updatingReplanId === record.id && (
-                            <div
-                              className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap items-center gap-2"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <span className="text-[10px] font-bold text-gray-500">
-                                {updateMode === 'carry_forward'
-                                  ? 'New End Date:'
-                                  : 'New Start Date:'}
-                              </span>
-                              <input
-                                type="date"
-                                value={replanDate}
-                                onChange={(e) => setReplanDate(e.target.value)}
-                                className="text-[11px] font-semibold border border-gray-300 rounded px-1.5 py-0.5 outline-none"
-                              />
-                              <button
-                                onClick={() => handleUpdateReplan(record)}
-                                className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded shadow-sm hover:bg-emerald-200"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setUpdatingReplanId(null)}
-                                className="text-[10px] bg-gray-100 text-gray-600 font-bold px-2 py-0.5 rounded hover:bg-gray-200"
-                              >
-                                Cancel
-                              </button>
+                            <div className="mt-2.5 p-2 bg-indigo-50/90 border border-indigo-200 rounded-xl space-y-2" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-[11px] font-bold text-indigo-900 flex items-center gap-1">
+                                <i className="fas fa-edit text-indigo-600"></i> Edit / Convert Plan Dates
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[10px] font-bold text-indigo-700 block mb-0.5 uppercase">Start Date</label>
+                                  <input
+                                    type="date"
+                                    value={replanDate}
+                                    onChange={(e) => {
+                                      setReplanDate(e.target.value);
+                                      if (!replanEndDate || replanEndDate < e.target.value) {
+                                        setReplanEndDate(e.target.value);
+                                      }
+                                    }}
+                                    className="w-full text-xs border border-indigo-200 rounded px-2 py-1 outline-none font-semibold text-gray-800 bg-white"
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[10px] font-bold text-indigo-700 block mb-0.5 uppercase">End Date (Multi-Day)</label>
+                                  <input
+                                    type="date"
+                                    value={replanEndDate}
+                                    min={replanDate}
+                                    onChange={(e) => setReplanEndDate(e.target.value)}
+                                    className="w-full text-xs border border-indigo-200 rounded px-2 py-1 outline-none font-semibold text-gray-800 bg-white"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-1.5 pt-1">
+                                <button
+                                  onClick={() => setUpdatingReplanId(null)}
+                                  className="text-xs bg-gray-150 hover:bg-gray-200 text-gray-700 font-bold px-2 py-0.5 rounded-lg transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateReplan(record)}
+                                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-0.5 rounded-lg shadow-sm transition-colors flex items-center gap-1"
+                                >
+                                  <i className="fas fa-check text-[10px]"></i> Save Dates
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>

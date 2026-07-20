@@ -36,7 +36,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Teacher context
   const [teacher, setTeacher] = useState(null);
   const [allTeachers, setAllTeachers] = useState([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState(() => 
+  const [selectedTeacherId, setSelectedTeacherId] = useState(() =>
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.selectedTeacherId : ''
   );
 
@@ -50,27 +50,30 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const [lessonPlans, setLessonPlans] = useState([]);
 
   // Selection
-  const [selectedClassId, setSelectedClassId] = useState(() => 
+  const [selectedClassId, setSelectedClassId] = useState(() =>
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.selectedClassId : ''
   );
-  const [selectedSubjectId, setSelectedSubjectId] = useState(() => 
+  const [selectedSubjectId, setSelectedSubjectId] = useState(() =>
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.selectedSubjectId : ''
   );
-  const [selectedBookId, setSelectedBookId] = useState(() => 
+  const [selectedBookId, setSelectedBookId] = useState(() =>
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.selectedBookId : ''
   );
 
   // Multi-select for syllabus leaves
-  const [selectedLessonIds, setSelectedLessonIds] = useState(() => 
+  const [selectedLessonIds, setSelectedLessonIds] = useState(() =>
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.selectedLessonIds : new Set()
   );
 
   // Active targets in timeline
   const [activeTargetDate, setActiveTargetDate] = useState(null);
+  const [activeTargetEndDate, setActiveTargetEndDate] = useState(null);
   const [activeTargetWeek, setActiveTargetWeek] = useState(null);
 
   // Custom multi-select Assign Lessons Modal Target State
-  const [assignModalTarget, setAssignModalTarget] = useState(null); // { date: 'YYYY-MM-DD', week: number }
+  const [assignModalTarget, setAssignModalTarget] = useState(null); // { date: 'YYYY-MM-DD', endDate: 'YYYY-MM-DD', week: number }
+  const [modalStartDate, setModalStartDate] = useState('');
+  const [modalEndDate, setModalEndDate] = useState('');
   const [modalSearch, setModalSearch] = useState('');
   const [modalSelectedIds, setModalSelectedIds] = useState(new Set());
   const [modalCollapsedNodes, setModalCollapsedNodes] = useState(new Set());
@@ -99,6 +102,31 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     return new Date(d.setDate(diff));
   });
 
+  // Helper function to generate array of date strings between startDate and endDate
+  const getDatesInRange = (startDateStr, endDateStr) => {
+    if (!startDateStr) return [];
+    if (!endDateStr || endDateStr === startDateStr) return [startDateStr];
+
+    const dates = [];
+    let curr = new Date(startDateStr);
+    let end = new Date(endDateStr);
+
+    if (isNaN(curr.getTime())) return [];
+    if (isNaN(end.getTime())) return [startDateStr];
+
+    if (curr > end) {
+      const temp = curr;
+      curr = end;
+      end = temp;
+    }
+
+    while (curr <= end) {
+      dates.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+    return dates;
+  };
+
   // Keep selection and target cache updated
   useEffect(() => {
     if (user?.id) {
@@ -109,11 +137,19 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       lessonPlannerCache.selectedBookId = selectedBookId;
       lessonPlannerCache.selectedLessonIds = selectedLessonIds;
     }
-  }, [user, selectedTeacherId, selectedClassId, selectedSubjectId, selectedBookId, selectedLessonIds]);
+  }, [
+    user,
+    selectedTeacherId,
+    selectedClassId,
+    selectedSubjectId,
+    selectedBookId,
+    selectedLessonIds,
+  ]);
 
   // Reset active targets when mode changes
   useEffect(() => {
     setActiveTargetDate(null);
+    setActiveTargetEndDate(null);
     setActiveTargetWeek(null);
   }, [planningMode]);
 
@@ -180,7 +216,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         }
 
         const results = await Promise.all(queries);
-        const errors = results.map(r => r.error).filter(Boolean);
+        const errors = results.map((r) => r.error).filter(Boolean);
         if (errors.length) throw new Error(errors[0].message);
 
         const [
@@ -201,7 +237,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         const resolvedBookClasses = dbBookClasses || [];
         const resolvedLessons = dbAllLessons || [];
         const resolvedLessonPlans = dbLessonPlans || [];
-        const resolvedTeachers = isAdminView && teachersResult ? (teachersResult.data || []) : [];
+        const resolvedTeachers = isAdminView && teachersResult ? teachersResult.data || [] : [];
 
         setClasses(resolvedClasses);
         setSubjects(resolvedSubjects);
@@ -251,9 +287,10 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     if (isAdminView && !selectedTeacherId) {
       return classes;
     }
-    return classes.filter(c =>
+    return classes.filter((c) =>
       assignments.some(
-        a => String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
+        (a) =>
+          String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
       )
     );
   }, [classes, assignments, isAdminView, selectedTeacherId, filterTeacherId]);
@@ -262,36 +299,45 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     if (!selectedClassId) return [];
     if (isAdminView && !selectedTeacherId) {
       const subjectIds = new Set(
-        assignments.filter(a => String(a.class_id) === String(selectedClassId)).map(a => String(a.subject_id))
+        assignments
+          .filter((a) => String(a.class_id) === String(selectedClassId))
+          .map((a) => String(a.subject_id))
       );
-      return subjects.filter(s => subjectIds.has(String(s.id)));
+      return subjects.filter((s) => subjectIds.has(String(s.id)));
     }
     const subjectIds = assignments
-      .filter(a => String(a.class_id) === String(selectedClassId) && String(a.teacher_id) === String(filterTeacherId))
-      .map(a => String(a.subject_id));
-    return subjects.filter(s => subjectIds.includes(String(s.id)));
+      .filter(
+        (a) =>
+          String(a.class_id) === String(selectedClassId) &&
+          String(a.teacher_id) === String(filterTeacherId)
+      )
+      .map((a) => String(a.subject_id));
+    return subjects.filter((s) => subjectIds.includes(String(s.id)));
   }, [selectedClassId, assignments, subjects, isAdminView, selectedTeacherId, filterTeacherId]);
 
   const availableBooks = useMemo(() => {
     if (!selectedClassId || !selectedSubjectId) return [];
     const classBookIds = bookClasses
-      .filter(bc => String(bc.class_id) === String(selectedClassId))
-      .map(bc => String(bc.book_id));
-    return books.filter(b =>
-      String(b.subject_id) === String(selectedSubjectId) &&
-      classBookIds.includes(String(b.id))
+      .filter((bc) => String(bc.class_id) === String(selectedClassId))
+      .map((bc) => String(bc.book_id));
+    return books.filter(
+      (b) =>
+        String(b.subject_id) === String(selectedSubjectId) && classBookIds.includes(String(b.id))
     );
   }, [selectedClassId, selectedSubjectId, bookClasses, books]);
 
   // Auto-select helper hooks
   useEffect(() => {
-    if (availableClasses.length === 1 && !selectedClassId) setSelectedClassId(String(availableClasses[0].id));
+    if (availableClasses.length === 1 && !selectedClassId)
+      setSelectedClassId(String(availableClasses[0].id));
   }, [availableClasses, selectedClassId]);
   useEffect(() => {
-    if (availableSubjects.length === 1 && !selectedSubjectId) setSelectedSubjectId(String(availableSubjects[0].id));
+    if (availableSubjects.length === 1 && !selectedSubjectId)
+      setSelectedSubjectId(String(availableSubjects[0].id));
   }, [availableSubjects, selectedSubjectId]);
   useEffect(() => {
-    if (availableBooks.length === 1 && !selectedBookId) setSelectedBookId(String(availableBooks[0].id));
+    if (availableBooks.length === 1 && !selectedBookId)
+      setSelectedBookId(String(availableBooks[0].id));
   }, [availableBooks, selectedBookId]);
 
   // Reset when teacher changes
@@ -307,24 +353,24 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // -------------------------
   const currentBookLessons = useMemo(() => {
     if (!selectedBookId) return [];
-    return allLessons.filter(l => String(l.book_id) === String(selectedBookId));
+    return allLessons.filter((l) => String(l.book_id) === String(selectedBookId));
   }, [selectedBookId, allLessons]);
 
   const syllabusTree = useMemo(() => {
     const tree = {};
-    currentBookLessons.forEach(lesson => {
+    currentBookLessons.forEach((lesson) => {
       const l1 = lesson.level1 || 'General';
       if (!tree[l1]) {
         tree[l1] = {
           name: l1,
           lessons: [],
-          level2s: {}
+          level2s: {},
         };
       }
-      
+
       const l2 = lesson.level2;
       const l3 = lesson.level3;
-      
+
       if (!l2 && !l3) {
         tree[l1].lessons.push(lesson);
       } else if (l2) {
@@ -332,7 +378,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           tree[l1].level2s[l2] = {
             name: l2,
             lessons: [],
-            level3s: []
+            level3s: [],
           };
         }
         if (!l3) {
@@ -348,9 +394,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Get flat list of all leaf lessons in the book
   const leafLessons = useMemo(() => {
     const leaves = [];
-    syllabusTree.forEach(l1Node => {
+    syllabusTree.forEach((l1Node) => {
       leaves.push(...l1Node.lessons);
-      Object.values(l1Node.level2s).forEach(l2Node => {
+      Object.values(l1Node.level2s).forEach((l2Node) => {
         leaves.push(...l2Node.lessons);
         leaves.push(...l2Node.level3s);
       });
@@ -368,11 +414,19 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     return parts.join(' > ');
   };
 
+  const handleLessonDragStart = (e, lesson) => {
+    if (!lesson?.id) return;
+    e.dataTransfer.setData('text/plain', String(lesson.id));
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
   // -------------------------
   // Modal State and Logic
   // -------------------------
   const openAssignModal = (target) => {
     setAssignModalTarget(target);
+    setModalStartDate(target?.date || '');
+    setModalEndDate(target?.endDate || target?.date || '');
     setModalSearch('');
     setModalSelectedIds(new Set());
     setModalCollapsedNodes(new Set());
@@ -382,12 +436,15 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const modalAvailableLessons = useMemo(() => {
     if (!selectedBookId) return [];
 
-    return leafLessons.filter(l => {
+    return leafLessons.filter((l) => {
       // Exclude lessons already planned on this target date or week
-      const isAlreadyPlanned = lessonPlans.some(p => 
-        String(p.lesson_id) === String(l.id) &&
-        String(p.class_id) === String(selectedClassId) &&
-        (assignModalTarget?.date ? p.target_date === assignModalTarget.date : p.academic_week === assignModalTarget?.week)
+      const isAlreadyPlanned = lessonPlans.some(
+        (p) =>
+          String(p.lesson_id) === String(l.id) &&
+          String(p.class_id) === String(selectedClassId) &&
+          (assignModalTarget?.date
+            ? p.target_date === assignModalTarget.date
+            : p.academic_week === assignModalTarget?.week)
       );
       if (isAlreadyPlanned) return false;
 
@@ -402,19 +459,19 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Group modal available lessons into a tree hierarchy
   const modalSyllabusTree = useMemo(() => {
     const tree = {};
-    modalAvailableLessons.forEach(lesson => {
+    modalAvailableLessons.forEach((lesson) => {
       const l1 = lesson.level1 || 'General';
       if (!tree[l1]) {
         tree[l1] = {
           name: l1,
           lessons: [],
-          level2s: {}
+          level2s: {},
         };
       }
-      
+
       const l2 = lesson.level2;
       const l3 = lesson.level3;
-      
+
       if (!l2 && !l3) {
         tree[l1].lessons.push(lesson);
       } else if (l2) {
@@ -422,7 +479,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           tree[l1].level2s[l2] = {
             name: l2,
             lessons: [],
-            level3s: []
+            level3s: [],
           };
         }
         if (!l3) {
@@ -436,9 +493,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   }, [modalAvailableLessons]);
 
   const handleModalSelectAll = (checked) => {
-    setModalSelectedIds(prev => {
+    setModalSelectedIds((prev) => {
       const next = new Set(prev);
-      modalAvailableLessons.forEach(l => {
+      modalAvailableLessons.forEach((l) => {
         if (checked) {
           next.add(String(l.id));
         } else {
@@ -449,10 +506,12 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     });
   };
 
-  const isAllModalSelected = modalAvailableLessons.length > 0 && modalAvailableLessons.every(l => modalSelectedIds.has(String(l.id)));
+  const isAllModalSelected =
+    modalAvailableLessons.length > 0 &&
+    modalAvailableLessons.every((l) => modalSelectedIds.has(String(l.id)));
 
   const handleModalLeafToggle = (id) => {
-    setModalSelectedIds(prev => {
+    setModalSelectedIds((prev) => {
       const next = new Set(prev);
       const strId = String(id);
       if (next.has(strId)) {
@@ -466,7 +525,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
   const getModalLeafLessonsForLevel1 = (l1Node) => {
     const leaves = [...l1Node.lessons];
-    Object.values(l1Node.level2s).forEach(l2Node => {
+    Object.values(l1Node.level2s).forEach((l2Node) => {
       leaves.push(...l2Node.lessons);
       leaves.push(...l2Node.level3s);
     });
@@ -476,7 +535,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const getModalLevel1CheckState = (l1Node) => {
     const leaves = getModalLeafLessonsForLevel1(l1Node);
     if (leaves.length === 0) return 'none';
-    const checkedCount = leaves.filter(l => modalSelectedIds.has(String(l.id))).length;
+    const checkedCount = leaves.filter((l) => modalSelectedIds.has(String(l.id))).length;
     if (checkedCount === 0) return 'none';
     if (checkedCount === leaves.length) return 'all';
     return 'some';
@@ -485,19 +544,19 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const handleModalLevel1CheckboxToggle = (l1Node) => {
     const checkState = getModalLevel1CheckState(l1Node);
     const leaves = getModalLeafLessonsForLevel1(l1Node);
-    setModalSelectedIds(prev => {
+    setModalSelectedIds((prev) => {
       const next = new Set(prev);
       if (checkState === 'all') {
-        leaves.forEach(l => next.delete(String(l.id)));
+        leaves.forEach((l) => next.delete(String(l.id)));
       } else {
-        leaves.forEach(l => next.add(String(l.id)));
+        leaves.forEach((l) => next.add(String(l.id)));
       }
       return next;
     });
   };
 
   const toggleModalCollapse = (path) => {
-    setModalCollapsedNodes(prev => {
+    setModalCollapsedNodes((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -510,38 +569,52 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
   const handleModalAssignSubmit = async () => {
     if (!assignModalTarget) return;
-    const targetDate = assignModalTarget.date || null;
+    const startDate = modalStartDate || assignModalTarget.date || null;
+    const endDate = modalEndDate || assignModalTarget.endDate || startDate;
     const targetWeek = assignModalTarget.week || null;
 
-    const lessonsToAssign = modalAvailableLessons.filter(l => modalSelectedIds.has(String(l.id)));
+    const lessonsToAssign = modalAvailableLessons.filter((l) => modalSelectedIds.has(String(l.id)));
     if (lessonsToAssign.length === 0) {
       showToast('No lessons selected', 'info');
       return;
     }
 
-    const plansToInsert = lessonsToAssign.map(lesson => ({
-      class_id: selectedClassId,
-      subject_id: selectedSubjectId,
-      book_id: selectedBookId,
-      teacher_id: isAdminView ? (selectedTeacherId || null) : (teacher?.id || null),
-      lesson_id: lesson.id,
-      target_date: targetDate,
-      academic_week: targetWeek,
-      status: 'planned',
-      carry_forward_count: 0
-    }));
+    const datesToPlan = startDate ? getDatesInRange(startDate, endDate) : [null];
+    const planTeacherId = isAdminView ? selectedTeacherId || null : teacher?.id || null;
 
-    setSaving(true); // smooth inline loading
+    const plansToInsert = [];
+    lessonsToAssign.forEach((lesson) => {
+      datesToPlan.forEach((dStr) => {
+        plansToInsert.push({
+          class_id: selectedClassId,
+          subject_id: selectedSubjectId,
+          book_id: selectedBookId,
+          teacher_id: planTeacherId,
+          lesson_id: lesson.id,
+          target_date: dStr,
+          academic_week: targetWeek,
+          status: 'planned',
+          carry_forward_count: 0,
+        });
+      });
+    });
+
+    setSaving(true);
     try {
       const { data, error } = await supabase.from('lesson_plans').insert(plansToInsert).select();
       if (error) throw error;
 
-      setLessonPlans(prev => {
+      setLessonPlans((prev) => {
         const next = [...prev, ...data];
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
-      showToast(`Successfully assigned ${data.length} lessons`, 'success');
+      showToast(
+        datesToPlan.length > 1
+          ? `Successfully assigned ${lessonsToAssign.length} lesson(s) across ${datesToPlan.length} days`
+          : `Successfully assigned ${lessonsToAssign.length} lesson(s)`,
+        'success'
+      );
       setAssignModalTarget(null);
     } catch (err) {
       showToast('Failed to assign lessons: ' + err.message, 'error');
@@ -553,7 +626,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Tree action helpers
   const getLeafLessonsForLevel1 = (l1Node) => {
     const leaves = [...l1Node.lessons];
-    Object.values(l1Node.level2s).forEach(l2Node => {
+    Object.values(l1Node.level2s).forEach((l2Node) => {
       leaves.push(...l2Node.lessons);
       leaves.push(...l2Node.level3s);
     });
@@ -563,7 +636,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const getLevel1CheckState = (l1Node) => {
     const leaves = getLeafLessonsForLevel1(l1Node);
     if (leaves.length === 0) return 'none';
-    const checkedCount = leaves.filter(l => selectedLessonIds.has(String(l.id))).length;
+    const checkedCount = leaves.filter((l) => selectedLessonIds.has(String(l.id))).length;
     if (checkedCount === 0) return 'none';
     if (checkedCount === leaves.length) return 'all';
     return 'some';
@@ -572,19 +645,19 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const handleLevel1CheckboxToggle = (l1Node) => {
     const checkState = getLevel1CheckState(l1Node);
     const leaves = getLeafLessonsForLevel1(l1Node);
-    setSelectedLessonIds(prev => {
+    setSelectedLessonIds((prev) => {
       const next = new Set(prev);
       if (checkState === 'all') {
-        leaves.forEach(l => next.delete(String(l.id)));
+        leaves.forEach((l) => next.delete(String(l.id)));
       } else {
-        leaves.forEach(l => next.add(String(l.id)));
+        leaves.forEach((l) => next.add(String(l.id)));
       }
       return next;
     });
   };
 
   const handleLeafCheckboxToggle = (lessonId) => {
-    setSelectedLessonIds(prev => {
+    setSelectedLessonIds((prev) => {
       const next = new Set(prev);
       const strId = String(lessonId);
       if (next.has(strId)) {
@@ -597,7 +670,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   };
 
   const toggleCollapse = (path) => {
-    setCollapsedNodes(prev => {
+    setCollapsedNodes((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -611,37 +684,44 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // -------------------------
   // Assignment Actions (Drag/Drop and Single clicks)
   // -------------------------
-  const handleAssignLesson = async (lesson, dateStr, weekNum) => {
+  const handleAssignLesson = async (lesson, dateStr, weekNum, endDateStr = null) => {
     if (!selectedClassId || !selectedSubjectId || !selectedBookId) {
       showToast('Please select Class, Subject, and Book first', 'error');
       return;
     }
 
-    const planTeacherId = isAdminView ? (selectedTeacherId || null) : (teacher?.id || null);
+    const planTeacherId = isAdminView ? selectedTeacherId || null : teacher?.id || null;
 
     setSaving(true);
     try {
-      const newPlan = {
+      const datesToPlan = planningMode === 'date' ? getDatesInRange(dateStr, endDateStr || dateStr) : [dateStr];
+
+      const newPlans = datesToPlan.map((dStr) => ({
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
         book_id: selectedBookId,
         teacher_id: planTeacherId,
         lesson_id: lesson.id,
-        target_date: planningMode === 'date' ? dateStr : null,
+        target_date: planningMode === 'date' ? dStr : null,
         academic_week: planningMode === 'week' ? weekNum : null,
         status: 'planned',
         carry_forward_count: 0,
-      };
+      }));
 
-      const { data, error } = await supabase.from('lesson_plans').insert([newPlan]).select();
+      const { data, error } = await supabase.from('lesson_plans').insert(newPlans).select();
       if (error) throw error;
 
-      setLessonPlans(prev => {
-        const next = [...prev, data[0]];
+      setLessonPlans((prev) => {
+        const next = [...prev, ...data];
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
-      showToast('Lesson assigned successfully', 'success');
+      showToast(
+        datesToPlan.length > 1
+          ? `Lesson assigned across ${datesToPlan.length} days`
+          : 'Lesson assigned successfully',
+        'success'
+      );
     } catch (err) {
       showToast('Failed to assign lesson: ' + err.message, 'error');
     } finally {
@@ -655,7 +735,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         showToast('Please click to select a date card on the timeline first', 'info');
         return;
       }
-      handleAssignLesson(lesson, activeTargetDate, null);
+      handleAssignLesson(lesson, activeTargetDate, null, activeTargetEndDate);
     } else {
       if (!activeTargetWeek) {
         showToast('Please click to select a week card on the timeline first', 'info');
@@ -667,6 +747,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
   const handleBulkAssign = async () => {
     const targetDate = planningMode === 'date' ? activeTargetDate : null;
+    const targetEndDate = planningMode === 'date' ? activeTargetEndDate : null;
     const targetWeek = planningMode === 'week' ? activeTargetWeek : null;
 
     if (planningMode === 'date' && !targetDate) {
@@ -678,38 +759,43 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       return;
     }
 
-    const lessonsToAssign = leafLessons.filter(l => selectedLessonIds.has(String(l.id)));
+    const lessonsToAssign = leafLessons.filter((l) => selectedLessonIds.has(String(l.id)));
     if (lessonsToAssign.length === 0) {
       showToast('No lessons selected', 'error');
       return;
     }
 
+    const datesToPlan = planningMode === 'date' ? getDatesInRange(targetDate, targetEndDate || targetDate) : [targetDate];
+
     // Filter out already planned lessons to prevent duplication
     const plansToInsert = [];
-    lessonsToAssign.forEach(lesson => {
-      const alreadyPlanned = lessonPlans.some(p => 
-        String(p.lesson_id) === String(lesson.id) &&
-        String(p.class_id) === String(selectedClassId) &&
-        (planningMode === 'date' ? p.target_date === targetDate : p.academic_week === targetWeek)
-      );
+    lessonsToAssign.forEach((lesson) => {
+      datesToPlan.forEach((dStr) => {
+        const alreadyPlanned = lessonPlans.some(
+          (p) =>
+            String(p.lesson_id) === String(lesson.id) &&
+            String(p.class_id) === String(selectedClassId) &&
+            (planningMode === 'date' ? p.target_date === dStr : p.academic_week === targetWeek)
+        );
 
-      if (!alreadyPlanned) {
-        plansToInsert.push({
-          class_id: selectedClassId,
-          subject_id: selectedSubjectId,
-          book_id: selectedBookId,
-          teacher_id: isAdminView ? (selectedTeacherId || null) : (teacher?.id || null),
-          lesson_id: lesson.id,
-          target_date: targetDate,
-          academic_week: targetWeek,
-          status: 'planned',
-          carry_forward_count: 0
-        });
-      }
+        if (!alreadyPlanned) {
+          plansToInsert.push({
+            class_id: selectedClassId,
+            subject_id: selectedSubjectId,
+            book_id: selectedBookId,
+            teacher_id: isAdminView ? selectedTeacherId || null : teacher?.id || null,
+            lesson_id: lesson.id,
+            target_date: planningMode === 'date' ? dStr : null,
+            academic_week: targetWeek,
+            status: 'planned',
+            carry_forward_count: 0,
+          });
+        }
+      });
     });
 
     if (plansToInsert.length === 0) {
-      showToast('Selected lessons are already planned on this target', 'info');
+      showToast('Selected lessons are already planned on these targets', 'info');
       return;
     }
 
@@ -718,13 +804,13 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       const { data, error } = await supabase.from('lesson_plans').insert(plansToInsert).select();
       if (error) throw error;
 
-      setLessonPlans(prev => {
+      setLessonPlans((prev) => {
         const next = [...prev, ...data];
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
       setSelectedLessonIds(new Set());
-      showToast(`Successfully assigned ${data.length} lessons`, 'success');
+      showToast(`Successfully assigned ${data.length} lesson plan entries`, 'success');
     } catch (err) {
       showToast('Failed to assign lessons: ' + err.message, 'error');
     } finally {
@@ -737,8 +823,8 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     try {
       const { error } = await supabase.from('lesson_plans').delete().eq('id', planId);
       if (error) throw error;
-      setLessonPlans(prev => {
-        const next = prev.filter(p => p.id !== planId);
+      setLessonPlans((prev) => {
+        const next = prev.filter((p) => p.id !== planId);
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
@@ -763,9 +849,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         .eq('id', planId)
         .select();
       if (error) throw error;
-      
-      setLessonPlans(prev => {
-        const next = prev.map(p => p.id === planId ? data[0] : p);
+
+      setLessonPlans((prev) => {
+        const next = prev.map((p) => (p.id === planId ? data[0] : p));
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
@@ -791,9 +877,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         .eq('id', planId)
         .select();
       if (error) throw error;
-      
-      setLessonPlans(prev => {
-        const next = prev.map(p => p.id === planId ? data[0] : p);
+
+      setLessonPlans((prev) => {
+        const next = prev.map((p) => (p.id === planId ? data[0] : p));
         lessonPlannerCache.lessonPlans = next;
         return next;
       });
@@ -843,10 +929,18 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // -------------------------
   const renderSyllabusTree = () => {
     if (!selectedBookId) {
-      return <div className="text-center text-gray-400 mt-10 text-sm p-4">Select Class, Subject, and Book to view syllabus tree.</div>;
+      return (
+        <div className="text-center text-gray-400 mt-10 text-sm p-4">
+          Select Class, Subject, and Book to view syllabus tree.
+        </div>
+      );
     }
     if (syllabusTree.length === 0) {
-      return <div className="text-center text-gray-400 mt-10 text-sm p-4">No syllabus lessons registered for this book.</div>;
+      return (
+        <div className="text-center text-gray-400 mt-10 text-sm p-4">
+          No syllabus lessons registered for this book.
+        </div>
+      );
     }
 
     return (
@@ -855,40 +949,59 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           const l1Path = l1Node.name;
           const isL1Collapsed = collapsedNodes.has(l1Path);
           const l1CheckState = getLevel1CheckState(l1Node);
-
-          const l1CheckIcon = l1CheckState === 'all' 
-            ? 'fa-check-square text-pink-600' 
-            : l1CheckState === 'some' 
-            ? 'fa-minus-square text-pink-600' 
-            : 'fa-square text-gray-400';
-
           const hasChildren = Object.keys(l1Node.level2s).length > 0;
+          const l1CheckIcon =
+            l1CheckState === 'all'
+              ? 'fa-check-square text-pink-600'
+              : l1CheckState === 'some'
+                ? 'fa-minus-square text-pink-600'
+                : 'fa-square text-gray-400';
 
           return (
-            <div key={l1Node.name} className={`bg-white rounded border border-gray-150 p-2 shadow-sm space-y-1 ${getIndexColorClass(idx)}`}>
+            <div
+              key={l1Node.name}
+              className={`bg-white rounded border border-gray-150 p-2 shadow-sm space-y-1 ${getIndexColorClass(idx)}`}
+            >
               {/* Level 1 Header */}
               <div className="flex items-center justify-between py-1 bg-gray-50/50 rounded pr-2">
-                <div className="flex items-center min-w-0 flex-1">
+                <div
+                  draggable={!hasChildren && !!l1Node.lessons[0]}
+                  onDragStart={(e) => {
+                    if (!hasChildren && l1Node.lessons[0]) {
+                      handleLessonDragStart(e, l1Node.lessons[0]);
+                    }
+                  }}
+                  className={`flex items-center min-w-0 flex-1 ${!hasChildren && l1Node.lessons[0] ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
+                >
                   {hasChildren ? (
-                    <button 
-                      onClick={() => toggleCollapse(l1Path)} 
+                    <button
+                      onClick={() => toggleCollapse(l1Path)}
                       className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors mr-1"
                     >
-                      <i className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[10px] w-3`}></i>
+                      <i
+                        className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[10px] w-3`}
+                      ></i>
                     </button>
                   ) : (
                     <div className="w-5 mr-1" />
                   )}
-                  
+
                   {/* Checkbox at Level 1 */}
-                  <button 
-                    onClick={() => handleLevel1CheckboxToggle(l1Node)}
-                    className="p-1 hover:bg-gray-200 rounded transition-colors mr-1.5 flex-shrink-0"
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLevel1CheckboxToggle(l1Node);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="p-1 hover:bg-gray-200 rounded transition-colors mr-1.5 flex-shrink-0 cursor-default"
                   >
                     <i className={`far ${l1CheckIcon} text-base`}></i>
                   </button>
 
-                  <span className="font-semibold text-gray-800 text-sm truncate" title={l1Node.name}>
+                  <span
+                    className="font-semibold text-gray-800 text-sm truncate"
+                    title={l1Node.name}
+                  >
                     {l1Node.name}
                   </span>
                 </div>
@@ -896,8 +1009,14 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                 {/* Level 1 Leaf Assign Button */}
                 {!hasChildren && l1Node.lessons[0] && (
                   <div className="flex items-center gap-1">
-                    {lessonPlans.some(p => String(p.lesson_id) === String(l1Node.lessons[0].id) && String(p.class_id) === String(selectedClassId)) ? (
-                      <span className="bg-pink-100 text-pink-700 text-[10px] px-1.5 py-0.5 rounded font-bold">Planned</span>
+                    {lessonPlans.some(
+                      (p) =>
+                        String(p.lesson_id) === String(l1Node.lessons[0].id) &&
+                        String(p.class_id) === String(selectedClassId)
+                    ) ? (
+                      <span className="bg-pink-100 text-pink-700 text-[10px] px-1.5 py-0.5 rounded font-bold">
+                        Planned
+                      </span>
                     ) : (
                       <button
                         draggable="true"
@@ -920,22 +1039,34 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               {/* Level 1 Children Content */}
               {!isL1Collapsed && hasChildren && (
                 <div className="pl-4 border-l-2 border-gray-100 ml-2 mt-1 space-y-1">
-                  {Object.values(l1Node.level2s).map(l2Node => {
+                  {Object.values(l1Node.level2s).map((l2Node) => {
                     const l2Path = `${l1Path}/${l2Node.name}`;
                     const isL2Collapsed = collapsedNodes.has(l2Path);
                     const hasL3 = l2Node.level3s.length > 0;
-                    
+
                     return (
-                      <div key={l2Node.name} className="space-y-1">
+                      <div
+                        key={l2Node.name}
+                        className="space-y-1"
+                      >
                         {/* Level 2 Header */}
                         <div className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2">
-                          <div className="flex items-center min-w-0 flex-1">
+                          <div
+                            draggable={!hasL3 && !!l2Node.lessons[0]}
+                            onDragStart={(e) => {
+                              if (!hasL3 && l2Node.lessons[0])
+                                handleLessonDragStart(e, l2Node.lessons[0]);
+                            }}
+                            className={`flex items-center min-w-0 flex-1 ${!hasL3 && l2Node.lessons[0] ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
+                          >
                             {hasL3 ? (
-                              <button 
-                                onClick={() => toggleCollapse(l2Path)} 
+                              <button
+                                onClick={() => toggleCollapse(l2Path)}
                                 className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors mr-1"
                               >
-                                <i className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[9px] w-3`}></i>
+                                <i
+                                  className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[9px] w-3`}
+                                ></i>
                               </button>
                             ) : (
                               <i className="fas fa-level-up-alt rotate-90 text-gray-400 ml-1 mr-2 text-[10px]"></i>
@@ -943,15 +1074,24 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
                             {/* Checkbox for Level 2 Leaf */}
                             {!hasL3 && l2Node.lessons[0] && (
-                              <button 
-                                onClick={() => handleLeafCheckboxToggle(l2Node.lessons[0].id)}
-                                className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLeafCheckboxToggle(l2Node.lessons[0].id);
+                                }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0 cursor-default"
                               >
-                                <i className={`far ${selectedLessonIds.has(String(l2Node.lessons[0].id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-sm`}></i>
+                                <i
+                                  className={`far ${selectedLessonIds.has(String(l2Node.lessons[0].id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-sm`}
+                                ></i>
                               </button>
                             )}
 
-                            <span className="text-xs font-semibold text-gray-700 truncate" title={l2Node.name}>
+                            <span
+                              className="text-xs font-semibold text-gray-700 truncate"
+                              title={l2Node.name}
+                            >
                               {l2Node.name}
                             </span>
                           </div>
@@ -959,13 +1099,22 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           {/* Level 2 Leaf actions */}
                           {!hasL3 && l2Node.lessons[0] && (
                             <div className="flex items-center gap-1">
-                              {lessonPlans.some(p => String(p.lesson_id) === String(l2Node.lessons[0].id) && String(p.class_id) === String(selectedClassId)) ? (
-                                <span className="bg-pink-100 text-pink-700 text-[9px] px-1.5 py-0.5 rounded font-bold">Planned</span>
+                              {lessonPlans.some(
+                                (p) =>
+                                  String(p.lesson_id) === String(l2Node.lessons[0].id) &&
+                                  String(p.class_id) === String(selectedClassId)
+                              ) ? (
+                                <span className="bg-pink-100 text-pink-700 text-[9px] px-1.5 py-0.5 rounded font-bold">
+                                  Planned
+                                </span>
                               ) : (
                                 <button
                                   draggable="true"
                                   onDragStart={(e) => {
-                                    e.dataTransfer.setData('text/plain', String(l2Node.lessons[0].id));
+                                    e.dataTransfer.setData(
+                                      'text/plain',
+                                      String(l2Node.lessons[0].id)
+                                    );
                                     e.dataTransfer.effectAllowed = 'copy';
                                   }}
                                   onClick={() => handleAssignToActiveTarget(l2Node.lessons[0])}
@@ -982,27 +1131,49 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                         {/* Level 3 Content */}
                         {!isL2Collapsed && hasL3 && (
                           <div className="pl-4 border-l border-gray-200 ml-2 space-y-1">
-                            {l2Node.level3s.map(l3Lesson => (
-                              <div key={l3Lesson.id} className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2">
-                                <div className="flex items-center min-w-0 flex-1">
+                            {l2Node.level3s.map((l3Lesson) => (
+                              <div
+                                key={l3Lesson.id}
+                                className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2"
+                              >
+                                <div
+                                  draggable={true}
+                                  onDragStart={(e) => handleLessonDragStart(e, l3Lesson)}
+                                  className="flex items-center min-w-0 flex-1 cursor-grab active:cursor-grabbing select-none"
+                                >
                                   <i className="fas fa-level-up-alt rotate-90 text-gray-300 mr-2 text-[9px] ml-1"></i>
-                                  
+
                                   {/* Checkbox for Level 3 Leaf */}
-                                  <button 
-                                    onClick={() => handleLeafCheckboxToggle(l3Lesson.id)}
-                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLeafCheckboxToggle(l3Lesson.id);
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0 cursor-default"
                                   >
-                                    <i className={`far ${selectedLessonIds.has(String(l3Lesson.id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-xs`}></i>
+                                    <i
+                                      className={`far ${selectedLessonIds.has(String(l3Lesson.id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-xs`}
+                                    ></i>
                                   </button>
 
-                                  <span className="text-xs text-gray-600 truncate" title={l3Lesson.level3}>
+                                  <span
+                                    className="text-xs text-gray-600 truncate"
+                                    title={l3Lesson.level3}
+                                  >
                                     {l3Lesson.level3}
                                   </span>
                                 </div>
 
                                 <div className="flex items-center gap-1">
-                                  {lessonPlans.some(p => String(p.lesson_id) === String(l3Lesson.id) && String(p.class_id) === String(selectedClassId)) ? (
-                                    <span className="bg-pink-100 text-pink-700 text-[9px] px-1.5 py-0.5 rounded font-bold">Planned</span>
+                                  {lessonPlans.some(
+                                    (p) =>
+                                      String(p.lesson_id) === String(l3Lesson.id) &&
+                                      String(p.class_id) === String(selectedClassId)
+                                  ) ? (
+                                    <span className="bg-pink-100 text-pink-700 text-[9px] px-1.5 py-0.5 rounded font-bold">
+                                      Planned
+                                    </span>
                                   ) : (
                                     <button
                                       draggable="true"
@@ -1041,7 +1212,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     if (modalSyllabusTree.length === 0) {
       return (
         <div className="text-center text-gray-400 text-xs py-8">
-          {modalSearch.trim() ? 'No matching lessons found.' : 'All lessons from this book are already planned on this target.'}
+          {modalSearch.trim()
+            ? 'No matching lessons found.'
+            : 'All lessons from this book are already planned on this target.'}
         </div>
       );
     }
@@ -1053,32 +1226,38 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           const isL1Collapsed = modalCollapsedNodes.has(l1Path);
           const l1CheckState = getModalLevel1CheckState(l1Node);
 
-          const l1CheckIcon = l1CheckState === 'all' 
-            ? 'fa-check-square text-pink-600' 
-            : l1CheckState === 'some' 
-            ? 'fa-minus-square text-pink-600' 
-            : 'fa-square text-gray-400';
+          const l1CheckIcon =
+            l1CheckState === 'all'
+              ? 'fa-check-square text-pink-600'
+              : l1CheckState === 'some'
+                ? 'fa-minus-square text-pink-600'
+                : 'fa-square text-gray-400';
 
           const hasChildren = Object.keys(l1Node.level2s).length > 0;
 
           return (
-            <div key={l1Node.name} className={`bg-white rounded border border-gray-150 p-2 shadow-sm space-y-1 ${getIndexColorClass(idx)}`}>
+            <div
+              key={l1Node.name}
+              className={`bg-white rounded border border-gray-150 p-2 shadow-sm space-y-1 ${getIndexColorClass(idx)}`}
+            >
               {/* Level 1 Header */}
               <div className="flex items-center justify-between py-1 bg-gray-50/50 rounded pr-2">
                 <div className="flex items-center min-w-0 flex-1">
                   {hasChildren ? (
-                    <button 
-                      onClick={() => toggleModalCollapse(l1Path)} 
+                    <button
+                      onClick={() => toggleModalCollapse(l1Path)}
                       className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors mr-1"
                     >
-                      <i className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[10px] w-3`}></i>
+                      <i
+                        className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[10px] w-3`}
+                      ></i>
                     </button>
                   ) : (
                     <div className="w-5 mr-1" />
                   )}
-                  
+
                   {/* Checkbox at Level 1 */}
-                  <button 
+                  <button
                     onClick={() => handleModalLevel1CheckboxToggle(l1Node)}
                     className="p-1 hover:bg-gray-200 rounded transition-colors mr-1.5 flex-shrink-0"
                     disabled={saving}
@@ -1086,7 +1265,10 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                     <i className={`far ${l1CheckIcon} text-base`}></i>
                   </button>
 
-                  <span className="font-semibold text-gray-800 text-sm truncate" title={l1Node.name}>
+                  <span
+                    className="font-semibold text-gray-800 text-sm truncate"
+                    title={l1Node.name}
+                  >
                     {l1Node.name}
                   </span>
                 </div>
@@ -1095,22 +1277,24 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               {/* Level 1 Children Content */}
               {!isL1Collapsed && hasChildren && (
                 <div className="pl-4 border-l-2 border-gray-100 ml-2 mt-1 space-y-1">
-                  {Object.values(l1Node.level2s).map(l2Node => {
+                  {Object.values(l1Node.level2s).map((l2Node) => {
                     const l2Path = `${l1Path}/${l2Node.name}`;
                     const isL2Collapsed = modalCollapsedNodes.has(l2Path);
                     const hasL3 = l2Node.level3s.length > 0;
-                    
+
                     return (
                       <div key={l2Node.name} className="space-y-1">
                         {/* Level 2 Header */}
                         <div className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2">
                           <div className="flex items-center min-w-0 flex-1">
                             {hasL3 ? (
-                              <button 
-                                onClick={() => toggleModalCollapse(l2Path)} 
+                              <button
+                                onClick={() => toggleModalCollapse(l2Path)}
                                 className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-gray-600 transition-colors mr-1"
                               >
-                                <i className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[9px] w-3`}></i>
+                                <i
+                                  className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[9px] w-3`}
+                                ></i>
                               </button>
                             ) : (
                               <i className="fas fa-level-up-alt rotate-90 text-gray-400 ml-1 mr-2 text-[10px]"></i>
@@ -1118,16 +1302,21 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
                             {/* Checkbox for Level 2 Leaf */}
                             {!hasL3 && l2Node.lessons[0] && (
-                              <button 
+                              <button
                                 onClick={() => handleModalLeafToggle(l2Node.lessons[0].id)}
                                 className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
                                 disabled={saving}
                               >
-                                <i className={`far ${modalSelectedIds.has(String(l2Node.lessons[0].id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-sm`}></i>
+                                <i
+                                  className={`far ${modalSelectedIds.has(String(l2Node.lessons[0].id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-sm`}
+                                ></i>
                               </button>
                             )}
 
-                            <span className="text-xs font-semibold text-gray-700 truncate" title={l2Node.name}>
+                            <span
+                              className="text-xs font-semibold text-gray-700 truncate"
+                              title={l2Node.name}
+                            >
                               {l2Node.name}
                             </span>
                           </div>
@@ -1136,21 +1325,29 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                         {/* Level 3 Content */}
                         {!isL2Collapsed && hasL3 && (
                           <div className="pl-4 border-l border-gray-200 ml-2 space-y-1">
-                            {l2Node.level3s.map(l3Lesson => (
-                              <div key={l3Lesson.id} className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2">
+                            {l2Node.level3s.map((l3Lesson) => (
+                              <div
+                                key={l3Lesson.id}
+                                className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2"
+                              >
                                 <div className="flex items-center min-w-0 flex-1">
                                   <i className="fas fa-level-up-alt rotate-90 text-gray-300 mr-2 text-[9px] ml-1"></i>
-                                  
+
                                   {/* Checkbox for Level 3 Leaf */}
-                                  <button 
+                                  <button
                                     onClick={() => handleModalLeafToggle(l3Lesson.id)}
                                     className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
                                     disabled={saving}
                                   >
-                                    <i className={`far ${modalSelectedIds.has(String(l3Lesson.id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-xs`}></i>
+                                    <i
+                                      className={`far ${modalSelectedIds.has(String(l3Lesson.id)) ? 'fa-check-square text-pink-600' : 'fa-square text-gray-400'} text-xs`}
+                                    ></i>
                                   </button>
 
-                                  <span className="text-xs text-gray-600 truncate" title={l3Lesson.level3}>
+                                  <span
+                                    className="text-xs text-gray-600 truncate"
+                                    title={l3Lesson.level3}
+                                  >
                                     {l3Lesson.level3}
                                   </span>
                                 </div>
@@ -1213,7 +1410,11 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Active target textual display
   const getActiveTargetName = () => {
     if (planningMode === 'date' && activeTargetDate) {
-      return new Date(activeTargetDate).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+      return new Date(activeTargetDate).toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
     }
     if (planningMode === 'week' && activeTargetWeek) {
       return `Week ${activeTargetWeek}`;
@@ -1250,13 +1451,15 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               </span>
               <select
                 value={selectedTeacherId}
-                onChange={e => setSelectedTeacherId(e.target.value)}
+                onChange={(e) => setSelectedTeacherId(e.target.value)}
                 disabled={saving}
                 className="border-indigo-200 rounded text-xs focus:border-indigo-500 focus:ring-indigo-500 bg-white py-0.5 px-2 outline-none font-medium cursor-pointer disabled:bg-gray-100"
               >
                 <option value="">All Teachers</option>
-                {allTeachers.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                {allTeachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1268,51 +1471,80 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
             onClick={() => setPlanningMode('date')}
             disabled={saving}
             className={`px-4 py-1.5 text-xs font-bold rounded-full transition-colors ${planningMode === 'date' ? 'bg-pink-600 text-white' : 'text-gray-500 hover:bg-gray-100'} disabled:opacity-50`}
-          >By Date</button>
+          >
+            By Date
+          </button>
           <button
             onClick={() => setPlanningMode('week')}
             disabled={saving}
             className={`px-4 py-1.5 text-xs font-bold rounded-full transition-colors ${planningMode === 'week' ? 'bg-pink-600 text-white' : 'text-gray-500 hover:bg-gray-100'} disabled:opacity-50`}
-          >By Week</button>
+          >
+            By Week
+          </button>
         </div>
       </div>
 
       {/* Context Selection Row */}
       <div className="p-4 border-b bg-white flex flex-wrap gap-4 items-end">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Class</label>
+          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">
+            Class
+          </label>
           <select
             value={selectedClassId}
-            onChange={e => { setSelectedClassId(e.target.value); setSelectedSubjectId(''); setSelectedBookId(''); }}
+            onChange={(e) => {
+              setSelectedClassId(e.target.value);
+              setSelectedSubjectId('');
+              setSelectedBookId('');
+            }}
             disabled={saving}
             className="w-full border-gray-300 rounded-md shadow-sm text-sm focus:border-pink-500 focus:ring-pink-500 disabled:bg-gray-150"
           >
             <option value="">Select Class...</option>
-            {availableClasses.map(c => <option key={c.id} value={c.id}>{c.name || c.class_name}</option>)}
+            {availableClasses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name || c.class_name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Subject</label>
+          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">
+            Subject
+          </label>
           <select
             value={selectedSubjectId}
-            onChange={e => { setSelectedSubjectId(e.target.value); setSelectedBookId(''); }}
+            onChange={(e) => {
+              setSelectedSubjectId(e.target.value);
+              setSelectedBookId('');
+            }}
             disabled={!selectedClassId || saving}
             className="w-full border-gray-300 rounded-md shadow-sm text-sm focus:border-pink-500 focus:ring-pink-500 disabled:bg-gray-100"
           >
             <option value="">Select Subject...</option>
-            {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {availableSubjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Book</label>
+          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">
+            Book
+          </label>
           <select
             value={selectedBookId}
-            onChange={e => setSelectedBookId(e.target.value)}
+            onChange={(e) => setSelectedBookId(e.target.value)}
             disabled={!selectedSubjectId || saving}
             className="w-full border-gray-300 rounded-md shadow-sm text-sm focus:border-pink-500 focus:ring-pink-500 disabled:bg-gray-100"
           >
             <option value="">Select Book...</option>
-            {availableBooks.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {availableBooks.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -1344,13 +1576,15 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       {/* Main Responsive Split Layout */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left Pane: Syllabus Tree & Bulk Assign */}
-        <div className={`w-full md:w-1/3 md:min-w-[320px] border-r border-gray-200 flex flex-col bg-gray-50 ${activeMobileTab === 'syllabus' ? 'flex' : 'hidden md:flex'}`}>
+        <div
+          className={`w-full md:w-1/3 md:min-w-[320px] border-r border-gray-200 flex flex-col bg-gray-50 ${activeMobileTab === 'syllabus' ? 'flex' : 'hidden md:flex'}`}
+        >
           <div className="p-3 border-b bg-gray-100 flex items-center justify-between">
             <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
               Syllabus Items {selectedBookId && `(${leafLessons.length} items)`}
             </span>
             {selectedLessonIds.size > 0 && (
-              <button 
+              <button
                 onClick={() => setSelectedLessonIds(new Set())}
                 disabled={saving}
                 className="text-[10px] text-gray-500 hover:text-gray-700 underline disabled:opacity-50"
@@ -1359,7 +1593,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               </button>
             )}
           </div>
-          
+
           <div className="flex-1 overflow-auto p-3">
             {/* Bulk Assign Panel */}
             {selectedLessonIds.size > 0 && (
@@ -1394,32 +1628,60 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         </div>
 
         {/* Right Pane: Timeline with Selection/Drop Target Indicators */}
-        <div className={`flex-1 flex flex-col bg-white ${activeMobileTab === 'timeline' ? 'flex' : 'hidden md:flex'}`}>
+        <div
+          className={`flex-1 flex flex-col bg-white ${activeMobileTab === 'timeline' ? 'flex' : 'hidden md:flex'}`}
+        >
           <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
             <div className="text-sm font-bold text-gray-700 flex items-center gap-2">
               <span>{planningMode === 'date' ? 'Daily Timeline' : 'Weekly Timeline'}</span>
               {getActiveTargetName() && (
                 <span className="text-xs bg-pink-600 text-white px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
                   Active target: {getActiveTargetName()}
-                  <button onClick={() => { setActiveTargetDate(null); setActiveTargetWeek(null); }} className="hover:text-red-200">
+                  <button
+                    onClick={() => {
+                      setActiveTargetDate(null);
+                      setActiveTargetWeek(null);
+                    }}
+                    className="hover:text-red-200"
+                  >
                     <i className="fas fa-times-circle ml-0.5"></i>
                   </button>
                 </span>
               )}
             </div>
-            
+
             <div className="flex items-center gap-2">
               {planningMode === 'date' ? (
                 <>
-                  <button onClick={() => setTimelineDays(p => Math.max(1, p - 1))} className="text-gray-400 hover:text-gray-600 px-2 py-1"><i className="fas fa-minus"></i></button>
+                  <button
+                    onClick={() => setTimelineDays((p) => Math.max(1, p - 1))}
+                    className="text-gray-400 hover:text-gray-600 px-2 py-1"
+                  >
+                    <i className="fas fa-minus"></i>
+                  </button>
                   <span className="text-xs font-bold text-gray-500">{timelineDays} Days</span>
-                  <button onClick={() => setTimelineDays(p => p + 1)} className="text-gray-400 hover:text-gray-600 px-2 py-1"><i className="fas fa-plus"></i></button>
+                  <button
+                    onClick={() => setTimelineDays((p) => p + 1)}
+                    className="text-gray-400 hover:text-gray-600 px-2 py-1"
+                  >
+                    <i className="fas fa-plus"></i>
+                  </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => setTimelineWeeks(p => Math.max(1, p - 1))} className="text-gray-400 hover:text-gray-600 px-2 py-1"><i className="fas fa-minus"></i></button>
+                  <button
+                    onClick={() => setTimelineWeeks((p) => Math.max(1, p - 1))}
+                    className="text-gray-400 hover:text-gray-600 px-2 py-1"
+                  >
+                    <i className="fas fa-minus"></i>
+                  </button>
                   <span className="text-xs font-bold text-gray-500">{timelineWeeks} Weeks</span>
-                  <button onClick={() => setTimelineWeeks(p => p + 1)} className="text-gray-400 hover:text-gray-600 px-2 py-1"><i className="fas fa-plus"></i></button>
+                  <button
+                    onClick={() => setTimelineWeeks((p) => p + 1)}
+                    className="text-gray-400 hover:text-gray-600 px-2 py-1"
+                  >
+                    <i className="fas fa-plus"></i>
+                  </button>
                 </>
               )}
             </div>
@@ -1435,51 +1697,101 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               </div>
             ) : planningMode === 'date' ? (
               <div className="space-y-4">
-                {timelineDates.map(date => {
+                {timelineDates.map((date) => {
                   const dateStr = date.toISOString().split('T')[0];
-                  const plansForDate = lessonPlans.filter(p =>
-                    p.target_date === dateStr &&
-                    String(p.class_id) === String(selectedClassId) &&
-                    String(p.subject_id) === String(selectedSubjectId)
+                  const plansForDate = lessonPlans.filter(
+                    (p) =>
+                      p.target_date === dateStr &&
+                      String(p.class_id) === String(selectedClassId) &&
+                      String(p.subject_id) === String(selectedSubjectId)
                   );
-                  
+
                   const isSelected = activeTargetDate === dateStr;
+                  const isRangeSelected =
+                    activeTargetDate &&
+                    activeTargetEndDate &&
+                    dateStr >= (activeTargetDate < activeTargetEndDate ? activeTargetDate : activeTargetEndDate) &&
+                    dateStr <= (activeTargetDate < activeTargetEndDate ? activeTargetEndDate : activeTargetDate);
                   const isDraggedOver = draggedOverDate === dateStr;
                   const isToday = dateStr === new Date().toISOString().split('T')[0];
                   const colorStyles = getWeekdayColorStyles(date);
 
                   return (
-                    <div 
+                    <div
                       key={dateStr}
-                      onClick={() => setActiveTargetDate(prev => prev === dateStr ? null : dateStr)}
-                      onDragEnter={(e) => { e.preventDefault(); setDraggedOverDate(dateStr); }}
+                      onClick={(e) => {
+                        if (e.shiftKey && activeTargetDate) {
+                          if (activeTargetDate < dateStr) {
+                            setActiveTargetEndDate(dateStr);
+                          } else {
+                            setActiveTargetEndDate(activeTargetDate);
+                            setActiveTargetDate(dateStr);
+                          }
+                        } else {
+                          if (activeTargetDate === dateStr && !activeTargetEndDate) {
+                            setActiveTargetDate(null);
+                            setActiveTargetEndDate(null);
+                          } else {
+                            setActiveTargetDate(dateStr);
+                            setActiveTargetEndDate(null);
+                          }
+                        }
+                      }}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        setDraggedOverDate(dateStr);
+                      }}
                       onDragOver={(e) => e.preventDefault()}
                       onDragLeave={() => setDraggedOverDate(null)}
                       onDrop={(e) => {
                         setDraggedOverDate(null);
                         const lessonId = e.dataTransfer.getData('text/plain');
-                        const lesson = allLessons.find(l => String(l.id) === lessonId);
-                        if (lesson) handleAssignLesson(lesson, dateStr, null);
+                        const lesson = allLessons.find((l) => String(l.id) === lessonId);
+                        if (lesson) {
+                          handleAssignLesson(
+                            lesson,
+                            dateStr,
+                            null,
+                            activeTargetEndDate && (activeTargetDate === dateStr || isRangeSelected) ? activeTargetEndDate : null
+                          );
+                        }
                       }}
                       className={`bg-white border rounded-lg p-3 shadow-sm transition-all cursor-pointer ${
-                        isSelected ? 'ring-2 ring-pink-500 border-transparent bg-pink-50/20' : 'border-gray-200'
+                        isSelected || isRangeSelected
+                          ? 'ring-2 ring-pink-500 border-transparent bg-pink-50/20'
+                          : 'border-gray-200'
                       } ${
                         isDraggedOver ? 'border-2 border-dashed border-pink-500 bg-pink-50' : ''
                       } ${
                         isToday ? 'border-2 border-pink-400 shadow-md ring-1 ring-pink-300' : ''
                       }`}
                     >
-                      <div className={`flex justify-between items-center mb-2 border-b pb-2 flex-wrap gap-2 ${colorStyles.bg} -mx-3 -mt-3 p-2 rounded-t-lg`}>
-                        <span className={`font-bold flex items-center gap-1.5 text-xs sm:text-sm ${colorStyles.text}`}>
+                      <div
+                        className={`flex justify-between items-center mb-2 border-b pb-2 flex-wrap gap-2 ${colorStyles.bg} -mx-3 -mt-3 p-2 rounded-t-lg`}
+                      >
+                        <span
+                          className={`font-bold flex items-center gap-1.5 text-xs sm:text-sm ${colorStyles.text}`}
+                        >
                           {isSelected && <i className="fas fa-map-pin text-pink-600 text-sm"></i>}
-                          {date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                          {isToday && <span className="text-[9px] font-bold bg-pink-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">Today</span>}
+                          {date.toLocaleDateString(undefined, {
+                            weekday: 'long',
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                          {isToday && (
+                            <span className="text-[9px] font-bold bg-pink-600 text-white px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
+                              Today
+                            </span>
+                          )}
                         </span>
-                        
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openAssignModal({ date: dateStr });
+                            openAssignModal({
+                              date: dateStr,
+                              endDate: activeTargetEndDate && (activeTargetDate === dateStr || isRangeSelected) ? activeTargetEndDate : dateStr,
+                            });
                           }}
                           disabled={saving}
                           className="bg-white hover:bg-gray-150 text-gray-700 border border-gray-250 rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 disabled:opacity-50"
@@ -1488,28 +1800,41 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           Assign
                         </button>
                       </div>
-                      
+
                       {plansForDate.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-1">No lessons planned. Drag a syllabus item here or click "+ Assign".</div>
+                        <div className="text-xs text-gray-400 italic py-1">
+                          No lessons planned. Drag a syllabus item here or click "+ Assign".
+                        </div>
                       ) : (
                         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                          {plansForDate.map(plan => {
-                            const lesson = allLessons.find(l => String(l.id) === String(plan.lesson_id));
+                          {plansForDate.map((plan) => {
+                            const lesson = allLessons.find(
+                              (l) => String(l.id) === String(plan.lesson_id)
+                            );
                             const fullPath = getFullLessonPath(lesson);
                             const isEditing = editingPlanId === plan.id;
 
                             return (
-                              <div key={plan.id} className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
+                              <div
+                                key={plan.id}
+                                className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors"
+                              >
                                 {isEditing ? (
-                                  <div className="flex flex-col gap-1.5 w-full" onClick={e => e.stopPropagation()}>
-                                    <span className="font-semibold text-pink-800 text-xs break-words" title={fullPath}>
+                                  <div
+                                    className="flex flex-col gap-1.5 w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span
+                                      className="font-semibold text-pink-800 text-xs break-words"
+                                      title={fullPath}
+                                    >
                                       {fullPath}
                                     </span>
                                     <div className="flex items-center gap-1.5 mt-1">
                                       <input
                                         type="date"
                                         value={editDate}
-                                        onChange={e => setEditDate(e.target.value)}
+                                        onChange={(e) => setEditDate(e.target.value)}
                                         className="text-xs border border-pink-200 rounded px-1.5 py-0.5 outline-none font-semibold text-pink-800 bg-white flex-1"
                                       />
                                       <button
@@ -1527,8 +1852,14 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex justify-between items-center w-full" onClick={(e) => e.stopPropagation()}>
-                                    <span className="font-semibold text-pink-800 text-xs break-words max-w-[70%]" title={fullPath}>
+                                  <div
+                                    className="flex justify-between items-center w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span
+                                      className="font-semibold text-pink-800 text-xs break-words max-w-[70%]"
+                                      title={fullPath}
+                                    >
                                       {fullPath}
                                     </span>
                                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -1536,7 +1867,10 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                                         <button
                                           onClick={() => {
                                             setEditingPlanId(plan.id);
-                                            setEditDate(plan.target_date || new Date().toISOString().split('T')[0]);
+                                            setEditDate(
+                                              plan.target_date ||
+                                                new Date().toISOString().split('T')[0]
+                                            );
                                           }}
                                           disabled={saving}
                                           className="text-pink-600 hover:text-pink-800 p-1 disabled:opacity-50"
@@ -1546,11 +1880,18 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                                         </button>
                                       )}
                                       {plan.carry_forward_count > 0 && (
-                                        <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
+                                        <span
+                                          className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold"
+                                          title="Carried forward"
+                                        >
                                           CF x{plan.carry_forward_count}
                                         </span>
                                       )}
-                                      <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
+                                      <button
+                                        onClick={() => handleUnassignLesson(plan.id)}
+                                        disabled={saving}
+                                        className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50"
+                                      >
                                         <i className="fas fa-times"></i>
                                       </button>
                                     </div>
@@ -1567,31 +1908,39 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               </div>
             ) : (
               <div className="space-y-4">
-                {timelineWeeksList.map(weekNum => {
-                  const plansForWeek = lessonPlans.filter(p =>
-                    p.academic_week === weekNum &&
-                    String(p.class_id) === String(selectedClassId) &&
-                    String(p.subject_id) === String(selectedSubjectId)
+                {timelineWeeksList.map((weekNum) => {
+                  const plansForWeek = lessonPlans.filter(
+                    (p) =>
+                      p.academic_week === weekNum &&
+                      String(p.class_id) === String(selectedClassId) &&
+                      String(p.subject_id) === String(selectedSubjectId)
                   );
-                  
+
                   const isSelected = activeTargetWeek === weekNum;
                   const isDraggedOver = draggedOverWeek === weekNum;
 
                   return (
-                    <div 
+                    <div
                       key={weekNum}
-                      onClick={() => setActiveTargetWeek(prev => prev === weekNum ? null : weekNum)}
-                      onDragEnter={(e) => { e.preventDefault(); setDraggedOverWeek(weekNum); }}
+                      onClick={() =>
+                        setActiveTargetWeek((prev) => (prev === weekNum ? null : weekNum))
+                      }
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        setDraggedOverWeek(weekNum);
+                      }}
                       onDragOver={(e) => e.preventDefault()}
                       onDragLeave={() => setDraggedOverWeek(null)}
                       onDrop={(e) => {
                         setDraggedOverWeek(null);
                         const lessonId = e.dataTransfer.getData('text/plain');
-                        const lesson = allLessons.find(l => String(l.id) === lessonId);
+                        const lesson = allLessons.find((l) => String(l.id) === lessonId);
                         if (lesson) handleAssignLesson(lesson, null, weekNum);
                       }}
                       className={`bg-white border rounded-lg p-3 shadow-sm transition-all cursor-pointer ${
-                        isSelected ? 'ring-2 ring-pink-500 border-transparent bg-pink-50/20' : 'border-gray-200'
+                        isSelected
+                          ? 'ring-2 ring-pink-500 border-transparent bg-pink-50/20'
+                          : 'border-gray-200'
                       } ${
                         isDraggedOver ? 'border-2 border-dashed border-pink-500 bg-pink-50' : ''
                       }`}
@@ -1601,7 +1950,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           {isSelected && <i className="fas fa-map-pin text-pink-600 text-sm"></i>}
                           Week {weekNum}
                         </span>
-                        
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1614,35 +1963,52 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           Assign
                         </button>
                       </div>
-                      
+
                       {plansForWeek.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-1">No lessons planned. Drag a syllabus item here or click "+ Assign".</div>
+                        <div className="text-xs text-gray-400 italic py-1">
+                          No lessons planned. Drag a syllabus item here or click "+ Assign".
+                        </div>
                       ) : (
                         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                          {plansForWeek.map(plan => {
-                            const lesson = allLessons.find(l => String(l.id) === String(plan.lesson_id));
+                          {plansForWeek.map((plan) => {
+                            const lesson = allLessons.find(
+                              (l) => String(l.id) === String(plan.lesson_id)
+                            );
                             const fullPath = getFullLessonPath(lesson);
                             const isEditing = editingPlanId === plan.id;
 
                             return (
-                              <div key={plan.id} className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors">
+                              <div
+                                key={plan.id}
+                                className="flex flex-col p-2 bg-pink-50 border border-pink-100 rounded text-sm shadow-sm hover:border-pink-200 transition-colors"
+                              >
                                 {isEditing ? (
-                                  <div className="flex flex-col gap-1.5 w-full" onClick={e => e.stopPropagation()}>
-                                    <span className="font-semibold text-pink-800 text-xs break-words" title={fullPath}>
+                                  <div
+                                    className="flex flex-col gap-1.5 w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span
+                                      className="font-semibold text-pink-800 text-xs break-words"
+                                      title={fullPath}
+                                    >
                                       {fullPath}
                                     </span>
                                     <div className="flex items-center gap-1.5 mt-1">
                                       <select
                                         value={editWeek}
-                                        onChange={e => setEditWeek(e.target.value)}
+                                        onChange={(e) => setEditWeek(e.target.value)}
                                         className="text-xs border border-pink-200 rounded px-1.5 py-0.5 outline-none font-semibold text-pink-800 bg-white flex-1"
                                       >
-                                        {timelineWeeksList.map(w => (
-                                          <option key={w} value={w}>Week {w}</option>
+                                        {timelineWeeksList.map((w) => (
+                                          <option key={w} value={w}>
+                                            Week {w}
+                                          </option>
                                         ))}
                                       </select>
                                       <button
-                                        onClick={() => handleUpdatePlanWeek(plan.id, parseInt(editWeek))}
+                                        onClick={() =>
+                                          handleUpdatePlanWeek(plan.id, parseInt(editWeek))
+                                        }
                                         className="bg-pink-600 hover:bg-pink-700 text-white font-bold px-2 py-0.5 rounded text-[10px]"
                                       >
                                         Save
@@ -1656,8 +2022,14 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex justify-between items-center w-full" onClick={(e) => e.stopPropagation()}>
-                                    <span className="font-semibold text-pink-800 text-xs break-words max-w-[70%]" title={fullPath}>
+                                  <div
+                                    className="flex justify-between items-center w-full"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <span
+                                      className="font-semibold text-pink-800 text-xs break-words max-w-[70%]"
+                                      title={fullPath}
+                                    >
                                       {fullPath}
                                     </span>
                                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -1675,11 +2047,18 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                                         </button>
                                       )}
                                       {plan.carry_forward_count > 0 && (
-                                        <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold" title="Carried forward">
+                                        <span
+                                          className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold"
+                                          title="Carried forward"
+                                        >
                                           CF x{plan.carry_forward_count}
                                         </span>
                                       )}
-                                      <button onClick={() => handleUnassignLesson(plan.id)} disabled={saving} className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50">
+                                      <button
+                                        onClick={() => handleUnassignLesson(plan.id)}
+                                        disabled={saving}
+                                        className="text-red-400 hover:text-red-600 p-1 disabled:opacity-50"
+                                      >
                                         <i className="fas fa-times"></i>
                                       </button>
                                     </div>
@@ -1707,12 +2086,16 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
             <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
               <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
                 <i className="fas fa-calendar-plus text-pink-600"></i>
-                Assign Lessons to {assignModalTarget.date 
-                  ? new Date(assignModalTarget.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-                  : `Week ${assignModalTarget.week}`
-                }
+                Assign Lessons to{' '}
+                {assignModalTarget.date
+                  ? new Date(assignModalTarget.date).toLocaleDateString(undefined, {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })
+                  : `Week ${assignModalTarget.week}`}
               </h3>
-              <button 
+              <button
                 onClick={() => setAssignModalTarget(null)}
                 disabled={saving}
                 className="text-gray-400 hover:text-gray-600 transition-colors p-1 disabled:opacity-50"
@@ -1721,12 +2104,42 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               </button>
             </div>
 
+            {/* Date Range Controls for Date Mode */}
+            {assignModalTarget.date && (
+              <div className="px-4 py-2.5 bg-pink-50/70 border-b border-pink-100 flex items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-pink-800 uppercase tracking-wide mb-0.5">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={modalStartDate}
+                    onChange={(e) => setModalStartDate(e.target.value)}
+                    disabled={saving}
+                    className="w-full text-xs border border-pink-200 rounded px-2 py-1 outline-none font-medium bg-white text-gray-800 focus:ring-1 focus:ring-pink-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-pink-800 uppercase tracking-wide mb-0.5">
+                    End Date (Multi-Day Plan)
+                  </label>
+                  <input
+                    type="date"
+                    value={modalEndDate}
+                    onChange={(e) => setModalEndDate(e.target.value)}
+                    disabled={saving}
+                    className="w-full text-xs border border-pink-200 rounded px-2 py-1 outline-none font-medium bg-white text-gray-800 focus:ring-1 focus:ring-pink-500"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Search and Select All controls */}
             <div className="p-3 border-b bg-white space-y-2">
               <input
                 type="text"
                 value={modalSearch}
-                onChange={e => setModalSearch(e.target.value)}
+                onChange={(e) => setModalSearch(e.target.value)}
                 disabled={saving}
                 placeholder="Search by topic, unit or chapter..."
                 className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 focus:border-pink-500 focus:ring-pink-500 outline-none disabled:bg-gray-100"
@@ -1737,10 +2150,12 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                     type="checkbox"
                     checked={isAllModalSelected}
                     disabled={saving}
-                    onChange={e => handleModalSelectAll(e.target.checked)}
+                    onChange={(e) => handleModalSelectAll(e.target.checked)}
                     className="rounded border-gray-300 text-pink-600 focus:ring-pink-500 cursor-pointer disabled:opacity-50"
                   />
-                  <span>Select All / Deselect All ({modalAvailableLessons.length} lessons available)</span>
+                  <span>
+                    Select All / Deselect All ({modalAvailableLessons.length} lessons available)
+                  </span>
                 </label>
               )}
             </div>

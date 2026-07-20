@@ -298,7 +298,16 @@ const SyllabusTreePanel = ({
             <div key={l1Node.name} className={`bg-white rounded-xl border border-gray-200 p-2 shadow-sm space-y-1 ${getIndexColorClass(idx)} transition-all hover:shadow-md`}>
               {/* Level 1 Header */}
               <div className="flex items-center justify-between py-1.5 bg-gray-50/50 rounded pr-2">
-                <div className="flex items-center min-w-0 flex-1">
+                <div
+                  draggable={!hasChildren && !!l1Node.lessons[0]}
+                  onDragStart={(e) => {
+                    if (!hasChildren && l1Node.lessons[0]) {
+                      e.dataTransfer.setData('text/plain', String(l1Node.lessons[0].id));
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }
+                  }}
+                  className={`flex items-center min-w-0 flex-1 ${!hasChildren && l1Node.lessons[0] ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
+                >
                   {hasChildren ? (
                     <button 
                       onClick={() => toggleCollapse(l1Path)} 
@@ -309,13 +318,20 @@ const SyllabusTreePanel = ({
                   ) : <div className="w-5 mr-1" />}
                   
                   <button 
-                    onClick={() => handleLevel1CheckboxToggle(l1Node)}
-                    className="p-1 hover:bg-gray-200 rounded transition-colors mr-1.5 flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLevel1CheckboxToggle(l1Node);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="p-1 hover:bg-gray-200 rounded transition-colors mr-1.5 flex-shrink-0 cursor-default"
                   >
                     <i className={`far ${l1CheckIcon} text-base`}></i>
                   </button>
 
-                  <span className={`font-bold text-sm truncate ${l1CheckState !== 'none' ? 'bg-brand-primary text-white px-1.5 rounded' : 'text-gray-800'}`} title={l1Node.name}>
+                  <span
+                    className={`font-bold text-sm truncate ${l1CheckState !== 'none' ? 'bg-brand-primary text-white px-1.5 rounded' : 'text-gray-800'}`}
+                    title={l1Node.name}
+                  >
                     {l1Node.name}
                   </span>
                 </div>
@@ -342,7 +358,16 @@ const SyllabusTreePanel = ({
                       <div key={l2Node.name} className="space-y-1">
                         {/* Level 2 Header */}
                         <div className="flex items-center justify-between py-1 hover:bg-gray-50 rounded pr-2 transition-colors">
-                          <div className="flex items-center min-w-0 flex-1">
+                          <div
+                            draggable={!hasL3 && !!l2Node.lessons[0]}
+                            onDragStart={(e) => {
+                              if (!hasL3 && l2Node.lessons[0]) {
+                                e.dataTransfer.setData('text/plain', String(l2Node.lessons[0].id));
+                                e.dataTransfer.effectAllowed = 'copy';
+                              }
+                            }}
+                            className={`flex items-center min-w-0 flex-1 ${!hasL3 && l2Node.lessons[0] ? 'cursor-grab active:cursor-grabbing select-none' : ''}`}
+                          >
                             {hasL3 ? (
                               <button 
                                 onClick={() => toggleCollapse(l2Path)} 
@@ -356,14 +381,21 @@ const SyllabusTreePanel = ({
 
                             {!hasL3 && l2Node.lessons[0] && (
                               <button 
-                                onClick={() => handleLeafCheckboxToggle(l2Node.lessons[0].id)}
-                                className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLeafCheckboxToggle(l2Node.lessons[0].id);
+                                }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0 cursor-default"
                               >
                                 <i className={`far ${isL2Selected ? 'fa-check-square text-brand-primary' : 'fa-square text-gray-400'} text-sm`}></i>
                               </button>
                             )}
 
-                            <span className={`text-xs font-semibold truncate ${isL2Selected ? 'bg-brand-primary text-white px-1.5 rounded py-0.5' : 'text-gray-700'}`} title={l2Node.name}>
+                            <span
+                              className={`text-xs font-semibold truncate ${isL2Selected ? 'bg-brand-primary text-white px-1.5 rounded py-0.5' : 'text-gray-700'}`}
+                              title={l2Node.name}
+                            >
                               {l2Node.name}
                             </span>
                           </div>
@@ -382,17 +414,31 @@ const SyllabusTreePanel = ({
                               const isL3Selected = selectedLessonIds.has(String(l3Lesson.id));
                               return (
                               <div key={l3Lesson.id} className="flex items-center justify-between py-1 hover:bg-gray-50 rounded pr-2 transition-colors">
-                                <div className="flex items-center min-w-0 flex-1">
+                                <div
+                                  draggable={true}
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData('text/plain', String(l3Lesson.id));
+                                    e.dataTransfer.effectAllowed = 'copy';
+                                  }}
+                                  className="flex items-center min-w-0 flex-1 cursor-grab active:cursor-grabbing select-none"
+                                >
                                   <i className="fas fa-level-up-alt rotate-90 text-gray-200 mr-2 text-[9px] ml-1"></i>
                                   
                                   <button 
-                                    onClick={() => handleLeafCheckboxToggle(l3Lesson.id)}
-                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleLeafCheckboxToggle(l3Lesson.id);
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="p-0.5 hover:bg-gray-200 rounded transition-colors mr-1 flex-shrink-0 cursor-default"
                                   >
                                     <i className={`far ${isL3Selected ? 'fa-check-square text-brand-primary' : 'fa-square text-gray-400'} text-xs`}></i>
                                   </button>
 
-                                  <span className={`text-[11px] truncate ${isL3Selected ? 'font-bold bg-brand-primary text-white px-1.5 rounded py-0.5' : 'font-medium text-gray-600'}`} title={l3Lesson.level3}>
+                                  <span
+                                    className={`text-[11px] truncate ${isL3Selected ? 'font-bold bg-brand-primary text-white px-1.5 rounded py-0.5' : 'font-medium text-gray-600'}`}
+                                    title={l3Lesson.level3}
+                                  >
                                     {l3Lesson.level3}
                                   </span>
                                 </div>
