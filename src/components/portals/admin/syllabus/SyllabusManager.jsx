@@ -206,6 +206,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   };
 
   const [isSupabaseMode, setIsSupabaseMode] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const [modal, setModal] = useState(null);
@@ -218,25 +219,46 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const [csvHeaders, setCsvHeaders] = useState([]);
   const [csvRows, setCsvRows] = useState([]);
   const [importBookId, setImportBookId] = useState(null);
+  const [importProgress, setImportProgress] = useState(null);
   const fileInputRef = useRef(null);
 
-  const loadData = async () => {
-    setLoading(true);
+  // Lazy loading & session cache state
+  const [loadedBookIds, setLoadedBookIds] = useState(new Set());
+  const [loadingBookIds, setLoadingBookIds] = useState(new Set());
+
+  const getSessionCachedData = async (cacheKey, fetcher) => {
     try {
-      const [
-        { data: dbClassifications, error: clsErr },
-        { data: dbSubjects },
-        { data: dbBooks },
-        { data: dbSyllabusData },
-        { data: dbClasses },
-        { data: dbBookClasses },
-      ] = await Promise.all([
-        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
-        supabase.from('subjects').select('*'),
-        supabase.from('syllabus_books').select('*'),
-        supabase.from('syllabus_book_lessons').select('*'),
-        supabase.from('classes').select('*').order('id', { ascending: true }),
-        supabase.from('syllabus_book_classes').select('*'),
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.warn(`Error reading session cache for ${cacheKey}:`, e);
+    }
+    const res = await fetcher();
+    const data = res?.data !== undefined ? res.data : res;
+    if (data && !res?.error) {
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      } catch (e) {}
+    }
+    return data;
+  };
+
+  const loadData = async () => {
+    setInitialLoading(true);
+    try {
+      const [dbClassifications, dbSubjects, dbClasses, dbBookClasses] = await Promise.all([
+        getSessionCachedData('jzv_session_classifications', () =>
+          supabase.from('subject_classifications').select('*').order('name', { ascending: true })
+        ),
+        getSessionCachedData('jzv_session_subjects', () => supabase.from('subjects').select('*')),
+        getSessionCachedData('jzv_session_classes', () =>
+          supabase.from('classes').select('*').order('id', { ascending: true })
+        ),
+        getSessionCachedData('jzv_session_book_classes', () =>
+          supabase.from('syllabus_book_classes').select('*')
+        ),
       ]);
 
       // If classifications came back empty (e.g. due to RLS), try fetching by IDs referenced in subjects
@@ -263,39 +285,54 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
       let teacherAllocatedIds = [];
       if (isTeacher && user?.id) {
-        let teacherData = teacherRecord;
-        if (!teacherData) {
-          const { data } = await supabase
-            .from('teachers')
-            .select('id')
-            .eq('auth_id', user.id)
-            .maybeSingle();
-          teacherData = data;
-        }
+        const teacherCacheKey = `jzv_session_teacher_allocated_${user.id}`;
+        try {
+          const cachedAlloc = sessionStorage.getItem(teacherCacheKey);
+          if (cachedAlloc) {
+            teacherAllocatedIds = JSON.parse(cachedAlloc);
+          }
+        } catch (e) {}
 
-        if (teacherData) {
-          const [dbAssignments, dbTeacherSubjects] = await Promise.all([
-            supabase
-              .from('class_assignments')
-              .select('subject_id')
-              .eq('teacher_id', teacherData.id),
-            supabase
-              .from('teacher_subjects')
-              .select('subject_id')
-              .eq('teacher_id', teacherData.id)
-          ]);
-          
-          const idsFromAssignments = (dbAssignments.data || []).map((a) => String(a.subject_id));
-          const idsFromTeacherSubjects = (dbTeacherSubjects.data || []).map((ts) => String(ts.subject_id));
-          teacherAllocatedIds = Array.from(new Set([...idsFromAssignments, ...idsFromTeacherSubjects]));
+        if (teacherAllocatedIds.length === 0) {
+          let teacherData = teacherRecord;
+          if (!teacherData) {
+            const { data } = await supabase
+              .from('teachers')
+              .select('id')
+              .eq('auth_id', user.id)
+              .maybeSingle();
+            teacherData = data;
+          }
+
+          if (teacherData) {
+            const [dbAssignments, dbTeacherSubjects] = await Promise.all([
+              supabase
+                .from('class_assignments')
+                .select('subject_id')
+                .eq('teacher_id', teacherData.id),
+              supabase
+                .from('teacher_subjects')
+                .select('subject_id')
+                .eq('teacher_id', teacherData.id),
+            ]);
+
+            const idsFromAssignments = (dbAssignments.data || []).map((a) => String(a.subject_id));
+            const idsFromTeacherSubjects = (dbTeacherSubjects.data || []).map((ts) =>
+              String(ts.subject_id)
+            );
+            teacherAllocatedIds = Array.from(
+              new Set([...idsFromAssignments, ...idsFromTeacherSubjects])
+            );
+            try {
+              sessionStorage.setItem(teacherCacheKey, JSON.stringify(teacherAllocatedIds));
+            } catch (e) {}
+          }
         }
       }
       setAllocatedSubjectIds(teacherAllocatedIds);
 
       setClassifications(resolvedClassifications);
       setSubjects(dbSubjects || []);
-      setBooks(dbBooks || []);
-      setSyllabusData(dbSyllabusData || []);
       setClasses(dbClasses || []);
       setBookClasses(dbBookClasses || []);
       setIsSupabaseMode(true);
@@ -314,7 +351,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       setIsSupabaseMode(false);
       loadLocalData();
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -458,11 +495,87 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     loadData();
   }, [user, role, teacherRecord]);
 
+  const fetchBooksForSubject = async (subjectId) => {
+    if (!subjectId || !isSupabaseMode) return;
+    const cacheKey = `jzv_session_books_subject_${subjectId}`;
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const data = JSON.parse(cached);
+        setBooks((prev) => {
+          const otherBooks = prev.filter((b) => String(b.subject_id) !== String(subjectId));
+          return [...otherBooks, ...data];
+        });
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      const { data, error } = await supabase
+        .from('syllabus_books')
+        .select('*')
+        .eq('subject_id', subjectId);
+      if (error) throw error;
+      if (data) {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (e) {}
+        setBooks((prev) => {
+          const otherBooks = prev.filter((b) => String(b.subject_id) !== String(subjectId));
+          return [...otherBooks, ...data];
+        });
+      }
+    } catch (err) {
+      console.warn('Error fetching books for subject:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubjectId && isSupabaseMode) {
+      fetchBooksForSubject(activeSubjectId);
+    }
+  }, [activeSubjectId, isSupabaseMode]);
+
+  const fetchLessonsForBook = async (bookId) => {
+    if (!bookId || !isSupabaseMode) return;
+    setLoadingBookIds((prev) => new Set(prev).add(String(bookId)));
+    try {
+      const { data, error } = await supabase
+        .from('syllabus_book_lessons')
+        .select('*')
+        .eq('book_id', bookId)
+        .range(0, 9999);
+      if (error) throw error;
+
+      setSyllabusData((prev) => {
+        const otherData = prev.filter(
+          (d) => String(d.book_id || '').trim() !== String(bookId).trim()
+        );
+        return [...otherData, ...(data || [])];
+      });
+      setLoadedBookIds((prev) => new Set(prev).add(String(bookId)));
+    } catch (err) {
+      console.warn(`Error fetching lessons for book ${bookId}:`, err.message);
+    } finally {
+      setLoadingBookIds((prev) => {
+        const next = new Set(prev);
+        next.delete(String(bookId));
+        return next;
+      });
+    }
+  };
+
   const toggleCollapse = (id) =>
     setCollapsedNodes((prev) => {
       const currentVal = prev[id];
       const defaultVal = String(id).includes('-') ? false : true;
       const nextVal = currentVal === undefined ? !defaultVal : !currentVal;
+
+      // When expanding a book node (id has no hyphen), lazily fetch lessons for that book if not loaded yet
+      if (!nextVal && !String(id).includes('-') && !loadedBookIds.has(String(id))) {
+        fetchLessonsForBook(id);
+      }
+
       return { ...prev, [id]: nextVal };
     });
   const toggleClassificationCollapse = (name) =>
@@ -471,32 +584,33 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const handleExportExcel = (book) => {
     try {
       const bookData = syllabusData.filter((d) => String(d.book_id) === String(book.id));
-      
+
       const sortedData = [...bookData].sort((a, b) => {
         const l1Compare = (a.level1 || '').localeCompare(b.level1 || '');
         if (l1Compare !== 0) return l1Compare;
-        
+
         const l2Compare = (a.level2 || '').localeCompare(b.level2 || '');
         if (l2Compare !== 0) return l2Compare;
-        
+
         return (a.level3 || '').localeCompare(b.level3 || '');
       });
 
       const sheetData = sortedData.map((d) => ({
+        ID: d.id || '',
         Level1: d.level1 || '',
         Level2: d.level2 || '',
         Level3: d.level3 || '',
         page: d.page_count !== undefined && d.page_count !== null ? d.page_count : 0,
-        complexity: d.complexity || 'Easy'
+        complexity: d.complexity || 'Easy',
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(sheetData);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Syllabus');
-      
+
       const filename = `${book.name.replace(/\s+/g, '_')}_Syllabus.xlsx`;
       XLSX.writeFile(workbook, filename);
-      
+
       showToast('Excel downloaded successfully!', 'success');
     } catch (err) {
       showToast('Export Error: ' + err.message, 'error');
@@ -513,89 +627,54 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const fileExt = file.name.split('.').pop().toLowerCase();
-    if (fileExt === 'xlsx' || fileExt === 'xls') {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const data = new Uint8Array(event.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-          // Filter out completely empty rows
-          const nonEmtpyRows = jsonData.filter(
-            (row) =>
-              row &&
-              row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '')
-          );
+        // Filter out completely empty rows
+        const nonEmtpyRows = jsonData.filter(
+          (row) =>
+            row &&
+            row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== '')
+        );
 
-          if (nonEmtpyRows.length < 2) {
-            showToast('Excel file is empty or invalid.', 'error');
-            return;
-          }
-
-          const headers = nonEmtpyRows[0].map((h) => String(h || '').trim());
-          const rows = nonEmtpyRows.slice(1).map((row) =>
-            headers.map((_, idx) => {
-              const cell = row[idx];
-              return cell === null || cell === undefined ? '' : String(cell).trim();
-            })
-          );
-
-          setCsvHeaders(headers);
-          setCsvRows(rows);
-          setIsCsvMappingOpen(true);
-        } catch (err) {
-          showToast('Error parsing Excel file: ' + err.message, 'error');
+        if (nonEmtpyRows.length < 2) {
+          showToast('File is empty or invalid.', 'error');
+          return;
         }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target.result;
-        processCsvText(text);
-      };
-      reader.readAsText(file);
-    }
-    e.target.value = null;
-  };
 
-  const processCsvText = (text) => {
-    const lines = text.split('\n').filter((line) => line.trim() !== '');
-    if (lines.length < 2) {
-      showToast('CSV file is empty or invalid.', 'error');
-      return;
-    }
-    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
-    const rows = lines.slice(1).map((line) => {
-      const row = [];
-      let currentVal = '';
-      let insideQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        if (line[i] === '"') {
-          insideQuotes = !insideQuotes;
-        } else if (line[i] === ',' && !insideQuotes) {
-          row.push(currentVal.trim());
-          currentVal = '';
-        } else {
-          currentVal += line[i];
-        }
+        const headers = nonEmtpyRows[0].map((h) => String(h || '').trim());
+        const rows = nonEmtpyRows.slice(1).map((row) =>
+          headers.map((_, idx) => {
+            const cell = row[idx];
+            return cell === null || cell === undefined ? '' : String(cell).trim();
+          })
+        );
+
+        setCsvHeaders(headers);
+        setCsvRows(rows);
+        setIsCsvMappingOpen(true);
+      } catch (err) {
+        showToast('Error parsing file: ' + err.message, 'error');
       }
-      row.push(currentVal.trim());
-      return row;
-    });
-    setCsvHeaders(headers);
-    setCsvRows(rows);
-    setIsCsvMappingOpen(true);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = null;
   };
 
   const handleExecuteCsvImport = async (mappings) => {
     setIsCsvMappingOpen(false);
     setLoading(true);
-    const { unitCol, chapterCol, lessonCol, complexityCol, pageCol } = mappings;
+    setImportProgress({ current: 0, total: csvRows.length });
+
+    const { isUpdateMode, idCol, unitCol, chapterCol, lessonCol, complexityCol, pageCol } =
+      mappings;
+    const idIdx = isUpdateMode && idCol ? csvHeaders.indexOf(idCol) : -1;
     const unitIdx = unitCol ? csvHeaders.indexOf(unitCol) : -1;
     const chapterIdx = chapterCol ? csvHeaders.indexOf(chapterCol) : -1;
     const lessonIdx = lessonCol ? csvHeaders.indexOf(lessonCol) : -1;
@@ -615,13 +694,19 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     try {
       const targetBook = books.find((b) => String(b.id) === String(importBookId));
       if (!targetBook) throw new Error('Target book not found');
-      const hierarchy = targetBook.hierarchy_type || 'Unit, Chapter, Lesson';
-      const levels = hierarchy.split(',').map((s) => s.trim());
 
       let currentData = [...syllabusData];
       let rowsImported = 0;
+      let rowsUpdated = 0;
+      let rowsInserted = 0;
+      let importFailed = false;
 
-      for (const row of csvRows) {
+      for (let i = 0; i < csvRows.length; i++) {
+        const row = csvRows[i];
+        const rowNumInFile = i + 2; // 1-indexed line in file (row 1 is header)
+        setImportProgress({ current: i + 1, total: csvRows.length });
+
+        const rowId = idIdx !== -1 ? row[idIdx]?.trim() : null;
         const l1 = toProperCase(unitIdx !== -1 ? row[unitIdx] : null);
         const l2 = toProperCase(chapterIdx !== -1 ? row[chapterIdx] : null);
         const l3 = toProperCase(lessonIdx !== -1 ? row[lessonIdx] : null);
@@ -639,56 +724,112 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         }
         if (!['Easy', 'Moderate', 'Complex'].includes(compVal)) compVal = 'Easy';
 
-        let existingRow = currentData.find(
+        const hierarchyStr = `${l1}${l2 ? ' > ' + l2 : ''}${l3 ? ' > ' + l3 : ''}`;
+
+        // Find existing record by hierarchy
+        const existingByHierarchy = currentData.find(
           (d) =>
             String(d.book_id) === String(importBookId) &&
-            d.level1?.toLowerCase() === l1.toLowerCase() &&
-            (d.level2 || '')?.toLowerCase() === (l2 ? l2 : '').toLowerCase() &&
-            (d.level3 || '')?.toLowerCase() === (l3 ? l3 : '').toLowerCase()
+            (d.level1 || '').trim().toLowerCase() === l1.toLowerCase() &&
+            (d.level2 || '').trim().toLowerCase() === (l2 ? l2.toLowerCase() : '') &&
+            (d.level3 || '').trim().toLowerCase() === (l3 ? l3.toLowerCase() : '')
         );
 
-        if (!existingRow) {
-          const newRow = {
-            book_id: importBookId,
-            level1: l1,
-            level2: l2,
-            level3: l3,
-            page_count: pageVal,
-            complexity: compVal,
-          };
-          if (isSupabaseMode) {
-            const { data, error } = await supabase
-              .from('syllabus_book_lessons')
-              .insert([newRow])
-              .select();
-            if (error) throw error;
-            existingRow = data[0];
-          } else {
-            existingRow = { id: generateLocalId(), ...newRow };
-          }
-          currentData.push(existingRow);
-        } else {
-          if (
-            isSupabaseMode &&
-            (existingRow.page_count !== pageVal || existingRow.complexity !== compVal)
-          ) {
-            await supabase
-              .from('syllabus_book_lessons')
-              .update({ page_count: pageVal, complexity: compVal })
-              .eq('id', existingRow.id);
-          }
-          existingRow.page_count = pageVal;
-          existingRow.complexity = compVal;
+        let existingRow = null;
+        if (isUpdateMode && rowId) {
+          existingRow = currentData.find((d) => String(d.id) === String(rowId));
         }
-        rowsImported++;
+
+        // If not updating by explicit ID, fallback to matching hierarchy
+        if (!existingRow) {
+          existingRow = existingByHierarchy;
+        }
+
+        try {
+          if (!existingRow) {
+            // Inserting a new record
+            const newRow = {
+              book_id: importBookId,
+              level1: l1,
+              level2: l2,
+              level3: l3,
+              page_count: pageVal,
+              complexity: compVal,
+            };
+            if (isSupabaseMode) {
+              const { data, error } = await supabase
+                .from('syllabus_book_lessons')
+                .insert([newRow])
+                .select();
+              if (error) {
+                const confId = existingByHierarchy?.id || 'unknown';
+                const msg =
+                  error.code === '23505'
+                    ? `Duplicate key constraint "unique_syllabus_hierarchy" violated (Conflicting DB ID: ${confId})`
+                    : error.message;
+                throw new Error(msg);
+              }
+              existingRow = data[0];
+            } else {
+              existingRow = { id: generateLocalId(), ...newRow };
+            }
+            currentData.push(existingRow);
+            rowsInserted++;
+          } else {
+            // Updating existing record
+            const updatePayload = {
+              level1: l1,
+              level2: l2,
+              level3: l3,
+              page_count: pageVal,
+              complexity: compVal,
+            };
+            if (isSupabaseMode) {
+              const { error } = await supabase
+                .from('syllabus_book_lessons')
+                .update(updatePayload)
+                .eq('id', existingRow.id);
+              if (error) {
+                const confId = existingByHierarchy?.id || existingRow.id;
+                const msg =
+                  error.code === '23505'
+                    ? `Duplicate key constraint "unique_syllabus_hierarchy" violated (Conflicting DB ID: ${confId})`
+                    : error.message;
+                throw new Error(msg);
+              }
+            }
+            existingRow.level1 = l1;
+            existingRow.level2 = l2;
+            existingRow.level3 = l3;
+            existingRow.page_count = pageVal;
+            existingRow.complexity = compVal;
+            rowsUpdated++;
+          }
+          rowsImported++;
+        } catch (rowErr) {
+          importFailed = true;
+          const confRecord = existingByHierarchy || existingRow;
+          const confIdInfo = confRecord?.id ? ` (DB Record ID: ${confRecord.id})` : '';
+          const fullErrText = `Import Error on Row ${rowNumInFile}${rowId ? ' [ID: ' + rowId + ']' : ''} ("${hierarchyStr}")${confIdInfo}: ${rowErr.message}`;
+          showToast(fullErrText, 'error', 12000);
+          console.error(fullErrText);
+          break; // Stop on first error so user can fix exact row & DB ID
+        }
       }
-      saveState({ syllabusData: currentData });
-      if (isSupabaseMode) await loadData();
-      showToast(`Imported ${rowsImported} rows!`, 'success');
+
+      if (!importFailed) {
+        saveState({ syllabusData: currentData });
+        if (isSupabaseMode) await loadData();
+        showToast(
+          `Successfully processed ${rowsImported} rows (${rowsInserted} added, ${rowsUpdated} updated)!`,
+          'success'
+        );
+      }
     } catch (err) {
-      showToast('CSV Error: ' + err.message, 'error');
+      showToast('CSV Error: ' + err.message, 'error', 10000);
     } finally {
       setLoading(false);
+      setImportProgress(null);
       setImportBookId(null);
     }
   };
@@ -858,6 +999,21 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               ])
               .select();
             newBook = res[0];
+
+            if (newBook?.id) {
+              // Check if database trigger inserted default _Revision entries for new book
+              const { data: revLessons } = await supabase
+                .from('syllabus_book_lessons')
+                .select('*')
+                .eq('book_id', newBook.id)
+                .eq('level1', '_Revision');
+
+              // If database trigger inserted multiple _Revision rows (e.g. 9 rows), keep only 1 and delete the excess
+              if (revLessons && revLessons.length > 1) {
+                const idsToDelete = revLessons.slice(1).map((r) => r.id);
+                await supabase.from('syllabus_book_lessons').delete().in('id', idsToDelete);
+              }
+            }
           }
           saveState({ books: [...books, newBook] });
         } else if (data.level === 'node') {
@@ -1337,9 +1493,20 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const activeSubject = subjects.find((s) => String(s.id) === String(activeSubjectId));
   const activeBooks = books.filter((b) => String(b.subject_id) === String(activeSubjectId));
 
+  const getNormalizedL1 = (rawL1) => {
+    if (!rawL1 || !String(rawL1).trim()) return 'General / Level 1';
+    const trimmed = String(rawL1).trim();
+    if (trimmed.toLowerCase().startsWith('_revision') || trimmed.toLowerCase() === 'revision') {
+      return '_Revision';
+    }
+    return trimmed;
+  };
+
   // Build Hierarchical Tree for active book
   const renderTreeForBook = (book) => {
-    const bookData = syllabusData.filter((d) => String(d.book_id) === String(book.id));
+    const bookData = syllabusData.filter(
+      (d) => String(d.book_id || '').trim() === String(book.id || '').trim()
+    );
     const levels = (book.hierarchy_type || 'Unit, Chapter, Lesson').split(',').map((s) => s.trim());
     const l1Name = levels[0] || 'Level 1';
     const l2Name = levels[1] || 'Level 2';
@@ -1348,11 +1515,15 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     // Group by level1
     const grouped = {};
     bookData.forEach((d) => {
-      const l1 = d.level1;
+      const l1 = getNormalizedL1(d.level1);
       if (!grouped[l1]) grouped[l1] = {};
-      if (d.level2) {
-        if (!grouped[l1][d.level2]) {
-          grouped[l1][d.level2] = {
+
+      const l2 = d.level2 && String(d.level2).trim() ? String(d.level2).trim() : null;
+      const l3 = d.level3 && String(d.level3).trim() ? String(d.level3).trim() : null;
+
+      if (l2) {
+        if (!grouped[l1][l2]) {
+          grouped[l1][l2] = {
             lessons: [],
             page_count: 0,
             complexity: 'Easy',
@@ -1360,18 +1531,18 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             placeholderId: null,
           };
         }
-        if (d.level3) {
-          grouped[l1][d.level2].lessons.push(d);
+        if (l3) {
+          grouped[l1][l2].lessons.push(d);
         } else {
           // It's a Level 2 leaf/placeholder record
-          grouped[l1][d.level2].page_count = d.page_count || 0;
-          grouped[l1][d.level2].complexity = d.complexity || 'Easy';
-          grouped[l1][d.level2].hasPlaceholder = true;
-          grouped[l1][d.level2].placeholderId = d.id;
+          grouped[l1][l2].page_count = d.page_count || 0;
+          grouped[l1][l2].complexity = d.complexity || 'Easy';
+          grouped[l1][l2].hasPlaceholder = true;
+          grouped[l1][l2].placeholderId = d.id;
         }
       } else {
         // If it's just a level1 leaf (e.g. just a unit without chapters)
-        if (d.level3) {
+        if (l3) {
           if (!grouped[l1]['_direct_lessons']) grouped[l1]['_direct_lessons'] = [];
           grouped[l1]['_direct_lessons'].push(d);
         }
@@ -1421,7 +1592,9 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[9px] text-dark-soft`}
                     />
                     <i className="fas fa-folder-open text-orange-primary text-xs" />
-                    <span className="font-extrabold text-xs text-dark-deepblue truncate">{l1}</span>
+                    <span className="font-extrabold text-xs text-dark-deepblue truncate">
+                      {l1 === '_Revision' ? 'Book Revision' : l1}
+                    </span>
                     <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
                       {Object.keys(l2Groups).filter((k) => k !== '_direct_lessons').length} {l2Name}
                       s
@@ -1485,7 +1658,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                           level: 'level1',
                           bookId: book.id,
                           oldLevel1: l1,
-                          name: l1,
+                          name: l1 === '_Revision' ? 'Book Revision' : l1,
                           hierarchy: book.hierarchy_type,
                         })
                       }
@@ -1684,66 +1857,58 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 )}
                               </div>
                             </div>
-                            {!isL2Collapsed && (
+                            {!isL2Collapsed && l3Nodes.lessons.length > 0 && (
                               <div className="p-2 bg-white space-y-1.5">
-                                {l3Nodes.lessons.length === 0 ? (
-                                  <div className="text-[10px] italic text-dark-muted pl-4">
-                                    No {l3Name}s added under this {l2Name}.
-                                  </div>
-                                ) : (
-                                  l3Nodes.lessons.map((node, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <i className="fas fa-file-alt text-dark-soft text-[10px]" />
-                                        <span>{node.level3}</span>
-                                      </div>
-                                      <div className="flex gap-2 items-center">
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
-                                          <i className="far fa-file-lines mr-1" />
-                                          {node.page_count} pages
-                                        </span>
-                                        <span
-                                          className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
-                                        >
-                                          {node.complexity}
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            setModal({
-                                              type: 'edit',
-                                              level: 'level3',
-                                              bookId: book.id,
-                                              node: node,
-                                              oldLevel1: l1,
-                                              oldLevel2: l2,
-                                              oldLevel3: node.level3,
-                                              name: node.level3,
-                                              pageCount: node.page_count,
-                                              complexity: node.complexity,
-                                              hierarchy: book.hierarchy_type,
-                                            })
-                                          }
-                                          className="p-1 text-blue-500"
-                                        >
-                                          <i className="fas fa-edit text-[10px]"></i>
-                                        </button>
-                                        {(isAdmin || isTeacher) && (
-                                          <button
-                                            onClick={() =>
-                                              handleDeleteNode('level3', node.id, node)
-                                            }
-                                            className="p-1 text-red-primary"
-                                          >
-                                            <i className="fas fa-trash-alt text-[10px]"></i>
-                                          </button>
-                                        )}
-                                      </div>
+                                {l3Nodes.lessons.map((node, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <i className="fas fa-file-alt text-dark-soft text-[10px]" />
+                                      <span>{node.level3}</span>
                                     </div>
-                                  ))
-                                )}
+                                    <div className="flex gap-2 items-center">
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                        <i className="far fa-file-lines mr-1" />
+                                        {node.page_count} pages
+                                      </span>
+                                      <span
+                                        className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
+                                      >
+                                        {node.complexity}
+                                      </span>
+                                      <button
+                                        onClick={() =>
+                                          setModal({
+                                            type: 'edit',
+                                            level: 'level3',
+                                            bookId: book.id,
+                                            node: node,
+                                            oldLevel1: l1,
+                                            oldLevel2: l2,
+                                            oldLevel3: node.level3,
+                                            name: node.level3,
+                                            pageCount: node.page_count,
+                                            complexity: node.complexity,
+                                            hierarchy: book.hierarchy_type,
+                                          })
+                                        }
+                                        className="p-1 text-blue-500"
+                                      >
+                                        <i className="fas fa-edit text-[10px]"></i>
+                                      </button>
+                                      {(isAdmin || isTeacher) && (
+                                        <button
+                                          onClick={() => handleDeleteNode('level3', node.id, node)}
+                                          className="p-1 text-red-primary"
+                                        >
+                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
@@ -1892,17 +2057,18 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               ) : (
                 <div className="space-y-4">
                   {activeBooks.map((book) => {
-                    const isBookCollapsed = collapsedNodes[book.id] === undefined ? true : collapsedNodes[book.id];
+                    const isBookCollapsed =
+                      collapsedNodes[book.id] === undefined ? true : collapsedNodes[book.id];
                     const bookLevels = (book.hierarchy_type || 'Unit, Chapter, Lesson')
                       .split(',')
                       .map((s) => s.trim());
                     const bookL1Name = bookLevels[0] || 'Level 1';
                     const bookData = syllabusData.filter(
-                      (d) => String(d.book_id) === String(book.id)
+                      (d) => String(d.book_id || '').trim() === String(book.id || '').trim()
                     );
-                    const l1Keys = Array.from(new Set(bookData.map((d) => d.level1))).filter(
-                      Boolean
-                    );
+                    const l1Keys = Array.from(
+                      new Set(bookData.map((d) => getNormalizedL1(d.level1)))
+                    ).filter(Boolean);
                     const bookL1Count = l1Keys.length;
                     return (
                       <div
@@ -1926,12 +2092,14 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 <i className="fas fa-book text-blue-primary text-sm" />
                                 {book.name}
                                 <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
-                                  {bookL1Count} {bookL1Name}s
+                                  {loadedBookIds.has(String(book.id))
+                                    ? `${bookL1Count} ${bookL1Name}s / ${bookData.length} Lessons`
+                                    : 'Expand to load lessons'}
                                 </span>
                               </h3>
                               <div className="flex items-center gap-3 mt-1">
                                 <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider">
-                                  Hierarchy: {book.hierarchy_type}
+                                  Book ID: {book.id}
                                 </span>
                               </div>
                             </div>
@@ -1989,19 +2157,19 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   <i className="fas fa-plus"></i> Add {bookL1Name}
                                 </button>
                                 <button
-                                   onClick={() => initiateCsvImport(book.id)}
-                                   className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                   title="Import CSV"
-                                 >
-                                   <i className="fas fa-file-import text-xl"></i>
-                                 </button>
-                                 <button
-                                   onClick={() => handleExportExcel(book)}
-                                   className="p-2 text-emerald-700 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                   title="Download Excel"
-                                 >
-                                   <i className="fas fa-file-excel text-xl"></i>
-                                 </button>
+                                  onClick={() => initiateCsvImport(book.id)}
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                  title="Import CSV/Excel"
+                                >
+                                  <i className="fas fa-file-arrow-up text-xl"></i>
+                                </button>
+                                <button
+                                  onClick={() => handleExportExcel(book)}
+                                  className="p-2 text-emerald-700 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                  title="Download Excel"
+                                >
+                                  <i className="fas fa-file-arrow-down text-xl"></i>
+                                </button>
                                 <button
                                   onClick={() => initiateMapping(book)}
                                   className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
@@ -2036,7 +2204,15 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                             )}
                           </div>
                         </div>
-                        {!isBookCollapsed && renderTreeForBook(book)}
+                        {!isBookCollapsed &&
+                          (loadingBookIds.has(String(book.id)) ? (
+                            <div className="p-6 text-center text-xs font-bold text-dark-muted bg-white border-t border-light-border flex items-center justify-center gap-2">
+                              <i className="fas fa-spinner fa-spin text-brand-primary text-sm"></i>{' '}
+                              Loading lessons...
+                            </div>
+                          ) : (
+                            renderTreeForBook(book)
+                          ))}
                       </div>
                     );
                   })}
@@ -2248,6 +2424,45 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           'Unit, Chapter, Lesson'
         }
       />
+
+      {/* Loading / Progress Overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl p-6 max-w-sm w-full text-center flex flex-col items-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="relative w-16 h-16 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full border-4 border-brand-primary/20 border-t-brand-primary animate-spin"></div>
+              <i className="fas fa-file-import text-brand-primary text-xl absolute"></i>
+            </div>
+            {importProgress ? (
+              <div className="w-full space-y-2">
+                <h4 className="text-sm font-extrabold text-dark-primary">Importing Syllabus...</h4>
+                <p className="text-xs font-semibold text-dark-muted">
+                  Processing row {importProgress.current} of {importProgress.total}
+                </p>
+                <div className="w-full bg-light-bg rounded-full h-2.5 overflow-hidden border border-light-border">
+                  <div
+                    className="bg-brand-primary h-full transition-all duration-200 rounded-full"
+                    style={{
+                      width: `${Math.round((importProgress.current / (importProgress.total || 1)) * 100)}%`,
+                    }}
+                  ></div>
+                </div>
+                <span className="text-[10px] font-bold text-brand-primary block">
+                  {Math.round((importProgress.current / (importProgress.total || 1)) * 100)}%
+                  Complete
+                </span>
+              </div>
+            ) : (
+              <div>
+                <h4 className="text-sm font-extrabold text-dark-primary">Processing...</h4>
+                <p className="text-xs font-semibold text-dark-muted">
+                  Please wait while updating syllabus
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <input
         type="file"

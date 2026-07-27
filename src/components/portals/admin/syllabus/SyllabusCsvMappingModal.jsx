@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
 const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImport, hierarchy }) => {
+  const [isUpdateMode, setIsUpdateMode] = useState(false);
+  const [idCol, setIdCol] = useState('');
   const [unitCol, setUnitCol] = useState('');
   const [chapterCol, setChapterCol] = useState('');
   const [lessonCol, setLessonCol] = useState('');
@@ -29,6 +31,15 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     const l2NameStr = levels[1] || 'level2';
     const l3NameStr = levels[2] || 'level3';
 
+    const matchedId = findBestMatch(['id', 'primary_id', 'primary id', 'lesson_id', 'lesson id', 'ID']);
+    if (matchedId) {
+      setIdCol(matchedId);
+      setIsUpdateMode(true);
+    } else {
+      setIdCol('');
+      setIsUpdateMode(false);
+    }
+
     setUnitCol(findBestMatch([l1NameStr, 'level1', 'level 1', 'unit', 'section', 'module', 'heading']));
     setChapterCol(findBestMatch([l2NameStr, 'level2', 'level 2', 'chapter', 'topic', 'subheading', 'sub heading']));
     setLessonCol(findBestMatch([l3NameStr, 'level3', 'level 3', 'lesson', 'title', 'subtopic', 'sub topic']));
@@ -43,11 +54,12 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     
     // Check for duplicate mappings
     const mapped = [];
+    if (isUpdateMode && idCol) mapped.push(idCol);
     if (hasLevel1 && unitCol) mapped.push(unitCol);
     if (hasLevel2 && chapterCol) mapped.push(chapterCol);
     if (hasLevel3 && lessonCol) mapped.push(lessonCol);
-    if (hasLevel3 && complexityCol) mapped.push(complexityCol);
-    if (hasLevel3 && pageCol) mapped.push(pageCol);
+    if (complexityCol) mapped.push(complexityCol);
+    if (pageCol) mapped.push(pageCol);
 
     const uniqueMapped = new Set(mapped);
     if (uniqueMapped.size !== mapped.length) {
@@ -56,7 +68,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     }
 
     setErrorMsg("");
-    onImport({ unitCol, chapterCol, lessonCol, complexityCol, pageCol });
+    onImport({ isUpdateMode, idCol: isUpdateMode ? idCol : '', unitCol, chapterCol, lessonCol, complexityCol, pageCol });
   };
 
   return (
@@ -142,9 +154,47 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
 
             {/* Optional */}
             <div className="space-y-4">
-              <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Optional Columns</h4>
+              <h4 className="text-[10px] font-bold text-dark-deepblue uppercase tracking-wider">Optional & Update Settings</h4>
 
-              {hasLevel3 ? (
+              <div className="p-3 bg-light-bg/30 border border-light-border/60 rounded-xl space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isUpdateMode}
+                    onChange={(e) => {
+                      setIsUpdateMode(e.target.checked);
+                      if (!e.target.checked) setIdCol('');
+                    }}
+                    className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary border-light-border"
+                  />
+                  <span className="text-xs font-bold text-dark-primary">
+                    UPDATE? (Check to update existing records by Primary ID)
+                  </span>
+                </label>
+
+                {isUpdateMode && (
+                  <div className="animate-in fade-in slide-in-from-top-1 duration-200 pl-6">
+                    <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">
+                      PRIMARY ID COLUMN (for update) *
+                    </label>
+                    <select
+                      value={idCol}
+                      onChange={(e) => setIdCol(e.target.value)}
+                      required={isUpdateMode}
+                      className="w-full bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                    >
+                      <option value="">-- Select Primary ID Column --</option>
+                      {headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {hasLevel3 && (
                 <>
                   <div>
                     <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Complexity (complexity) Column</label>
@@ -170,10 +220,6 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
                     </select>
                   </div>
                 </>
-              ) : (
-                <div className="text-xs text-dark-muted font-medium bg-light-lbg/10 p-3 rounded-xl border border-dashed border-light-border/40">
-                  No optional fields are available for the selected book hierarchy.
-                </div>
               )}
             </div>
           </div>
