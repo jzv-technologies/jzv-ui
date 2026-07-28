@@ -56,6 +56,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
+  const [timetableSlots, setTimetableSlots] = useState([]);
   const [books, setBooks] = useState([]);
   const [bookClasses, setBookClasses] = useState([]);
   const [classifications, setClassifications] = useState([]);
@@ -164,6 +165,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
               'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
             ),
           supabase.from('subject_classifications').select('*'),
+          supabase.from('timetable_slots').select('class_id, teacher_id, subject_id'),
         ];
 
         if (isAdminView) {
@@ -196,12 +198,14 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
           { data: dbLessons },
           { data: dbProgress },
           { data: dbClassifications },
+          { data: dbTimetableSlots },
           teachersResult,
         ] = results;
 
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
         setAssignments(dbAssignments || []);
+        setTimetableSlots(dbTimetableSlots || []);
         setBooks(dbBooks || []);
         setBookClasses(dbBookClasses || []);
         setAllLessons(dbLessons || []);
@@ -219,6 +223,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
           classes: dbClasses || [],
           subjects: dbSubjects || [],
           assignments: dbAssignments || [],
+          timetableSlots: dbTimetableSlots || [],
           books: dbBooks || [],
           bookClasses: dbBookClasses || [],
           allLessons: dbLessons || [],
@@ -247,39 +252,105 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
     if (isAdminView && !selectedTeacherId) return classes;
     if (showAllClasses) return classes;
 
-    return classes.filter((c) =>
-      assignments.some(
-        (a) =>
-          String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
-      )
+    return classes.filter(
+      (c) =>
+        assignments.some(
+          (a) =>
+            String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
+        ) ||
+        timetableSlots.some(
+          (s) =>
+            String(s.class_id) === String(c.id) && String(s.teacher_id) === String(filterTeacherId)
+        )
     );
-  }, [classes, assignments, filterTeacherId, isAdminView, showAllClasses]);
+  }, [classes, assignments, timetableSlots, filterTeacherId, isAdminView, showAllClasses]);
+
+  const classSubjects = useMemo(() => {
+    if (!selectedClassId) return [];
+
+    const isFilteredByTeacher =
+      Boolean(filterTeacherId) && !showAllClasses && !(isAdminView && !selectedTeacherId);
+
+    // Subjects assigned to the specific teacher for this class (from class_assignments OR scheduled timetable_slots)
+    const teacherAssignmentSubjectIds = new Set([
+      ...assignments
+        .filter(
+          (a) =>
+            String(a.class_id) === String(selectedClassId) &&
+            String(a.teacher_id) === String(filterTeacherId)
+        )
+        .map((a) => String(a.subject_id)),
+      ...timetableSlots
+        .filter(
+          (s) =>
+            String(s.class_id) === String(selectedClassId) &&
+            String(s.teacher_id) === String(filterTeacherId) &&
+            Boolean(s.subject_id)
+        )
+        .map((s) => String(s.subject_id)),
+    ]);
+
+    if (isFilteredByTeacher) {
+      // Return only subjects assigned to this teacher for the selected class
+      return subjects.filter((s) => teacherAssignmentSubjectIds.has(String(s.id)));
+    }
+
+    // Otherwise (Admin view with no teacher selected OR showAllClasses is true):
+    // Get subject IDs that have books mapped to this class in syllabus_book_classes
+    const mappedBookIdsForClass = new Set(
+      bookClasses
+        .filter((bc) => String(bc.class_id) === String(selectedClassId))
+        .map((bc) => String(bc.book_id))
+    );
+
+    const mappedSubjectIdsFromBooks = new Set(
+      books.filter((b) => mappedBookIdsForClass.has(String(b.id))).map((b) => String(b.subject_id))
+    );
+
+    const allAssignmentSubjectIds = new Set(
+      assignments
+        .filter((a) => String(a.class_id) === String(selectedClassId))
+        .map((a) => String(a.subject_id))
+    );
+
+    const hasSpecificMappings =
+      mappedSubjectIdsFromBooks.size > 0 || allAssignmentSubjectIds.size > 0;
+
+    if (!hasSpecificMappings) {
+      return subjects;
+    }
+
+    return subjects.filter((s) => {
+      const sId = String(s.id);
+      return mappedSubjectIdsFromBooks.has(sId) || allAssignmentSubjectIds.has(sId);
+    });
+  }, [
+    selectedClassId,
+    bookClasses,
+    books,
+    subjects,
+    assignments,
+    timetableSlots,
+    filterTeacherId,
+    showAllClasses,
+    isAdminView,
+    selectedTeacherId,
+  ]);
+
+  const availableClassifications = useMemo(() => {
+    if (!selectedClassId || classSubjects.length === 0) return [];
+    const classSubjectClassificationIds = new Set(
+      classSubjects.map((s) => String(s.classification_id)).filter(Boolean)
+    );
+    return classifications.filter((c) => classSubjectClassificationIds.has(String(c.id)));
+  }, [selectedClassId, classSubjects, classifications]);
 
   const availableSubjects = useMemo(() => {
-    if (!selectedClassId) return [];
-    const assignmentSubjects = assignments
-      .filter(
-        (a) =>
-          String(a.class_id) === String(selectedClassId) &&
-          (!filterTeacherId || String(a.teacher_id) === String(filterTeacherId))
-      )
-      .map((a) => String(a.subject_id));
-
-    // If showAllClasses is true or admin view, we might want to show all subjects for the class
-    let filteredSubjects = subjects;
-    if (!(showAllClasses || (isAdminView && !selectedTeacherId))) {
-      filteredSubjects = subjects.filter((s) => assignmentSubjects.includes(String(s.id)));
-    }
-
-    // Filter by selected classification
-    if (selectedClassificationId) {
-      filteredSubjects = filteredSubjects.filter(
-        (s) => String(s.classification_id) === String(selectedClassificationId)
-      );
-    }
-
-    return filteredSubjects;
-  }, [subjects, assignments, selectedClassId, filterTeacherId, isAdminView, showAllClasses, selectedClassificationId]);
+    if (!selectedClassificationId) return classSubjects;
+    return classSubjects.filter(
+      (s) => String(s.classification_id) === String(selectedClassificationId)
+    );
+  }, [classSubjects, selectedClassificationId]);
 
   const availableBooks = useMemo(() => {
     if (!selectedClassId || !selectedSubjectId) return [];
@@ -493,11 +564,11 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
                   setSelectedSubjectId('');
                   setSelectedBookId('');
                 }}
-                disabled={!selectedClassId}
+                disabled={!selectedClassId || availableClassifications.length === 0}
                 className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
               >
-                <option value="">Select Classification...</option>
-                {classifications.map((cl) => (
+                <option value="">All Classifications</option>
+                {availableClassifications.map((cl) => (
                   <option key={cl.id} value={cl.id}>
                     {cl.name}
                   </option>

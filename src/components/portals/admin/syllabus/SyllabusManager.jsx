@@ -2070,6 +2070,14 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       new Set(bookData.map((d) => getNormalizedL1(d.level1)))
                     ).filter(Boolean);
                     const bookL1Count = l1Keys.length;
+
+                    const mappedClassIds = bookClasses
+                      .filter((bc) => String(bc.book_id) === String(book.id))
+                      .map((bc) => String(bc.class_id));
+                    const mappedClassNames = classes
+                      .filter((c) => mappedClassIds.includes(String(c.id)))
+                      .map((c) => c.name || c.class_name);
+
                     return (
                       <div
                         key={book.id}
@@ -2097,10 +2105,21 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                     : 'Expand to load lessons'}
                                 </span>
                               </h3>
-                              <div className="flex items-center gap-3 mt-1">
+                              <div className="flex items-center gap-3 mt-1 flex-wrap">
                                 <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider">
                                   Book ID: {book.id}
                                 </span>
+                                {mappedClassNames.length > 0 ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                                    <i className="fas fa-graduation-cap text-[9px]"></i>
+                                    Mapped to: {mappedClassNames.join(', ')}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                    <i className="fas fa-exclamation-triangle text-[9px]"></i>
+                                    Not Mapped
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </button>
@@ -2143,6 +2162,18 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   </button>
                                 )}
                                 <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    initiateMapping(book);
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 shadow-sm active:scale-[0.98]"
+                                  title="Map Book to Classes"
+                                >
+                                  <i className="fas fa-graduation-cap text-xs"></i>
+                                  <span>Map to Class</span>
+                                </button>
+                                <button
                                   onClick={() =>
                                     setModal({
                                       type: 'add',
@@ -2169,13 +2200,6 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   title="Download Excel"
                                 >
                                   <i className="fas fa-file-arrow-down text-xl"></i>
-                                </button>
-                                <button
-                                  onClick={() => initiateMapping(book)}
-                                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                  title="Map to Classes"
-                                >
-                                  <i className="fas fa-graduation-cap text-xl"></i>
                                 </button>
                                 <button
                                   onClick={() =>
