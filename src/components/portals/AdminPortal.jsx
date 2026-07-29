@@ -7,6 +7,7 @@ import AdminFormConfigsView from './admin/AdminFormConfigsView';
 import TimetableManager from './admin/timetable/TimetableManager';
 import AdminStudentsView from './admin/AdminStudentsView';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
+import EmployeeRecordsView from './admin/employees/EmployeeRecordsView';
 import SyllabusTrackerPortal from './shared-components/SyllabusTrackerPortal';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import ConfirmModal from '../ConfirmModal';
@@ -396,13 +397,13 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // Admin tiles (same as before, but "Clear cache" removed – can be re-added if needed)
   const adminTiles = [
     {
-      id: 'user-management',
-      title: 'User Management',
-      description: 'Manage roles and permissions for all users.',
-      icon: 'fa-users',
+      id: 'employee-management',
+      title: 'Employee Management',
+      description: 'Manage employee records, roles, designations, salaries, and bulk imports.',
+      icon: 'fa-users-gear',
       buttonColor: 'bg-orange-primary text-white',
       shadow: 'shadow-orange-200',
-      onClick: () => onSetSubView('user-management'),
+      onClick: () => onSetSubView('employee-management'),
     },
     {
       id: 'form-configurations',
@@ -450,13 +451,13 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       onClick: () => onSetSubView('lesson-planner'),
     },
     {
-      id: 'student-database',
-      title: 'Student Database',
+      id: 'student-records',
+      title: 'Student Records',
       description: 'View and assign student records to parents.',
       icon: 'fa-user-graduate',
       buttonColor: 'bg-green-dark text-white',
       shadow: 'shadow-green-200',
-      onClick: () => onSetSubView('student-database'),
+      onClick: () => onSetSubView('student-records'),
     },
     {
       id: 'display-dashboard',
@@ -469,7 +470,6 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     },
   ];
 
-
   return (
     <RolePortal
       userRoles={userRoles}
@@ -478,18 +478,10 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       subView={subView}
       onSetSubView={onSetSubView}
     >
-      {/* Users view (now using DataGrid + Modal) */}
-      {subView === 'user-management' && (
-        <div data-user-management="true">
-          <AdminUsersView
-            users={users}
-            loading={loading}
-            onUpdateUser={handleUpdateUser}
-            saving={saving}
-            teachers={teachers}
-            onAddTeacher={handleAddTeacherFromUser}
-            onToggleTeacherActive={handleToggleTeacherActiveFromUser}
-          />
+      {/* Employee Management view */}
+      {(subView === 'employee-management' || subView === 'user-management') && (
+        <div data-employee-management="true">
+          <EmployeeRecordsView role="admin" user={user} />
         </div>
       )}
 
@@ -520,8 +512,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       )}
 
       {/* Student Database view */}
-      {subView === 'student-database' && (
-        <div data-student-database="true">
+      {subView === 'student-records' && (
+        <div data-student-records="true">
           <AdminStudentsView />
         </div>
       )}

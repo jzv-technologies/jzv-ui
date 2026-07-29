@@ -15,6 +15,7 @@ import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
 import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
 import ReporterTicketsView from './portals/ReporterTicketsView';
 import LessonManager from './portals/teacher/LessonManager/LessonManager';
+import EmployeeRecordsView from './portals/admin/employees/EmployeeRecordsView';
 import SyllabusTrackerPortal from './portals/shared-components/SyllabusTrackerPortal';
 import CandidatePortal from './portals/CandidatePortal';
 import TVDisplayDashboard from './portals/shared-components/TVDisplayDashboard';
@@ -294,6 +295,15 @@ export const AppRoutes = ({
                     onClick: () => setTeacherSubView('progress-tracker'),
                   },
                   {
+                    id: 'personal-info',
+                    title: 'Personal Info',
+                    description: 'View your employee profile, designation, and update contact information.',
+                    icon: 'fa-id-card',
+                    buttonColor: 'bg-emerald-600 text-white',
+                    shadow: 'shadow-emerald-200',
+                    onClick: () => setTeacherSubView('personal-info'),
+                  },
+                  {
                     id: 'track-tickets',
                     title: 'My Tickets',
                     description: 'View status and update comments on your submitted tickets.',
@@ -307,6 +317,15 @@ export const AppRoutes = ({
                 onSetSubView={setTeacherSubView}
                 openModal={openModal}
               >
+                {teacherSubView === 'personal-info' && (
+                  <div data-personal-info="true">
+                    <EmployeeRecordsView
+                      role="employee"
+                      user={user}
+                      teacherRecord={teacherRecord}
+                    />
+                  </div>
+                )}
                 {teacherSubView === 'timetable' && (
                   <div data-timetable="true">
                     <TeacherTimetableViewer user={user} />

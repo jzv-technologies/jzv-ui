@@ -11,6 +11,7 @@ import TimetableAdminView from './admin/timetable/TimetableAdminView';
 import SyllabusTrackerPortal from './shared-components/SyllabusTrackerPortal';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import LessonManager from './teacher/LessonManager/LessonManager';
+import EmployeeRecordsView from './admin/employees/EmployeeRecordsView';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -499,6 +500,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   }, [subView]);
 
   const baseManagementTiles = [
+    {
+      id: 'employee-records',
+      title: 'Employee Records',
+      description: 'View employee records, roles, designations, and salary details.',
+      icon: 'fa-users-gear',
+      buttonColor: 'bg-orange-primary text-white',
+      shadow: 'shadow-orange-200',
+      onClick: () => onSetSubView('employee-records'),
+    },
     {
       id: 'registered-complaints',
       title: 'Registered Complaints',
@@ -1428,6 +1438,11 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           {renderTableView()}
         </div>
       ) : null}
+      {subView === 'employee-records' && (
+        <div data-employee-records="true">
+          <EmployeeRecordsView role="management" user={user} />
+        </div>
+      )}
       {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}
       {subView === 'syllabus-progress-tracker' && (
         <div data-syllabus-progress-tracker="true">
