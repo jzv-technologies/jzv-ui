@@ -35,12 +35,23 @@ const SYSTEM_ROLES = [
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const MARITAL_STATUSES = ['Single', 'Married', 'Divorced', 'Widowed'];
+const EMERGENCY_RELATIONS = [
+  'Parent',
+  'Spouse',
+  'Sibling',
+  'Cousin',
+  'Friend',
+  'Colleague',
+  'Other',
+];
 
 // Helper to format Portal Roles from bitmask sum
 const formatPortalRoles = (sum) => {
   const num = parseInt(sum, 10) || 0;
   if (!num) return <span className="text-gray-400 font-normal">None</span>;
-  const roles = SYSTEM_ROLES.filter((r) => (num & r.id) !== 0).map((r) => r.name);
+  const roles = SYSTEM_ROLES.filter((r) => (num & r.id) !== 0).map(
+    (r) => `${r.name.slice(0, 2).toUpperCase()}(${r.id})`
+  );
   if (roles.length === 0) return <span className="text-gray-400 font-normal">None</span>;
   return roles.join(', ');
 };
@@ -151,6 +162,11 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [csvPreviewRows, setCsvPreviewRows] = useState([]);
+  const [isUserRolesModalOpen, setIsUserRolesModalOpen] = useState(false);
+  const [userRolesSearch, setUserRolesSearch] = useState('');
+  const [editingAuthUser, setEditingAuthUser] = useState(null);
+  const [editingRoleSum, setEditingRoleSum] = useState('8');
+  const [editingEmpId, setEditingEmpId] = useState('');
 
   // Keyboard shortcut listener for Esc key to close modal
   useEffect(() => {
@@ -158,11 +174,12 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       if (e.key === 'Escape') {
         if (modalMode) setModalMode(null);
         if (isCsvImportOpen) setIsCsvImportOpen(false);
+        if (isUserRolesModalOpen) setIsUserRolesModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [modalMode, isCsvImportOpen]);
+  }, [modalMode, isCsvImportOpen, isUserRolesModalOpen]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -272,26 +289,15 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
       });
 
-      // Try querying 'teachers' table first (primary table with full 32-column schema)
+      // Fetch employees data
       try {
-        const { data: teachData, error: teachErr } = await supabase
-          .from('teachers')
+        const { data: empData, error: empErr } = await supabase
+          .from('employees')
           .select('*')
           .order('id', { ascending: true });
 
-        if (!teachErr && Array.isArray(teachData) && teachData.length > 0) {
-          data = teachData;
-        } else {
-          // Fallback to 'employees' table
-          const { data: empData, error: empErr } = await supabase
-            .from('employees')
-            .select('*')
-            .order('id', { ascending: true });
-          if (!empErr && Array.isArray(empData) && empData.length > 0) {
-            data = empData;
-          } else if (Array.isArray(teachData)) {
-            data = teachData;
-          }
+        if (!empErr && Array.isArray(empData)) {
+          data = empData;
         }
       } catch (e) {
         console.warn('DB query error:', e);
@@ -567,11 +573,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
             try {
               await supabase.from('employees').update({ auth_id, email }).eq('id', emp.id);
-            } catch (err) {
-              try {
-                await supabase.from('teachers').update({ auth_id, email }).eq('id', emp.id);
-              } catch (e) {}
-            }
+            } catch (err) {}
           }
         }
       }
@@ -643,6 +645,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       'is_active',
       'login_allowed',
       'auth_id',
+      'mapped_roles_sum',
     ];
     if (!oldObj) return ['record_created'];
 
@@ -726,6 +729,49 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     is_teacher: data.is_teaching_staff !== false,
   });
 
+  // Direct User Roles & Employee Link Update for Non-Employees / Any Auth Account
+  const handleSaveUserRoleDirect = async (userId, roleSum, selectedEmpId = '') => {
+    setSaving(true);
+    try {
+      // 1. Upsert integer role into user_roles table
+      const roleNum = parseInt(roleSum, 10) || 0;
+      const { error: roleErr } = await supabase.from('user_roles').upsert(
+        {
+          user_id: userId,
+          role: roleNum,
+        },
+        { onConflict: 'user_id' }
+      );
+      if (roleErr) throw roleErr;
+
+      // 2. Sync Employee Link in teachers / employees table if modified
+      const currentMapped = mappedAuthUserMap.get(String(userId));
+      const currentEmpId = currentMapped ? String(currentMapped.emp_id) : '';
+      const targetEmpId = selectedEmpId ? String(selectedEmpId) : '';
+
+      if (currentEmpId !== targetEmpId) {
+        if (currentEmpId) {
+          try {
+            await supabase.from('employees').update({ auth_id: null }).eq('id', currentEmpId);
+          } catch (e) {}
+        }
+        if (targetEmpId) {
+          try {
+            await supabase.from('employees').update({ auth_id: userId }).eq('id', targetEmpId);
+          } catch (e) {}
+        }
+      }
+
+      showToast('User portal role and employee mapping updated successfully!', 'success');
+      setEditingAuthUser(null);
+      await fetchEmployees();
+    } catch (err) {
+      showToast('Failed to update user role: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Save Employee Form
   const handleSaveEmployee = async (e) => {
     e.preventDefault();
@@ -771,25 +817,13 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       let dbError = null;
 
       if (modalMode === 'edit' && selectedEmployee?.id) {
-        // Try updating 'teachers' table first
-        const { error: tErr } = await supabase
-          .from('teachers')
+        const { error: eErr } = await supabase
+          .from('employees')
           .update(teacherPayload)
           .eq('id', selectedEmployee.id);
 
-        if (!tErr) {
-          try {
-            await supabase.from('employees').update(employeePayload).eq('id', selectedEmployee.id);
-          } catch (e) {}
-        } else {
-          // Fallback to 'employees'
-          const { error: eErr } = await supabase
-            .from('employees')
-            .update(employeePayload)
-            .eq('id', selectedEmployee.id);
-          if (eErr) {
-            dbError = tErr || eErr;
-          }
+        if (eErr) {
+          dbError = eErr;
         }
 
         if (dbError) {
@@ -798,15 +832,31 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
 
         if (formData.auth_id) {
-          try {
-            await supabase.from('user_roles').upsert(
+          const roleNum = parseInt(formData.mapped_roles_sum, 10) || 8;
+          const { error: roleErr } = await supabase.from('user_roles').upsert(
+            {
+              user_id: formData.auth_id,
+              role: roleNum,
+            },
+            { onConflict: 'user_id' }
+          );
+          if (roleErr) {
+            console.warn('user_roles upsert error (int):', roleErr.message);
+            const { error: roleErr2 } = await supabase.from('user_roles').upsert(
               {
                 user_id: formData.auth_id,
-                role: String(formData.mapped_roles_sum || '8'),
+                role: String(roleNum),
               },
               { onConflict: 'user_id' }
             );
-          } catch (err) {}
+            if (roleErr2) {
+              console.warn('user_roles upsert error (str):', roleErr2.message);
+              showToast(
+                'Warning: Record saved, but user_roles table update failed: ' + roleErr2.message,
+                'warning'
+              );
+            }
+          }
         }
 
         updatedList = updatedList.map((emp) =>
@@ -835,37 +885,13 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           update_history: updatedHistoryList,
         };
 
-        const employeesSelfPayload = {
-          name: formData.name.trim(),
-          is_male: formData.is_male,
-          date_of_birth: formData.date_of_birth || null,
-          blood_group: formData.blood_group,
-          highest_education: formData.highest_education,
-          phone1: formData.primary_mobile,
-          phone2: formData.secondary_mobile,
-          full_address: formData.communication_address,
-        };
-
-        const { error: tErr } = await supabase
-          .from('teachers')
+        const { error: eErr } = await supabase
+          .from('employees')
           .update(teachersSelfPayload)
           .eq('id', currentSelfEmployee.id);
 
-        if (!tErr) {
-          try {
-            await supabase
-              .from('employees')
-              .update(employeesSelfPayload)
-              .eq('id', currentSelfEmployee.id);
-          } catch (e) {}
-        } else {
-          const { error: eErr } = await supabase
-            .from('employees')
-            .update(employeesSelfPayload)
-            .eq('id', currentSelfEmployee.id);
-          if (eErr) {
-            dbError = tErr || eErr;
-          }
+        if (eErr) {
+          dbError = eErr;
         }
 
         if (dbError) {
@@ -888,26 +914,15 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       } else {
         // Add new employee
         let newRecord = null;
-        const { data: tData, error: tErr } = await supabase
-          .from('teachers')
+        const { data: eData, error: eErr } = await supabase
+          .from('employees')
           .insert([teacherPayload])
           .select();
 
-        if (!tErr && tData?.[0]) {
-          newRecord = tData[0];
-          try {
-            await supabase.from('employees').insert([{ ...employeePayload, id: newRecord.id }]);
-          } catch (e) {}
+        if (!eErr && eData?.[0]) {
+          newRecord = eData[0];
         } else {
-          const { data: eData, error: eErr } = await supabase
-            .from('employees')
-            .insert([employeePayload])
-            .select();
-          if (!eErr && eData?.[0]) {
-            newRecord = eData[0];
-          } else {
-            dbError = tErr || eErr;
-          }
+          dbError = eErr;
         }
 
         if (dbError) {
@@ -916,15 +931,27 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
 
         if (formData.auth_id && newRecord) {
-          try {
-            await supabase.from('user_roles').upsert(
+          const roleNum = parseInt(formData.mapped_roles_sum, 10) || 8;
+          const { error: roleErr } = await supabase.from('user_roles').upsert(
+            {
+              user_id: formData.auth_id,
+              role: roleNum,
+            },
+            { onConflict: 'user_id' }
+          );
+          if (roleErr) {
+            console.warn('user_roles upsert error (int):', roleErr.message);
+            const { error: roleErr2 } = await supabase.from('user_roles').upsert(
               {
                 user_id: formData.auth_id,
-                role: String(formData.mapped_roles_sum || '8'),
+                role: String(roleNum),
               },
               { onConflict: 'user_id' }
             );
-          } catch (err) {}
+            if (roleErr2) {
+              console.warn('user_roles upsert error (str):', roleErr2.message);
+            }
+          }
         }
 
         if (newRecord) {
@@ -1256,30 +1283,19 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           }
           teacherPayload.update_history = historyList;
 
-          const { error: tErr } = await supabase
-            .from('teachers')
+          const { error: eErr } = await supabase
+            .from('employees')
             .update(teacherPayload)
             .eq('id', r.existingId);
 
-          if (!tErr) {
+          if (!eErr) {
             updatedCount++;
-            try {
-              await supabase.from('employees').update(employeePayload).eq('id', r.existingId);
-            } catch (e) {}
           } else {
-            const { error: eErr } = await supabase
-              .from('employees')
-              .update(employeePayload)
-              .eq('id', r.existingId);
-            if (!eErr) {
-              updatedCount++;
-            } else {
-              failedRows.push({
-                row: r.previewIndex,
-                name: r.name,
-                error: tErr.message || eErr.message,
-              });
-            }
+            failedRows.push({
+              row: r.previewIndex,
+              name: r.name,
+              error: eErr.message,
+            });
           }
         } else {
           teacherPayload.update_history = [
@@ -1290,30 +1306,19 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
             },
           ];
 
-          const { data: tData, error: tErr } = await supabase
-            .from('teachers')
+          const { data: eData, error: eErr } = await supabase
+            .from('employees')
             .insert([teacherPayload])
             .select();
 
-          if (!tErr && tData?.[0]) {
+          if (!eErr && eData?.[0]) {
             insertedCount++;
-            try {
-              await supabase.from('employees').insert([{ ...employeePayload, id: tData[0].id }]);
-            } catch (e) {}
           } else {
-            const { data: eData, error: eErr } = await supabase
-              .from('employees')
-              .insert([employeePayload])
-              .select();
-            if (!eErr && eData?.[0]) {
-              insertedCount++;
-            } else {
-              failedRows.push({
-                row: r.previewIndex,
-                name: r.name,
-                error: tErr ? tErr.message : eErr ? eErr.message : 'Insert failed',
-              });
-            }
+            failedRows.push({
+              row: r.previewIndex,
+              name: r.name,
+              error: eErr ? eErr.message : 'Insert failed',
+            });
           }
         }
       }
@@ -1395,14 +1400,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Full Name
                 </span>
-                <span className="text-dark-primary font-bold">{emp.name || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">{emp.name || 'Unknown'}</span>
               </div>
               <div>
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Father / Husband Name
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.father_husband_name || 'N/A'}
+                  {emp.father_husband_name || 'Unknown'}
                 </span>
               </div>
               <div>
@@ -1417,13 +1422,15 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Date of Birth
                 </span>
-                <span className="text-dark-primary font-bold">{emp.date_of_birth || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">
+                  {emp.date_of_birth || 'Unknown'}
+                </span>
               </div>
               <div>
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Blood Group
                 </span>
-                <span className="text-dark-primary font-bold">{emp.blood_group || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">{emp.blood_group || 'Unknown'}</span>
               </div>
               <div>
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
@@ -1438,7 +1445,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Highest Qualification
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.highest_education || 'N/A'}
+                  {emp.highest_education || 'Unknown'}
                 </span>
               </div>
               <div>
@@ -1452,7 +1459,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Primary Mobile
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.primary_mobile || emp.phone1 || 'N/A'}
+                  {emp.primary_mobile || emp.phone1 || 'Unknown'}
                 </span>
               </div>
               <div>
@@ -1460,7 +1467,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Secondary Mobile
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.secondary_mobile || emp.phone2 || 'N/A'}
+                  {emp.secondary_mobile || emp.phone2 || 'Unknown'}
                 </span>
               </div>
               <div className="col-span-2">
@@ -1485,7 +1492,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Account Name
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.bank_account_name || 'N/A'}
+                  {emp.bank_account_name || 'Not Provided'}
                 </span>
               </div>
               <div>
@@ -1493,7 +1500,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Account Number
                 </span>
                 <span className="text-dark-primary font-bold font-mono">
-                  {emp.bank_account_number || 'N/A'}
+                  {emp.bank_account_number || 'Not Provided'}
                 </span>
               </div>
               <div>
@@ -1501,20 +1508,24 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   IFSC Code
                 </span>
                 <span className="text-dark-primary font-bold font-mono">
-                  {emp.bank_ifsc_code || 'N/A'}
+                  {emp.bank_ifsc_code || 'Not Provided'}
                 </span>
               </div>
               <div>
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Bank Name
                 </span>
-                <span className="text-dark-primary font-bold">{emp.bank_name || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">
+                  {emp.bank_name || 'Not Provided'}
+                </span>
               </div>
               <div className="col-span-2">
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Branch Name
                 </span>
-                <span className="text-dark-primary font-bold">{emp.bank_branch_name || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">
+                  {emp.bank_branch_name || 'Not Provided'}
+                </span>
               </div>
             </div>
           </div>
@@ -1532,19 +1543,19 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div>
                     <span className="text-dark-muted block text-[10px]">Name:</span>{' '}
-                    <strong>{emp.emergency_contact_1?.name || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_1?.name || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Relation:</span>{' '}
-                    <strong>{emp.emergency_contact_1?.relation || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_1?.relation || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Phone:</span>{' '}
-                    <strong>{emp.emergency_contact_1?.phone || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_1?.phone || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Address:</span>{' '}
-                    <strong>{emp.emergency_contact_1?.address || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_1?.address || 'Not Provided'}</strong>
                   </div>
                 </div>
               </div>
@@ -1556,19 +1567,19 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div>
                     <span className="text-dark-muted block text-[10px]">Name:</span>{' '}
-                    <strong>{emp.emergency_contact_2?.name || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_2?.name || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Relation:</span>{' '}
-                    <strong>{emp.emergency_contact_2?.relation || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_2?.relation || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Phone:</span>{' '}
-                    <strong>{emp.emergency_contact_2?.phone || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_2?.phone || 'Not Provided'}</strong>
                   </div>
                   <div>
                     <span className="text-dark-muted block text-[10px]">Address:</span>{' '}
-                    <strong>{emp.emergency_contact_2?.address || 'N/A'}</strong>
+                    <strong>{emp.emergency_contact_2?.address || 'Not Provided'}</strong>
                   </div>
                 </div>
               </div>
@@ -1609,7 +1620,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
                   Joining Date
                 </span>
-                <span className="text-dark-primary font-bold">{emp.joining_date || 'N/A'}</span>
+                <span className="text-dark-primary font-bold">
+                  {emp.joining_date || 'Not Updated'}
+                </span>
               </div>
               <div>
                 <span className="text-dark-muted block text-[10px] uppercase font-bold">
@@ -1626,7 +1639,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 <span className="text-emerald-700 font-extrabold">
                   {emp.current_salary
                     ? `₹${Number(emp.current_salary).toLocaleString('en-IN')}`
-                    : 'N/A'}
+                    : 'Not Updated'}
                 </span>
               </div>
               <div>
@@ -1912,9 +1925,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                         </div>
                         <div>
                           <label className="text-[10px] text-dark-muted block">Relation</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Spouse"
+                          <select
                             value={formData.emergency_contact_1.relation}
                             onChange={(e) =>
                               setFormData({
@@ -1926,7 +1937,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                               })
                             }
                             className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
+                          >
+                            <option value="">Select Relation</option>
+                            {EMERGENCY_RELATIONS.map((rel) => (
+                              <option key={rel} value={rel}>
+                                {rel}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="text-[10px] text-dark-muted block">
@@ -1993,9 +2011,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                         </div>
                         <div>
                           <label className="text-[10px] text-dark-muted block">Relation</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Sibling"
+                          <select
                             value={formData.emergency_contact_2.relation}
                             onChange={(e) =>
                               setFormData({
@@ -2007,7 +2023,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                               })
                             }
                             className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
+                          >
+                            <option value="">Select Relation</option>
+                            {EMERGENCY_RELATIONS.map((rel) => (
+                              <option key={rel} value={rel}>
+                                {rel}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label className="text-[10px] text-dark-muted block">
@@ -2105,6 +2128,13 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
           {(isAdmin || isManagement) && (
             <>
+              <button
+                onClick={() => setIsUserRolesModalOpen(true)}
+                className="px-3.5 py-2.5 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-xs font-bold border border-purple-200 transition-all flex items-center gap-2 shadow-sm"
+                title="Manage portal roles for all Auth Users (including non-employees)"
+              >
+                <i className="fas fa-user-shield text-purple-600"></i> Manage User Roles
+              </button>
               <button
                 onClick={handleAutoLinkAuthAccounts}
                 disabled={saving}
@@ -2332,29 +2362,41 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                         <div className="flex items-center gap-1 flex-wrap">
                           {emp.auth_id ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-700  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-link text-purple-500"></i>
+                              <i className="fas fa-link text-purple-500" title="Login Linked"></i>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-unlink text-amber-500"></i>
+                              <i
+                                className="fas fa-unlink text-amber-500"
+                                title="No Login Linked"
+                              ></i>
                             </span>
                           )}
                           {emp.login_allowed ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-user text-emerald-500"></i>
+                              <i className="fas fa-user text-emerald-500" title="Login Allowed"></i>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-user-slash text-red-400"></i>
+                              <i
+                                className="fas fa-user-slash text-red-400"
+                                title="Login Not Allowed"
+                              ></i>
                             </span>
                           )}
                           {emp.is_active ? (
                             <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-plug-circle-check text-emerald-500"></i>
+                              <i
+                                className="fas fa-plug-circle-check text-emerald-500"
+                                title="Active Employee"
+                              ></i>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500  px-1 py-0.5 rounded-full">
-                              <i className="fas fa-plug-circle-xmark text-red-400"></i>
+                              <i
+                                className="fas fa-plug-circle-xmark text-red-400"
+                                title="Inactive Employee"
+                              ></i>
                             </span>
                           )}
                           <button
@@ -2618,9 +2660,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                       </div>
                       <div>
                         <label className="text-[10px] text-dark-muted block">Relation</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Spouse, Parent"
+                        <select
                           value={formData.emergency_contact_1.relation}
                           onChange={(e) =>
                             setFormData({
@@ -2632,7 +2672,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                             })
                           }
                           className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
+                        >
+                          <option value="">Select Relation</option>
+                          {EMERGENCY_RELATIONS.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-dark-muted block">Contact Number</label>
@@ -2697,9 +2744,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                       </div>
                       <div>
                         <label className="text-[10px] text-dark-muted block">Relation</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Sibling, Friend"
+                        <select
                           value={formData.emergency_contact_2.relation}
                           onChange={(e) =>
                             setFormData({
@@ -2711,7 +2756,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                             })
                           }
                           className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
+                        >
+                          <option value="">Select Relation</option>
+                          {EMERGENCY_RELATIONS.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] text-dark-muted block">Contact Number</label>
@@ -3022,8 +3074,8 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50/30 p-4 rounded-2xl border border-purple-100">
-                  {/* First Field in Section 5: Portal Login Allowed Toggle */}
-                  <div className="col-span-1 md:col-span-2">
+                  {/* Field 1: Portal Access */}
+                  <div>
                     <label className="block text-dark-soft mb-1 font-extrabold text-purple-950">
                       Portal Access
                     </label>
@@ -3053,8 +3105,49 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                     </div>
                   </div>
 
-                  {/* Auth User Mapping (Disabled if login_allowed is false) */}
-                  <div className="">
+                  {/* Field 2: Consider As Teacher */}
+                  <div>
+                    <label
+                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
+                    >
+                      Consider As Teacher
+                    </label>
+                    <div
+                      className={`inline-flex p-1 rounded-xl border ${
+                        !formData.login_allowed
+                          ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                          : 'bg-white border-purple-200 shadow-sm'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        disabled={!formData.login_allowed}
+                        onClick={() => setFormData({ ...formData, is_teaching_staff: true })}
+                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                          formData.is_teaching_staff
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!formData.login_allowed}
+                        onClick={() => setFormData({ ...formData, is_teaching_staff: false })}
+                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                          !formData.is_teaching_staff
+                            ? 'bg-gray-700 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Field 3: Auth User Mapping */}
+                  <div>
                     <label
                       className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
                     >
@@ -3104,7 +3197,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
                     {/* Status Helper Badge */}
                     {formData.auth_id && formData.login_allowed && (
-                      <div className="text-[11px] font-bold">
+                      <div className="text-[11px] font-bold mt-1">
                         {(() => {
                           const mapped = mappedAuthUserMap.get(String(formData.auth_id));
                           if (!mapped || String(mapped.emp_id) === String(selectedEmployee?.id)) {
@@ -3127,61 +3220,25 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                     )}
                   </div>
 
-                  {/* Roles Mapping (Disabled if login_allowed is false) */}
+                  {/* Field 4: Portal Roles */}
                   <div>
                     <label
-                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
+                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed || !formData.auth_id ? 'text-gray-400' : 'text-purple-950'}`}
                     >
                       Portal Roles
                     </label>
                     <MultiSelectRolesDropdown
-                      disabled={!formData.login_allowed}
+                      disabled={!formData.login_allowed || !formData.auth_id}
                       value={formData.mapped_roles_sum}
                       onChange={(nextSum) =>
                         setFormData({ ...formData, mapped_roles_sum: nextSum })
                       }
                     />
-                  </div>
-
-                  {/* Is Teaching Staff Field Toggle (Moved to Section 5 as requested!) */}
-                  <div>
-                    <label
-                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
-                    >
-                      Teacher Access
-                    </label>
-                    <div
-                      className={`inline-flex p-1 rounded-xl border ${
-                        !formData.login_allowed
-                          ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
-                          : 'bg-white border-purple-200 shadow-sm'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        disabled={!formData.login_allowed}
-                        onClick={() => setFormData({ ...formData, is_teaching_staff: true })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          formData.is_teaching_staff
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!formData.login_allowed}
-                        onClick={() => setFormData({ ...formData, is_teaching_staff: false })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          !formData.is_teaching_staff
-                            ? 'bg-gray-700 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        No
-                      </button>
-                    </div>
+                    {!formData.auth_id && formData.login_allowed && (
+                      <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1">
+                        <i className="fas fa-lock text-amber-600"></i> Auth Mapping is required.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3337,6 +3394,186 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 {saving
                   ? 'Processing Import...'
                   : `Confirm Import / Update (${csvPreviewRows.length} Rows)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Non-Employee / Auth User Roles Modal */}
+      {isUserRolesModalOpen && (
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-lg font-black text-dark-primary flex items-center gap-2">
+                  <i className="fas fa-user-shield text-purple-600"></i> Manage Portal User Roles
+                  (Auth Users)
+                </h3>
+                <p className="text-xs text-dark-muted font-semibold mt-0.5">
+                  Update role bitmask permissions for any registered Auth User (including
+                  non-employees).
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsUserRolesModalOpen(false);
+                  setEditingAuthUser(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times text-lg"></i>
+              </button>
+            </div>
+
+            {/* Search filter */}
+            <div className="relative">
+              <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+              <input
+                type="text"
+                placeholder="Search Auth Users by Name or Email..."
+                value={userRolesSearch}
+                onChange={(e) => setUserRolesSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-purple-200 outline-none"
+              />
+            </div>
+
+            {/* User Roles Table / List */}
+            <div className="border border-gray-100 rounded-2xl overflow-hidden max-h-96 overflow-y-auto">
+              <table className="w-full text-left text-xs font-semibold">
+                <thead className="bg-purple-50/60 border-b text-[10px] uppercase tracking-wider text-purple-950 font-bold">
+                  <tr>
+                    <th className="p-3">User</th>
+                    <th className="p-3">Employee Link</th>
+                    <th className="p-3">Current Portal Roles</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {authUsers
+                    .filter((u) => {
+                      if (!userRolesSearch.trim()) return true;
+                      const q = userRolesSearch.toLowerCase();
+                      return (
+                        (u.full_name || '').toLowerCase().includes(q) ||
+                        (u.email || '').toLowerCase().includes(q)
+                      );
+                    })
+                    .map((u) => {
+                      const mappedEmp = mappedAuthUserMap.get(String(u.user_id));
+                      const isEditingThis = editingAuthUser === u.user_id;
+
+                      return (
+                        <tr key={u.user_id} className="hover:bg-purple-50/30 transition-colors">
+                          <td className="p-3">
+                            <div className="font-extrabold text-dark-primary text-xs flex items-center gap-1.5">
+                              <i className="fas fa-user-circle text-purple-600"></i>
+                              {u.full_name || 'User'}
+                            </div>
+                            <div className="text-[10px] text-purple-700 font-semibold">
+                              {u.email}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            {isEditingThis ? (
+                              <select
+                                value={editingEmpId}
+                                onChange={(e) => setEditingEmpId(e.target.value)}
+                                className="w-full px-2 py-1 border rounded-lg text-xs bg-white font-bold outline-none border-purple-300"
+                              >
+                                <option value="">-- External User --</option>
+                                {employees.map((emp) => {
+                                  const isOtherLinked =
+                                    emp.auth_id && String(emp.auth_id) !== String(u.user_id);
+                                  return (
+                                    <option key={emp.id} value={emp.id} disabled={isOtherLinked}>
+                                      {emp.name} ({emp.emp_id || `EMP-${emp.id}`})
+                                      {isOtherLinked ? ' 🔒 [Mapped]' : ''}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            ) : mappedEmp ? (
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 px-2.5 py-1 rounded-lg text-[10px] font-black border border-emerald-200 shadow-xs">
+                                <i className="fas fa-id-badge text-emerald-600"></i>{' '}
+                                {mappedEmp.emp_name}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 px-2.5 py-1 rounded-lg text-[10px] font-bold border border-amber-200 shadow-xs">
+                                <i className="fas fa-user-tag text-amber-600"></i> External User
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {isEditingThis ? (
+                              <div className="w-56">
+                                <MultiSelectRolesDropdown
+                                  value={editingRoleSum}
+                                  onChange={(nextSum) => setEditingRoleSum(nextSum)}
+                                />
+                              </div>
+                            ) : (
+                              <div className="font-extrabold text-purple-950 text-xs">
+                                {formatPortalRoles(u.role)}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            {isEditingThis ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSaveUserRoleDirect(
+                                      u.user_id,
+                                      editingRoleSum,
+                                      editingEmpId
+                                    )
+                                  }
+                                  disabled={saving}
+                                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow-sm"
+                                >
+                                  {saving ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingAuthUser(null)}
+                                  className="px-2.5 py-1 bg-gray-200 text-gray-700 rounded-lg text-xs font-bold"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingAuthUser(u.user_id);
+                                  setEditingRoleSum(String(u.role || '8'));
+                                  setEditingEmpId(mappedEmp ? String(mappedEmp.emp_id) : '');
+                                }}
+                                className="px-3 py-1 bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-lg text-xs font-bold transition-all"
+                              >
+                                <i className="fas fa-edit mr-1"></i>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end border-t pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUserRolesModalOpen(false);
+                  setEditingAuthUser(null);
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-dark-primary rounded-xl font-bold text-xs"
+              >
+                Close
               </button>
             </div>
           </div>

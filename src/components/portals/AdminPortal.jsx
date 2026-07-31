@@ -35,7 +35,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // ----- User Management -----
   const fetchTeachers = async () => {
     try {
-      const { data, error } = await supabase.from('teachers').select('*');
+      const { data, error } = await supabase.from('employees').select('*');
       if (error) throw error;
       setTeachers(data || []);
     } catch (err) {
@@ -87,12 +87,12 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
 
       // 2. Map teacher auth_id
       // Clear previous mapping for this user
-      await supabase.from('teachers').update({ auth_id: null }).eq('auth_id', userId);
+      await supabase.from('employees').update({ auth_id: null }).eq('auth_id', userId);
 
       // Link new mapping if selected
       if (teacherId) {
         const { error: teachErr } = await supabase
-          .from('teachers')
+          .from('employees')
           .update({ auth_id: userId })
           .eq('id', teacherId);
         if (teachErr) throw teachErr;
@@ -134,7 +134,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     try {
       // 1. Create the teacher in the database
       const { data: newTeacherData, error: insertErr } = await supabase
-        .from('teachers')
+        .from('employees')
         .insert([
           {
             name: fullName,
@@ -200,7 +200,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     const nextStatus = !currentStatus;
     try {
       const { error } = await supabase
-        .from('teachers')
+        .from('employees')
         .update({ is_active: nextStatus })
         .eq('id', teacherId);
 

@@ -143,7 +143,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     const fetchPersonOptions = async () => {
       try {
         const [teachersRes, usersRes] = await Promise.all([
-          supabase.from('teachers').select('name'),
+          supabase.from('employees').select('name'),
           supabase.from('admin_users_view').select('full_name'),
         ]);
         const namesMap = new Map();
@@ -211,7 +211,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         { data: dbPeriods },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
-        supabase.from('teachers').select('*'),
+        supabase.from('employees').select('*'),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),

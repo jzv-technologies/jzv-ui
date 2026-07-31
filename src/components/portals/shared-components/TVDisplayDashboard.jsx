@@ -48,7 +48,7 @@ const TVDisplayDashboard = () => {
           supabase.from('classes').select('*'),
           supabase.from('periods').select('*').order('period_number', { ascending: true }),
           supabase.from('subjects').select('*'),
-          supabase.from('teachers').select('*').eq('is_active', true),
+          supabase.from('employees').select('*').eq('is_active', true),
           supabase.from('timetable_slots').select('*')
         ]);
 

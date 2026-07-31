@@ -140,7 +140,7 @@ const TimetableManager = () => {
       ] = await Promise.all([
         supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.from('subjects').select('*'),
-        supabase.from('teachers').select('*'),
+        supabase.from('employees').select('*'),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
@@ -412,7 +412,7 @@ const TimetableManager = () => {
       try {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
-          .from('teachers')
+          .from('employees')
           .insert([{ name, is_male: isMale, is_active: true }])
           .select();
 
@@ -470,7 +470,7 @@ const TimetableManager = () => {
       try {
         // 1. Update teachers table
         const { error: teacherErr } = await supabase
-          .from('teachers')
+          .from('employees')
           .update({ name, is_male: isMale })
           .eq('id', id);
         if (teacherErr) throw teacherErr;
@@ -510,7 +510,7 @@ const TimetableManager = () => {
 
     if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
-        await supabase.from('teachers').delete().eq('id', id);
+        await supabase.from('employees').delete().eq('id', id);
       } catch (err) {
         console.error(err);
       }
@@ -534,7 +534,7 @@ const TimetableManager = () => {
     if (isSupabaseMode && !id.toString().startsWith('local-')) {
       try {
         const { error } = await supabase
-          .from('teachers')
+          .from('employees')
           .update({ is_active: nextActive })
           .eq('id', id);
         if (error) throw error;
@@ -1636,7 +1636,7 @@ const TimetableManager = () => {
                   supabase.from('timetable_slots').delete().gt('id', 0),
                   supabase.from('class_assignments').delete().gt('id', 0),
                   supabase.from('teacher_subjects').delete().gt('id', 0),
-                  supabase.from('teachers').delete().gt('id', 0),
+                  supabase.from('employees').delete().gt('id', 0),
                   supabase.from('classes').delete().gt('id', 0),
                   supabase.from('subjects').delete().gt('id', 0),
                   supabase.from('periods').delete().gt('id', 0),

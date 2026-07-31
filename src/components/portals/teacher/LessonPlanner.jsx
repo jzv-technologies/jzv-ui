@@ -198,13 +198,13 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('teachers').select('*'));
+          queries.push(supabase.from('employees').select('*'));
         } else {
           // Resolve teacher for teacher role
           let teacherData = teacherRecord || null;
           if (!teacherData) {
             const { data, error: teachErr } = await supabase
-              .from('teachers')
+              .from('employees')
               .select('*')
               .eq('auth_id', user.id)
               .maybeSingle();

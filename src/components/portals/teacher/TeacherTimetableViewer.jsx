@@ -76,7 +76,7 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: dbClassifications },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
-        supabase.from('teachers').select('*'),
+        supabase.from('employees').select('*'),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),

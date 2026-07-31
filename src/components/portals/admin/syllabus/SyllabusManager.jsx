@@ -297,7 +297,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           let teacherData = teacherRecord;
           if (!teacherData) {
             const { data } = await supabase
-              .from('teachers')
+              .from('employees')
               .select('id')
               .eq('auth_id', user.id)
               .maybeSingle();

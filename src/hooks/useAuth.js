@@ -53,7 +53,7 @@ export const useAuth = () => {
     if (teacherRecordRef.current) return teacherRecordRef.current;
     try {
       const { data, error } = await supabase
-        .from("teachers")
+        .from("employees")
         .select("*")
         .eq("auth_id", userId)
         .maybeSingle();

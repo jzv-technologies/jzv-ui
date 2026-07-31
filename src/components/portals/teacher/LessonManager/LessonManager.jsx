@@ -169,12 +169,12 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('teachers').select('*'));
+          queries.push(supabase.from('employees').select('*'));
         } else {
           let teacherData = teacherRecord || null;
           if (!teacherData) {
             const { data, error: teachErr } = await supabase
-              .from('teachers')
+              .from('employees')
               .select('*')
               .eq('auth_id', user.id)
               .maybeSingle();

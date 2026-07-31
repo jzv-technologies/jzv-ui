@@ -281,7 +281,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         supabase.from('syllabus_book_classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase
-          .from('teachers')
+          .from('employees')
           .select('*')
           .eq('is_active', true)
           .order('name', { ascending: true }),
@@ -420,7 +420,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         let teacherData = teacherRecord;
         if (!teacherData) {
           const { data, error: teachErr } = await supabase
-            .from('teachers')
+            .from('employees')
             .select('*')
             .eq('auth_id', user.id)
             .maybeSingle();

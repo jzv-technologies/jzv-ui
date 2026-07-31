@@ -123,7 +123,7 @@ const ParentTimetableViewer = ({ student }) => {
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('timetable_slots').select('*').eq('class_id', cId),
         supabase.from('subjects').select('id, name'),
-        supabase.from('teachers').select('id, name'),
+        supabase.from('employees').select('id, name'),
       ]);
 
       if (classRow && periodsRows && slotsRows !== null) {
