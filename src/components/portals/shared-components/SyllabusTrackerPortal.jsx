@@ -284,6 +284,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           .from('employees')
           .select('*')
           .eq('is_active', true)
+          .eq('is_teacher', true)
           .order('name', { ascending: true }),
         supabase.from('book_tracker').select('*'),
         supabase

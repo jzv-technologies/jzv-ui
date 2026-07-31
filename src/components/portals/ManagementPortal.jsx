@@ -12,6 +12,7 @@ import SyllabusTrackerPortal from './shared-components/SyllabusTrackerPortal';
 import SyllabusManager from './admin/syllabus/SyllabusManager';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import EmployeeRecordsView from './admin/employees/EmployeeRecordsView';
+import SalaryTrackerView from './admin/employees/SalaryTrackerView';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -143,7 +144,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     const fetchPersonOptions = async () => {
       try {
         const [teachersRes, usersRes] = await Promise.all([
-          supabase.from('employees').select('name'),
+          supabase.from('employees').select('name').eq('is_active', true).eq('is_teacher', true),
           supabase.from('admin_users_view').select('full_name'),
         ]);
         const namesMap = new Map();
@@ -211,7 +212,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         { data: dbPeriods },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
-        supabase.from('employees').select('*'),
+        supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
@@ -505,9 +506,18 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       title: 'Employee Records',
       description: 'View employee records, roles, designations, and salary details.',
       icon: 'fa-users-gear',
-      buttonColor: 'bg-orange-primary text-white',
-      shadow: 'shadow-orange-200',
+      buttonColor: 'bg-green-600 text-white',
+      shadow: 'shadow-green-200',
       onClick: () => onSetSubView('employee-records'),
+    },
+    {
+      id: 'salary-tracker',
+      title: 'Salary Distribution Log',
+      description: 'Track, settle, and manage monthly salary payments for salaried employees.',
+      icon: 'fa-sack-dollar',
+      buttonColor: 'bg-pink-600 text-white',
+      shadow: 'shadow-pink-200',
+      onClick: () => onSetSubView('salary-tracker'),
     },
     {
       id: 'registered-complaints',
@@ -592,7 +602,6 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       onClick: () => window.open('/portal/display', '_blank'),
     },
   ];
-
 
   const dynamicTiles = dynamicConfigs
     .filter((config) => {
@@ -1441,6 +1450,11 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'employee-records' && (
         <div data-employee-records="true">
           <EmployeeRecordsView role="management" user={user} />
+        </div>
+      )}
+      {subView === 'salary-tracker' && (
+        <div data-salary-tracker="true">
+          <SalaryTrackerView user={user} userRoles={userRoles} />
         </div>
       )}
       {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}

@@ -429,7 +429,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
     const fetchPeople = async () => {
       try {
         const [teachersRes, usersRes] = await Promise.all([
-          supabase.from('employees').select('name'),
+          supabase.from('employees').select('name').eq('is_active', true).eq('is_teacher', true),
           supabase.from('admin_users_view').select('full_name'),
         ]);
         const names = new Set();

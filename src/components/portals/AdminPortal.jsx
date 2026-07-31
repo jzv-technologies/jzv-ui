@@ -35,7 +35,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // ----- User Management -----
   const fetchTeachers = async () => {
     try {
-      const { data, error } = await supabase.from('employees').select('*');
+      const { data, error } = await supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true);
       if (error) throw error;
       setTeachers(data || []);
     } catch (err) {

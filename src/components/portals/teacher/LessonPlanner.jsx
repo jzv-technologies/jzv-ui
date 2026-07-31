@@ -198,7 +198,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('employees').select('*'));
+          queries.push(supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true));
         } else {
           // Resolve teacher for teacher role
           let teacherData = teacherRecord || null;

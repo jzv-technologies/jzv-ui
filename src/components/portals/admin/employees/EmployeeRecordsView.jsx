@@ -14,6 +14,8 @@ const DEFAULT_ROLES = [
   'Librarian',
 ];
 
+const DESIGNATIONS = DEFAULT_ROLES;
+
 const DEFAULT_ORGANIZATIONS = [
   'MRQU Educational & Charitable Trust',
   'Jamia Zaytoonah',
@@ -140,6 +142,54 @@ const MultiSelectRolesDropdown = ({ value, onChange, disabled }) => {
   );
 };
 
+// Error Boundary Component to isolate modal rendering exceptions
+class ModalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Modal Error Boundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 bg-dark-almostblack/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-red-200 shadow-2xl max-w-lg w-full p-6 space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto text-xl">
+              <i className="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3 className="text-base font-black text-dark-primary">Modal Component Error</h3>
+            <p className="text-xs text-dark-muted font-bold">
+              An unexpected error occurred while displaying this modal:
+            </p>
+            <div className="p-3 bg-red-50 text-red-800 text-[11px] font-mono rounded-xl border border-red-200 text-left overflow-x-auto max-h-32">
+              {this.state.error?.toString()}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                if (this.props.onClose) this.props.onClose();
+              }}
+              className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all"
+            >
+              Close & Reset Modal
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null }) => {
   const isAdmin = role === 'admin';
   const isManagement = role === 'management';
@@ -167,6 +217,26 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
   const [editingAuthUser, setEditingAuthUser] = useState(null);
   const [editingRoleSum, setEditingRoleSum] = useState('8');
   const [editingEmpId, setEditingEmpId] = useState('');
+
+  // Bulk Apply Increments State & Selection
+  const [isBulkApplyModalOpen, setIsBulkApplyModalOpen] = useState(false);
+  const [bulkApplyFilterMode, setBulkApplyFilterMode] = useState('month');
+  const [bulkApplyDateValue, setBulkApplyDateValue] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [selectedBulkEmpIds, setSelectedBulkEmpIds] = useState([]);
+
+  // Section Editability in Edit Modal (Sections 1-4 read-only by default, Section 5 editable by default)
+  const [editableSections, setEditableSections] = useState({
+    sec1: false,
+    sec2: false,
+    sec3: false,
+    sec4: false,
+    sec5: true,
+  });
+  const [initialFormData, setInitialFormData] = useState(null);
+  const [navConfirmModal, setNavConfirmModal] = useState(null);
 
   // Keyboard shortcut listener for Esc key to close modal
   useEffect(() => {
@@ -224,7 +294,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     is_salaried_employee: true,
     current_salary: '',
     compensation_history: [],
-    is_teaching_staff: true,
+    is_teacher: true,
     is_active: true,
 
     // Section 5: Portal Access
@@ -310,17 +380,15 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           const authRole = emp.auth_id ? userRoleMap.get(String(emp.auth_id)) : null;
           return {
             ...emp,
-            name: emp.name || emp.full_name || '',
-            primary_mobile: emp.primary_mobile || emp.phone1 || '',
-            secondary_mobile: emp.secondary_mobile || emp.phone2 || '',
-            designation: emp.designation || emp.role || 'Teacher',
-            communication_address: emp.communication_address || emp.full_address || '',
+            name: emp.name || '',
+            primary_mobile: emp.primary_mobile || '',
+            secondary_mobile: emp.secondary_mobile || '',
+            designation: emp.designation || 'Teacher',
+            communication_address: emp.communication_address || '',
             compensation_history: Array.isArray(emp.compensation_history)
               ? emp.compensation_history
-              : Array.isArray(emp.previous_increment_history)
-                ? emp.previous_increment_history
-                : [],
-            is_teaching_staff: emp.is_teaching_staff !== false && emp.is_teacher !== false,
+              : [],
+            is_teacher: emp.is_teacher !== false,
             is_salaried_employee: emp.is_salaried_employee !== false,
             email: emp.email || authEmail || '',
             login_allowed: emp.login_allowed === true,
@@ -403,9 +471,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         const haystack = [
           emp.name || '',
           emp.emp_id || '',
-          emp.primary_mobile || emp.phone1 || '',
-          emp.secondary_mobile || emp.phone2 || '',
-          emp.designation || emp.role || '',
+          emp.primary_mobile || '',
+          emp.secondary_mobile || '',
+          emp.designation || '',
           emp.organization || '',
           emp.email || '',
         ]
@@ -442,71 +510,145 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     return result;
   }, [employees, searchQuery, roleFilter, statusFilter, sortField, sortOrder]);
 
-  // Open Add/Edit Modal
+  // Current index in filtered list for Prev/Next navigation
+  const currentIndex = useMemo(() => {
+    if (!selectedEmployee || !Array.isArray(filteredEmployees)) return -1;
+    const targetId = selectedEmployee.id || selectedEmployee.emp_id;
+    if (targetId == null) return -1;
+    return filteredEmployees.findIndex(
+      (e) => e && (String(e.id) === String(targetId) || String(e.emp_id) === String(targetId))
+    );
+  }, [selectedEmployee, filteredEmployees]);
+
+  // Matching list for Bulk Apply Increments Modal based on date/month
+  const matchingBulkIncrements = useMemo(() => {
+    if (!bulkApplyDateValue || !Array.isArray(employees)) return [];
+    const list = [];
+    employees.forEach((emp) => {
+      if (!emp) return;
+      const history = Array.isArray(emp.compensation_history)
+        ? emp.compensation_history
+        : [];
+
+      const match = history.find((h) => {
+        if (!h || !h.date) return false;
+        if (bulkApplyFilterMode === 'month') {
+          return String(h.date).startsWith(bulkApplyDateValue);
+        }
+        return String(h.date) === bulkApplyDateValue;
+      });
+
+      if (match) {
+        const currentSal = Number(emp.current_salary) || 0;
+        const hikeAmt = Number(match.amount) || 0;
+        const proposedSalary = match.updated_salary
+          ? Number(match.updated_salary)
+          : currentSal + hikeAmt;
+        list.push({
+          emp,
+          matchingEntry: match,
+          currentSalary: currentSal,
+          proposedSalary,
+        });
+      }
+    });
+    return list;
+  }, [employees, bulkApplyDateValue, bulkApplyFilterMode]);
+
+  // Synchronize selective employee checkboxes when matchingBulkIncrements list changes
+  useEffect(() => {
+    if (Array.isArray(matchingBulkIncrements) && matchingBulkIncrements.length > 0) {
+      setSelectedBulkEmpIds(matchingBulkIncrements.map((item) => String(item.emp.id)));
+    } else {
+      setSelectedBulkEmpIds([]);
+    }
+  }, [matchingBulkIncrements]);
+
+  // Safe Contact Parser Helper
+  const parseContact = (c) => {
+    if (c && typeof c === 'object' && !Array.isArray(c)) {
+      return {
+        name: c.name || '',
+        relation: c.relation || '',
+        phone: c.phone || c.contact || '',
+        address: c.address || '',
+      };
+    }
+    if (typeof c === 'string' && c.trim().startsWith('{')) {
+      try {
+        const p = JSON.parse(c);
+        if (p && typeof p === 'object') {
+          return {
+            name: p.name || '',
+            relation: p.relation || '',
+            phone: p.phone || p.contact || '',
+            address: p.address || '',
+          };
+        }
+      } catch (e) {}
+    }
+    return { name: typeof c === 'string' ? c : '', relation: '', phone: '', address: '' };
+  };
+
   const handleOpenModal = (mode, emp = null) => {
     setModalMode(mode);
-    setSelectedEmployee(emp);
+    const targetEmp = emp || selectedEmployee || currentSelfEmployee;
+    let loaded = null;
+    if ((mode === 'edit' || mode === 'self_edit') && targetEmp) {
+      setSelectedEmployee(targetEmp);
+      const empToLoad = targetEmp;
+      const matchedAuthUser =
+        empToLoad.auth_id && Array.isArray(authUsers)
+          ? authUsers.find((u) => u && String(u.user_id) === String(empToLoad.auth_id))
+          : null;
 
-    if (emp) {
-      const matchedAuthUser = authUsers.find((u) => String(u.user_id) === String(emp.auth_id));
-      setFormData({
-        // Section 1: Personal Details
-        name: emp.name || emp.full_name || '',
-        father_husband_name: emp.father_husband_name || '',
-        is_male: emp.is_male !== false,
-        date_of_birth: emp.date_of_birth || '',
-        blood_group: emp.blood_group || '',
-        marital_status: emp.marital_status || 'Single',
-        highest_education: emp.highest_education || '',
-        primary_mobile: emp.primary_mobile || emp.phone1 || '',
-        secondary_mobile: emp.secondary_mobile || emp.phone2 || '',
-        email: emp.email || '',
-        communication_address: emp.communication_address || emp.full_address || '',
+      loaded = {
+        name: empToLoad.name || '',
+        father_husband_name: empToLoad.father_husband_name || '',
+        is_male: empToLoad.is_male !== false,
+        date_of_birth: empToLoad.date_of_birth || '',
+        blood_group: empToLoad.blood_group || '',
+        marital_status: empToLoad.marital_status || 'Single',
+        highest_education: empToLoad.highest_education || '',
+        primary_mobile: empToLoad.primary_mobile || '',
+        secondary_mobile: empToLoad.secondary_mobile || '',
+        email: empToLoad.email || '',
+        communication_address: empToLoad.communication_address || '',
 
-        // Section 2: Bank Detail
-        bank_account_name: emp.bank_account_name || '',
-        bank_account_number: emp.bank_account_number || '',
-        bank_ifsc_code: emp.bank_ifsc_code || '',
-        bank_name: emp.bank_name || '',
-        bank_branch_name: emp.bank_branch_name || '',
+        bank_account_name: empToLoad.bank_account_name || '',
+        bank_account_number: empToLoad.bank_account_number || '',
+        bank_ifsc_code: empToLoad.bank_ifsc_code || '',
+        bank_name: empToLoad.bank_name || '',
+        bank_branch_name: empToLoad.bank_branch_name || '',
 
-        // Section 3: Emergency Contacts
-        emergency_contact_1: emp.emergency_contact_1 || {
-          name: '',
-          relation: '',
-          phone: '',
-          address: '',
-        },
-        emergency_contact_2: emp.emergency_contact_2 || {
-          name: '',
-          relation: '',
-          phone: '',
-          address: '',
-        },
+        emergency_contact_1: parseContact(empToLoad.emergency_contact_1),
+        emergency_contact_2: parseContact(empToLoad.emergency_contact_2),
 
-        // Section 4: Employee Detail
-        emp_id: emp.emp_id || `EMP-${String(emp.id).padStart(3, '0')}`,
-        organization: emp.organization || 'Jamia Zaytoonah',
-        designation: emp.designation || emp.role || 'Teacher',
-        joining_date: emp.joining_date || '',
-        is_salaried_employee: emp.is_salaried_employee !== false,
-        current_salary: emp.current_salary || '',
-        compensation_history: Array.isArray(emp.compensation_history)
-          ? emp.compensation_history
-          : Array.isArray(emp.previous_increment_history)
-            ? emp.previous_increment_history
-            : [],
-        is_teaching_staff: emp.is_teaching_staff !== false && emp.is_teacher !== false,
-        is_active: emp.is_active !== false,
+        emp_id: empToLoad.emp_id || (empToLoad.id ? `EMP-${String(empToLoad.id).padStart(3, '0')}` : 'EMP-001'),
+        organization: empToLoad.organization || 'Jamia Zaytoonah',
+        designation: empToLoad.designation || 'Teacher',
+        joining_date: empToLoad.joining_date || '',
+        is_salaried_employee:
+          empToLoad.is_salaried_employee !== false &&
+          empToLoad.is_salaried_employee !== 'false' &&
+          empToLoad.is_salaried_employee !== 'Service' &&
+          empToLoad.is_salaried_employee !== 'service' &&
+          empToLoad.is_salaried_employee !== 0,
+        current_salary: empToLoad.current_salary || '',
+        compensation_history: Array.isArray(empToLoad.compensation_history)
+          ? empToLoad.compensation_history
+          : [],
+        is_teacher: empToLoad.is_teacher !== false,
+        is_active: empToLoad.is_active !== false,
 
-        // Section 5: Portal Access
-        login_allowed: emp.login_allowed === true,
-        auth_id: emp.auth_id || '',
+        login_allowed: empToLoad.login_allowed === true,
+        auth_id: empToLoad.auth_id || '',
         mapped_roles_sum: matchedAuthUser?.role ? String(matchedAuthUser.role) : '8',
-        update_history: Array.isArray(emp.update_history) ? emp.update_history : [],
-      });
+        update_history: Array.isArray(empToLoad.update_history) ? empToLoad.update_history : [],
+      };
+      setEditableSections({ sec1: false, sec2: false, sec3: false, sec4: false, sec5: false });
     } else {
-      setFormData({
+      loaded = {
         name: '',
         father_husband_name: '',
         is_male: true,
@@ -535,16 +677,80 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         is_salaried_employee: true,
         current_salary: '',
         compensation_history: [],
-        is_teaching_staff: true,
+        is_teacher: true,
         is_active: true,
 
         login_allowed: false,
         auth_id: '',
         mapped_roles_sum: '8',
         update_history: [],
-      });
+      };
+      setEditableSections({ sec1: true, sec2: true, sec3: true, sec4: true, sec5: true });
     }
+    setFormData(loaded);
+    setInitialFormData(JSON.stringify(loaded));
     setNewIncrement({ date: '', amount: '', percentage: '', notes: '' });
+  };
+
+  // Direct Record Switch Helper for Prev/Next Navigation
+  const switchRecordDirect = (emp) => {
+    if (!emp) return;
+    setSelectedEmployee(emp);
+    const matchedAuthUser =
+      emp?.auth_id && Array.isArray(authUsers)
+        ? authUsers.find((u) => u && String(u.user_id) === String(emp.auth_id))
+        : null;
+    const loaded = {
+      name: emp.name || '',
+      father_husband_name: emp.father_husband_name || '',
+      is_male: emp.is_male !== false,
+      date_of_birth: emp.date_of_birth || '',
+      blood_group: emp.blood_group || '',
+      marital_status: emp.marital_status || 'Single',
+      highest_education: emp.highest_education || '',
+      primary_mobile: emp.primary_mobile || '',
+      secondary_mobile: emp.secondary_mobile || '',
+      email: emp.email || '',
+      communication_address: emp.communication_address || '',
+      bank_account_name: emp.bank_account_name || '',
+      bank_account_number: emp.bank_account_number || '',
+      bank_ifsc_code: emp.bank_ifsc_code || '',
+      bank_name: emp.bank_name || '',
+      bank_branch_name: emp.bank_branch_name || '',
+      emergency_contact_1: parseContact(emp.emergency_contact_1),
+      emergency_contact_2: parseContact(emp.emergency_contact_2),
+      emp_id: emp.emp_id || (emp.id ? `EMP-${String(emp.id).padStart(3, '0')}` : 'EMP-001'),
+      organization: emp.organization || 'Jamia Zaytoonah',
+      designation: emp.designation || 'Teacher',
+      joining_date: emp.joining_date || '',
+      is_salaried_employee: emp.is_salaried_employee !== false,
+      current_salary: emp.current_salary || '',
+      compensation_history: Array.isArray(emp.compensation_history)
+        ? emp.compensation_history
+        : [],
+      is_teacher: emp.is_teacher !== false,
+      is_active: emp.is_active !== false,
+      login_allowed: emp.login_allowed === true,
+      auth_id: emp.auth_id || '',
+      mapped_roles_sum: matchedAuthUser?.role ? String(matchedAuthUser.role) : '8',
+      update_history: Array.isArray(emp.update_history) ? emp.update_history : [],
+    };
+    setFormData(loaded);
+    setInitialFormData(JSON.stringify(loaded));
+    setEditableSections({ sec1: false, sec2: false, sec3: false, sec4: false, sec5: true });
+    setNavConfirmModal(null);
+  };
+
+  const handleNavigateRecord = (targetIndex) => {
+    if (targetIndex < 0 || targetIndex >= filteredEmployees.length) return;
+    const targetEmp = filteredEmployees[targetIndex];
+    if (!targetEmp) return;
+
+    if (isFormDirty) {
+      setNavConfirmModal({ targetEmp });
+    } else {
+      switchRecordDirect(targetEmp);
+    }
   };
 
   // Auto-link Auth Accounts
@@ -557,11 +763,16 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       for (let i = 0; i < updatedList.length; i++) {
         const emp = updatedList[i];
         if (!emp.auth_id) {
-          const matched = authUsers.find(
-            (u) =>
-              (u.email && emp.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
-              (u.full_name && emp.name && u.full_name.toLowerCase() === emp.name.toLowerCase())
-          );
+          const matched = Array.isArray(authUsers)
+            ? authUsers.find(
+                (u) =>
+                  u &&
+                  ((u.email && emp.email && u.email.toLowerCase() === emp.email.toLowerCase()) ||
+                    (u.full_name &&
+                      emp.name &&
+                      u.full_name.toLowerCase() === emp.name.toLowerCase()))
+              )
+            : null;
 
           if (matched) {
             linkedCount++;
@@ -595,15 +806,76 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
   // Add Increment Item
   const handleAddIncrementItem = () => {
-    if (!newIncrement.date && !newIncrement.amount) {
-      showToast('Please specify date or amount for increment', 'error');
+    if (!newIncrement.date && !newIncrement.amount && !newIncrement.updated_salary) {
+      showToast('Please specify date, amount, or updated salary for increment', 'error');
       return;
     }
+    const currentSal = Number(formData.current_salary) || 0;
+    const hikeAmt = Number(newIncrement.amount) || 0;
+    const computedUpdated = currentSal + hikeAmt;
+
+    const itemToAdd = {
+      ...newIncrement,
+      updated_salary: newIncrement.updated_salary || (computedUpdated > 0 ? String(computedUpdated) : ''),
+      id: Date.now(),
+    };
+
     setFormData((prev) => ({
       ...prev,
-      compensation_history: [...prev.compensation_history, { ...newIncrement, id: Date.now() }],
+      compensation_history: [...prev.compensation_history, itemToAdd],
     }));
-    setNewIncrement({ date: '', amount: '', percentage: '', notes: '' });
+    setNewIncrement({ date: '', amount: '', percentage: '', updated_salary: '', notes: '' });
+  };
+
+  // Bulk Apply Increments Execution Handler for Selected Employees
+  const handleExecuteBulkApplyIncrements = async () => {
+    const selectedList = matchingBulkIncrements.filter((item) =>
+      selectedBulkEmpIds.includes(String(item.emp.id))
+    );
+    if (!selectedList || selectedList.length === 0) {
+      showToast('Please select at least one employee to apply increments', 'error');
+      return;
+    }
+    setSaving(true);
+    let updatedCount = 0;
+    try {
+      const updatedEmployees = [...employees];
+
+      for (let i = 0; i < selectedList.length; i++) {
+        const item = selectedList[i];
+        const empId = item.emp.id;
+        const newSalary = item.proposedSalary;
+
+        const { error } = await supabase
+          .from('employees')
+          .update({ current_salary: newSalary })
+          .eq('id', empId);
+
+        if (!error) {
+          updatedCount++;
+          const idx = updatedEmployees.findIndex((e) => String(e.id) === String(empId));
+          if (idx !== -1) {
+            updatedEmployees[idx] = {
+              ...updatedEmployees[idx],
+              current_salary: newSalary,
+            };
+          }
+        }
+      }
+
+      setEmployees(updatedEmployees);
+      localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedEmployees));
+      showToast(
+        `Successfully updated Current Salary for ${updatedCount} selected employees!`,
+        'success'
+      );
+      setIsBulkApplyModalOpen(false);
+    } catch (err) {
+      console.error('Error applying bulk increments:', err);
+      showToast('Failed to apply increments: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Remove Increment Item
@@ -641,7 +913,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       'joining_date',
       'is_salaried_employee',
       'current_salary',
-      'is_teaching_staff',
+      'is_teacher',
       'is_active',
       'login_allowed',
       'auth_id',
@@ -651,18 +923,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
     const changed = [];
     keys.forEach((k) => {
-      const oldVal =
-        oldObj[k] !== undefined
-          ? oldObj[k]
-          : oldObj[
-              k === 'primary_mobile'
-                ? 'phone1'
-                : k === 'secondary_mobile'
-                  ? 'phone2'
-                  : k === 'designation'
-                    ? 'role'
-                    : k
-            ];
+      const oldVal = oldObj[k];
       const newVal = newObj[k];
       if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
         changed.push(k);
@@ -671,8 +932,8 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     return changed;
   };
 
-  // Helper to build payload matching strictly 'teachers' table schema
-  const buildTeacherPayload = (data) => ({
+  // Helper to build payload matching strictly 'employees' table schema
+  const buildEmployeePayload = (data) => ({
     name: (data.name || '').trim(),
     father_husband_name: data.father_husband_name || '',
     is_male: data.is_male !== false,
@@ -691,7 +952,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     is_salaried_employee: data.is_salaried_employee !== false,
     current_salary: data.current_salary ? Number(data.current_salary) : 0,
     compensation_history: Array.isArray(data.compensation_history) ? data.compensation_history : [],
-    is_teaching_staff: data.is_teaching_staff !== false,
+    is_teacher: data.is_teacher !== false,
     bank_account_name: data.bank_account_name || '',
     bank_account_number: data.bank_account_number || '',
     bank_ifsc_code: data.bank_ifsc_code || '',
@@ -705,29 +966,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     update_history: Array.isArray(data.update_history) ? data.update_history : [],
   });
 
-  // Helper to build payload matching strictly 'employees' view schema
-  const buildEmployeePayload = (data) => ({
-    name: (data.name || '').trim(),
-    is_male: data.is_male !== false,
-    auth_id: data.auth_id || null,
-    is_active: data.is_active !== false,
-    emp_id: data.emp_id || '',
-    organization: data.organization || 'Jamia Zaytoonah',
-    role: data.designation || 'Teacher',
-    joining_date: data.joining_date || null,
-    phone1: data.primary_mobile || '',
-    phone2: data.secondary_mobile || '',
-    email: data.email || '',
-    date_of_birth: data.date_of_birth || null,
-    blood_group: data.blood_group || '',
-    full_address: data.communication_address || '',
-    highest_education: data.highest_education || '',
-    current_salary: data.current_salary ? Number(data.current_salary) : 0,
-    previous_increment_history: Array.isArray(data.compensation_history)
-      ? data.compensation_history
-      : [],
-    is_teacher: data.is_teaching_staff !== false,
-  });
+  const buildTeacherPayload = buildEmployeePayload;
 
   // Direct User Roles & Employee Link Update for Non-Employees / Any Auth Account
   const handleSaveUserRoleDirect = async (userId, roleSum, selectedEmpId = '') => {
@@ -744,7 +983,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       );
       if (roleErr) throw roleErr;
 
-      // 2. Sync Employee Link in teachers / employees table if modified
+      // 2. Sync Employee Link in employees table if modified
       const currentMapped = mappedAuthUserMap.get(String(userId));
       const currentEmpId = currentMapped ? String(currentMapped.emp_id) : '';
       const targetEmpId = selectedEmpId ? String(selectedEmpId) : '';
@@ -774,20 +1013,29 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
   // Save Employee Form
   const handleSaveEmployee = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.name.trim()) {
       showToast('Employee name is required', 'error');
-      return;
+      return false;
     }
 
-    if (formData.is_salaried_employee) {
+    const isSalariedType =
+      formData.is_salaried_employee === true ||
+      (formData.is_salaried_employee !== false &&
+        formData.is_salaried_employee !== 'false' &&
+        formData.is_salaried_employee !== 'Service' &&
+        formData.is_salaried_employee !== 'service' &&
+        formData.is_salaried_employee !== 0);
+
+    // Only validate salary if employee is Salaried and NOT in self_edit mode
+    if (modalMode !== 'self_edit' && isSalariedType) {
       const salaryNum = Number(formData.current_salary);
       if (!formData.current_salary || isNaN(salaryNum) || salaryNum <= 0) {
         showToast(
           'Current Salary is required and must be a valid amount greater than ₹0 for salaried employees.',
           'error'
         );
-        return;
+        return false;
       }
     }
 
@@ -795,11 +1043,10 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     try {
       const currentUserEmail = user?.email || 'Admin / Management User';
 
-      const teacherPayload = buildTeacherPayload(formData);
       const employeePayload = buildEmployeePayload(formData);
 
       // Compute changed fields & update history
-      const changedFields = getChangedFields(selectedEmployee, teacherPayload);
+      const changedFields = getChangedFields(selectedEmployee, employeePayload);
       let updatedHistoryList = Array.isArray(formData.update_history)
         ? [...formData.update_history]
         : [];
@@ -811,7 +1058,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           fields_changed: changedFields,
         });
       }
-      teacherPayload.update_history = updatedHistoryList;
+      employeePayload.update_history = updatedHistoryList;
 
       let updatedList = [...employees];
       let dbError = null;
@@ -819,16 +1066,14 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       if (modalMode === 'edit' && selectedEmployee?.id) {
         const { error: eErr } = await supabase
           .from('employees')
-          .update(teacherPayload)
+          .update(employeePayload)
           .eq('id', selectedEmployee.id);
 
-        if (eErr) {
-          dbError = eErr;
-        }
+        if (eErr) dbError = eErr;
 
         if (dbError) {
           showToast('Failed to update record: ' + (dbError.message || 'Database error'), 'error');
-          return;
+          return false;
         }
 
         if (formData.auth_id) {
@@ -860,51 +1105,50 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
 
         updatedList = updatedList.map((emp) =>
-          String(emp.id) === String(selectedEmployee.id) ? { ...emp, ...teacherPayload } : emp
+          String(emp.id) === String(selectedEmployee.id) ? { ...emp, ...employeePayload } : emp
         );
         showToast('Employee record updated successfully!', 'success');
-      } else if (modalMode === 'self_edit' && currentSelfEmployee?.id) {
-        const teachersSelfPayload = {
+      } else if (modalMode === 'self_edit' && (currentSelfEmployee?.id || selectedEmployee?.id || teacherRecord?.id)) {
+        const targetId = currentSelfEmployee?.id || selectedEmployee?.id || teacherRecord?.id;
+        const selfEditPayload = {
           name: formData.name.trim(),
-          father_husband_name: formData.father_husband_name,
-          is_male: formData.is_male,
+          father_husband_name: formData.father_husband_name || '',
+          is_male: formData.is_male !== false,
           date_of_birth: formData.date_of_birth || null,
-          blood_group: formData.blood_group,
-          marital_status: formData.marital_status,
-          highest_education: formData.highest_education,
-          primary_mobile: formData.primary_mobile,
-          secondary_mobile: formData.secondary_mobile,
-          communication_address: formData.communication_address,
-          bank_account_name: formData.bank_account_name,
-          bank_account_number: formData.bank_account_number,
-          bank_ifsc_code: formData.bank_ifsc_code,
-          bank_name: formData.bank_name,
-          bank_branch_name: formData.bank_branch_name,
-          emergency_contact_1: formData.emergency_contact_1,
-          emergency_contact_2: formData.emergency_contact_2,
+          blood_group: formData.blood_group || '',
+          marital_status: formData.marital_status || 'Single',
+          highest_education: formData.highest_education || '',
+          primary_mobile: formData.primary_mobile || '',
+          secondary_mobile: formData.secondary_mobile || '',
+          communication_address: formData.communication_address || '',
+          bank_account_name: formData.bank_account_name || '',
+          bank_account_number: formData.bank_account_number || '',
+          bank_ifsc_code: formData.bank_ifsc_code || '',
+          bank_name: formData.bank_name || '',
+          bank_branch_name: formData.bank_branch_name || '',
+          emergency_contact_1: formData.emergency_contact_1 || {},
+          emergency_contact_2: formData.emergency_contact_2 || {},
           update_history: updatedHistoryList,
         };
 
         const { error: eErr } = await supabase
           .from('employees')
-          .update(teachersSelfPayload)
-          .eq('id', currentSelfEmployee.id);
+          .update(selfEditPayload)
+          .eq('id', targetId);
 
-        if (eErr) {
-          dbError = eErr;
-        }
+        if (eErr) dbError = eErr;
 
         if (dbError) {
           showToast(
             'Failed to update profile info: ' + (dbError.message || 'Database error'),
             'error'
           );
-          return;
+          return false;
         }
 
         updatedList = updatedList.map((emp) =>
-          String(emp.id) === String(currentSelfEmployee.id)
-            ? { ...emp, ...teachersSelfPayload }
+          String(emp.id) === String(targetId)
+            ? { ...emp, ...selfEditPayload }
             : emp
         );
         showToast(
@@ -916,7 +1160,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         let newRecord = null;
         const { data: eData, error: eErr } = await supabase
           .from('employees')
-          .insert([teacherPayload])
+          .insert([employeePayload])
           .select();
 
         if (!eErr && eData?.[0]) {
@@ -927,7 +1171,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
         if (dbError) {
           showToast('Failed to add employee: ' + (dbError.message || 'Database error'), 'error');
-          return;
+          return false;
         }
 
         if (formData.auth_id && newRecord) {
@@ -954,17 +1198,18 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           }
         }
 
-        if (newRecord) {
-          updatedList.push(newRecord);
-        }
+        updatedList = [newRecord, ...updatedList];
         showToast('New employee added successfully!', 'success');
       }
 
       setEmployees(updatedList);
       localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+      setInitialFormData(JSON.stringify(formData));
       setModalMode(null);
+      return true;
     } catch (err) {
       showToast('Error saving record: ' + err.message, 'error');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -988,11 +1233,11 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       'Blood Group': emp.blood_group || '',
       'Marital Status': emp.marital_status || 'Single',
       'Highest Education': emp.highest_education || '',
-      'Primary Mobile': emp.primary_mobile || emp.phone1 || '',
-      'Secondary Mobile': emp.secondary_mobile || emp.phone2 || '',
+      'Primary Mobile': emp.primary_mobile || '',
+      'Secondary Mobile': emp.secondary_mobile || '',
       Email: emp.email || '',
-      'Communication Address': emp.communication_address || emp.full_address || '',
-      Designation: emp.designation || emp.role || 'Teacher',
+      'Communication Address': emp.communication_address || '',
+      Designation: emp.designation || 'Teacher',
       Organization: emp.organization || 'Jamia Zaytoonah',
       'Joining Date': emp.joining_date || '',
       'Is Salaried Employee': emp.is_salaried_employee !== false ? 'TRUE' : 'FALSE',
@@ -1004,8 +1249,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       'Bank Branch Name': emp.bank_branch_name || '',
       'Emergency Contact 1': JSON.stringify(emp.emergency_contact_1 || {}),
       'Emergency Contact 2': JSON.stringify(emp.emergency_contact_2 || {}),
-      'Is Teaching Staff':
-        emp.is_teaching_staff !== false && emp.is_teacher !== false ? 'TRUE' : 'FALSE',
+      'Is Teaching Staff': emp.is_teacher !== false ? 'TRUE' : 'FALSE',
       'Is Active': emp.is_active !== false ? 'TRUE' : 'FALSE',
       'Login Allowed': emp.login_allowed === true ? 'TRUE' : 'FALSE',
       'Auth ID': emp.auth_id || '',
@@ -1137,9 +1381,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
             designation:
               row['Designation'] ||
               row['designation'] ||
-              row['Role'] ||
-              row['role'] ||
-              (matchedExisting ? matchedExisting.designation || matchedExisting.role : 'Teacher'),
+              (matchedExisting ? matchedExisting.designation : 'Teacher'),
             organization:
               row['Organization'] ||
               row['organization'] ||
@@ -1152,16 +1394,12 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
             primary_mobile: String(
               row['Primary Mobile'] ||
                 row['primary_mobile'] ||
-                row['Phone1'] ||
-                row['phone1'] ||
-                (matchedExisting ? matchedExisting.primary_mobile || matchedExisting.phone1 : '')
+                (matchedExisting ? matchedExisting.primary_mobile : '')
             ),
             secondary_mobile: String(
               row['Secondary Mobile'] ||
                 row['secondary_mobile'] ||
-                row['Phone2'] ||
-                row['phone2'] ||
-                (matchedExisting ? matchedExisting.secondary_mobile || matchedExisting.phone2 : '')
+                (matchedExisting ? matchedExisting.secondary_mobile : '')
             ),
             date_of_birth:
               row['Date of Birth'] ||
@@ -1178,11 +1416,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
             communication_address:
               row['Communication Address'] ||
               row['communication_address'] ||
-              row['Full Address'] ||
-              row['full_address'] ||
-              (matchedExisting
-                ? matchedExisting.communication_address || matchedExisting.full_address
-                : ''),
+              (matchedExisting ? matchedExisting.communication_address : ''),
             highest_education:
               row['Highest Education'] ||
               row['highest_education'] ||
@@ -1220,13 +1454,11 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
               (matchedExisting ? matchedExisting.bank_branch_name : ''),
             emergency_contact_1: ec1,
             emergency_contact_2: ec2,
-            is_teaching_staff:
+            is_teacher:
               String(
-                row['Is Teaching Staff'] ??
-                  row['is_teaching_staff'] ??
-                  row['Is Teacher'] ??
+                row['Is Teacher'] ??
                   row['is_teacher'] ??
-                  (matchedExisting ? matchedExisting.is_teaching_staff : 'true')
+                  (matchedExisting ? matchedExisting.is_teacher : 'true')
               ).toLowerCase() !== 'false',
             login_allowed:
               String(
@@ -1346,13 +1578,676 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     }
   };
 
+  // Helper to render Add / Edit Employee Modal
+  const renderEditModal = () => {
+    if (!modalMode || (modalMode !== 'add' && modalMode !== 'edit' && modalMode !== 'self_edit')) {
+return null;
+    }
+    return (
+      <ModalErrorBoundary onClose={() => setModalMode(null)}>
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative">
+            {/* Fixed Top Header with Title, Actions, and Close Button at Top Right */}
+            <div className="px-5 py-4 bg-white border-b shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 z-20 relative">
+              {/* Header Title + Close button on mobile */}
+              <div className="flex items-center justify-between gap-2 w-full sm:w-auto min-w-0 flex-1">
+                <h3 className="text-base font-black text-dark-primary flex items-center gap-2 truncate">
+                  {modalMode === 'add' ? (
+                    <>
+                      <i className="fas fa-user-plus text-brand-primary shrink-0"></i>{' '}
+                      <span>Add New Employee Record</span>
+                    </>
+                  ) : modalMode === 'self_edit' ? (
+                    <>
+                      <i className="fas fa-user-pen text-brand-primary shrink-0"></i>{' '}
+                      <span className="truncate">
+                        Edit Profile Details:{' '}
+                        <span className="text-purple-950 font-extrabold">
+                          {formData.name || selectedEmployee?.name || currentSelfEmployee?.name}
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-id-card text-purple-600 shrink-0"></i>{' '}
+                      <span className="truncate">
+                        Edit Record:{' '}
+                        <span className="text-purple-950 font-extrabold">
+                          {formData.name || selectedEmployee?.name}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                </h3>
+
+                {/* Close Button on mobile (top right of mobile title row) */}
+                <button
+                  type="button"
+                  onClick={() => setModalMode(null)}
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex sm:hidden items-center justify-center transition-all shrink-0"
+                  title="Close (Esc)"
+                >
+                  <i className="fas fa-times text-sm"></i>
+                </button>
+              </div>
+
+              {/* Action Buttons (Prev/Next & Save Record & Close on desktop) */}
+              <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                {/* Prev / Next Record Navigation (Edit Mode) */}
+                {modalMode === 'edit' && filteredEmployees.length > 1 && (
+                  <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200">
+                    <button
+                      type="button"
+                      disabled={currentIndex <= 0 || saving}
+                      onClick={() => handleNavigateRecord(currentIndex - 1)}
+                      className="px-2 py-1 text-xs font-extrabold bg-white hover:bg-purple-100 text-purple-900 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-purple-300 shadow-xs flex items-center gap-1"
+                      title="Previous Employee Record"
+                    >
+                      <i className="fas fa-chevron-left text-[10px]"></i> Prev
+                    </button>
+                    <span className="text-[10px] font-extrabold px-1 text-purple-950">
+                      {currentIndex + 1} / {filteredEmployees.length}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentIndex >= filteredEmployees.length - 1 || saving}
+                      onClick={() => handleNavigateRecord(currentIndex + 1)}
+                      className="px-2 py-1 text-xs font-extrabold bg-white hover:bg-purple-100 text-purple-900 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-purple-300 shadow-xs flex items-center gap-1"
+                      title="Next Employee Record"
+                    >
+                      Next <i className="fas fa-chevron-right text-[10px]"></i>
+                    </button>
+                  </div>
+                )}
+
+                {/* Save Record button */}
+                <button
+                  type="button"
+                  onClick={handleSaveEmployee}
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl text-xs font-extrabold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <i className="fas fa-floppy-disk"></i> {saving ? 'Saving...' : 'Save Record'}
+                </button>
+
+                {/* Close Button on Desktop */}
+                <button
+                  type="button"
+                  onClick={() => setModalMode(null)}
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 hidden sm:flex items-center justify-center transition-all shrink-0"
+                  title="Close (Esc)"
+                >
+                  <i className="fas fa-times text-sm"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Form Body Container */}
+            <form
+              onSubmit={handleSaveEmployee}
+              className="p-6 overflow-y-auto flex-1 space-y-6 text-xs font-bold"
+            >
+              {/* Section 1: Personal Details */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h4 className="text-xs uppercase tracking-wider text-brand-primary font-black">
+                    Section 1: Personal Details
+                  </h4>
+                  {modalMode !== 'add' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditableSections((prev) => ({ ...prev, sec1: !prev.sec1 }))
+                      }
+                      className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                        editableSections.sec1
+                          ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                          : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      <i className={`fas ${editableSections.sec1 ? 'fa-check' : 'fa-pen'}`}></i>
+                      {editableSections.sec1 ? 'Editing Enabled' : 'Edit Section 1'}
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-dark-soft mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Father / Husband Name</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.father_husband_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, father_husband_name: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Gender</label>
+                    <select
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.is_male ? 'Male' : 'Female'}
+                      onChange={(e) =>
+                        setFormData({ ...formData, is_male: e.target.value === 'Male' })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.date_of_birth}
+                      onChange={(e) =>
+                        setFormData({ ...formData, date_of_birth: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Blood Group</label>
+                    <select
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.blood_group}
+                      onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select Blood Group</option>
+                      {BLOOD_GROUPS.map((bg) => (
+                        <option key={bg} value={bg}>
+                          {bg}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Marital Status</label>
+                    <select
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.marital_status}
+                      onChange={(e) =>
+                        setFormData({ ...formData, marital_status: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    >
+                      {MARITAL_STATUSES.map((ms) => (
+                        <option key={ms} value={ms}>
+                          {ms}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Highest Education</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      placeholder="e.g. M.Sc, M.Ed, B.Tech"
+                      value={formData.highest_education}
+                      onChange={(e) =>
+                        setFormData({ ...formData, highest_education: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">
+                      Primary Mobile (10 digits)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.primary_mobile}
+                      onChange={(e) =>
+                        setFormData({ ...formData, primary_mobile: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Email Address</label>
+                    <input
+                      type="email"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div className="col-span-1 md:col-span-3">
+                    <label className="block text-dark-soft mb-1">Communication Address</label>
+                    <textarea
+                      rows="2"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1}
+                      value={formData.communication_address}
+                      onChange={(e) =>
+                        setFormData({ ...formData, communication_address: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec1
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Bank Detail */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h4 className="text-xs uppercase tracking-wider text-emerald-700 font-black">
+                    Section 2: Bank Detail
+                  </h4>
+                  {modalMode !== 'add' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditableSections((prev) => ({ ...prev, sec2: !prev.sec2 }))
+                      }
+                      className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                        editableSections.sec2
+                          ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <i className={`fas ${editableSections.sec2 ? 'fa-check' : 'fa-pen'}`}></i>
+                      {editableSections.sec2 ? 'Editing Enabled' : 'Edit Section 2'}
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-dark-soft mb-1">Account Name</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2}
+                      placeholder="Account Holder Name"
+                      value={formData.bank_account_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, bank_account_name: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Account Number</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2}
+                      placeholder="Bank Account Number"
+                      value={formData.bank_account_number}
+                      onChange={(e) =>
+                        setFormData({ ...formData, bank_account_number: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-mono font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">IFSC Code</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2}
+                      placeholder="e.g. SBIN0001234"
+                      value={formData.bank_ifsc_code}
+                      onChange={(e) =>
+                        setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-mono uppercase font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-dark-soft mb-1">Bank Name</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2}
+                      placeholder="e.g. State Bank of India"
+                      value={formData.bank_name}
+                      onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                  <div className="col-span-1 md:col-span-2">
+                    <label className="block text-dark-soft mb-1">Branch Name</label>
+                    <input
+                      type="text"
+                      disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2}
+                      placeholder="Bank Branch Location"
+                      value={formData.bank_branch_name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, bank_branch_name: e.target.value })
+                      }
+                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                        (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec2
+                          ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                          : 'bg-white text-dark-primary border-gray-300'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Emergency Contacts */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h4 className="text-xs uppercase tracking-wider text-rose-700 font-black">
+                    Section 3: Emergency Contacts
+                  </h4>
+                  {modalMode !== 'add' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditableSections((prev) => ({ ...prev, sec3: !prev.sec3 }))
+                      }
+                      className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                        editableSections.sec3
+                          ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                          : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
+                      }`}
+                    >
+                      <i className={`fas ${editableSections.sec3 ? 'fa-check' : 'fa-pen'}`}></i>
+                      {editableSections.sec3 ? 'Editing Enabled' : 'Edit Section 3'}
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Emergency Contact 1 */}
+                  <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
+                    <span className="text-[11px] font-black text-rose-900 block">
+                      Emergency Contact 1
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Name</label>
+                        <input
+                          type="text"
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_1?.name || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_1: {
+                                ...(formData?.emergency_contact_1 || {}),
+                                name: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Relation</label>
+                        <select
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_1?.relation || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_1: {
+                                ...(formData?.emergency_contact_1 || {}),
+                                relation: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        >
+                          <option value="">Select Relation</option>
+                          {EMERGENCY_RELATIONS.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">
+                          Contact Number
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={10}
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_1?.phone || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_1: {
+                                ...(formData?.emergency_contact_1 || {}),
+                                phone: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Address</label>
+                        <input
+                          type="text"
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_1?.address || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_1: {
+                                ...(formData?.emergency_contact_1 || {}),
+                                address: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Emergency Contact 2 */}
+                  <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
+                    <span className="text-[11px] font-black text-rose-900 block">
+                      Emergency Contact 2
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Name</label>
+                        <input
+                          type="text"
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_2?.name || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_2: {
+                                ...(formData?.emergency_contact_2 || {}),
+                                name: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Relation</label>
+                        <select
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_2?.relation || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_2: {
+                                ...(formData?.emergency_contact_2 || {}),
+                                relation: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        >
+                          <option value="">Select Relation</option>
+                          {EMERGENCY_RELATIONS.map((rel) => (
+                            <option key={rel} value={rel}>
+                              {rel}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">
+                          Contact Number
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={10}
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_2?.phone || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_2: {
+                                ...(formData?.emergency_contact_2 || {}),
+                                phone: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block">Address</label>
+                        <input
+                          type="text"
+                          disabled={(modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3}
+                          value={formData?.emergency_contact_2?.address || ''}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              emergency_contact_2: {
+                                ...(formData?.emergency_contact_2 || {}),
+                                address: e.target.value,
+                              },
+                            })
+                          }
+                          className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                            (modalMode === 'edit' || modalMode === 'self_edit') && !editableSections.sec3
+                              ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                              : 'bg-white text-dark-primary border-gray-300'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </ModalErrorBoundary>
+    );
+  };
+
   // Render Employee Personal Info Card (for teacher/employee self mode)
   if (isEmployeeSelf) {
     const emp = currentSelfEmployee || {};
     const authUserEmail = user?.email || emp.email || 'Not Available';
 
     return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+      <>
+        <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
         {/* Profile Card Header */}
         <div className="bg-gradient-to-r from-brand-primary to-brand-soft text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
@@ -1459,7 +2354,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Primary Mobile
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.primary_mobile || emp.phone1 || 'Unknown'}
+                  {emp.primary_mobile || 'Unknown'}
                 </span>
               </div>
               <div>
@@ -1467,7 +2362,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Secondary Mobile
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.secondary_mobile || emp.phone2 || 'Unknown'}
+                  {emp.secondary_mobile || 'Unknown'}
                 </span>
               </div>
               <div className="col-span-2">
@@ -1475,7 +2370,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Communication Address
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.communication_address || emp.full_address || 'Not Provided'}
+                  {emp.communication_address || 'Not Provided'}
                 </span>
               </div>
             </div>
@@ -1647,7 +2542,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   Teaching Staff
                 </span>
                 <span className="text-dark-primary font-bold">
-                  {emp.is_teaching_staff !== false && emp.is_teacher !== false ? 'Yes' : 'No'}
+                  {emp.is_teacher !== false ? 'Yes' : 'No'}
                 </span>
               </div>
               <div>
@@ -1663,521 +2558,49 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
               <i className="fas fa-info-circle text-blue-600 mr-1.5"></i>
               Official employment classification and administrative designations are managed by HR /
               Administration.
-            </div>
           </div>
         </div>
-
-        {/* Self Edit Modal */}
-        {modalMode === 'self_edit' && (
-          <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="text-base font-extrabold text-dark-primary flex items-center gap-2">
-                  <i className="fas fa-user-pen text-brand-primary"></i> Edit Personal, Bank &
-                  Emergency Details
-                </h3>
-                <button
-                  onClick={() => setModalMode(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <i className="fas fa-times text-lg"></i>
-                </button>
-              </div>
-              <form onSubmit={handleSaveEmployee} className="space-y-6 text-xs font-bold">
-                {/* Section 1: Personal Details */}
-                <div className="space-y-3">
-                  <h4 className="text-xs uppercase tracking-wider text-brand-primary font-black border-b pb-1">
-                    Section 1: Personal Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-dark-soft mb-1">Full Name *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Father / Husband Name</label>
-                      <input
-                        type="text"
-                        value={formData.father_husband_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, father_husband_name: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Gender</label>
-                      <select
-                        value={formData.is_male ? 'Male' : 'Female'}
-                        onChange={(e) =>
-                          setFormData({ ...formData, is_male: e.target.value === 'Male' })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Date of Birth</label>
-                      <input
-                        type="date"
-                        value={formData.date_of_birth}
-                        onChange={(e) =>
-                          setFormData({ ...formData, date_of_birth: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Blood Group</label>
-                      <select
-                        value={formData.blood_group}
-                        onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl"
-                      >
-                        <option value="">Select Blood Group</option>
-                        {BLOOD_GROUPS.map((bg) => (
-                          <option key={bg} value={bg}>
-                            {bg}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Marital Status</label>
-                      <select
-                        value={formData.marital_status}
-                        onChange={(e) =>
-                          setFormData({ ...formData, marital_status: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      >
-                        {MARITAL_STATUSES.map((ms) => (
-                          <option key={ms} value={ms}>
-                            {ms}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Highest Qualification</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. M.Sc, M.Ed, B.Tech"
-                        value={formData.highest_education}
-                        onChange={(e) =>
-                          setFormData({ ...formData, highest_education: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">
-                        Email Address{' '}
-                        <span className="text-purple-600 font-normal">(From User Auth Table)</span>
-                      </label>
-                      <input
-                        type="email"
-                        disabled
-                        value={user?.email || formData.email}
-                        className="w-full px-3 py-2 border rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">
-                        Primary Mobile (10 digits)
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={10}
-                        value={formData.primary_mobile}
-                        onChange={(e) =>
-                          setFormData({ ...formData, primary_mobile: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">
-                        Secondary Mobile (10 digits)
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={10}
-                        value={formData.secondary_mobile}
-                        onChange={(e) =>
-                          setFormData({ ...formData, secondary_mobile: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-dark-soft mb-1">Communication Address</label>
-                      <textarea
-                        rows="2"
-                        value={formData.communication_address}
-                        onChange={(e) =>
-                          setFormData({ ...formData, communication_address: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Bank Details */}
-                <div className="space-y-3">
-                  <h4 className="text-xs uppercase tracking-wider text-emerald-700 font-black border-b pb-1">
-                    Section 2: Bank Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-dark-soft mb-1">Account Holder Name</label>
-                      <input
-                        type="text"
-                        value={formData.bank_account_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, bank_account_name: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Account Number</label>
-                      <input
-                        type="text"
-                        value={formData.bank_account_number}
-                        onChange={(e) =>
-                          setFormData({ ...formData, bank_account_number: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">IFSC Code</label>
-                      <input
-                        type="text"
-                        value={formData.bank_ifsc_code}
-                        onChange={(e) =>
-                          setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl font-mono uppercase"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-dark-soft mb-1">Bank Name</label>
-                      <input
-                        type="text"
-                        value={formData.bank_name}
-                        onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                    <div className="col-span-1 md:col-span-2">
-                      <label className="block text-dark-soft mb-1">Branch Name</label>
-                      <input
-                        type="text"
-                        value={formData.bank_branch_name}
-                        onChange={(e) =>
-                          setFormData({ ...formData, bank_branch_name: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border rounded-xl"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 3: Emergency Contacts */}
-                <div className="space-y-3">
-                  <h4 className="text-xs uppercase tracking-wider text-rose-700 font-black border-b pb-1">
-                    Section 3: Emergency Contacts
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Contact 1 */}
-                    <div className="p-3 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
-                      <span className="text-[11px] font-black text-rose-900 block">
-                        Emergency Contact 1
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Name</label>
-                          <input
-                            type="text"
-                            value={formData.emergency_contact_1.name}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_1: {
-                                  ...formData.emergency_contact_1,
-                                  name: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Relation</label>
-                          <select
-                            value={formData.emergency_contact_1.relation}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_1: {
-                                  ...formData.emergency_contact_1,
-                                  relation: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          >
-                            <option value="">Select Relation</option>
-                            {EMERGENCY_RELATIONS.map((rel) => (
-                              <option key={rel} value={rel}>
-                                {rel}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">
-                            Contact Number
-                          </label>
-                          <input
-                            type="text"
-                            maxLength={10}
-                            value={formData.emergency_contact_1.phone}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_1: {
-                                  ...formData.emergency_contact_1,
-                                  phone: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Address</label>
-                          <input
-                            type="text"
-                            value={formData.emergency_contact_1.address}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_1: {
-                                  ...formData.emergency_contact_1,
-                                  address: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Contact 2 */}
-                    <div className="p-3 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
-                      <span className="text-[11px] font-black text-rose-900 block">
-                        Emergency Contact 2
-                      </span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Name</label>
-                          <input
-                            type="text"
-                            value={formData.emergency_contact_2.name}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_2: {
-                                  ...formData.emergency_contact_2,
-                                  name: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Relation</label>
-                          <select
-                            value={formData.emergency_contact_2.relation}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_2: {
-                                  ...formData.emergency_contact_2,
-                                  relation: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          >
-                            <option value="">Select Relation</option>
-                            {EMERGENCY_RELATIONS.map((rel) => (
-                              <option key={rel} value={rel}>
-                                {rel}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">
-                            Contact Number
-                          </label>
-                          <input
-                            type="text"
-                            maxLength={10}
-                            value={formData.emergency_contact_2.phone}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_2: {
-                                  ...formData.emergency_contact_2,
-                                  phone: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-dark-muted block">Address</label>
-                          <input
-                            type="text"
-                            value={formData.emergency_contact_2.address}
-                            onChange={(e) =>
-                              setFormData({
-                                ...formData,
-                                emergency_contact_2: {
-                                  ...formData.emergency_contact_2,
-                                  address: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setModalMode(null)}
-                    className="px-4 py-2 bg-light-ui rounded-xl text-dark-soft font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-5 py-2.5 bg-brand-primary text-white rounded-xl font-bold shadow-md"
-                  >
-                    {saving ? 'Saving...' : 'Save Profile Changes'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
-    );
-  }
+    </div>
+    {renderEditModal()}
+  </>
+  );
+}
 
   // Admin & Management View
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="bg-white p-6 rounded-3xl border border-light-border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Unified Header Card with Search, Filters, and Action Icons */}
+      <div className="bg-white p-5 rounded-3xl border border-light-border shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-primary/10 text-orange-primary flex items-center justify-center shrink-0">
               <i className="fas fa-users-gear text-xl"></i>
             </div>
-            Employee Records {isManagement ? '(Management View)' : ''}
+            Employee Records
           </h1>
-          <p className="text-xs font-bold text-dark-soft mt-1">
-            {isManagement
-              ? 'View and manage employee profile details, qualifications, and salary records.'
-              : 'Add, import, export, edit, and link employee records to user accounts.'}
-          </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
-          <button
-            onClick={handleExportEmployeesExcel}
-            className="px-4 py-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold border border-blue-200 transition-all flex items-center gap-2 shadow-sm"
-            title="Download all employee records to Excel"
-          >
-            <i className="fas fa-file-excel text-blue-600"></i> Export Excel
-          </button>
+        {/* Search, Filter & Action Controls */}
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
+          {/* Search Input */}
+          <div className="relative w-full sm:w-64">
+            <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+            <input
+              type="text"
+              placeholder="Search Name, ID, Mobile, Role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
+            />
+          </div>
 
-          {(isAdmin || isManagement) && (
-            <>
-              <button
-                onClick={() => setIsUserRolesModalOpen(true)}
-                className="px-3.5 py-2.5 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-xs font-bold border border-purple-200 transition-all flex items-center gap-2 shadow-sm"
-                title="Manage portal roles for all Auth Users (including non-employees)"
-              >
-                <i className="fas fa-user-shield text-purple-600"></i> Manage User Roles
-              </button>
-              <button
-                onClick={handleAutoLinkAuthAccounts}
-                disabled={saving}
-                className="px-3.5 py-2.5 bg-purple-50 text-purple-700 hover:bg-purple-100 rounded-xl text-xs font-bold border border-purple-200 transition-all flex items-center gap-2 shadow-sm"
-                title="Automatically link employees to auth users by email/name"
-              >
-                <i className="fas fa-link"></i> Auto-Link Auth
-              </button>
-              <button
-                onClick={() => setIsCsvImportOpen(true)}
-                className="px-4 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-bold border border-emerald-200 transition-all flex items-center gap-2 shadow-sm"
-              >
-                <i className="fas fa-file-arrow-up"></i> Bulk Import/Update
-              </button>
-              <button
-                onClick={() => handleOpenModal('add')}
-                className="px-4 py-2.5 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-xs font-extrabold shadow-md transition-all flex items-center gap-2 active:scale-95"
-              >
-                <i className="fas fa-plus"></i> Add Employee
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-light-border shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-          <input
-            type="text"
-            placeholder="Search by Name, Emp ID, Mobile, Designation, Org..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 w-full md:w-auto">
+          {/* Role Filter */}
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
+            className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
+            title="Filter by Designation"
           >
             <option value="">All Designations</option>
             {DEFAULT_ROLES.map((r) => (
@@ -2187,15 +2610,61 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
             ))}
           </select>
 
+          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none"
+            className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
+            title="Filter by Status"
           >
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
             <option value="all">All Statuses</option>
           </select>
+
+          {/* Action Icon Buttons */}
+          <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start">
+            <button
+              onClick={handleExportEmployeesExcel}
+              className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+              title="Export Excel"
+            >
+              <i className="fas fa-file-excel text-blue-600 text-base"></i>
+            </button>
+
+            {(isAdmin || isManagement) && (
+              <>
+                <button
+                  onClick={() => setIsUserRolesModalOpen(true)}
+                  className="w-10 h-10 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-sm font-bold border border-purple-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                  title="Manage Portal User Roles"
+                >
+                  <i className="fas fa-user-shield text-purple-600 text-base"></i>
+                </button>
+                <button
+                  onClick={() => setIsBulkApplyModalOpen(true)}
+                  className="w-10 h-10 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                  title="Apply Increment Salaries by Effective Date/Month ($)"
+                >
+                  <i className="fas fa-dollar-sign text-emerald-600 text-base"></i>
+                </button>
+                <button
+                  onClick={() => setIsCsvImportOpen(true)}
+                  className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                  title="Bulk Import / Update"
+                >
+                  <i className="fas fa-file-arrow-up text-emerald-600 text-base"></i>
+                </button>
+                <button
+                  onClick={() => handleOpenModal('add')}
+                  className="w-10 h-10 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-sm font-extrabold shadow-md transition-all flex items-center justify-center active:scale-95 shrink-0"
+                  title="Add Employee"
+                >
+                  <i className="fas fa-plus text-base"></i>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2216,7 +2685,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       ) : (
         <div className="bg-white rounded-3xl border border-light-border shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-semibold">
+            <table className="w-full text-left text-xs font-semibold min-w-[900px]">
               <thead className="bg-gray-50 border-b text-[10px] uppercase tracking-wider text-dark-muted font-bold">
                 <tr>
                   <th
@@ -2334,7 +2803,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                       </td>
                       <td className="p-4">
                         <div className="text-dark-primary font-bold">
-                          {emp.primary_mobile || emp.phone1 || 'No Phone'}
+                          {emp.primary_mobile || 'No Phone'}
                         </div>
                         <div className="text-[10px] text-dark-muted font-semibold">
                           {emp.email || 'No Email'}
@@ -2421,846 +2890,1347 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       )}
 
       {/* Add / Edit Employee Modal - 5 Structured Sections */}
-      {(modalMode === 'add' || modalMode === 'edit') && (
-        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-3xl w-full p-6 space-y-5 my-8 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-lg font-black text-dark-primary">
-                {modalMode === 'add'
-                  ? 'Add New Employee Record'
-                  : `Edit Employee Record: ${selectedEmployee?.name}`}
-              </h3>
-              <button
-                onClick={() => setModalMode(null)}
-                className="text-gray-400 hover:text-gray-600"
+      {(modalMode === 'add' || modalMode === 'edit' || modalMode === 'self_edit') && (
+        <ModalErrorBoundary onClose={() => setModalMode(null)}>
+          <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 relative">
+              {/* Fixed Top Header with Prev/Next, Save Record, and Close */}
+              <div className="px-6 py-4 bg-white border-b shadow-xs flex items-center justify-between gap-2 shrink-0 z-20">
+                <div>
+                  <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
+                    {modalMode === 'add' ? (
+                      <>
+                        <i className="fas fa-user-plus text-brand-primary"></i> Add New Employee
+                        Record
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-id-card text-purple-600"></i> Edit Record:{' '}
+                        <span className="text-purple-950 font-extrabold">
+                          {selectedEmployee?.name}
+                        </span>
+                      </>
+                    )}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Prev / Next Record Navigation (Edit Mode) */}
+                  {(modalMode === 'edit' || modalMode === 'self_edit') &&
+                    filteredEmployees.length > 1 && (
+                      <div className="flex items-center gap-1 bg-purple-50 p-1 rounded-xl border border-purple-200">
+                        <button
+                          type="button"
+                          disabled={currentIndex <= 0 || saving}
+                          onClick={() => handleNavigateRecord(currentIndex - 1)}
+                          className="px-2 py-1 text-xs font-extrabold bg-white hover:bg-purple-100 text-purple-900 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-purple-300 shadow-xs flex items-center gap-1"
+                          title="Previous Employee Record"
+                        >
+                          <i className="fas fa-chevron-left text-[10px]"></i> Prev
+                        </button>
+                        <span className="text-[10px] font-extrabold px-1 text-purple-950">
+                          {currentIndex + 1} / {filteredEmployees.length}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={currentIndex >= filteredEmployees.length - 1 || saving}
+                          onClick={() => handleNavigateRecord(currentIndex + 1)}
+                          className="px-2 py-1 text-xs font-extrabold bg-white hover:bg-purple-100 text-purple-900 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-purple-300 shadow-xs flex items-center gap-1"
+                          title="Next Employee Record"
+                        >
+                          Next <i className="fas fa-chevron-right text-[10px]"></i>
+                        </button>
+                      </div>
+                    )}
+
+                  {/* Move Save Employee Record to Sticky Header and Rename to Save Record */}
+                  <button
+                    type="button"
+                    onClick={handleSaveEmployee}
+                    disabled={saving}
+                    className="px-4 py-2 rounded-xl text-xs font-extrabold bg-brand-primary hover:bg-brand-primary/90 text-white shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <i className="fas fa-floppy-disk"></i> {saving ? 'Saving...' : 'Save Record'}
+                  </button>
+
+                  {/* Close Button */}
+                  <button
+                    type="button"
+                    onClick={() => setModalMode(null)}
+                    className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center transition-all"
+                    title="Close (Esc)"
+                  >
+                    <i className="fas fa-times text-base"></i>
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Form Body Container */}
+              <form
+                onSubmit={handleSaveEmployee}
+                className="p-6 overflow-y-auto flex-1 space-y-6 text-xs font-bold"
               >
-                <i className="fas fa-times text-lg"></i>
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEmployee} className="space-y-6 text-xs font-bold">
-              {/* Section 1: Personal Details */}
-              <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-wider text-brand-primary font-black border-b pb-1">
-                  Section 1: Personal Details
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-dark-soft mb-1">Full Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Father / Husband Name</label>
-                    <input
-                      type="text"
-                      value={formData.father_husband_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, father_husband_name: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Gender</label>
-                    <select
-                      value={formData.is_male ? 'Male' : 'Female'}
-                      onChange={(e) =>
-                        setFormData({ ...formData, is_male: e.target.value === 'Male' })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Date of Birth</label>
-                    <input
-                      type="date"
-                      value={formData.date_of_birth}
-                      onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Blood Group</label>
-                    <select
-                      value={formData.blood_group}
-                      onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    >
-                      <option value="">Select Blood Group</option>
-                      {BLOOD_GROUPS.map((bg) => (
-                        <option key={bg} value={bg}>
-                          {bg}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Marital Status</label>
-                    <select
-                      value={formData.marital_status}
-                      onChange={(e) => setFormData({ ...formData, marital_status: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    >
-                      {MARITAL_STATUSES.map((ms) => (
-                        <option key={ms} value={ms}>
-                          {ms}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Highest Education</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. M.Sc, M.Ed, B.Tech"
-                      value={formData.highest_education}
-                      onChange={(e) =>
-                        setFormData({ ...formData, highest_education: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Primary Mobile (10 digits)</label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      value={formData.primary_mobile}
-                      onChange={(e) => setFormData({ ...formData, primary_mobile: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div className="col-span-1 md:col-span-3">
-                    <label className="block text-dark-soft mb-1">Communication Address</label>
-                    <textarea
-                      rows="2"
-                      value={formData.communication_address}
-                      onChange={(e) =>
-                        setFormData({ ...formData, communication_address: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Bank Detail */}
-              <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-wider text-emerald-700 font-black border-b pb-1">
-                  Section 2: Bank Detail
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-dark-soft mb-1">Account Name</label>
-                    <input
-                      type="text"
-                      placeholder="Account Holder Name"
-                      value={formData.bank_account_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, bank_account_name: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Account Number</label>
-                    <input
-                      type="text"
-                      placeholder="Bank Account Number"
-                      value={formData.bank_account_number}
-                      onChange={(e) =>
-                        setFormData({ ...formData, bank_account_number: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">IFSC Code</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. SBIN0001234"
-                      value={formData.bank_ifsc_code}
-                      onChange={(e) =>
-                        setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl font-mono uppercase"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Bank Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. State Bank of India"
-                      value={formData.bank_name}
-                      onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                  <div className="col-span-1 md:col-span-2">
-                    <label className="block text-dark-soft mb-1">Branch Name</label>
-                    <input
-                      type="text"
-                      placeholder="Bank Branch Location"
-                      value={formData.bank_branch_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, bank_branch_name: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border rounded-xl"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Emergency Contacts */}
-              <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-wider text-rose-700 font-black border-b pb-1">
-                  Section 3: Emergency Contacts
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Emergency Contact 1 */}
-                  <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
-                    <span className="text-[11px] font-black text-rose-900 block">
-                      Emergency Contact 1
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Name</label>
-                        <input
-                          type="text"
-                          value={formData.emergency_contact_1.name}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_1: {
-                                ...formData.emergency_contact_1,
-                                name: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Relation</label>
-                        <select
-                          value={formData.emergency_contact_1.relation}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_1: {
-                                ...formData.emergency_contact_1,
-                                relation: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        >
-                          <option value="">Select Relation</option>
-                          {EMERGENCY_RELATIONS.map((rel) => (
-                            <option key={rel} value={rel}>
-                              {rel}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Contact Number</label>
-                        <input
-                          type="text"
-                          maxLength={10}
-                          value={formData.emergency_contact_1.phone}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_1: {
-                                ...formData.emergency_contact_1,
-                                phone: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Address</label>
-                        <input
-                          type="text"
-                          value={formData.emergency_contact_1.address}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_1: {
-                                ...formData.emergency_contact_1,
-                                address: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Emergency Contact 2 */}
-                  <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
-                    <span className="text-[11px] font-black text-rose-900 block">
-                      Emergency Contact 2
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Name</label>
-                        <input
-                          type="text"
-                          value={formData.emergency_contact_2.name}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_2: {
-                                ...formData.emergency_contact_2,
-                                name: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Relation</label>
-                        <select
-                          value={formData.emergency_contact_2.relation}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_2: {
-                                ...formData.emergency_contact_2,
-                                relation: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        >
-                          <option value="">Select Relation</option>
-                          {EMERGENCY_RELATIONS.map((rel) => (
-                            <option key={rel} value={rel}>
-                              {rel}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Contact Number</label>
-                        <input
-                          type="text"
-                          maxLength={10}
-                          value={formData.emergency_contact_2.phone}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_2: {
-                                ...formData.emergency_contact_2,
-                                phone: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-dark-muted block">Address</label>
-                        <input
-                          type="text"
-                          value={formData.emergency_contact_2.address}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              emergency_contact_2: {
-                                ...formData.emergency_contact_2,
-                                address: e.target.value,
-                              },
-                            })
-                          }
-                          className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-white"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 4: Employee Detail */}
-              <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-wider text-blue-primary font-black border-b pb-1">
-                  Section 4: Employee Detail
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {/* First Field: Is Salaried Employee Toggle */}
-                  <div>
-                    <label className="block text-dark-soft mb-1 font-bold">
-                      Is Salaried Employee?
-                    </label>
-                    <div className="inline-flex p-1 bg-gray-100 rounded-xl border border-gray-200">
+                {/* Section 1: Personal Details */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h4 className="text-xs uppercase tracking-wider text-brand-primary font-black">
+                      Section 1: Personal Details
+                    </h4>
+                    {modalMode !== 'add' && (
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, is_salaried_employee: true })}
-                        className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          formData.is_salaried_employee
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                        onClick={() =>
+                          setEditableSections((prev) => ({ ...prev, sec1: !prev.sec1 }))
+                        }
+                        className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                          editableSections.sec1
+                            ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                            : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
                         }`}
                       >
-                        Salaried
+                        <i className={`fas ${editableSections.sec1 ? 'fa-check' : 'fa-pen'}`}></i>
+                        {editableSections.sec1 ? 'Editing Enabled' : 'Edit Section 1'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, is_salaried_employee: false })}
-                        className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          !formData.is_salaried_employee
-                            ? 'bg-amber-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Service
-                      </button>
-                    </div>
+                    )}
                   </div>
-
-                  <div>
-                    <label className="block text-dark-soft mb-1">Employee ID *</label>
-                    <input
-                      type="text"
-                      required={formData.is_salaried_employee}
-                      disabled={!formData.is_salaried_employee}
-                      value={formData.emp_id}
-                      onChange={(e) => setFormData({ ...formData, emp_id: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-xl ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : ''
-                      }`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Organization</label>
-                    <input
-                      type="text"
-                      list="organizations-list"
-                      disabled={!formData.is_salaried_employee}
-                      placeholder="Select Organization..."
-                      value={formData.organization}
-                      onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-xl ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : ''
-                      }`}
-                    />
-                    <datalist id="organizations-list">
-                      {DEFAULT_ORGANIZATIONS.map((org) => (
-                        <option key={org} value={org} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Designation</label>
-                    <input
-                      type="text"
-                      list="roles-list"
-                      disabled={!formData.is_salaried_employee}
-                      value={formData.designation}
-                      onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-xl ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : ''
-                      }`}
-                    />
-                    <datalist id="roles-list">
-                      {DEFAULT_ROLES.map((r) => (
-                        <option key={r} value={r} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className="block text-dark-soft mb-1">Joining Date</label>
-                    <input
-                      type="date"
-                      disabled={!formData.is_salaried_employee}
-                      value={formData.joining_date}
-                      onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-xl ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : ''
-                      }`}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-dark-soft mb-1">
-                      Current Monthly Salary (₹) {formData.is_salaried_employee && '*'}
-                    </label>
-                    <input
-                      type="number"
-                      step="100"
-                      disabled={!formData.is_salaried_employee}
-                      required={formData.is_salaried_employee}
-                      placeholder={formData.is_salaried_employee ? 'Must be > ₹0' : 'Optional'}
-                      value={formData.current_salary}
-                      onChange={(e) => setFormData({ ...formData, current_salary: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-xl font-bold ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'text-emerald-700'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Employee Status Toggle */}
-                  <div>
-                    <label
-                      className={`block text-dark-soft mb-1 font-bold ${!formData.is_salaried_employee ? 'text-gray-400' : ''}`}
-                    >
-                      Employee Status
-                    </label>
-                    <div
-                      className={`inline-flex p-1 rounded-xl border ${
-                        !formData.is_salaried_employee
-                          ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
-                          : 'bg-gray-100 border-gray-200'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        disabled={!formData.is_salaried_employee}
-                        onClick={() => setFormData({ ...formData, is_active: true })}
-                        className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          formData.is_active
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Active
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!formData.is_salaried_employee}
-                        onClick={() => setFormData({ ...formData, is_active: false })}
-                        className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          !formData.is_active
-                            ? 'bg-rose-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Inactive
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Compensation History Builder */}
-                <div
-                  className={`p-4 rounded-2xl border space-y-3 mt-2 ${
-                    !formData.is_salaried_employee
-                      ? 'bg-gray-100 border-gray-200 opacity-60 pointer-events-none'
-                      : 'bg-gray-50 border-gray-200'
-                  }`}
-                >
-                  <span className="text-[11px] font-extrabold text-dark-primary block">
-                    Compensation History ({formData.compensation_history.length} entries)
-                  </span>
-
-                  {formData.compensation_history.length > 0 && (
-                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                      {formData.compensation_history.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between bg-white p-2.5 rounded-xl border text-[11px]"
-                        >
-                          <div>
-                            <span className="font-bold text-dark-primary">
-                              {item.date ? item.date : 'N/A'} &bull; +₹{item.amount || '0'} (
-                              {item.percentage || 0}%)
-                            </span>
-                            {item.notes && (
-                              <span className="text-dark-muted block text-[10px]">
-                                {item.notes}
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            disabled={!formData.is_salaried_employee}
-                            onClick={() => handleRemoveIncrementItem(idx)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-4 gap-2 pt-1 items-end">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="text-[10px] text-dark-muted block">Revision Date</label>
+                      <label className="block text-dark-soft mb-1">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Father / Husband Name</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.father_husband_name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, father_husband_name: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Gender</label>
+                      <select
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.is_male ? 'Male' : 'Female'}
+                        onChange={(e) =>
+                          setFormData({ ...formData, is_male: e.target.value === 'Male' })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Date of Birth</label>
                       <input
                         type="date"
-                        disabled={!formData.is_salaried_employee}
-                        value={newIncrement.date}
-                        onChange={(e) => setNewIncrement({ ...newIncrement, date: e.target.value })}
-                        className="w-full px-2 py-1 border rounded-lg text-xs"
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.date_of_birth}
+                        onChange={(e) =>
+                          setFormData({ ...formData, date_of_birth: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-dark-muted block">Hike (₹)</label>
-                      <input
-                        type="number"
-                        disabled={!formData.is_salaried_employee}
-                        placeholder="e.g. 3000"
-                        value={newIncrement.amount}
+                      <label className="block text-dark-soft mb-1">Blood Group</label>
+                      <select
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.blood_group}
+                        onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      >
+                        <option value="">Select Blood Group</option>
+                        {BLOOD_GROUPS.map((bg) => (
+                          <option key={bg} value={bg}>
+                            {bg}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Marital Status</label>
+                      <select
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.marital_status}
                         onChange={(e) =>
-                          setNewIncrement({ ...newIncrement, amount: e.target.value })
+                          setFormData({ ...formData, marital_status: e.target.value })
                         }
-                        className="w-full px-2 py-1 border rounded-lg text-xs"
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      >
+                        {MARITAL_STATUSES.map((ms) => (
+                          <option key={ms} value={ms}>
+                            {ms}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Highest Education</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        placeholder="e.g. M.Sc, M.Ed, B.Tech"
+                        value={formData.highest_education}
+                        onChange={(e) =>
+                          setFormData({ ...formData, highest_education: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-dark-muted block">Hike (%)</label>
+                      <label className="block text-dark-soft mb-1">
+                        Primary Mobile (10 digits)
+                      </label>
                       <input
-                        type="number"
-                        disabled={!formData.is_salaried_employee}
-                        placeholder="10%"
-                        value={newIncrement.percentage}
+                        type="text"
+                        maxLength={10}
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.primary_mobile}
                         onChange={(e) =>
-                          setNewIncrement({ ...newIncrement, percentage: e.target.value })
+                          setFormData({ ...formData, primary_mobile: e.target.value })
                         }
-                        className="w-full px-2 py-1 border rounded-lg text-xs"
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
                       />
                     </div>
-                    <button
-                      type="button"
-                      disabled={!formData.is_salaried_employee}
-                      onClick={handleAddIncrementItem}
-                      className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold disabled:bg-gray-400"
-                    >
-                      + Add Increment
-                    </button>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div className="col-span-1 md:col-span-3">
+                      <label className="block text-dark-soft mb-1">Communication Address</label>
+                      <textarea
+                        rows="2"
+                        disabled={modalMode === 'edit' && !editableSections.sec1}
+                        value={formData.communication_address}
+                        onChange={(e) =>
+                          setFormData({ ...formData, communication_address: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec1
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Section 5: Portal Access */}
-              <div className="space-y-3">
-                <h4 className="text-xs uppercase tracking-wider text-purple-700 font-black border-b pb-1">
-                  Section 5: Portal Access
-                </h4>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50/30 p-4 rounded-2xl border border-purple-100">
-                  {/* Field 1: Portal Access */}
-                  <div>
-                    <label className="block text-dark-soft mb-1 font-extrabold text-purple-950">
-                      Portal Access
-                    </label>
-                    <div className="inline-flex p-1 bg-white rounded-xl border border-purple-200 shadow-sm">
+                {/* Section 2: Bank Detail */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h4 className="text-xs uppercase tracking-wider text-emerald-700 font-black">
+                      Section 2: Bank Detail
+                    </h4>
+                    {modalMode !== 'add' && (
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, login_allowed: true })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          formData.login_allowed
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                        onClick={() =>
+                          setEditableSections((prev) => ({ ...prev, sec2: !prev.sec2 }))
+                        }
+                        className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                          editableSections.sec2
+                            ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
                         }`}
                       >
-                        Allowed
+                        <i className={`fas ${editableSections.sec2 ? 'fa-check' : 'fa-pen'}`}></i>
+                        {editableSections.sec2 ? 'Editing Enabled' : 'Edit Section 2'}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, login_allowed: false })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          !formData.login_allowed
-                            ? 'bg-gray-700 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-dark-soft mb-1">Account Name</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec2}
+                        placeholder="Account Holder Name"
+                        value={formData.bank_account_name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bank_account_name: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec2
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
                         }`}
-                      >
-                        Not Allowed
-                      </button>
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Account Number</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec2}
+                        placeholder="Bank Account Number"
+                        value={formData.bank_account_number}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bank_account_number: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-mono font-bold ${
+                          modalMode === 'edit' && !editableSections.sec2
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">IFSC Code</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec2}
+                        placeholder="e.g. SBIN0001234"
+                        value={formData.bank_ifsc_code}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bank_ifsc_code: e.target.value.toUpperCase() })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-mono uppercase font-bold ${
+                          modalMode === 'edit' && !editableSections.sec2
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Bank Name</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec2}
+                        placeholder="e.g. State Bank of India"
+                        value={formData.bank_name}
+                        onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec2
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div className="col-span-1 md:col-span-2">
+                      <label className="block text-dark-soft mb-1">Branch Name</label>
+                      <input
+                        type="text"
+                        disabled={modalMode === 'edit' && !editableSections.sec2}
+                        placeholder="Bank Branch Location"
+                        value={formData.bank_branch_name}
+                        onChange={(e) =>
+                          setFormData({ ...formData, bank_branch_name: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec2
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Field 2: Consider As Teacher */}
-                  <div>
-                    <label
-                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
-                    >
-                      Consider As Teacher
-                    </label>
-                    <div
-                      className={`inline-flex p-1 rounded-xl border ${
-                        !formData.login_allowed
-                          ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
-                          : 'bg-white border-purple-200 shadow-sm'
-                      }`}
-                    >
+                {/* Section 3: Emergency Contacts */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h4 className="text-xs uppercase tracking-wider text-rose-700 font-black">
+                      Section 3: Emergency Contacts
+                    </h4>
+                    {modalMode !== 'add' && (
                       <button
                         type="button"
-                        disabled={!formData.login_allowed}
-                        onClick={() => setFormData({ ...formData, is_teaching_staff: true })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          formData.is_teaching_staff
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
+                        onClick={() =>
+                          setEditableSections((prev) => ({ ...prev, sec3: !prev.sec3 }))
+                        }
+                        className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                          editableSections.sec3
+                            ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                            : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100'
                         }`}
                       >
-                        Yes
+                        <i className={`fas ${editableSections.sec3 ? 'fa-check' : 'fa-pen'}`}></i>
+                        {editableSections.sec3 ? 'Editing Enabled' : 'Edit Section 3'}
                       </button>
-                      <button
-                        type="button"
-                        disabled={!formData.login_allowed}
-                        onClick={() => setFormData({ ...formData, is_teaching_staff: false })}
-                        className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
-                          !formData.is_teaching_staff
-                            ? 'bg-gray-700 text-white shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        No
-                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Emergency Contact 1 */}
+                    <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
+                      <span className="text-[11px] font-black text-rose-900 block">
+                        Emergency Contact 1
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Name</label>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_1?.name || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_1: {
+                                  ...(formData?.emergency_contact_1 || {}),
+                                  name: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Relation</label>
+                          <select
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_1?.relation || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_1: {
+                                  ...(formData?.emergency_contact_1 || {}),
+                                  relation: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select Relation</option>
+                            {EMERGENCY_RELATIONS.map((rel) => (
+                              <option key={rel} value={rel}>
+                                {rel}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">
+                            Contact Number
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={10}
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_1?.phone || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_1: {
+                                  ...(formData?.emergency_contact_1 || {}),
+                                  phone: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Address</label>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_1?.address || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_1: {
+                                  ...(formData?.emergency_contact_1 || {}),
+                                  address: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Emergency Contact 2 */}
+                    <div className="p-3.5 bg-rose-50/40 rounded-2xl border border-rose-100 space-y-2">
+                      <span className="text-[11px] font-black text-rose-900 block">
+                        Emergency Contact 2
+                      </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Name</label>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_2?.name || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_2: {
+                                  ...(formData?.emergency_contact_2 || {}),
+                                  name: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Relation</label>
+                          <select
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_2?.relation || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_2: {
+                                  ...(formData?.emergency_contact_2 || {}),
+                                  relation: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          >
+                            <option value="">Select Relation</option>
+                            {EMERGENCY_RELATIONS.map((rel) => (
+                              <option key={rel} value={rel}>
+                                {rel}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">
+                            Contact Number
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={10}
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_2?.phone || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_2: {
+                                  ...(formData?.emergency_contact_2 || {}),
+                                  phone: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-dark-muted block">Address</label>
+                          <input
+                            type="text"
+                            disabled={modalMode === 'edit' && !editableSections.sec3}
+                            value={formData?.emergency_contact_2?.address || ''}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                emergency_contact_2: {
+                                  ...(formData?.emergency_contact_2 || {}),
+                                  address: e.target.value,
+                                },
+                              })
+                            }
+                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-bold ${
+                              modalMode === 'edit' && !editableSections.sec3
+                                ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                                : 'bg-white text-dark-primary border-gray-300'
+                            }`}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Field 3: Auth User Mapping */}
-                  <div>
-                    <label
-                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
-                    >
-                      Auth User Mapping
-                    </label>
-                    <select
-                      disabled={!formData.login_allowed}
-                      value={formData.auth_id}
-                      onChange={(e) => {
-                        const selectedId = e.target.value;
-                        const matched = authUsers.find(
-                          (u) => String(u.user_id) === String(selectedId)
-                        );
-                        setFormData({
-                          ...formData,
-                          auth_id: selectedId,
-                          email: formData.email || (matched ? matched.email : formData.email),
-                          mapped_roles_sum: matched?.role
-                            ? String(matched.role)
-                            : formData.mapped_roles_sum,
-                        });
-                      }}
-                      className={`w-full px-3 py-2 border rounded-xl font-bold outline-none ${
-                        !formData.login_allowed
-                          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-                          : 'bg-white text-purple-900 border-purple-200'
-                      }`}
-                    >
-                      <option value="">-- Unlinked / No Auth Account --</option>
-                      {authUsers.map((u) => {
-                        const mapped = mappedAuthUserMap.get(String(u.user_id));
-                        const isMappedToOther =
-                          mapped && String(mapped.emp_id) !== String(selectedEmployee?.id);
+                {/* Section 4: Employee Detail */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h4 className="text-xs uppercase tracking-wider text-blue-primary font-black">
+                      Section 4: Employee Detail
+                    </h4>
+                    {modalMode !== 'add' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditableSections((prev) => ({ ...prev, sec4: !prev.sec4 }))
+                        }
+                        className={`text-xs font-extrabold px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all border ${
+                          editableSections.sec4
+                            ? 'bg-purple-600 text-white border-purple-700 shadow-xs'
+                            : 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
+                        }`}
+                      >
+                        <i className={`fas ${editableSections.sec4 ? 'fa-check' : 'fa-pen'}`}></i>
+                        {editableSections.sec4 ? 'Editing Enabled' : 'Edit Section 4'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* First Field: Is Salaried Employee Toggle */}
+                    <div>
+                      <label className="block text-dark-soft mb-1 font-bold">
+                        Is Salaried Employee?
+                      </label>
+                      <div
+                        className={`inline-flex p-1 rounded-xl border ${
+                          modalMode === 'edit' && !editableSections.sec4
+                            ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                            : 'bg-gray-100 border-gray-200'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          disabled={modalMode === 'edit' && !editableSections.sec4}
+                          onClick={() => setFormData({ ...formData, is_salaried_employee: true })}
+                          className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            formData.is_salaried_employee
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Salaried
+                        </button>
+                        <button
+                          type="button"
+                          disabled={modalMode === 'edit' && !editableSections.sec4}
+                          onClick={() => setFormData({ ...formData, is_salaried_employee: false })}
+                          className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            !formData.is_salaried_employee
+                              ? 'bg-amber-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Service
+                        </button>
+                      </div>
+                    </div>
 
-                        return (
-                          <option key={u.user_id} value={u.user_id} disabled={isMappedToOther}>
-                            {u.full_name ? u.full_name : 'User'} - {u.email}
-                            {isMappedToOther
-                              ? ` 🔒 [${mapped.emp_name}]`
-                              : mapped && String(mapped.emp_id) === String(selectedEmployee?.id)
-                                ? ' ✓ (Currently Linked)'
-                                : ''}
+                    <div>
+                      <label className="block text-dark-soft mb-1">Employee ID *</label>
+                      <input
+                        type="text"
+                        required={formData.is_salaried_employee}
+                        disabled={
+                          (modalMode === 'edit' && !editableSections.sec4) ||
+                          !formData.is_salaried_employee
+                        }
+                        value={formData.emp_id}
+                        onChange={(e) => setFormData({ ...formData, emp_id: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          (modalMode === 'edit' && !editableSections.sec4) ||
+                          !formData.is_salaried_employee
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Organization</label>
+                      <select
+                        disabled={modalMode === 'edit' && !editableSections.sec4}
+                        value={formData.organization}
+                        onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec4
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      >
+                        <option value="">-- Select Organization --</option>
+                        {DEFAULT_ORGANIZATIONS.map((org) => (
+                          <option key={org} value={org}>
+                            {org}
                           </option>
-                        );
-                      })}
-                    </select>
+                        ))}
+                        {formData.organization &&
+                          !DEFAULT_ORGANIZATIONS.includes(formData.organization) && (
+                            <option value={formData.organization}>{formData.organization}</option>
+                          )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Designation</label>
+                      <select
+                        disabled={modalMode === 'edit' && !editableSections.sec4}
+                        value={formData.designation}
+                        onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec4
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      >
+                        {DESIGNATIONS.map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">Joining Date</label>
+                      <input
+                        type="date"
+                        disabled={modalMode === 'edit' && !editableSections.sec4}
+                        value={formData.joining_date}
+                        onChange={(e) => setFormData({ ...formData, joining_date: e.target.value })}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          modalMode === 'edit' && !editableSections.sec4
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-dark-soft mb-1">
+                        Current Salary (₹){' '}
+                        {formData.is_salaried_employee && <span className="text-red-500">*</span>}
+                      </label>
+                      <input
+                        type="number"
+                        disabled={
+                          (modalMode === 'edit' && !editableSections.sec4) ||
+                          !formData.is_salaried_employee
+                        }
+                        placeholder={
+                          formData.is_salaried_employee
+                            ? 'Required salary amount'
+                            : 'Disabled for Service'
+                        }
+                        value={formData.current_salary}
+                        onChange={(e) =>
+                          setFormData({ ...formData, current_salary: e.target.value })
+                        }
+                        className={`w-full px-3 py-2 border rounded-xl font-bold ${
+                          (modalMode === 'edit' && !editableSections.sec4) ||
+                          !formData.is_salaried_employee
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                            : 'bg-white text-dark-primary border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    {/* Employee Status Toggle */}
+                    <div>
+                      <label
+                        className={`block text-dark-soft mb-1 font-bold ${modalMode === 'edit' && !editableSections.sec4 ? 'text-gray-400' : ''}`}
+                      >
+                        Employee Status
+                      </label>
+                      <div
+                        className={`inline-flex p-1 rounded-xl border ${
+                          (modalMode === 'edit' && !editableSections.sec4) ||
+                          !formData.is_salaried_employee
+                            ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                            : 'bg-gray-100 border-gray-200'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          disabled={
+                            (modalMode === 'edit' && !editableSections.sec4) ||
+                            !formData.is_salaried_employee
+                          }
+                          onClick={() => setFormData({ ...formData, is_active: true })}
+                          className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            formData.is_active
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Active
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            (modalMode === 'edit' && !editableSections.sec4) ||
+                            !formData.is_salaried_employee
+                          }
+                          onClick={() => setFormData({ ...formData, is_active: false })}
+                          className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            !formData.is_active
+                              ? 'bg-rose-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Inactive
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-                    {/* Status Helper Badge */}
-                    {formData.auth_id && formData.login_allowed && (
-                      <div className="text-[11px] font-bold mt-1">
-                        {(() => {
-                          const mapped = mappedAuthUserMap.get(String(formData.auth_id));
-                          if (!mapped || String(mapped.emp_id) === String(selectedEmployee?.id)) {
+                  {/* Compensation History Builder */}
+                  <div
+                    className={`p-4 rounded-2xl border space-y-3 mt-2 ${
+                      !formData.is_salaried_employee
+                        ? 'bg-gray-100 border-gray-200 opacity-60 pointer-events-none'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <span className="text-[11px] font-extrabold text-dark-primary block">
+                      Compensation History (
+                      {
+                        (Array.isArray(formData?.compensation_history)
+                          ? formData.compensation_history
+                          : []
+                        ).length
+                      }{' '}
+                      entries)
+                    </span>
+
+                    {Array.isArray(formData?.compensation_history) &&
+                      formData.compensation_history.length > 0 && (
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                          {formData.compensation_history.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="flex items-center justify-between bg-white p-2.5 rounded-xl border text-[11px]"
+                            >
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-dark-primary flex items-center gap-2 flex-wrap">
+                                  <span>{item.date ? item.date : 'N/A'}</span>
+                                  <span className="text-emerald-700 font-extrabold">
+                                    +₹{item.amount || '0'} ({item.percentage || 0}%)
+                                  </span>
+                                  <span className="bg-emerald-100 text-emerald-950 font-black px-2 py-0.5 rounded-md border border-emerald-200 text-[10px]">
+                                    Updated Salary: ₹
+                                    {(item.updated_salary
+                                      ? Number(item.updated_salary)
+                                      : Number(formData.current_salary) || 0
+                                    ).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+                                {item.notes && (
+                                  <span className="text-dark-muted block text-[10px]">
+                                    {item.notes}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={!formData.is_salaried_employee}
+                                  onClick={() => {
+                                    const revised = item.updated_salary
+                                      ? Number(item.updated_salary)
+                                      : Number(formData.current_salary) +
+                                        (Number(item.amount) || 0);
+                                    setFormData({ ...formData, current_salary: String(revised) });
+                                    showToast(
+                                      `Applied updated salary: ₹${revised.toLocaleString('en-IN')}`,
+                                      'success'
+                                    );
+                                  }}
+                                  className="p-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 rounded-md font-extrabold text-[10px] flex items-center gap-1 transition-all"
+                                  title="Set as Current Salary"
+                                >
+                                  <i className="fas fa-check-circle text-xs"></i> Apply
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!formData.is_salaried_employee}
+                                  onClick={() => handleRemoveIncrementItem(idx)}
+                                  className="text-red-500 hover:text-red-700 p-1"
+                                  title="Remove Increment"
+                                >
+                                  <i className="fas fa-trash-alt"></i>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                    <div className="grid grid-cols-5 gap-2 pt-1 items-end">
+                      <div>
+                        <label className="text-[10px] text-dark-muted block font-bold">
+                          Revision Date
+                        </label>
+                        <input
+                          type="date"
+                          disabled={!formData.is_salaried_employee}
+                          value={newIncrement.date}
+                          onChange={(e) =>
+                            setNewIncrement({ ...newIncrement, date: e.target.value })
+                          }
+                          className="w-full px-2 py-1 border rounded-lg text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block font-bold">
+                          Hike (₹)
+                        </label>
+                        <input
+                          type="number"
+                          disabled={!formData.is_salaried_employee}
+                          placeholder="e.g. 3000"
+                          value={newIncrement.amount}
+                          onChange={(e) => {
+                            const amtVal = e.target.value;
+                            const currentSal = Number(formData.current_salary) || 0;
+                            let pctVal = newIncrement.percentage;
+                            let updSal = '';
+                            if (amtVal !== '') {
+                              const amtNum = Number(amtVal);
+                              if (currentSal > 0) {
+                                pctVal = ((amtNum / currentSal) * 100).toFixed(2);
+                                updSal = String(currentSal + amtNum);
+                              }
+                            }
+                            setNewIncrement({
+                              ...newIncrement,
+                              amount: amtVal,
+                              percentage: pctVal,
+                              updated_salary: updSal,
+                            });
+                          }}
+                          className="w-full px-2 py-1 border rounded-lg text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block font-bold">
+                          Hike (%)
+                        </label>
+                        <input
+                          type="number"
+                          disabled={!formData.is_salaried_employee}
+                          placeholder="10%"
+                          value={newIncrement.percentage}
+                          onChange={(e) => {
+                            const pctVal = e.target.value;
+                            const currentSal = Number(formData.current_salary) || 0;
+                            let amtVal = newIncrement.amount;
+                            let updSal = '';
+                            if (pctVal !== '') {
+                              const pctNum = Number(pctVal);
+                              if (currentSal > 0) {
+                                amtVal = String(Math.round((currentSal * pctNum) / 100));
+                                updSal = String(currentSal + Number(amtVal));
+                              }
+                            }
+                            setNewIncrement({
+                              ...newIncrement,
+                              percentage: pctVal,
+                              amount: amtVal,
+                              updated_salary: updSal,
+                            });
+                          }}
+                          className="w-full px-2 py-1 border rounded-lg text-xs font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-dark-muted block font-bold">
+                          Updated Salary (₹)
+                        </label>
+                        <input
+                          type="number"
+                          disabled={!formData.is_salaried_employee}
+                          placeholder="Updated Sal"
+                          value={
+                            newIncrement.updated_salary ||
+                            Number(formData.current_salary) + Number(newIncrement.amount || 0) ||
+                            ''
+                          }
+                          onChange={(e) => {
+                            const updVal = e.target.value;
+                            const currentSal = Number(formData.current_salary) || 0;
+                            let amtVal = newIncrement.amount;
+                            let pctVal = newIncrement.percentage;
+                            if (updVal !== '' && currentSal > 0) {
+                              const diff = Number(updVal) - currentSal;
+                              amtVal = String(diff);
+                              pctVal = ((diff / currentSal) * 100).toFixed(2);
+                            }
+                            setNewIncrement({
+                              ...newIncrement,
+                              updated_salary: updVal,
+                              amount: amtVal,
+                              percentage: pctVal,
+                            });
+                          }}
+                          className="w-full px-2 py-1 border rounded-lg text-xs font-bold bg-emerald-50 text-emerald-900 border-emerald-300"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {/* Apply Salary Icon Button */}
+                        <button
+                          type="button"
+                          disabled={
+                            !formData.is_salaried_employee ||
+                            (!newIncrement.amount && !newIncrement.updated_salary)
+                          }
+                          onClick={() => {
+                            const revised =
+                              Number(newIncrement.updated_salary) ||
+                              Number(formData.current_salary) + Number(newIncrement.amount || 0);
+                            if (revised > 0) {
+                              setFormData({ ...formData, current_salary: String(revised) });
+                              showToast(
+                                `Applied updated salary: ₹${revised.toLocaleString('en-IN')}`,
+                                'success'
+                              );
+                            }
+                          }}
+                          className="p-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-extrabold disabled:opacity-40 transition-all flex items-center justify-center h-8 w-8 shrink-0 shadow-xs"
+                          title="Apply Updated Salary directly to Current Salary"
+                        >
+                          <i className="fas fa-check-double text-xs"></i>
+                        </button>
+                        {/* Renamed button to + */}
+                        <button
+                          type="button"
+                          disabled={!formData.is_salaried_employee}
+                          onClick={handleAddIncrementItem}
+                          className="flex-1 h-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-black disabled:opacity-40 transition-all flex items-center justify-center shadow-xs"
+                          title="Add to Compensation History (+)"
+                        >
+                          <i className="fas fa-plus"></i>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Revised Salary Preview & Update Button for New Increment */}
+                    {Number(formData.current_salary) > 0 && Number(newIncrement.amount) > 0 && (
+                      <div className="flex items-center justify-between bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200 text-xs mt-2">
+                        <div>
+                          <span className="font-extrabold text-emerald-950">
+                            Revised Salary Preview:{' '}
+                            <span className="text-emerald-700 font-black">
+                              ₹
+                              {(
+                                Number(formData.current_salary) + Number(newIncrement.amount)
+                              ).toLocaleString('en-IN')}
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-emerald-800 font-semibold block">
+                            (Current ₹{Number(formData.current_salary).toLocaleString('en-IN')} +
+                            Hike ₹{Number(newIncrement.amount).toLocaleString('en-IN')})
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const revised =
+                              Number(formData.current_salary) + Number(newIncrement.amount);
+                            setFormData({ ...formData, current_salary: String(revised) });
+                            showToast(
+                              `Updated Current Salary to ₹${revised.toLocaleString('en-IN')}`,
+                              'success'
+                            );
+                          }}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-extrabold text-xs shadow-xs transition-all flex items-center gap-1.5"
+                        >
+                          <i className="fas fa-check-circle"></i> Set as Current Salary
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 5: Portal Access */}
+                <div className="space-y-3">
+                  <h4 className="text-xs uppercase tracking-wider text-purple-700 font-black border-b pb-1">
+                    Section 5: Portal Access
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-purple-50/30 p-4 rounded-2xl border border-purple-100">
+                    {/* Field 1: Portal Access */}
+                    <div>
+                      <label className="block text-dark-soft mb-1 font-extrabold text-purple-950">
+                        Portal Access
+                      </label>
+                      <div className="inline-flex p-1 bg-white rounded-xl border border-purple-200 shadow-sm">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, login_allowed: true })}
+                          className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            formData.login_allowed
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Allowed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, login_allowed: false })}
+                          className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            !formData.login_allowed
+                              ? 'bg-gray-700 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Not Allowed
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Field 2: Consider As Teacher */}
+                    <div>
+                      <label
+                        className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
+                      >
+                        Consider As Teacher
+                      </label>
+                      <div
+                        className={`inline-flex p-1 rounded-xl border ${
+                          !formData.login_allowed
+                            ? 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'
+                            : 'bg-white border-purple-200 shadow-sm'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          disabled={!formData.login_allowed}
+                          onClick={() => setFormData({ ...formData, is_teacher: true })}
+                          className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            formData.is_teacher
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!formData.login_allowed}
+                          onClick={() => setFormData({ ...formData, is_teacher: false })}
+                          className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
+                            !formData.is_teacher
+                              ? 'bg-gray-700 text-white shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          No
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Field 3: Auth User Mapping */}
+                    <div>
+                      <label
+                        className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed ? 'text-gray-400' : 'text-purple-950'}`}
+                      >
+                        Auth User Mapping
+                      </label>
+                      <select
+                        disabled={!formData.login_allowed}
+                        value={formData.auth_id}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          const matched =
+                            selectedId && Array.isArray(authUsers)
+                              ? authUsers.find((u) => u && String(u.user_id) === String(selectedId))
+                              : null;
+                          setFormData({
+                            ...formData,
+                            auth_id: selectedId,
+                            email: formData.email || (matched ? matched.email : formData.email),
+                            mapped_roles_sum: matched?.role
+                              ? String(matched.role)
+                              : formData.mapped_roles_sum,
+                          });
+                        }}
+                        className={`w-full px-3 py-2 border rounded-xl font-bold outline-none ${
+                          !formData.login_allowed
+                            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'bg-white text-purple-900 border-purple-200'
+                        }`}
+                      >
+                        <option value="">-- Unlinked / No Auth Account --</option>
+                        {(Array.isArray(authUsers) ? authUsers : []).map((u) => {
+                          const mapped = mappedAuthUserMap.get(String(u.user_id));
+                          const isMappedToOther =
+                            mapped && String(mapped.emp_id) !== String(selectedEmployee?.id);
+
+                          return (
+                            <option key={u.user_id} value={u.user_id} disabled={isMappedToOther}>
+                              {u.full_name ? u.full_name : 'User'} - {u.email}
+                              {isMappedToOther
+                                ? ` 🔒 [${mapped.emp_name}]`
+                                : mapped && String(mapped.emp_id) === String(selectedEmployee?.id)
+                                  ? ' ✓ (Currently Linked)'
+                                  : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {/* Status Helper Badge */}
+                      {formData.auth_id && formData.login_allowed && (
+                        <div className="text-[11px] font-bold mt-1">
+                          {(() => {
+                            const mapped = mappedAuthUserMap.get(String(formData.auth_id));
+                            if (!mapped || String(mapped.emp_id) === String(selectedEmployee?.id)) {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 text-purple-700 bg-purple-100/60 px-3 py-1 rounded-lg border border-purple-200">
+                                  <i className="fas fa-link text-purple-600"></i> Linked to this
+                                  employee account
+                                </span>
+                              );
+                            }
                             return (
-                              <span className="inline-flex items-center gap-1.5 text-purple-700 bg-purple-100/60 px-3 py-1 rounded-lg border border-purple-200">
-                                <i className="fas fa-link text-purple-600"></i> Linked to this
-                                employee account
+                              <span className="inline-flex items-center gap-1.5 text-amber-800 bg-amber-100/80 px-3 py-1 rounded-lg border border-amber-300">
+                                <i className="fas fa-exclamation-triangle text-amber-600"></i>
+                                Already mapped to employee: <strong>{mapped.emp_name}</strong> (
+                                {mapped.emp_code})
                               </span>
                             );
-                          }
-                          return (
-                            <span className="inline-flex items-center gap-1.5 text-amber-800 bg-amber-100/80 px-3 py-1 rounded-lg border border-amber-300">
-                              <i className="fas fa-exclamation-triangle text-amber-600"></i>
-                              Already mapped to employee: <strong>{mapped.emp_name}</strong> (
-                              {mapped.emp_code})
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
+                          })()}
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Field 4: Portal Roles */}
-                  <div>
-                    <label
-                      className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed || !formData.auth_id ? 'text-gray-400' : 'text-purple-950'}`}
-                    >
-                      Portal Roles
-                    </label>
-                    <MultiSelectRolesDropdown
-                      disabled={!formData.login_allowed || !formData.auth_id}
-                      value={formData.mapped_roles_sum}
-                      onChange={(nextSum) =>
-                        setFormData({ ...formData, mapped_roles_sum: nextSum })
-                      }
-                    />
-                    {!formData.auth_id && formData.login_allowed && (
-                      <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1">
-                        <i className="fas fa-lock text-amber-600"></i> Auth Mapping is required.
-                      </div>
-                    )}
+                    {/* Field 4: Portal Roles */}
+                    <div>
+                      <label
+                        className={`block text-dark-soft mb-1 font-extrabold ${!formData.login_allowed || !formData.auth_id ? 'text-gray-400' : 'text-purple-950'}`}
+                      >
+                        Portal Roles
+                      </label>
+                      <MultiSelectRolesDropdown
+                        disabled={!formData.login_allowed || !formData.auth_id}
+                        value={formData.mapped_roles_sum}
+                        onChange={(nextSum) =>
+                          setFormData({ ...formData, mapped_roles_sum: nextSum })
+                        }
+                      />
+                      {!formData.auth_id && formData.login_allowed && (
+                        <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1">
+                          <i className="fas fa-lock text-amber-600"></i> Auth Mapping is required.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              </form>
+            </div>
+          </div>
+        </ModalErrorBoundary>
+      )}
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setModalMode(null)}
-                  className="px-5 py-2.5 rounded-xl font-bold bg-light-ui text-dark-soft"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2.5 rounded-xl font-extrabold bg-brand-primary text-white shadow-md"
-                >
-                  {saving ? 'Saving...' : 'Save Employee Record'}
-                </button>
+      {/* Unsaved Changes Confirmation Modal for Record Navigation */}
+      {navConfirmModal && (
+        <div className="fixed inset-0 bg-dark-almostblack/60 backdrop-blur-sm z-[130] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-md w-full p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-amber-600">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-lg shrink-0">
+                <i className="fas fa-triangle-exclamation"></i>
               </div>
-            </form>
+              <div>
+                <h4 className="text-base font-black text-dark-primary">Unsaved Changes</h4>
+                <p className="text-xs text-dark-muted font-semibold mt-0.5">
+                  You have modified fields for <strong>{selectedEmployee?.name}</strong>. Choose how
+                  to proceed before switching:
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 font-bold">
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetEmp = navConfirmModal.targetEmp;
+                  const success = await handleSaveEmployee(null);
+                  if (success) {
+                    switchRecordDirect(targetEmp);
+                  }
+                }}
+                disabled={saving}
+                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+              >
+                <i className="fas fa-floppy-disk"></i> Save & Move to{' '}
+                {navConfirmModal.targetEmp?.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => switchRecordDirect(navConfirmModal.targetEmp)}
+                className="w-full py-2.5 bg-red-50 hover:bg-red-100 text-red-700 font-extrabold text-xs rounded-xl border border-red-200 transition-all flex items-center justify-center gap-2"
+              >
+                <i className="fas fa-trash-arrow-up"></i> Discard & Move
+              </button>
+              <button
+                type="button"
+                onClick={() => setNavConfirmModal(null)}
+                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3415,15 +4385,27 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   non-employees).
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setIsUserRolesModalOpen(false);
-                  setEditingAuthUser(null);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <i className="fas fa-times text-lg"></i>
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleAutoLinkAuthAccounts}
+                  disabled={saving}
+                  className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5"
+                  title="Automatically link employees to auth users by email/name"
+                >
+                  <i className="fas fa-link"></i>{' '}
+                  {saving ? 'Linking...' : 'Auto-Link Auth Accounts'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsUserRolesModalOpen(false);
+                    setEditingAuthUser(null);
+                  }}
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-800 flex items-center justify-center transition-all"
+                >
+                  <i className="fas fa-times text-base"></i>
+                </button>
+              </div>
             </div>
 
             {/* Search filter */}
@@ -3450,7 +4432,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {authUsers
+                  {(Array.isArray(authUsers) ? authUsers : [])
                     .filter((u) => {
                       if (!userRolesSearch.trim()) return true;
                       const q = userRolesSearch.toLowerCase();
@@ -3579,8 +4561,256 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           </div>
         </div>
       )}
+
+      {/* Bulk Apply Increments by Date/Month Modal */}
+      {isBulkApplyModalOpen && (
+        <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-2xl w-full p-6 space-y-5 my-8 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div>
+                <h3 className="text-lg font-black text-dark-primary flex items-center gap-2">
+                  <i className="fas fa-calendar-check text-emerald-600"></i> Bulk Apply Increments
+                  to Current Salary
+                </h3>
+                <p className="text-xs text-dark-muted font-semibold mt-0.5">
+                  Select a target month or exact date to find matching compensation history entries
+                  and update employees' Current Salary in bulk.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsBulkApplyModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times text-lg"></i>
+              </button>
+            </div>
+
+            {/* Date/Month Selection Controls */}
+            <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 space-y-3">
+              <div className="flex items-center gap-4 text-xs font-bold">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="filterMode"
+                    checked={bulkApplyFilterMode === 'month'}
+                    onChange={() => {
+                      setBulkApplyFilterMode('month');
+                      const now = new Date();
+                      setBulkApplyDateValue(
+                        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+                      );
+                    }}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  Filter by Month (YYYY-MM)
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="filterMode"
+                    checked={bulkApplyFilterMode === 'date'}
+                    onChange={() => {
+                      setBulkApplyFilterMode('date');
+                      const now = new Date();
+                      setBulkApplyDateValue(now.toISOString().split('T')[0]);
+                    }}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  Filter by Specific Date (YYYY-MM-DD)
+                </label>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-extrabold text-emerald-950 shrink-0">
+                  Target {bulkApplyFilterMode === 'month' ? 'Effective Month' : 'Effective Date'}:
+                </label>
+                <input
+                  type={bulkApplyFilterMode === 'month' ? 'month' : 'date'}
+                  value={bulkApplyDateValue}
+                  onChange={(e) => setBulkApplyDateValue(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-extrabold text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+            </div>
+
+            {/* Matching Preview List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-dark-primary">
+                <span>
+                  Matching Employees ({matchingBulkIncrements.length} found,{' '}
+                  {selectedBulkEmpIds.length} selected):
+                </span>
+              </div>
+
+              {matchingBulkIncrements.length === 0 ? (
+                <div className="p-8 text-center bg-gray-50 rounded-2xl border border-dashed text-xs text-dark-muted font-semibold">
+                  <i className="fas fa-calendar-xmark text-2xl text-gray-300 mb-2 block"></i>
+                  No employees found with compensation history entry matching "{bulkApplyDateValue}
+                  ".
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-emerald-50 border-b text-[10px] uppercase tracking-wider text-emerald-950 font-bold">
+                      <tr>
+                        <th className="p-2.5 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              matchingBulkIncrements.length > 0 &&
+                              selectedBulkEmpIds.length === matchingBulkIncrements.length
+                            }
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedBulkEmpIds(
+                                  matchingBulkIncrements.map((item) => String(item.emp.id))
+                                );
+                              } else {
+                                setSelectedBulkEmpIds([]);
+                              }
+                            }}
+                            className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            title="Select All / Deselect All"
+                          />
+                        </th>
+                        <th className="p-2.5">Employee</th>
+                        <th className="p-2.5">Revision Date</th>
+                        <th className="p-2.5">Hike Amount</th>
+                        <th className="p-2.5">Current Salary</th>
+                        <th className="p-2.5">Proposed Salary</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 font-semibold">
+                      {matchingBulkIncrements.map((item, idx) => {
+                        const isChecked = selectedBulkEmpIds.includes(String(item.emp.id));
+                        return (
+                          <tr
+                            key={idx}
+                            className={`hover:bg-emerald-50/30 ${isChecked ? 'bg-emerald-50/20' : 'opacity-60'}`}
+                          >
+                            <td className="p-2.5 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const empIdStr = String(item.emp.id);
+                                  if (e.target.checked) {
+                                    setSelectedBulkEmpIds((prev) => [...prev, empIdStr]);
+                                  } else {
+                                    setSelectedBulkEmpIds((prev) =>
+                                      prev.filter((id) => id !== empIdStr)
+                                    );
+                                  }
+                                }}
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <div className="font-extrabold text-dark-primary">
+                                {item.emp.name}
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-mono">
+                                {item.emp.emp_id || `ID: ${item.emp.id}`}
+                              </div>
+                            </td>
+                            <td className="p-2.5 font-mono">{item.matchingEntry.date || 'N/A'}</td>
+                            <td className="p-2.5 text-emerald-700 font-bold">
+                              +₹{(Number(item.matchingEntry.amount) || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-2.5 text-gray-600">
+                              ₹{(Number(item.currentSalary) || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="p-2.5 font-extrabold text-emerald-800">
+                              ₹{item.proposedSalary.toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setIsBulkApplyModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-light-ui text-dark-soft"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={selectedBulkEmpIds.length === 0 || saving}
+                onClick={handleExecuteBulkApplyIncrements}
+                className="px-5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                <i className="fas fa-check-double"></i>
+                {saving
+                  ? 'Updating Salaries...'
+                  : `Apply to ${selectedBulkEmpIds.length} Selected Employees`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default EmployeeRecordsView;
+// Top-Level View Error Boundary to isolate component exceptions and display friendly fallback
+class ViewErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('EmployeeRecordsView Error Boundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-4xl mx-auto my-8 bg-white rounded-3xl border border-red-200 shadow-xl space-y-4 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto text-2xl">
+            <i className="fas fa-bug"></i>
+          </div>
+          <h3 className="text-lg font-black text-dark-primary">
+            Something went wrong in Employee Records
+          </h3>
+          <p className="text-xs text-dark-muted font-bold">
+            An unexpected error occurred while rendering the view:
+          </p>
+          <div className="p-3 bg-red-50 text-red-800 text-xs font-mono rounded-xl border border-red-200 text-left overflow-x-auto max-h-40">
+            {this.state.error?.toString()}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-6 py-2.5 bg-brand-primary hover:bg-brand-primary/90 text-white font-extrabold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-2"
+          >
+            <i className="fas fa-rotate"></i> Reload Page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SafeEmployeeRecordsView = (props) => (
+  <ViewErrorBoundary>
+    <EmployeeRecordsView {...props} />
+  </ViewErrorBoundary>
+);
+
+export default SafeEmployeeRecordsView;

@@ -169,7 +169,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('employees').select('*'));
+          queries.push(supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true));
         } else {
           let teacherData = teacherRecord || null;
           if (!teacherData) {
