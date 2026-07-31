@@ -107,7 +107,8 @@ const PaymentSettlementModal = ({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-hand-holding-dollar text-teal-600"></i> Monthly Payment Settlement
+              <i className="fas fa-hand-holding-dollar text-teal-600"></i> Monthly Payment
+              Settlement
             </h3>
             <p className="text-xs text-dark-muted font-semibold mt-0.5">
               {selectedPaymentItem.emp?.name} ({selectedPaymentItem.organization}) — Target Month:{' '}
@@ -131,19 +132,25 @@ const PaymentSettlementModal = ({
             </span>
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold text-gray-500 block">Extras / Deduc.</span>
+            <span className="text-[10px] uppercase font-bold text-gray-500 block">
+              Extras / Deduc.
+            </span>
             <span className="font-black text-blue-700">
               +₹{currentExtras} / -₹{currentDeductions}
             </span>
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold text-gray-500 block">Total Payable</span>
+            <span className="text-[10px] uppercase font-bold text-gray-500 block">
+              Total Payable
+            </span>
             <span className="font-black text-dark-primary">
               ₹{totalPayable.toLocaleString('en-IN')}
             </span>
           </div>
           <div>
-            <span className="text-[10px] uppercase font-bold text-gray-500 block">Remaining Bal</span>
+            <span className="text-[10px] uppercase font-bold text-gray-500 block">
+              Remaining Bal
+            </span>
             <span className="font-black text-rose-600">
               ₹{currentBalance.toLocaleString('en-IN')}
             </span>
@@ -157,7 +164,7 @@ const PaymentSettlementModal = ({
             <div className="space-y-1.5">
               <h4 className="text-xs font-black text-dark-primary flex items-center justify-between">
                 <span>
-                  <i className="fas fa-history text-gray-400 mr-1.5"></i> Existing Payment Settlements
+                  <i className="fas fa-history text-gray-400 mr-1.5"></i> Previous Payments
                 </span>
                 <span className="text-emerald-700 font-extrabold">
                   Total Paid: ₹{pastPaid.toLocaleString('en-IN')}
@@ -194,7 +201,10 @@ const PaymentSettlementModal = ({
                               {h.paid_through || 'N/A'}
                             </span>
                           </td>
-                          <td className="p-2 text-gray-500 text-[11px] truncate max-w-[100px]" title={h.notes}>
+                          <td
+                            className="p-2 text-gray-500 text-[11px] truncate max-w-[100px]"
+                            title={h.notes}
+                          >
                             {h.notes || '-'}
                           </td>
                           <td className="p-2 text-center">
@@ -247,9 +257,7 @@ const PaymentSettlementModal = ({
                     type="date"
                     required
                     value={settlementForm.date}
-                    onChange={(e) =>
-                      setSettlementForm({ ...settlementForm, date: e.target.value })
-                    }
+                    onChange={(e) => setSettlementForm({ ...settlementForm, date: e.target.value })}
                     className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-bold outline-none focus:ring-2 focus:ring-teal-400"
                   />
                 </div>
@@ -420,7 +428,9 @@ const PaymentSettlementModal = ({
                                 : 'bg-white text-gray-700 border-gray-300 hover:bg-rose-50'
                             }`}
                           >
-                            <i className={`fas ${isSelected ? 'fa-check' : 'fa-plus'} text-[10px]`}></i>
+                            <i
+                              className={`fas ${isSelected ? 'fa-check' : 'fa-plus'} text-[10px]`}
+                            ></i>
                             {opt}
                           </button>
                         );
@@ -457,7 +467,9 @@ const PaymentSettlementModal = ({
                               : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
                           }`}
                         >
-                          <i className={`fas ${isSelected ? 'fa-check' : 'fa-plus'} text-[10px]`}></i>
+                          <i
+                            className={`fas ${isSelected ? 'fa-check' : 'fa-plus'} text-[10px]`}
+                          ></i>
                           {opt}
                         </button>
                       );
@@ -471,14 +483,13 @@ const PaymentSettlementModal = ({
             {settlementType === 'complete' && (
               <div className="pt-2 space-y-1">
                 <label className="block text-dark-primary font-extrabold text-xs">
-                  Settlement Notes / Memo <span className="text-rose-600 font-bold">* (Mandatory)</span>
+                  Settlement Notes / Memo{' '}
+                  <span className="text-rose-600 font-bold">* (Mandatory)</span>
                 </label>
                 <input
                   type="text"
                   value={settlementForm.notes}
-                  onChange={(e) =>
-                    setSettlementForm({ ...settlementForm, notes: e.target.value })
-                  }
+                  onChange={(e) => setSettlementForm({ ...settlementForm, notes: e.target.value })}
                   placeholder="Enter mandatory note explaining reason for full settlement..."
                   className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-teal-400"
                 />

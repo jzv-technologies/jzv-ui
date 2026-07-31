@@ -12,6 +12,7 @@ const SalaryPaymentLogView = ({
   handleInitializeMonthRecords,
   handleOpenExtrasModal,
   handleOpenPaymentModal,
+  handleOpenHistoryModal,
 }) => {
   if (trackerRecords.length === 0) {
     return (
@@ -155,6 +156,7 @@ const SalaryPaymentLogView = ({
                     items={orgItems}
                     onOpenExtras={handleOpenExtrasModal}
                     onOpenPayment={handleOpenPaymentModal}
+                    onOpenHistory={handleOpenHistoryModal}
                     canUpdate={canUpdateSalaryTracker}
                   />
                 </div>

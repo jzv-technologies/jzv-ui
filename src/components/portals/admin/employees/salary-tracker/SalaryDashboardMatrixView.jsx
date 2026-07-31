@@ -6,18 +6,6 @@ const SalaryDashboardMatrixView = ({
   matrixLookupMap,
   handleOpenMatrixPaymentModal,
 }) => {
-  if (matrixFilteredGroupedEmployees.length === 0) {
-    return (
-      <div className="bg-white p-12 text-center rounded-3xl border border-light-border border-dashed">
-        <i className="fas fa-folder-open text-4xl text-gray-300 mb-3"></i>
-        <h3 className="text-base font-extrabold text-dark-primary">No Matching Records Found</h3>
-        <p className="text-xs text-dark-muted mt-1">
-          No salaried employees match your search criteria.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
       {matrixFilteredGroupedEmployees.map(([orgName, orgEmps]) => (
@@ -25,8 +13,8 @@ const SalaryDashboardMatrixView = ({
           key={orgName}
           className="bg-white rounded-3xl border border-light-border shadow-sm overflow-hidden space-y-4 p-5"
         >
-          {/* Organization Card Header with Table Color Legends */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-3">
+          {/* Organization Header */}
+          <div className="flex items-center justify-between border-b pb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-base font-black shadow-xs">
                 <i className="fas fa-building"></i>
@@ -38,46 +26,40 @@ const SalaryDashboardMatrixView = ({
                 </span>
               </div>
             </div>
-
-            {/* Table Status Color Legends */}
-            <div className="flex items-center gap-3 text-xs font-bold shrink-0 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Paid
+            {/* Legend indicators */}
+            <div className="flex items-center gap-3 text-[11px] font-extrabold">
+              <span className="flex items-center gap-1.5 text-emerald-700">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Paid
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Partial
+              <span className="flex items-center gap-1.5 text-amber-700">
+                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Partial
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> Unpaid
+              <span className="flex items-center gap-1.5 text-rose-700">
+                <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span> Unpaid
               </span>
-              <span className="inline-flex items-center gap-1 text-gray-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-gray-200 border border-gray-300 inline-block"></span>{' '}
-                Uninitialized
+              <span className="flex items-center gap-1.5 text-gray-500">
+                <span className="w-3 h-3 rounded-full bg-gray-200 border border-gray-300 inline-block"></span> Uninitialized
               </span>
             </div>
           </div>
 
-          {/* Dedicated Table for this Org */}
-          <div className="overflow-x-auto border border-gray-200 rounded-2xl">
-            <table className="w-full text-left text-xs font-semibold min-w-[850px]">
-              <thead className="bg-teal-50/70 border-b border-teal-100 text-[10px] uppercase tracking-wider text-teal-950 font-black">
+          {/* Matrix Grid Table */}
+          <div className="overflow-x-auto border border-gray-200 rounded-2xl shadow-2xs">
+            <table className="w-full text-left text-xs min-w-[900px]">
+              <thead className="bg-gray-50 border-b text-[10px] uppercase tracking-wider text-dark-muted font-bold">
                 <tr>
-                  <th className="p-3 min-w-[240px]">Employee Details</th>
+                  <th className="p-3.5 w-56">Employee</th>
+                  <th className="p-3.5 w-28 text-right">Base Salary</th>
                   {matrixMonths.map((m) => (
                     <th
                       key={`${m.year}-${m.month}`}
-                      className={`p-2.5 text-center min-w-[75px] ${
+                      className={`p-3 text-center ${
                         m.isCurrent
-                          ? 'bg-teal-100 text-teal-950 font-black border-x border-teal-200'
+                          ? 'bg-teal-100/70 text-teal-900 font-black border-x border-teal-200'
                           : ''
                       }`}
                     >
                       {m.label}
-                      {m.isCurrent && (
-                        <span className="block text-[8px] uppercase tracking-tighter text-teal-800">
-                          (Selected)
-                        </span>
-                      )}
                     </th>
                   ))}
                 </tr>
@@ -86,17 +68,26 @@ const SalaryDashboardMatrixView = ({
                 {orgEmps.map((emp) => {
                   const org = emp.organization || 'Jamia Zaytoonah';
                   return (
-                    <tr key={emp.id} className="hover:bg-teal-50/20 transition-colors">
-                      {/* Single Combined Column for ID, Employee & Org */}
-                      <td className="p-3">
+                    <tr key={emp.id} className="hover:bg-gray-50/70 transition-colors">
+                      {/* Employee Info */}
+                      <td className="p-3.5">
                         <div className="font-extrabold text-dark-primary text-xs">{emp.name}</div>
                         <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">
-                          <span>{emp.emp_id || `ID: ${emp.id}`} | </span>
-                          <span className="text-teal-800 font-bold">{org}</span>
+                          <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700">
+                            {emp.emp_id || `EMP-${emp.id}`}
+                          </span>
+                          <span className="text-teal-800 font-bold truncate max-w-[110px]">
+                            {emp.designation || 'Teacher'}
+                          </span>
                         </div>
                       </td>
 
-                      {/* 9 Month Swatches */}
+                      {/* Current Salary */}
+                      <td className="p-3.5 text-right font-black text-emerald-700 text-xs">
+                        ₹{Number(emp.current_salary || 0).toLocaleString('en-IN')}
+                      </td>
+
+                      {/* Month Swatches */}
                       {matrixMonths.map((m) => {
                         const key = `${emp.id}_${org}_${m.year}_${m.month}`;
                         const record = matrixLookupMap.get(key);

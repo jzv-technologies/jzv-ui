@@ -153,12 +153,54 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         localStorage.setItem('jzv_employees_local_data', JSON.stringify(data));
       }
 
-      const { data: authData, error: authErr } = await supabase.rpc('get_auth_users_with_roles');
-      if (!authErr && authData) {
-        setAuthUsers(authData);
+      // Fetch Auth Users & Roles with Fallback
+      let usersList = [];
+      try {
+        const { data: authData, error: authErr } = await supabase.rpc('get_auth_users_with_roles');
+        if (!authErr && Array.isArray(authData) && authData.length > 0) {
+          usersList = authData;
+        }
+      } catch (e) {
+        console.warn('RPC get_auth_users_with_roles failed, trying view fallback...', e);
       }
+
+      if (usersList.length === 0) {
+        try {
+          const { data: viewData, error: viewErr } = await supabase.from('admin_users_view').select('*');
+          if (!viewErr && Array.isArray(viewData) && viewData.length > 0) {
+            usersList = viewData;
+          }
+        } catch (e) {
+          console.warn('admin_users_view fetch failed:', e);
+        }
+      }
+
+      // Offline / Local state fallback if usersList is still empty
+      if (usersList.length === 0) {
+        const localEmpsRaw = localStorage.getItem('jzv_employees_local_data');
+        if (localEmpsRaw) {
+          try {
+            const localEmps = JSON.parse(localEmpsRaw);
+            const constructedMap = new Map();
+            localEmps.forEach((e) => {
+              if (e.auth_id || e.email) {
+                const uid = e.auth_id || `local_user_${e.id}`;
+                constructedMap.set(uid, {
+                  user_id: uid,
+                  email: e.email || `${(e.name || 'user').toLowerCase().replace(/\s+/g, '')}@zaytoonah.in`,
+                  full_name: e.name,
+                  role: Number(e.mapped_roles_sum) || 8,
+                });
+              }
+            });
+            usersList = Array.from(constructedMap.values());
+          } catch (e) {}
+        }
+      }
+
+      setAuthUsers(usersList);
     } catch (err) {
-      console.error('Error fetching employees:', err);
+      console.error('Error fetching employees or auth users:', err);
     } finally {
       setLoading(false);
     }
@@ -414,38 +456,76 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     }
   };
 
+const normalizeDateToISO = (val) => {
+  if (!val) return null;
+  const str = String(val).trim();
+  if (!str) return null;
+
+  // Already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const ddmmyyyyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const day = ddmmyyyyMatch[1].padStart(2, '0');
+    const month = ddmmyyyyMatch[2].padStart(2, '0');
+    const year = ddmmyyyyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // YYYY/MM/DD or YYYY.MM.DD
+  const yyyymmddMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (yyyymmddMatch) {
+    const year = yyyymmddMatch[1];
+    const month = yyyymmddMatch[2].padStart(2, '0');
+    const day = yyyymmddMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try JS Date parsing fallback
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+};
+
   const buildTeacherPayload = (data) => ({
     name: data.name,
-    father_husband_name: data.father_husband_name,
-    is_male: data.is_male,
-    date_of_birth: data.date_of_birth || null,
-    blood_group: data.blood_group,
-    marital_status: data.marital_status,
-    highest_education: data.highest_education,
-    primary_mobile: data.primary_mobile,
-    secondary_mobile: data.secondary_mobile,
-    email: data.email,
-    communication_address: data.communication_address,
-    bank_account_name: data.bank_account_name,
-    bank_account_number: data.bank_account_number,
-    bank_ifsc_code: data.bank_ifsc_code,
-    bank_name: data.bank_name,
-    bank_branch_name: data.bank_branch_name,
-    emergency_contact_1: data.emergency_contact_1,
-    emergency_contact_2: data.emergency_contact_2,
-    emp_id: data.is_salaried_employee ? data.emp_id : null,
-    organization: data.organization,
-    designation: data.designation,
-    role: data.designation,
-    joining_date: data.joining_date || null,
-    is_salaried_employee: data.is_salaried_employee,
+    father_husband_name: data.father_husband_name || null,
+    is_male: data.is_male !== false,
+    date_of_birth: normalizeDateToISO(data.date_of_birth),
+    blood_group: data.blood_group || null,
+    marital_status: data.marital_status || null,
+    highest_education: data.highest_education || null,
+    primary_mobile: data.primary_mobile || null,
+    secondary_mobile: data.secondary_mobile || null,
+    email: data.email || null,
+    communication_address: data.communication_address || null,
+    bank_account_name: data.bank_account_name || null,
+    bank_account_number: data.bank_account_number || null,
+    bank_ifsc_code: data.bank_ifsc_code || null,
+    bank_name: data.bank_name || null,
+    bank_branch_name: data.bank_branch_name || null,
+    emergency_contact_1: data.emergency_contact_1 || {},
+    emergency_contact_2: data.emergency_contact_2 || {},
+    emp_id: data.is_salaried_employee ? (data.emp_id || null) : null,
+    organization: data.organization || 'Jamia Zaytoonah',
+    designation: data.designation || 'Teacher',
+    joining_date: normalizeDateToISO(data.joining_date),
+    is_salaried_employee: data.is_salaried_employee !== false,
     current_salary: data.is_salaried_employee ? Number(data.current_salary) || 0 : 0,
-    compensation_history: data.compensation_history || [],
-    is_teacher: data.is_teacher,
-    is_active: data.is_active,
-    login_allowed: data.login_allowed,
+    compensation_history: Array.isArray(data.compensation_history) ? data.compensation_history : [],
+    is_teacher: data.is_teacher !== false,
+    is_active: data.is_active !== false,
+    login_allowed: data.login_allowed === true,
     auth_id: data.auth_id || null,
-    mapped_roles_sum: Number(data.mapped_roles_sum) || 8,
   });
 
   const buildEmployeePayload = buildTeacherPayload;
@@ -464,7 +544,6 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
       'primary_mobile',
       'email',
       'auth_id',
-      'mapped_roles_sum',
     ];
     checkKeys.forEach((key) => {
       if (String(oldObj[key] ?? '') !== String(newObj[key] ?? '')) {
@@ -1201,6 +1280,18 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           {/* Action Icon Buttons */}
           <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start">
             <button
+              onClick={fetchEmployees}
+              disabled={loading}
+              className="w-10 h-10 bg-gray-50 text-gray-700 hover:bg-gray-100 rounded-xl text-sm font-bold border border-gray-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+              title="Refresh Employee Records"
+            >
+              <i
+                className={`fas fa-rotate-right ${
+                  loading ? 'fa-spin text-brand-primary' : 'text-gray-600'
+                } text-base`}
+              ></i>
+            </button>
+            <button
               onClick={handleExportEmployeesExcel}
               className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
               title="Export Excel"
@@ -1216,13 +1307,6 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                   title="Manage Portal User Roles"
                 >
                   <i className="fas fa-user-shield text-purple-600 text-base"></i>
-                </button>
-                <button
-                  onClick={() => setIsBulkApplyModalOpen(true)}
-                  className="w-10 h-10 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                  title="Apply Increment Salaries by Effective Date/Month ($)"
-                >
-                  <i className="fas fa-dollar-sign text-emerald-600 text-base"></i>
                 </button>
                 <button
                   onClick={() => setIsCsvImportOpen(true)}
@@ -1254,6 +1338,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         handleOpenModal={handleOpenModal}
         isAdmin={isAdmin}
         isManagement={isManagement}
+        authUsers={authUsers}
       />
 
       {/* Add / Edit Employee Modal */}

@@ -11,6 +11,62 @@ const BulkImportModal = ({
 }) => {
   if (!isCsvImportOpen) return null;
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'Emp ID',
+      'Name',
+      'Father/Husband Name',
+      'Gender',
+      'Date of Birth',
+      'Blood Group',
+      'Marital Status',
+      'Highest Education',
+      'Primary Mobile',
+      'Secondary Mobile',
+      'Email',
+      'Communication Address',
+      'Organization',
+      'Designation',
+      'Joining Date',
+      'Is Salaried Employee',
+      'Current Salary',
+      'Login Allowed',
+    ];
+
+    const sampleRow = [
+      'EMP-001',
+      'Sample Teacher',
+      'Father Name',
+      'Male',
+      '1990-01-15',
+      'O+',
+      'Married',
+      'Master of Arts',
+      '9876543210',
+      '9876543211',
+      'teacher@zaytoonah.in',
+      '123 Main Street',
+      'Jamia Zaytoonah',
+      'Teacher',
+      '2022-06-01',
+      'TRUE',
+      '35000',
+      'TRUE',
+    ];
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), sampleRow.join(',')].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'employee_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="fixed inset-0 bg-dark-almostblack/40 backdrop-blur-sm z-[110] flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl border border-light-border shadow-2xl max-w-4xl w-full p-6 space-y-5 my-8 animate-in zoom-in-95 duration-200">
@@ -39,7 +95,14 @@ const BulkImportModal = ({
         {/* File Upload Box */}
         <div className="border-2 border-dashed border-emerald-200 bg-emerald-50/40 rounded-2xl p-6 text-center space-y-3">
           <i className="fas fa-cloud-arrow-up text-3xl text-emerald-600 mb-1"></i>
-          <div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-4 py-2 rounded-xl font-extrabold text-xs inline-flex items-center gap-2 shadow-xs transition-all cursor-pointer"
+            >
+              <i className="fas fa-download text-emerald-600"></i> Download Template (.csv)
+            </button>
             <label className="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-extrabold text-xs inline-flex items-center gap-2 shadow-sm transition-all">
               <i className="fas fa-file-excel"></i> Choose Excel / CSV File
               <input
@@ -49,10 +112,10 @@ const BulkImportModal = ({
                 className="hidden"
               />
             </label>
-            <p className="text-[10px] text-gray-500 font-semibold mt-2">
-              Supported formats: .xlsx, .xls, .csv
-            </p>
           </div>
+          <p className="text-[10px] text-gray-500 font-semibold">
+            Supported formats: .xlsx, .xls, .csv
+          </p>
         </div>
 
         {/* Preview Table */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 const SYSTEM_ROLES = [
   { id: 1, name: 'Guest' },
@@ -28,7 +28,34 @@ const EmployeeRecordsTable = ({
   handleOpenModal,
   isAdmin,
   isManagement,
+  authUsers = [],
 }) => {
+  // Map auth_id -> role sum from user_roles
+  const authUserRoleMap = useMemo(() => {
+    const map = new Map();
+    if (Array.isArray(authUsers)) {
+      authUsers.forEach((u) => {
+        if (u && u.user_id && u.role != null) {
+          map.set(String(u.user_id), u.role);
+        }
+      });
+    }
+    return map;
+  }, [authUsers]);
+
+  // Group employees by Organization
+  const groupedEmployees = useMemo(() => {
+    const groups = {};
+    filteredEmployees.forEach((emp) => {
+      const org = emp.organization || 'Jamia Zaytoonah';
+      if (!groups[org]) {
+        groups[org] = [];
+      }
+      groups[org].push(emp);
+    });
+    return groups;
+  }, [filteredEmployees]);
+
   if (loading) {
     return (
       <div className="bg-white p-12 text-center rounded-3xl border border-light-border">
@@ -51,227 +78,268 @@ const EmployeeRecordsTable = ({
   }
 
   return (
-    <div className="bg-white rounded-3xl border border-light-border shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs font-semibold min-w-[900px]">
-          <thead className="bg-gray-50 border-b text-[10px] uppercase tracking-wider text-dark-muted font-bold">
-            <tr>
-              <th
-                onClick={() => handleSort('emp_id')}
-                className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center gap-1.5">
-                  Emp ID
-                  <i
-                    className={`fas ${
-                      sortField === 'emp_id'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('name')}
-                className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center gap-1.5">
-                  Employee
-                  <i
-                    className={`fas ${
-                      sortField === 'name'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('designation')}
-                className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center gap-1.5">
-                  Designation & Org
-                  <i
-                    className={`fas ${
-                      sortField === 'designation'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-              <th className="p-4">Contact</th>
-              <th
-                onClick={() => handleSort('mapped_roles_sum')}
-                className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center gap-1.5">
-                  Portal Role
-                  <i
-                    className={`fas ${
-                      sortField === 'mapped_roles_sum'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('current_salary')}
-                className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center gap-1.5">
-                  Salary
-                  <i
-                    className={`fas ${
-                      sortField === 'current_salary'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort('is_active')}
-                className="p-4 text-center cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  Status
-                  <i
-                    className={`fas ${
-                      sortField === 'is_active'
-                        ? sortOrder === 'asc'
-                          ? 'fa-sort-up text-brand-primary'
-                          : 'fa-sort-down text-brand-primary'
-                        : 'fa-sort text-gray-300'
-                    }`}
-                  ></i>
-                </div>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filteredEmployees.map((emp) => {
-              return (
-                <tr
-                  key={emp.id}
-                  onDoubleClick={() => (isAdmin || isManagement) && handleOpenModal('edit', emp)}
-                  className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  title="Double-click record to open edit modal"
-                >
-                  <td className="p-4">
-                    <span className="font-extrabold text-dark-primary text-xs bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 inline-block">
-                      {emp.emp_id || `EMP-${String(emp.id).padStart(3, '0')}`}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="font-extrabold text-dark-primary text-sm flex items-center gap-2">
-                          {emp.is_male ? (
-                            <i className="fa fa-male text-blue-600"></i>
-                          ) : (
-                            <i className="fa fa-female text-pink-600"></i>
-                          )}
-                          {emp.name}
-                        </div>
-                        <span className="text-[10px] text-dark-muted">
-                          {emp.designation || emp.role || 'Teacher'}
-                        </span>
-                      </div>
+    <div className="space-y-6">
+      {Object.entries(groupedEmployees).map(([orgName, orgEmps]) => (
+        <div
+          key={orgName}
+          className="bg-white rounded-3xl border border-light-border shadow-sm overflow-hidden"
+        >
+          {/* Organization Header Card Bar */}
+          <div className="bg-gradient-to-r from-gray-50 via-blue-50/20 to-gray-50 px-5 py-3.5 border-b border-light-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
+                <i className="fas fa-building text-sm"></i>
+              </div>
+              <div>
+                <h3 className="font-black text-dark-primary text-sm tracking-tight">{orgName}</h3>
+                <span className="text-[10px] text-dark-muted font-bold">
+                  {orgEmps.length} {orgEmps.length === 1 ? 'Employee' : 'Employees'}
+                </span>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-white border border-gray-200 text-gray-700 rounded-full text-xs font-extrabold shadow-2xs">
+              {orgEmps.filter((e) => e.is_active !== false).length} Active
+            </span>
+          </div>
+
+          {/* Table Content */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-semibold min-w-[900px]">
+              <thead className="bg-gray-50/70 border-b text-[10px] uppercase tracking-wider text-dark-muted font-bold">
+                <tr>
+                  <th
+                    onClick={() => handleSort('emp_id')}
+                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Emp ID
+                      <i
+                        className={`fas ${
+                          sortField === 'emp_id'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
                     </div>
-                  </td>
-                  <td className="p-4">
-                    <span
-                      className="font-bold text-dark-primary block"
-                      title={emp.organization}
-                    >
-                      {emp.organization || 'Jamia Zaytoonah'}
-                    </span>
-                    <span className="text-[10px] text-dark-muted font-bold block max-w-[180px] truncate">
-                      Joined: {emp.joining_date || 'N/A'}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="text-dark-primary font-bold">
-                      {emp.primary_mobile || 'No Phone'}
+                  </th>
+                  <th
+                    onClick={() => handleSort('name')}
+                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Employee
+                      <i
+                        className={`fas ${
+                          sortField === 'name'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
                     </div>
-                    <div className="text-[10px] text-dark-muted font-semibold">
-                      {emp.email || 'No Email'}
+                  </th>
+                  <th
+                    onClick={() => handleSort('designation')}
+                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Designation & Org
+                      <i
+                        className={`fas ${
+                          sortField === 'designation'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
                     </div>
-                  </td>
-                  <td className="p-4 space-y-1">
-                    <div className="font-extrabold text-purple-950 text-xs">
-                      {formatPortalRoles(emp.mapped_roles_sum)}
+                  </th>
+                  <th className="p-4">Contact</th>
+                  <th
+                    onClick={() => handleSort('mapped_roles_sum')}
+                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Portal Role
+                      <i
+                        className={`fas ${
+                          sortField === 'mapped_roles_sum'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
                     </div>
-                  </td>
-                  <td className="p-4 font-bold text-emerald-700">
-                    {emp.is_salaried_employee !== false ? (
-                      emp.current_salary ? (
-                        `₹${Number(emp.current_salary).toLocaleString('en-IN')}`
-                      ) : (
-                        <span className="text-red-500 font-extrabold">Required</span>
-                      )
-                    ) : (
-                      <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-extrabold">
-                        Service
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-center">
-                    <div className="flex items-center gap-1 flex-wrap justify-center">
-                      {emp.auth_id ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 px-1 py-0.5 rounded-full">
-                          <i className="fas fa-link text-purple-500" title="Login Linked"></i>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 px-1 py-0.5 rounded-full">
-                          <i
-                            className="fas fa-unlink text-amber-500"
-                            title="No Login Linked"
-                          ></i>
-                        </span>
-                      )}
-                      {emp.login_allowed ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 px-1 py-0.5 rounded-full">
-                          <i className="fas fa-user text-emerald-500" title="Login Allowed"></i>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 px-1 py-0.5 rounded-full">
-                          <i
-                            className="fas fa-user-slash text-red-400"
-                            title="Login Not Allowed"
-                          ></i>
-                        </span>
-                      )}
-                      {emp.is_active !== false ? (
-                        <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full text-[10px] font-bold">
-                          Inactive
-                        </span>
-                      )}
+                  </th>
+                  <th
+                    onClick={() => handleSort('current_salary')}
+                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      Salary
+                      <i
+                        className={`fas ${
+                          sortField === 'current_salary'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
                     </div>
-                  </td>
+                  </th>
+                  <th
+                    onClick={() => handleSort('is_active')}
+                    className="p-4 text-center cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      Status
+                      <i
+                        className={`fas ${
+                          sortField === 'is_active'
+                            ? sortOrder === 'asc'
+                              ? 'fa-sort-up text-brand-primary'
+                              : 'fa-sort-down text-brand-primary'
+                            : 'fa-sort text-gray-300'
+                        }`}
+                      ></i>
+                    </div>
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {orgEmps.map((emp) => {
+                  let roleSum = null;
+                  if (emp.auth_id && authUserRoleMap.has(String(emp.auth_id))) {
+                    roleSum = authUserRoleMap.get(String(emp.auth_id));
+                  }
+                  if (!roleSum || String(roleSum).trim() === '' || String(roleSum) === '0') {
+                    roleSum = emp.mapped_roles_sum;
+                  }
+                  if (!roleSum || String(roleSum).trim() === '' || String(roleSum) === '0') {
+                    const desig = (emp.designation || emp.role || '').toLowerCase();
+                    if (desig.includes('teacher')) roleSum = 8;
+                    else if (desig.includes('admin') || desig.includes('superadmin')) roleSum = 32;
+                    else if (desig.includes('management') || desig.includes('principal')) roleSum = 16;
+                    else if (desig.includes('staff') || desig.includes('accountant') || desig.includes('librarian')) roleSum = 4;
+                  }
+
+                  return (
+                    <tr
+                      key={emp.id}
+                      onDoubleClick={() => (isAdmin || isManagement) && handleOpenModal('edit', emp)}
+                      className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                      title="Double-click record to open edit modal"
+                    >
+                      <td className="p-4">
+                        <span className="font-extrabold text-dark-primary text-xs bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 inline-block">
+                          {emp.emp_id || `EMP-${String(emp.id).padStart(3, '0')}`}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div>
+                            <div className="font-extrabold text-dark-primary text-sm flex items-center gap-2">
+                              {emp.is_male ? (
+                                <i className="fa fa-male text-blue-600"></i>
+                              ) : (
+                                <i className="fa fa-female text-pink-600"></i>
+                              )}
+                              {emp.name}
+                            </div>
+                            <span className="text-[10px] text-dark-muted">
+                              {emp.designation || emp.role || 'Teacher'}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span
+                          className="font-bold text-dark-primary block"
+                          title={emp.organization}
+                        >
+                          {emp.organization || 'Jamia Zaytoonah'}
+                        </span>
+                        <span className="text-[10px] text-dark-muted font-bold block max-w-[180px] truncate">
+                          Joined: {emp.joining_date || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-dark-primary font-bold">
+                          {emp.primary_mobile || 'No Phone'}
+                        </div>
+                        <div className="text-[10px] text-dark-muted font-semibold">
+                          {emp.email || 'No Email'}
+                        </div>
+                      </td>
+                      <td className="p-4 space-y-1">
+                        <div className="font-extrabold text-purple-950 text-xs">
+                          {formatPortalRoles(roleSum)}
+                        </div>
+                      </td>
+                      <td className="p-4 font-bold text-emerald-700">
+                        {emp.is_salaried_employee !== false ? (
+                          emp.current_salary ? (
+                            `₹${Number(emp.current_salary).toLocaleString('en-IN')}`
+                          ) : (
+                            <span className="text-red-500 font-extrabold">Required</span>
+                          )
+                        ) : (
+                          <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-extrabold">
+                            Service
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center gap-1 flex-wrap justify-center">
+                          {emp.auth_id ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 px-1 py-0.5 rounded-full">
+                              <i className="fas fa-link text-purple-500" title="Login Linked"></i>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 px-1 py-0.5 rounded-full">
+                              <i
+                                className="fas fa-unlink text-amber-500"
+                                title="No Login Linked"
+                              ></i>
+                            </span>
+                          )}
+                          {emp.login_allowed ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 px-1 py-0.5 rounded-full">
+                              <i className="fas fa-user text-emerald-500" title="Login Allowed"></i>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 px-1 py-0.5 rounded-full">
+                              <i
+                                className="fas fa-user-slash text-red-400"
+                                title="Login Not Allowed"
+                              ></i>
+                            </span>
+                          )}
+                          {emp.is_active !== false ? (
+                            <span className="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                              Active
+                            </span>
+                          ) : (
+                            <span className="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

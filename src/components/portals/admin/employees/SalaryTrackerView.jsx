@@ -7,6 +7,9 @@ import SalaryPaymentLogView from './salary-tracker/SalaryPaymentLogView';
 import SalaryDashboardMatrixView from './salary-tracker/SalaryDashboardMatrixView';
 import ExtrasUpdateModal from './salary-tracker/ExtrasUpdateModal';
 import PaymentSettlementModal from './salary-tracker/PaymentSettlementModal';
+import CompensationHistoryModal from './salary-tracker/CompensationHistoryModal';
+import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
+import { isMonthBeforeJoining } from './salary-tracker/joiningDateHelper';
 
 const MONTH_NAMES = [
   'Jan',
@@ -38,18 +41,27 @@ const SalaryTrackerView = ({ user, userRoles }) => {
   // View Mode: 'matrix' (Salary Tracker / Matrix Swatches) | 'monthly' (Payment Update)
   const [viewMode, setViewMode] = useState('matrix');
 
-  // Month Selection State: YYYY-MM
+  // Month Selection State: YYYY-MM (Defaults to Previous Month)
   const [selectedMonthStr, setSelectedMonthStr] = useState(() => {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let prevYear = now.getFullYear();
+    let prevMonth = now.getMonth(); // 0-indexed month gives previous month 1-based number
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
   });
 
   const [salYear, salMonth] = useMemo(() => {
-    const [y, m] = selectedMonthStr.split('-');
-    return [
-      parseInt(y, 10) || new Date().getFullYear(),
-      parseInt(m, 10) || new Date().getMonth() + 1,
-    ];
+    if (!selectedMonthStr || typeof selectedMonthStr !== 'string') {
+      const now = new Date();
+      return [now.getFullYear(), now.getMonth() + 1];
+    }
+    const parts = selectedMonthStr.split('-');
+    const y = parseInt(parts[0], 10) || new Date().getFullYear();
+    const m = parseInt(parts[1], 10) || new Date().getMonth() + 1;
+    return [y, m];
   }, [selectedMonthStr]);
 
   // Previous Month YYYY-MM
@@ -107,6 +119,19 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     adjustment_reason: '',
     notes: '',
   });
+
+  // Compensation History Modal State
+  const [selectedHistoryEmployee, setSelectedHistoryEmployee] = useState(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+
+  // Bulk Apply Increments State
+  const [isBulkApplyModalOpen, setIsBulkApplyModalOpen] = useState(false);
+  const [bulkApplyFilterMode, setBulkApplyFilterMode] = useState('month');
+  const [bulkApplyDateValue, setBulkApplyDateValue] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [selectedBulkEmpIds, setSelectedBulkEmpIds] = useState([]);
 
   // Fetch data
   const fetchData = async () => {
@@ -324,10 +349,16 @@ const SalaryTrackerView = ({ user, userRoles }) => {
       trackerMap.set(key, tr);
     });
 
-    return employees.map((emp) => {
+    const items = [];
+    employees.forEach((emp) => {
       const org = emp.organization || 'Jamia Zaytoonah';
       const key = `${emp.id}_${org}`;
       const record = trackerMap.get(key);
+
+      // Only include employees who have an explicit salary_tracker entry for this month
+      if (trackerRecords.length > 0 && !record) {
+        return;
+      }
 
       const baseSalary = Number(record?.salary != null ? record.salary : emp.current_salary) || 0;
       const extras = Number(record?.extras) || 0;
@@ -343,7 +374,7 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         status = 'partial';
       }
 
-      return {
+      items.push({
         emp,
         organization: org,
         trackRecord: record || null,
@@ -359,8 +390,10 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         status,
         targetYear: salYear,
         targetMonth: salMonth,
-      };
+      });
     });
+
+    return items;
   }, [employees, trackerRecords, salYear, salMonth]);
 
   // Search Filtered Items
@@ -896,6 +929,128 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     };
   }, [trackerItems, prevMonthPendingMap]);
 
+
+
+  const handleOpenHistoryModal = (emp) => {
+    setSelectedHistoryEmployee(emp);
+    setIsHistoryModalOpen(true);
+  };
+
+  const handleSaveCompensationHistory = async (empId, updatedHistory, updatedSalary) => {
+    setSaving(true);
+    try {
+      const newSalaryNum = Number(updatedSalary) || 0;
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          compensation_history: updatedHistory,
+          current_salary: newSalaryNum,
+        })
+        .eq('id', empId);
+
+      if (error) throw error;
+
+      showToast('Employee compensation history updated successfully!', 'success');
+      setIsHistoryModalOpen(false);
+      setSelectedHistoryEmployee(null);
+      await fetchData();
+    } catch (err) {
+      showToast('Error saving compensation history: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const matchingBulkIncrements = useMemo(() => {
+    if (!bulkApplyDateValue) return [];
+
+    const matches = [];
+    if (Array.isArray(employees)) {
+      employees.forEach((emp) => {
+        if (emp && emp.is_salaried_employee !== false && Array.isArray(emp.compensation_history)) {
+          emp.compensation_history.forEach((h) => {
+            if (!h || !h.date) return;
+            const dateStr = String(h.date).trim();
+            const targetVal = String(bulkApplyDateValue).trim();
+
+            let isMatch = false;
+            if (bulkApplyFilterMode === 'month') {
+              isMatch = dateStr.startsWith(targetVal);
+            } else {
+              isMatch = dateStr === targetVal;
+            }
+
+            if (isMatch) {
+              const currentSalary = Number(emp.current_salary) || 0;
+              const hikeAmount = Number(h.amount) || 0;
+              const proposedSalary = h.updated_salary
+                ? Number(h.updated_salary)
+                : currentSalary + hikeAmount;
+
+              matches.push({
+                emp,
+                matchingEntry: h,
+                currentSalary,
+                hikeAmount,
+                proposedSalary,
+              });
+            }
+          });
+        }
+      });
+    }
+
+    return matches;
+  }, [employees, bulkApplyFilterMode, bulkApplyDateValue]);
+
+  const handleExecuteBulkApplyIncrements = async () => {
+    if (selectedBulkEmpIds.length === 0) return;
+    setSaving(true);
+    try {
+      let updatedCount = 0;
+      const currentUserEmail = user?.email || 'Admin Bulk Apply';
+
+      for (const empIdStr of selectedBulkEmpIds) {
+        const item = matchingBulkIncrements.find((m) => String(m.emp.id) === empIdStr);
+        if (item && item.proposedSalary > 0) {
+          const emp = item.emp;
+          const newSalary = item.proposedSalary;
+
+          let historyList = Array.isArray(emp.update_history) ? [...emp.update_history] : [];
+          historyList.push({
+            timestamp: new Date().toISOString(),
+            updated_by: currentUserEmail,
+            fields_changed: ['current_salary_bulk_applied_from_increment'],
+          });
+
+          const { error: updErr } = await supabase
+            .from('employees')
+            .update({
+              current_salary: newSalary,
+              update_history: historyList,
+            })
+            .eq('id', emp.id);
+
+          if (!updErr) {
+            updatedCount++;
+          }
+        }
+      }
+
+      showToast(
+        `Successfully updated current salary for ${updatedCount} selected employee(s)!`,
+        'success'
+      );
+      setIsBulkApplyModalOpen(false);
+      setSelectedBulkEmpIds([]);
+      await fetchData();
+    } catch (err) {
+      showToast('Bulk apply error: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
       {/* Top Header Card */}
@@ -909,6 +1064,9 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         cumulativeStats={cumulativeStats}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
+        onRefresh={fetchData}
+        loading={loading}
+        onOpenBulkIncrement={() => setIsBulkApplyModalOpen(true)}
       />
 
       {/* MAIN VIEW CONTENT */}
@@ -930,6 +1088,7 @@ const SalaryTrackerView = ({ user, userRoles }) => {
           handleInitializeMonthRecords={handleInitializeMonthRecords}
           handleOpenExtrasModal={handleOpenExtrasModal}
           handleOpenPaymentModal={handleOpenPaymentModal}
+          handleOpenHistoryModal={handleOpenHistoryModal}
         />
       ) : (
         /* ================= TAB 2: SALARY DASHBOARD (MATRIX SWATCHES VIEW) ================= */
@@ -966,8 +1125,80 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         saving={saving}
         canUpdateSalaryTracker={canUpdateSalaryTracker}
       />
+
+      <CompensationHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => {
+          setIsHistoryModalOpen(false);
+          setSelectedHistoryEmployee(null);
+        }}
+        employee={selectedHistoryEmployee}
+        onSaveHistory={handleSaveCompensationHistory}
+        saving={saving}
+        user={user}
+      />
+
+      <BulkIncrementApplyModal
+        isBulkApplyModalOpen={isBulkApplyModalOpen}
+        setIsBulkApplyModalOpen={setIsBulkApplyModalOpen}
+        bulkApplyFilterMode={bulkApplyFilterMode}
+        setBulkApplyFilterMode={setBulkApplyFilterMode}
+        bulkApplyDateValue={bulkApplyDateValue}
+        setBulkApplyDateValue={setBulkApplyDateValue}
+        matchingBulkIncrements={matchingBulkIncrements}
+        selectedBulkEmpIds={selectedBulkEmpIds}
+        setSelectedBulkEmpIds={setSelectedBulkEmpIds}
+        handleExecuteBulkApplyIncrements={handleExecuteBulkApplyIncrements}
+        saving={saving}
+      />
     </div>
   );
 };
 
-export default SalaryTrackerView;
+class SalaryTrackerErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('SalaryTrackerErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-xl mx-auto my-12 bg-white rounded-3xl border border-rose-200 shadow-xl text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto text-2xl">
+            <i className="fas fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <h3 className="text-base font-extrabold text-dark-primary">Salary Tracker Exception</h3>
+            <p className="text-xs text-rose-700 font-mono mt-1 bg-rose-50 p-2 rounded-xl border border-rose-100">
+              {this.state.error?.message || 'Unexpected rendering error'}
+            </p>
+          </div>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-xs shadow-md transition-all active:scale-95"
+          >
+            Reload Salary Tracker
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const SalaryTrackerViewWithErrorBoundary = (props) => (
+  <SalaryTrackerErrorBoundary>
+    <SalaryTrackerView {...props} />
+  </SalaryTrackerErrorBoundary>
+);
+
+export default SalaryTrackerViewWithErrorBoundary;

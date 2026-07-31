@@ -10,10 +10,14 @@ const SalaryTrackerHeader = ({
   cumulativeStats,
   statusFilter,
   setStatusFilter,
+  onRefresh,
+  loading,
+  onOpenBulkIncrement,
 }) => {
   return (
     <div className="bg-white p-4 sm:p-5 rounded-3xl border border-light-border shadow-sm space-y-4">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      {/* TOP ROW: Title, Bulk Increment & View Mode Switcher */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
@@ -23,20 +27,7 @@ const SalaryTrackerHeader = ({
           </h1>
         </div>
 
-        {/* Top Controls: Search Input, View Switcher Tabs & Month Selector */}
-        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-          {/* Main Header Search Input */}
-          <div className="relative w-full sm:w-64">
-            <i className="fas fa-search absolute left-3.5 top-2.5 text-gray-400 text-xs"></i>
-            <input
-              type="text"
-              placeholder="Search Employee, ID, Designation..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-300 outline-none"
-            />
-          </div>
-
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
           {/* View Mode Switcher */}
           <div className="inline-flex p-1 bg-gray-100 rounded-2xl border border-gray-200 justify-center">
             <button
@@ -57,26 +48,13 @@ const SalaryTrackerHeader = ({
                   : 'text-dark-soft hover:bg-gray-200/80'
               }`}
             >
-              <i className="fas fa-building"></i> Payment Log
+              <i className="fas fa-building"></i> List View
             </button>
-          </div>
-
-          {/* Month Selector */}
-          <div className="flex items-center justify-between gap-2 bg-teal-50/70 p-1.5 rounded-2xl border border-teal-200">
-            <label className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 px-1 shrink-0">
-              <i className="fas fa-calendar-day text-teal-600"></i>
-            </label>
-            <input
-              type="month"
-              value={selectedMonthStr}
-              onChange={(e) => setSelectedMonthStr(e.target.value)}
-              className="w-full sm:w-auto px-3 py-1.5 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-teal-950 outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer shadow-xs"
-            />
           </div>
         </div>
       </div>
 
-      {/* Cumulative Stats Tiles Across All Organizations */}
+      {/* MIDDLE SECTION: Cumulative Stats Tiles */}
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 border-t pt-4">
         <div className="bg-amber-50/70 p-3 rounded-2xl border border-amber-200 space-y-0.5 shadow-2xs">
           <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-amber-800 tracking-wider">
@@ -129,77 +107,136 @@ const SalaryTrackerHeader = ({
         </div>
       </div>
 
-      {/* Global Status Filter Bar */}
-      <div className="flex items-center gap-2 border-t pt-3 flex-wrap">
-        <span className="text-xs font-extrabold text-dark-primary flex items-center gap-1.5 mr-1">
-          <i className="fas fa-filter text-teal-600"></i>
-        </span>
+      {/* BOTTOM ROW: Search, Month Selector, Refresh & Status Filters */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 border-t pt-3.5">
+        {/* Left Side: Search, Month Selector & Refresh Button */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Main Header Search Input */}
+          <div className="relative w-full sm:w-64">
+            <i className="fas fa-search absolute left-3.5 top-2.5 text-gray-400 text-xs"></i>
+            <input
+              type="text"
+              placeholder="Search Employee, ID, Designation..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-300 outline-none"
+            />
+          </div>
 
-        {/* Paid Tickbox */}
-        <button
-          type="button"
-          onClick={() => setStatusFilter(statusFilter === 'paid' ? 'all' : 'paid')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-            statusFilter === 'paid'
-              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-              : 'bg-white border-emerald-500 text-emerald-700 hover:bg-emerald-50/60'
-          }`}
-        >
-          <span
-            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+          {/* Month Selector */}
+          <div className="flex items-center gap-1.5 bg-teal-50/70 p-1 rounded-2xl border border-teal-200 shrink-0">
+            <i className="fas fa-calendar-day text-teal-600 text-xs ml-1.5"></i>
+            <input
+              type="month"
+              value={selectedMonthStr}
+              onChange={(e) => setSelectedMonthStr(e.target.value)}
+              className="px-3 py-1 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-teal-950 outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer shadow-2xs"
+            />
+          </div>
+
+          {/* Refresh Button */}
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={loading}
+              className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
+              title="Refresh Salary Data"
+            >
+              <i
+                className={`fas fa-rotate-right ${
+                  loading ? 'fa-spin text-teal-600' : 'text-teal-700'
+                } text-xs`}
+              ></i>
+            </button>
+          )}
+        </div>
+
+        {/* Right Side: Global Status Filter Badges */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Bulk Increment Button */}
+          {onOpenBulkIncrement && (
+            <button
+              type="button"
+              onClick={onOpenBulkIncrement}
+              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
+              title="Apply Increments in Bulk by Effective Date/Month"
+            >
+              <i className="fas fa-calendar-check text-emerald-600"></i>
+              <span>Bulk Increment</span>
+            </button>
+          )}
+          <span className="text-xs font-extrabold text-dark-primary flex items-center gap-1.5 mr-1">
+            <i className="fas fa-filter text-teal-600"></i>
+            <span className="hidden sm:inline">Filter:</span>
+          </span>
+
+          {/* Paid Tickbox */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'paid' ? 'all' : 'paid')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
               statusFilter === 'paid'
-                ? 'border-white bg-white text-emerald-600'
-                : 'border-emerald-500 bg-white text-transparent'
+                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                : 'bg-white border-emerald-500 text-emerald-700 hover:bg-emerald-50/60'
             }`}
           >
-            <i className="fas fa-check"></i>
-          </span>
-          Paid
-        </button>
+            <span
+              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+                statusFilter === 'paid'
+                  ? 'border-white bg-white text-emerald-600'
+                  : 'border-emerald-500 bg-white text-transparent'
+              }`}
+            >
+              <i className="fas fa-check"></i>
+            </span>
+            Paid
+          </button>
 
-        {/* Partial Tickbox */}
-        <button
-          type="button"
-          onClick={() => setStatusFilter(statusFilter === 'partial' ? 'all' : 'partial')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-            statusFilter === 'partial'
-              ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
-              : 'bg-white border-amber-500 text-amber-700 hover:bg-amber-50/60'
-          }`}
-        >
-          <span
-            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+          {/* Partial Tickbox */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'partial' ? 'all' : 'partial')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
               statusFilter === 'partial'
-                ? 'border-white bg-white text-amber-600'
-                : 'border-amber-500 bg-white text-transparent'
+                ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                : 'bg-white border-amber-500 text-amber-700 hover:bg-amber-50/60'
             }`}
           >
-            <i className="fas fa-check"></i>
-          </span>
-          Partial
-        </button>
+            <span
+              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+                statusFilter === 'partial'
+                  ? 'border-white bg-white text-amber-600'
+                  : 'border-amber-500 bg-white text-transparent'
+              }`}
+            >
+              <i className="fas fa-check"></i>
+            </span>
+            Partial
+          </button>
 
-        {/* Unpaid Tickbox */}
-        <button
-          type="button"
-          onClick={() => setStatusFilter(statusFilter === 'unpaid' ? 'all' : 'unpaid')}
-          className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-            statusFilter === 'unpaid'
-              ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
-              : 'bg-white border-rose-500 text-rose-700 hover:bg-rose-50/60'
-          }`}
-        >
-          <span
-            className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+          {/* Unpaid Tickbox */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'unpaid' ? 'all' : 'unpaid')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
               statusFilter === 'unpaid'
-                ? 'border-white bg-white text-rose-600'
-                : 'border-rose-500 bg-white text-transparent'
+                ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
+                : 'bg-white border-rose-500 text-rose-700 hover:bg-rose-50/60'
             }`}
           >
-            <i className="fas fa-check"></i>
-          </span>
-          Unpaid
-        </button>
+            <span
+              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
+                statusFilter === 'unpaid'
+                  ? 'border-white bg-white text-rose-600'
+                  : 'border-rose-500 bg-white text-transparent'
+              }`}
+            >
+              <i className="fas fa-check"></i>
+            </span>
+            Unpaid
+          </button>
+        </div>
       </div>
     </div>
   );

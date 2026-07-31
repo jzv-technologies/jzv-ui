@@ -100,16 +100,35 @@ const UserRolesManagementModal = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {(Array.isArray(authUsers) ? authUsers : [])
-                .filter((u) => {
+              {(() => {
+                const list = (Array.isArray(authUsers) ? authUsers : []).filter((u) => {
                   if (!userRolesSearch.trim()) return true;
                   const q = userRolesSearch.toLowerCase();
                   return (
                     (u.full_name || '').toLowerCase().includes(q) ||
                     (u.email || '').toLowerCase().includes(q)
                   );
-                })
-                .map((u) => {
+                });
+
+                if (list.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan="4" className="p-8 text-center text-xs font-semibold text-gray-500">
+                        <i className="fas fa-user-shield text-2xl text-purple-300 block mb-2"></i>
+                        No registered Auth Users found.{' '}
+                        <button
+                          type="button"
+                          onClick={handleAutoLinkAuthAccounts}
+                          className="text-purple-700 font-extrabold underline hover:text-purple-900 cursor-pointer"
+                        >
+                          Auto-Link Employee Auth Accounts
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return list.map((u) => {
                   const mappedEmp = mappedAuthUserMap.get(String(u.user_id));
                   const isEditingThis = editingAuthUser === u.user_id;
 
@@ -206,7 +225,8 @@ const UserRolesManagementModal = ({
                       </td>
                     </tr>
                   );
-                })}
+                });
+              })()}
             </tbody>
           </table>
         </div>

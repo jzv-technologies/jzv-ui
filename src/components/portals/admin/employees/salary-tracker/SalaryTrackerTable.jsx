@@ -1,12 +1,11 @@
 import React from 'react';
 
-const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, canUpdate }) => {
+const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory, canUpdate }) => {
   return (
     <table className="w-full text-left text-xs font-semibold min-w-[850px]">
       <thead className="bg-gray-50/80 border-b border-gray-200 text-[10px] uppercase tracking-wider text-gray-600 font-extrabold">
         <tr>
           <th className="p-3.5">Employee Details</th>
-          <th className="p-3.5">Designation</th>
           <th className="p-3.5 text-right">Total Payable</th>
           <th className="p-3.5 text-right">Total Paid</th>
           <th className="p-3.5 text-right">Balance</th>
@@ -17,110 +16,140 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, canUpdate }) =
       </thead>
       <tbody className="divide-y divide-gray-100">
         {items.map((item, idx) => {
-          const emp = item.emp;
-          const isZeroBalance = item.balance <= 0 && item.totalPaid > 0;
+          const emp = item.emp || {};
+          const baseSalary = Number(item.baseSalary) || 0;
+          const extras = Number(item.extras) || 0;
+          const deductions = Number(item.deductions) || 0;
+          const totalPayable =
+            Number(item.totalPayable ?? item.payableAmt) || baseSalary + extras - deductions;
+          const totalPaid = Number(item.totalPaid) || 0;
+          const balance = Number(item.balance) || Math.max(0, totalPayable - totalPaid);
+
+          const isZeroBalance = balance <= 0 && totalPaid > 0;
+          const lastPaymentDate = item.lastPaymentDate || item.lastDate;
+          const lastPaidBy = item.lastPaidBy || item.lastBy;
 
           const statusBadge =
-            item.balance <= 0 && item.totalPaid > 0 ? (
+            balance <= 0 && totalPaid > 0 ? (
               <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black inline-flex items-center gap-1">
                 <i className="fas fa-check-circle"></i> Paid
               </span>
-            ) : item.balance > 0 ? (
+            ) : totalPaid > 0 ? (
               <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black inline-flex items-center gap-1">
-                <i className="fas fa-circle-half-stroke"></i> Partial
+                <i className="fas fa-spinner"></i> Partial
               </span>
             ) : (
               <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 text-[10px] font-black inline-flex items-center gap-1">
-                <i className="fas fa-times-circle"></i> Unpaid
+                <i className="fas fa-clock"></i> Unpaid
               </span>
             );
 
           return (
             <tr
-              key={idx}
+              key={emp.id || item.id || idx}
               className={`transition-colors ${
                 isZeroBalance
-                  ? 'bg-emerald-50/70 border-l-4 border-l-emerald-500 hover:bg-emerald-100/70 font-semibold text-emerald-950'
+                  ? 'bg-emerald-50/30 hover:bg-emerald-50/50'
+                  : totalPaid > 0
+                  ? 'bg-amber-50/20 hover:bg-amber-50/40'
                   : 'hover:bg-teal-50/20'
               }`}
             >
-              {/* Single Combined Column for ID, Employee & Org */}
+              {/* Single Combined Column for ID, Employee & Designation */}
               <td className="p-3.5">
-                <div className="font-extrabold text-dark-primary text-xs">{emp.name}</div>
-                <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">
-                  <span>{emp.emp_id || `ID: ${emp.id}`} | </span>
-                  <span className="text-teal-800 font-bold">{item.organization}</span>
+                <div className="font-extrabold text-dark-primary text-xs">
+                  {emp.name || 'Unknown Employee'}
                 </div>
-              </td>
-
-              {/* Designation */}
-              <td className="p-3.5 text-dark-soft font-bold text-xs">
-                {emp.designation || 'Teacher'}
+                <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">
+                  <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700">
+                    {emp.emp_id || `EMP-${emp.id || idx}`}
+                  </span>
+                  <span className="text-teal-800 font-bold">
+                    {emp.designation || 'Not Defined'}
+                  </span>
+                </div>
               </td>
 
               {/* Total Payable with Base, Extras & Deductions Subtext */}
-              <td className="p-3.5 text-right">
-                <div className="font-black text-dark-primary text-sm">
-                  ₹{item.totalPayable.toLocaleString('en-IN')}
-                </div>
+              <td className="p-3.5 text-right font-black text-xs text-dark-primary">
+                ₹{totalPayable.toLocaleString('en-IN')}
                 <div className="text-[10px] text-gray-500 font-semibold mt-0.5">
-                  Base: ₹{item.baseSalary.toLocaleString('en-IN')}
-                  {item.extras > 0 && (
-                    <span className="text-blue-700 font-bold"> | Extras: +₹{item.extras.toLocaleString('en-IN')}</span>
+                  Base: ₹{baseSalary.toLocaleString('en-IN')}
+                  {extras > 0 && (
+                    <span className="text-blue-700 font-bold">
+                      {' '}
+                      | Extras: +₹{extras.toLocaleString('en-IN')}
+                    </span>
                   )}
-                  {item.deductions > 0 && (
-                    <span className="text-rose-700 font-bold"> | Deductions: -₹{item.deductions.toLocaleString('en-IN')}</span>
+                  {deductions > 0 && (
+                    <span className="text-rose-700 font-bold">
+                      {' '}
+                      | Deductions: -₹{deductions.toLocaleString('en-IN')}
+                    </span>
                   )}
                 </div>
               </td>
 
               {/* Total Paid */}
-              <td className="p-3.5 text-right font-extrabold text-emerald-700">
-                ₹{item.totalPaid.toLocaleString('en-IN')}
+              <td className="p-3.5 text-right font-extrabold text-xs text-emerald-700">
+                ₹{totalPaid.toLocaleString('en-IN')}
               </td>
 
               {/* Balance */}
-              <td className="p-3.5 text-right font-black text-rose-700">
-                ₹{item.balance.toLocaleString('en-IN')}
+              <td className="p-3.5 text-right font-extrabold text-xs">
+                {balance > 0 ? (
+                  <span className="text-rose-600">₹{balance.toLocaleString('en-IN')}</span>
+                ) : (
+                  <span className="text-gray-400">₹0</span>
+                )}
               </td>
 
               {/* Status */}
               <td className="p-3.5">{statusBadge}</td>
 
-              {/* Last Settlement */}
-              <td className="p-3.5">
-                {item.lastPaymentDate ? (
+              {/* Last Settlement Info */}
+              <td className="p-3.5 text-gray-500 text-[11px]">
+                {lastPaymentDate ? (
                   <div>
-                    <div className="font-bold text-dark-primary text-xs">
-                      {item.lastPaymentDate}
-                    </div>
-                    <div className="text-[10px] text-gray-500 font-medium">
-                      By: {item.lastPaidBy || 'Admin'}
+                    <div className="font-bold text-dark-primary">{lastPaymentDate}</div>
+                    <div className="text-[10px] text-gray-400 font-semibold">
+                      by {lastPaidBy || 'Admin'}
                     </div>
                   </div>
                 ) : (
-                  <span className="text-gray-400 font-normal italic text-[11px]">None</span>
+                  <span className="text-gray-400 font-normal">No payment history</span>
                 )}
               </td>
 
               {/* Actions */}
               <td className="p-3.5 text-center">
                 <div className="flex items-center justify-center gap-2">
+                  {onOpenHistory && (
+                    <button
+                      type="button"
+                      disabled={!canUpdate}
+                      onClick={() => onOpenHistory(emp)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-amber-50 hover:bg-amber-100 text-amber-800 transition-all border border-amber-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Compensation History & Salary Revisions"
+                    >
+                      <i className="fas fa-chart-line"></i>
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={!canUpdate}
                     onClick={() => onOpenExtras(item)}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-blue-50 hover:bg-blue-100 text-blue-800 transition-all border border-blue-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Edit Extras / Deductions"
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-yellow-800 hover:bg-yellow-600 text-yellow-50 transition-all border border-yellow-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Edit Extras & Deductions"
                   >
-                    <i className="fas fa-indian-rupee-sign"></i> Extras
+                    <i className="fas fa-coins"></i>
                   </button>
                   <button
                     type="button"
                     disabled={!canUpdate}
                     onClick={() => onOpenPayment(item)}
                     className="px-3 py-1.5 rounded-lg text-xs font-black bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Settle / Record Monthly Payment"
+                    title="Record Payment"
                   >
                     <i className="fas fa-hand-holding-dollar"></i>
                   </button>
