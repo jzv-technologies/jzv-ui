@@ -718,11 +718,12 @@ const EmployeeEditModal = ({
               </div>
 
               {/* Section 4: Employee Detail */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b pb-1">
-                  <h4 className="text-xs uppercase tracking-wider text-blue-primary font-black">
-                    Section 4: Employee Detail
-                  </h4>
+              {modalMode !== 'self_edit' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b pb-1">
+                    <h4 className="text-xs uppercase tracking-wider text-blue-primary font-black">
+                      Section 4: Employee Detail
+                    </h4>
                   {modalMode !== 'add' && (
                     <button
                       type="button"
@@ -1202,9 +1203,11 @@ const EmployeeEditModal = ({
                   )}
                 </div>
               </div>
+              )}
 
               {/* Section 5: Portal Access */}
-              <div className="space-y-3">
+              {modalMode !== 'self_edit' && (
+                <div className="space-y-3">
                 <h4 className="text-xs uppercase tracking-wider text-purple-700 font-black border-b pb-1">
                   Section 5: Portal Access
                 </h4>
@@ -1387,6 +1390,7 @@ const EmployeeEditModal = ({
                   </div>
                 </div>
               </div>
+              )}
             </form>
           </div>
         </div>
