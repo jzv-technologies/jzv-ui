@@ -380,15 +380,15 @@ const AdminFormConfigsView = ({
 
   const handleSaveMappingClick = async () => {
     if (!mappingDataId.trim()) {
-      alert('Mapping Name is required.');
+      showToast('Mapping Name is required.', 'error');
       return;
     }
     if (!mappingSheetId.trim()) {
-      alert('Google Sheet ID is required.');
+      showToast('Google Sheet ID is required.', 'error');
       return;
     }
     if (!mappingSheetName.trim()) {
-      alert('Sheet Tab Name is required.');
+      showToast('Sheet Tab Name is required.', 'error');
       return;
     }
 

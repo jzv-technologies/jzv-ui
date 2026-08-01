@@ -1,11 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { showToast } from '../../../../../utils/toast';
 
+const MONTH_NAMES = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
 const CompensationHistoryModal = ({
   isOpen,
   onClose,
   employee,
   onSaveHistory,
+  matrixTrackerRecords = [],
   saving,
   user,
 }) => {
@@ -19,12 +35,20 @@ const CompensationHistoryModal = ({
     notes: '',
   });
 
+  // Apply to Salary Tracker Swatches state
+  const [activeApplyItem, setActiveApplyItem] = useState(null);
+  const [applySwatches, setApplySwatches] = useState([]);
+  const [selectedApplyMonths, setSelectedApplyMonths] = useState([]);
+
   useEffect(() => {
     if (employee) {
       setHistoryList(
         Array.isArray(employee.compensation_history) ? [...employee.compensation_history] : []
       );
       setCurrentSalary(employee.current_salary ? String(employee.current_salary) : '0');
+      setActiveApplyItem(null);
+      setApplySwatches([]);
+      setSelectedApplyMonths([]);
     }
   }, [employee]);
 
@@ -101,7 +125,11 @@ const CompensationHistoryModal = ({
     }
 
     const userName =
-      user?.user_metadata?.full_name || user?.email?.split('@')[0] || user?.email || 'Admin';
+      user?.user_metadata?.full_name ||
+      user?.user_metadata?.name ||
+      user?.email?.split('@')[0] ||
+      user?.email ||
+      'Admin';
 
     const itemToAdd = {
       date: newIncrement.date || new Date().toISOString().split('T')[0],
@@ -129,6 +157,97 @@ const CompensationHistoryModal = ({
     showToast('Salary increment entry added!', 'success');
   };
 
+  const handleApplyIncrement = (item) => {
+    // Parse Effective Date (e.g. 2026-07-15 -> Year 2026, Month 7)
+    let effYear = new Date().getFullYear();
+    let effMonth = new Date().getMonth() + 1;
+
+    if (item.date) {
+      const parts = String(item.date).split('-');
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (!isNaN(y) && !isNaN(m) && y > 2000 && m >= 1 && m <= 12) {
+          effYear = y;
+          effMonth = m;
+        }
+      }
+    }
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+
+    // Generate Month Swatches from Effective Date onwards up to Current Month
+    const swatches = [];
+    let dYear = effYear;
+    let dMonth = effMonth;
+
+    let safetyCounter = 0;
+    while ((dYear < curYear || (dYear === curYear && dMonth <= curMonth)) && safetyCounter < 36) {
+      safetyCounter++;
+      const existingRec = Array.isArray(matrixTrackerRecords)
+        ? matrixTrackerRecords.find(
+            (r) =>
+              String(r.employee_id) === String(employee.id) &&
+              r.sal_year === dYear &&
+              r.sal_month === dMonth
+          )
+        : null;
+
+      swatches.push({
+        year: dYear,
+        month: dMonth,
+        monthStr: `${dYear}-${String(dMonth).padStart(2, '0')}`,
+        label: `${MONTH_NAMES[dMonth - 1]} ${dYear}`,
+        hasRecord: !!existingRec,
+        currentSalaryInRecord: existingRec?.salary != null ? existingRec.salary : null,
+      });
+
+      dMonth++;
+      if (dMonth > 12) {
+        dMonth = 1;
+        dYear++;
+      }
+    }
+
+    if (swatches.length === 0) {
+      swatches.push({
+        year: effYear,
+        month: effMonth,
+        monthStr: `${effYear}-${String(effMonth).padStart(2, '0')}`,
+        label: `${MONTH_NAMES[effMonth - 1]} ${effYear}`,
+        hasRecord: false,
+      });
+    }
+
+    setActiveApplyItem(item);
+    setApplySwatches(swatches);
+    setSelectedApplyMonths([]);
+  };
+
+  const toggleApplyMonth = (mObj) => {
+    const exists = selectedApplyMonths.some((x) => x.year === mObj.year && x.month === mObj.month);
+    if (exists) {
+      setSelectedApplyMonths(
+        selectedApplyMonths.filter((x) => !(x.year === mObj.year && x.month === mObj.month))
+      );
+    } else {
+      setSelectedApplyMonths([...selectedApplyMonths, mObj]);
+    }
+  };
+
+  const handleConfirmApplyIncrement = () => {
+    if (!activeApplyItem) return;
+
+    const newSal = activeApplyItem.updated_salary
+      ? String(activeApplyItem.updated_salary)
+      : currentSalary;
+
+    setCurrentSalary(newSal);
+    onSaveHistory(employee.id, historyList, newSal, selectedApplyMonths);
+  };
+
   const handleRemoveEntry = (idx) => {
     const updatedList = [...historyList];
     updatedList.splice(idx, 1);
@@ -153,7 +272,8 @@ const CompensationHistoryModal = ({
                 Compensation History & Revisions
               </h3>
               <p className="text-xs text-dark-muted font-semibold mt-0.5">
-                {employee.name} — {employee.organization || 'Jamia Zaytoonah'} ({employee.designation || 'Teacher'})
+                {employee.name} — {employee.organization || 'Jamia Zaytoonah'} (
+                {employee.designation || 'Teacher'})
               </p>
             </div>
           </div>
@@ -176,6 +296,83 @@ const CompensationHistoryModal = ({
             {historyList.length} Revision(s) Recorded
           </span>
         </div>
+
+        {/* Effective Date Salary Tracker Swatches Sub-panel */}
+        {activeApplyItem && (
+          <div className="bg-emerald-50/90 p-4 rounded-2xl border border-emerald-300 space-y-3 animate-in fade-in zoom-in-95 duration-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <i className="fas fa-calendar-check text-emerald-700 text-base"></i>
+                <h4 className="text-xs font-black text-emerald-950">
+                  Apply Revised Base Salary (₹
+                  {Number(activeApplyItem.updated_salary || 0).toLocaleString('en-IN')}) to Salary
+                  Tracker
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveApplyItem(null)}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <p className="text-[11px] text-emerald-800 font-semibold leading-tight">
+              Effective Date: <strong className="font-extrabold">{activeApplyItem.date}</strong>.
+              Select the Salary-Tracker month swatches below to apply this base salary update to:
+            </p>
+
+            <div className="flex items-center gap-2 flex-wrap max-h-36 overflow-y-auto pr-1">
+              {applySwatches.map((m) => {
+                const isSelected = selectedApplyMonths.some(
+                  (x) => x.year === m.year && x.month === m.month
+                );
+                return (
+                  <button
+                    key={`${m.year}-${m.month}`}
+                    type="button"
+                    onClick={() => toggleApplyMonth(m)}
+                    className={`px-3 py-2 rounded-xl text-xs font-black transition-all border flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-300/50'
+                        : 'bg-white text-emerald-950 border-emerald-300 hover:bg-emerald-100/60'
+                    }`}
+                  >
+                    <i
+                      className={`fas ${isSelected ? 'fa-circle-check' : 'fa-circle'} text-xs`}
+                    ></i>
+                    <span>{m.label}</span>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        isSelected
+                          ? 'bg-emerald-800/60 text-white'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
+                      {m.hasRecord ? 'Update Entry' : 'Add New'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-emerald-200/80 pt-2.5">
+              <span className="text-[11px] text-emerald-900 font-bold">
+                {selectedApplyMonths.length} month(s) selected
+              </span>
+              <button
+                type="button"
+                onClick={handleConfirmApplyIncrement}
+                disabled={saving || selectedApplyMonths.length === 0}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <i className="fas fa-check-double"></i> Confirm & Update Salary-Tracker (
+                {selectedApplyMonths.length})
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Existing History List */}
         <div className="space-y-2">
@@ -202,7 +399,8 @@ const CompensationHistoryModal = ({
                         {item.date || 'N/A'}
                       </span>
                       <span className="text-emerald-700 font-black">
-                        +₹{Number(item.amount || 0).toLocaleString('en-IN')} ({item.percentage || 0}%)
+                        +₹{Number(item.amount || 0).toLocaleString('en-IN')} ({item.percentage || 0}
+                        %)
                       </span>
                       <span className="bg-emerald-100 text-emerald-950 font-black px-2 py-0.5 rounded-md border border-emerald-200 text-[10px]">
                         Revised Salary: ₹
@@ -219,33 +417,50 @@ const CompensationHistoryModal = ({
                     )}
                     <div className="text-[10px] text-dark-muted font-semibold flex items-center gap-2 flex-wrap pt-0.5">
                       <span className="text-purple-900 font-extrabold flex items-center gap-1">
-                        <i className="fas fa-user-shield text-purple-600"></i>
-                        By: {item.created_by || item.updated_by || 'Admin'}
+                        <i className="fas fa-user-check text-purple-600"></i>
+                        By:{' '}
+                        {item.created_by ||
+                          item.updated_by ||
+                          user?.user_metadata?.full_name ||
+                          'Admin'}
                       </span>
                       <span className="text-gray-300">•</span>
-                      <span className="text-gray-500 font-medium flex items-center gap-1">
+                      <span className="text-gray-600 font-bold flex items-center gap-1">
                         <i className="fas fa-clock text-gray-400"></i>
-                        Recorded:{' '}
+                        Updated:{' '}
                         {item.created_at
-                          ? new Date(item.created_at).toLocaleDateString('en-IN', {
+                          ? new Date(item.created_at).toLocaleString('en-IN', {
                               day: '2-digit',
                               month: 'short',
                               year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
+                              second: '2-digit',
                             })
                           : item.date || 'N/A'}
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEntry(idx)}
-                    className="w-7 h-7 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg flex items-center justify-center transition-all shrink-0 ml-2"
-                    title="Remove entry"
-                  >
-                    <i className="fas fa-trash-alt text-xs"></i>
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIncrement(item)}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1 active:scale-95 shadow-2xs cursor-pointer"
+                      title={`Apply revised salary of ₹${Number(
+                        item.updated_salary || 0
+                      ).toLocaleString('en-IN')} as Current Base Salary`}
+                    >
+                      <i className="fas fa-circle-check text-xs"></i> Apply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEntry(idx)}
+                      className="w-7 h-7 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg flex items-center justify-center transition-all shrink-0 shadow-2xs cursor-pointer"
+                      title="Remove entry"
+                    >
+                      <i className="fas fa-trash-alt text-xs"></i>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -255,7 +470,8 @@ const CompensationHistoryModal = ({
         {/* Add New Revision Entry Form */}
         <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200 space-y-3">
           <h4 className="text-xs font-black text-amber-950 flex items-center gap-1.5">
-            <i className="fas fa-[#d97706] fa-plus-circle text-amber-700"></i> Add New Salary Revision
+            <i className="fas fa-[#d97706] fa-plus-circle text-amber-700"></i> Add New Salary
+            Revision
           </h4>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">

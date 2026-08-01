@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
+import ConfirmModal from '../../../ConfirmModal';
 
 const TimelinePanel = ({
   selectedClassId,
@@ -27,6 +28,7 @@ const TimelinePanel = ({
   const [replanEndDate, setReplanEndDate] = useState('');
   const [updateMode, setUpdateMode] = useState('replan'); // 'replan' | 'carry_forward'
   const [updatingDateLevelStr, setUpdatingDateLevelStr] = useState(null);
+  const [confirmModalData, setConfirmModalData] = useState(null);
 
 
   const [startDateStr, setStartDateStr] = useState(() => {
@@ -338,54 +340,11 @@ const TimelinePanel = ({
     }
   };
 
-  const handleUnplanLesson = async (e, record, currentCardDateStr = null) => {
-    e.stopPropagation();
-
-    const startStr = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
-    const endStr = record.target_end_date ? String(record.target_end_date).split('T')[0] : startStr;
-    const isMultiDay = startStr && endStr && startStr !== endStr;
-
-    if (isMultiDay && currentCardDateStr) {
-      if (currentCardDateStr === startStr) {
-        // Shift start date forward by 1 day
-        const d = new Date(startStr);
-        d.setDate(d.getDate() + 1);
-        const newStart = getLocalISODate(d);
-
-        const confirmMsg = `Remove ${startStr} from this multi-day plan?\n\nThe updated plan range will be ${newStart} to ${endStr}.`;
-        if (!window.confirm(confirmMsg)) return;
-
-        return updateRecordDateRange(record, newStart, endStr);
-      } else if (currentCardDateStr === endStr) {
-        // Shift end date backward by 1 day
-        const d = new Date(endStr);
-        d.setDate(d.getDate() - 1);
-        const newEnd = getLocalISODate(d);
-
-        const confirmMsg = `Remove ${endStr} from this multi-day plan?\n\nThe updated plan range will be ${startStr} to ${newEnd}.`;
-        if (!window.confirm(confirmMsg)) return;
-
-        return updateRecordDateRange(record, startStr, newEnd);
-      } else if (currentCardDateStr > startStr && currentCardDateStr < endStr) {
-        // Intermediate day clicked
-        const confirmMsg = `Remove ${currentCardDateStr} from this plan?\n\nClick OK to shorten plan to end on day before (${currentCardDateStr}), or Cancel to delete full plan.`;
-        if (window.confirm(confirmMsg)) {
-          const dEnd = new Date(currentCardDateStr);
-          dEnd.setDate(dEnd.getDate() - 1);
-          const newEnd = getLocalISODate(dEnd);
-          return updateRecordDateRange(record, startStr, newEnd);
-        }
-      }
-    }
-
-    const confirmed = window.confirm('Delete planned lesson?');
-    if (!confirmed) return;
+  const executeUnplanLesson = async (record) => {
     try {
       if (record.status === 'planned') {
         const { error } = await supabase.from('lesson_progress').delete().eq('id', record.id);
-
         if (error) throw error;
-
         const updatedRecords = progressRecords.filter((r) => r.id !== record.id);
         setProgressRecords(updatedRecords);
         showToast('Lesson plan deleted.', 'success');
@@ -415,6 +374,77 @@ const TimelinePanel = ({
     } catch (err) {
       showToast('Failed to remove planned lesson: ' + err.message, 'error');
     }
+  };
+
+  const handleUnplanLesson = (e, record, currentCardDateStr = null) => {
+    e.stopPropagation();
+
+    const startStr = record.target_start_date ? String(record.target_start_date).split('T')[0] : null;
+    const endStr = record.target_end_date ? String(record.target_end_date).split('T')[0] : startStr;
+    const isMultiDay = startStr && endStr && startStr !== endStr;
+
+    if (isMultiDay && currentCardDateStr) {
+      if (currentCardDateStr === startStr) {
+        const d = new Date(startStr);
+        d.setDate(d.getDate() + 1);
+        const newStart = getLocalISODate(d);
+
+        setConfirmModalData({
+          title: 'Update Lesson Schedule',
+          message: `Remove ${startStr} from this multi-day plan?\n\nThe updated plan range will be ${newStart} to ${endStr}.`,
+          type: 'warning',
+          confirmText: 'Update Range',
+          onConfirm: () => {
+            setConfirmModalData(null);
+            updateRecordDateRange(record, newStart, endStr);
+          },
+        });
+        return;
+      } else if (currentCardDateStr === endStr) {
+        const d = new Date(endStr);
+        d.setDate(d.getDate() - 1);
+        const newEnd = getLocalISODate(d);
+
+        setConfirmModalData({
+          title: 'Update Lesson Schedule',
+          message: `Remove ${endStr} from this multi-day plan?\n\nThe updated plan range will be ${startStr} to ${newEnd}.`,
+          type: 'warning',
+          confirmText: 'Update Range',
+          onConfirm: () => {
+            setConfirmModalData(null);
+            updateRecordDateRange(record, startStr, newEnd);
+          },
+        });
+        return;
+      } else if (currentCardDateStr > startStr && currentCardDateStr < endStr) {
+        const dEnd = new Date(currentCardDateStr);
+        dEnd.setDate(dEnd.getDate() - 1);
+        const newEnd = getLocalISODate(dEnd);
+
+        setConfirmModalData({
+          title: 'Shorten Lesson Schedule',
+          message: `Remove ${currentCardDateStr} from this plan?\n\nThis will shorten the plan to end on ${newEnd}.`,
+          type: 'warning',
+          confirmText: 'Shorten Plan',
+          onConfirm: () => {
+            setConfirmModalData(null);
+            updateRecordDateRange(record, startStr, newEnd);
+          },
+        });
+        return;
+      }
+    }
+
+    setConfirmModalData({
+      title: 'Delete Planned Lesson',
+      message: 'Are you sure you want to delete this planned lesson entry?',
+      type: 'danger',
+      confirmText: 'Delete Lesson',
+      onConfirm: async () => {
+        setConfirmModalData(null);
+        await executeUnplanLesson(record);
+      },
+    });
   };
 
   const handleUpdateReplan = async (record) => {
@@ -1173,6 +1203,18 @@ const TimelinePanel = ({
             );
           })}
       </div>
+
+      {confirmModalData && (
+        <ConfirmModal
+          isOpen={!!confirmModalData}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          type={confirmModalData.type || 'danger'}
+          confirmText={confirmModalData.confirmText || 'Confirm'}
+          onConfirm={confirmModalData.onConfirm}
+          onCancel={() => setConfirmModalData(null)}
+        />
+      )}
     </div>
   );
 };

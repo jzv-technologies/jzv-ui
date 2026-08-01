@@ -26,6 +26,7 @@ const EmployeeRecordsTable = ({
   sortOrder,
   handleSort,
   handleOpenModal,
+  handleDeleteEmployee,
   isAdmin,
   isManagement,
   authUsers = [],
@@ -210,6 +211,7 @@ const EmployeeRecordsTable = ({
                       ></i>
                     </div>
                   </th>
+                  <th className="p-4 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -330,6 +332,36 @@ const EmployeeRecordsTable = ({
                               Inactive
                             </span>
                           )}
+                        </div>
+                      </td>
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              (isAdmin || isManagement) && handleOpenModal('edit', emp);
+                            }}
+                            className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40"
+                            disabled={!isAdmin && !isManagement}
+                            title="Edit Employee Record"
+                          >
+                            <i className="fas fa-pen text-xs"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              (isAdmin || isManagement) &&
+                                handleDeleteEmployee &&
+                                handleDeleteEmployee(emp);
+                            }}
+                            className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40"
+                            disabled={!isAdmin && !isManagement}
+                            title="Delete Employee Record"
+                          >
+                            <i className="fas fa-trash-alt text-xs"></i>
+                          </button>
                         </div>
                       </td>
                     </tr>

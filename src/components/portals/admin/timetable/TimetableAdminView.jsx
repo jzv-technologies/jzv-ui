@@ -5,6 +5,7 @@ import TimetableScheduler from './TimetableScheduler';
 import ConfirmModal from '../../../ConfirmModal';
 import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTabs';
 import { CARD_THEMES } from '../../../../utils/cardTheme';
+import { showToast } from '../../../../utils/toast';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -2913,11 +2914,11 @@ const ClearSlotsModal = ({ isOpen, onClose, days, periods, className, onClear })
 
   const handleClearSlotsSubmit = () => {
     if (selDays.length === 0) {
-      alert('Please select at least one day.');
+      showToast('Please select at least one day.', 'error');
       return;
     }
     if (selPeriods.length === 0) {
-      alert('Please select at least one period.');
+      showToast('Please select at least one period.', 'error');
       return;
     }
 

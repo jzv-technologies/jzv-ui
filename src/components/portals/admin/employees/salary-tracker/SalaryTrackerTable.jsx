@@ -51,8 +51,8 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
                 isZeroBalance
                   ? 'bg-emerald-50/30 hover:bg-emerald-50/50'
                   : totalPaid > 0
-                  ? 'bg-amber-50/20 hover:bg-amber-50/40'
-                  : 'hover:bg-teal-50/20'
+                    ? 'bg-amber-50/20 hover:bg-amber-50/40'
+                    : 'hover:bg-teal-50/20'
               }`}
             >
               {/* Single Combined Column for ID, Employee & Designation */}
@@ -129,7 +129,7 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
                       type="button"
                       disabled={!canUpdate}
                       onClick={() => onOpenHistory(emp)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-amber-50 hover:bg-amber-100 text-amber-800 transition-all border border-amber-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-blue-600 hover:bg-blue-800 text-blue-50 transition-all border border-amber-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Compensation History & Salary Revisions"
                     >
                       <i className="fas fa-chart-line"></i>
@@ -139,19 +139,19 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
                     type="button"
                     disabled={!canUpdate}
                     onClick={() => onOpenExtras(item)}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-yellow-800 hover:bg-yellow-600 text-yellow-50 transition-all border border-yellow-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-yellow-600 hover:bg-yellow-800 text-yellow-50 transition-all border border-yellow-200 flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Edit Extras & Deductions"
                   >
-                    <i className="fas fa-coins"></i>
+                    <i className="fas fa-sack-dollar"></i>
                   </button>
                   <button
                     type="button"
                     disabled={!canUpdate}
                     onClick={() => onOpenPayment(item)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-black bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 rounded-lg text-xs font-black bg-teal-600 hover:bg-teal-800 text-white shadow-xs transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Record Payment"
                   >
-                    <i className="fas fa-hand-holding-dollar"></i>
+                    <i class="fa-brands fa-amazon-pay"></i>
                   </button>
                 </div>
               </td>

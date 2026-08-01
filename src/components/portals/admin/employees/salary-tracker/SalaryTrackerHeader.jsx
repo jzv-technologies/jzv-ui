@@ -13,10 +13,12 @@ const SalaryTrackerHeader = ({
   onRefresh,
   loading,
   onOpenBulkIncrement,
+  onOpenExport,
+  onOpenUpload,
 }) => {
   return (
     <div className="bg-white p-4 sm:p-5 rounded-3xl border border-light-border shadow-sm space-y-4">
-      {/* TOP ROW: Title, Bulk Increment & View Mode Switcher */}
+      {/* TOP ROW: Title, Download, Upload & View Mode Switcher */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
@@ -28,6 +30,32 @@ const SalaryTrackerHeader = ({
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
+          {/* Download (Export) Button */}
+          {onOpenExport && (
+            <button
+              type="button"
+              onClick={onOpenExport}
+              className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
+              title="Download Salary Tracker Log (Excel)"
+            >
+              <i className="fas fa-download text-teal-600"></i>
+              <span>Download</span>
+            </button>
+          )}
+
+          {/* Upload / Bulk Edit Button */}
+          {onOpenUpload && (
+            <button
+              type="button"
+              onClick={onOpenUpload}
+              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
+              title="Upload CSV/Excel or Bulk Edit Payments"
+            >
+              <i className="fas fa-file-excel text-amber-600"></i>
+              <span>Upload / Bulk Edit</span>
+            </button>
+          )}
+
           {/* View Mode Switcher */}
           <div className="inline-flex p-1 bg-gray-100 rounded-2xl border border-gray-200 justify-center">
             <button

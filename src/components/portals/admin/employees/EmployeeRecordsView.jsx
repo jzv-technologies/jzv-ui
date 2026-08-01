@@ -11,6 +11,7 @@ import EmployeeEditModal from './employee-records/EmployeeEditModal';
 import BulkImportModal from './employee-records/BulkImportModal';
 import UserRolesManagementModal from './employee-records/UserRolesManagementModal';
 import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
+import ConfirmModal from '../../../ConfirmModal';
 
 const DEFAULT_ROLES = [
   'Teacher',
@@ -70,6 +71,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
   });
   const [initialFormData, setInitialFormData] = useState(null);
   const [navConfirmModal, setNavConfirmModal] = useState(null);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
 
   // Keyboard shortcut listener for Esc key to close modal
   useEffect(() => {
@@ -141,7 +143,10 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     try {
       const { data, error } = await supabase.from('employees').select('*');
       if (error) {
-        console.warn('Supabase fetch employees error (using local storage fallback):', error.message);
+        console.warn(
+          'Supabase fetch employees error (using local storage fallback):',
+          error.message
+        );
         const localData = localStorage.getItem('jzv_employees_local_data');
         if (localData) {
           try {
@@ -166,7 +171,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
       if (usersList.length === 0) {
         try {
-          const { data: viewData, error: viewErr } = await supabase.from('admin_users_view').select('*');
+          const { data: viewData, error: viewErr } = await supabase
+            .from('admin_users_view')
+            .select('*');
           if (!viewErr && Array.isArray(viewData) && viewData.length > 0) {
             usersList = viewData;
           }
@@ -187,7 +194,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
                 const uid = e.auth_id || `local_user_${e.id}`;
                 constructedMap.set(uid, {
                   user_id: uid,
-                  email: e.email || `${(e.name || 'user').toLowerCase().replace(/\s+/g, '')}@zaytoonah.in`,
+                  email:
+                    e.email ||
+                    `${(e.name || 'user').toLowerCase().replace(/\s+/g, '')}@zaytoonah.in`,
                   full_name: e.name,
                   role: Number(e.mapped_roles_sum) || 8,
                 });
@@ -456,45 +465,45 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     }
   };
 
-const normalizeDateToISO = (val) => {
-  if (!val) return null;
-  const str = String(val).trim();
-  if (!str) return null;
+  const normalizeDateToISO = (val) => {
+    if (!val) return null;
+    const str = String(val).trim();
+    if (!str) return null;
 
-  // Already YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return str;
-  }
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
 
-  // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
-  const ddmmyyyyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
-  if (ddmmyyyyMatch) {
-    const day = ddmmyyyyMatch[1].padStart(2, '0');
-    const month = ddmmyyyyMatch[2].padStart(2, '0');
-    const year = ddmmyyyyMatch[3];
-    return `${year}-${month}-${day}`;
-  }
+    // DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+    const ddmmyyyyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const day = ddmmyyyyMatch[1].padStart(2, '0');
+      const month = ddmmyyyyMatch[2].padStart(2, '0');
+      const year = ddmmyyyyMatch[3];
+      return `${year}-${month}-${day}`;
+    }
 
-  // YYYY/MM/DD or YYYY.MM.DD
-  const yyyymmddMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
-  if (yyyymmddMatch) {
-    const year = yyyymmddMatch[1];
-    const month = yyyymmddMatch[2].padStart(2, '0');
-    const day = yyyymmddMatch[3].padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
+    // YYYY/MM/DD or YYYY.MM.DD
+    const yyyymmddMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+    if (yyyymmddMatch) {
+      const year = yyyymmddMatch[1];
+      const month = yyyymmddMatch[2].padStart(2, '0');
+      const day = yyyymmddMatch[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
 
-  // Try JS Date parsing fallback
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    const y = parsed.getFullYear();
-    const m = String(parsed.getMonth() + 1).padStart(2, '0');
-    const d = String(parsed.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
+    // Try JS Date parsing fallback
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
 
-  return null;
-};
+    return null;
+  };
 
   const buildTeacherPayload = (data) => ({
     name: data.name,
@@ -515,7 +524,7 @@ const normalizeDateToISO = (val) => {
     bank_branch_name: data.bank_branch_name || null,
     emergency_contact_1: data.emergency_contact_1 || {},
     emergency_contact_2: data.emergency_contact_2 || {},
-    emp_id: data.is_salaried_employee ? (data.emp_id || null) : null,
+    emp_id: data.is_salaried_employee ? data.emp_id || null : null,
     organization: data.organization || 'Jamia Zaytoonah',
     designation: data.designation || 'Teacher',
     joining_date: normalizeDateToISO(data.joining_date),
@@ -593,7 +602,10 @@ const normalizeDateToISO = (val) => {
           .select();
 
         if (eErr) {
-          console.warn('Supabase insert employee error (using local state fallback):', eErr.message);
+          console.warn(
+            'Supabase insert employee error (using local state fallback):',
+            eErr.message
+          );
           const localNew = { ...teacherPayload, id: Date.now() };
           const updatedList = [localNew, ...employees];
           setEmployees(updatedList);
@@ -636,7 +648,10 @@ const normalizeDateToISO = (val) => {
           .select();
 
         if (eErr) {
-          console.warn('Supabase update employee error (using local state fallback):', eErr.message);
+          console.warn(
+            'Supabase update employee error (using local state fallback):',
+            eErr.message
+          );
           const updatedList = employees.map((e) =>
             String(e.id) === String(targetId) ? { ...e, ...teacherPayload } : e
           );
@@ -668,6 +683,43 @@ const normalizeDateToISO = (val) => {
       console.error('Error saving employee:', err);
       showToast('Error saving record: ' + err.message, 'error');
       return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteEmployee = (emp) => {
+    if (!isAdmin && !isManagement) {
+      showToast('Only Admin or Management can delete employee records', 'error');
+      return;
+    }
+    setEmployeeToDelete(emp);
+  };
+
+  const confirmDeleteEmployee = async () => {
+    if (!employeeToDelete) return;
+    const emp = employeeToDelete;
+    setEmployeeToDelete(null);
+
+    setSaving(true);
+    try {
+      const { error } = await supabase.from('employees').delete().eq('id', emp.id);
+      if (error) {
+        console.warn('Supabase delete employee error (using local state fallback):', error.message);
+        const updatedList = employees.filter((e) => String(e.id) !== String(emp.id));
+        setEmployees(updatedList);
+        localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+      } else {
+        const updatedList = employees.filter((e) => String(e.id) !== String(emp.id));
+        setEmployees(updatedList);
+        localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+      }
+
+      showToast(`Employee "${emp.name}" deleted successfully!`, 'success');
+      await fetchEmployees();
+    } catch (err) {
+      console.error('Error deleting employee:', err);
+      showToast('Error deleting employee: ' + err.message, 'error');
     } finally {
       setSaving(false);
     }
@@ -1294,9 +1346,9 @@ const normalizeDateToISO = (val) => {
             <button
               onClick={handleExportEmployeesExcel}
               className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-              title="Export Excel"
+              title="Download"
             >
-              <i className="fas fa-file-excel text-blue-600 text-base"></i>
+              <i className="fas fa-download text-blue-600 text-base"></i>
             </button>
 
             {(isAdmin || isManagement) && (
@@ -1306,7 +1358,7 @@ const normalizeDateToISO = (val) => {
                   className="w-10 h-10 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-sm font-bold border border-purple-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
                   title="Manage Portal User Roles"
                 >
-                  <i className="fas fa-user-shield text-purple-600 text-base"></i>
+                  <i className="fas fa-link text-purple-600 text-base"></i>
                 </button>
                 <button
                   onClick={() => setIsCsvImportOpen(true)}
@@ -1336,6 +1388,7 @@ const normalizeDateToISO = (val) => {
         sortOrder={sortOrder}
         handleSort={handleSort}
         handleOpenModal={handleOpenModal}
+        handleDeleteEmployee={handleDeleteEmployee}
         isAdmin={isAdmin}
         isManagement={isManagement}
         authUsers={authUsers}
@@ -1412,6 +1465,17 @@ const normalizeDateToISO = (val) => {
         setSelectedBulkEmpIds={setSelectedBulkEmpIds}
         handleExecuteBulkApplyIncrements={handleExecuteBulkApplyIncrements}
         saving={saving}
+      />
+
+      {/* Delete Employee Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!employeeToDelete}
+        title="Delete Employee Record"
+        message={`Are you sure you want to delete employee record "${employeeToDelete?.name}"? This action cannot be undone.`}
+        type="danger"
+        confirmText="Delete Record"
+        onConfirm={confirmDeleteEmployee}
+        onCancel={() => setEmployeeToDelete(null)}
       />
     </div>
   );

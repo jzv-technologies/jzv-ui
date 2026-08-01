@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ConfirmModal from '../../../ConfirmModal';
 import { CARD_THEMES } from '../../../../utils/cardTheme';
+import { showToast } from '../../../../utils/toast';
 
 // Helper to generate UUIDs locally when offline
 export const generateLocalId = () => {
@@ -1234,7 +1235,7 @@ export const PeriodsSetup = ({
 
   const handleTriggerCopy = () => {
     if (copySource === copyTarget) {
-      alert('Source and target seasons must be different.');
+      showToast('Source and target seasons must be different.', 'error');
       return;
     }
     const srcName = localSeasonsConfig.seasons[copySource]?.name || copySource;

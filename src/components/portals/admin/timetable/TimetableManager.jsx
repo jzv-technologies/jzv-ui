@@ -1503,71 +1503,84 @@ const TimetableManager = () => {
       (s) =>
         String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId)
     );
-    if (existingTargetSlots.length > 0) {
-      const confirmMove = window.confirm(
-        'The target column already has assignments for this class. They will be overwritten. Proceed?'
+
+    const executeMove = async () => {
+      // Remove source slots
+      updatedSlots = updatedSlots.filter(
+        (s) =>
+          !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId))
       );
-      if (!confirmMove) return;
-    }
 
-    // Remove source slots
-    updatedSlots = updatedSlots.filter(
-      (s) =>
-        !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId))
-    );
+      // Remove old target slots (overwrite)
+      updatedSlots = updatedSlots.filter(
+        (s) =>
+          !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId))
+      );
 
-    // Remove old target slots (overwrite)
-    updatedSlots = updatedSlots.filter(
-      (s) =>
-        !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId))
-    );
+      const newSlotsVal = slotsToMove.map((s) => ({
+        class_id: classId,
+        day: s.day,
+        period_id: targetPeriodId,
+        subject_id: s.subject_id,
+        teacher_id: s.teacher_id,
+        room_id: s.room_id,
+      }));
 
-    const newSlotsVal = slotsToMove.map((s) => ({
-      class_id: classId,
-      day: s.day,
-      period_id: targetPeriodId,
-      subject_id: s.subject_id,
-      teacher_id: s.teacher_id,
-    }));
+      newSlotsVal.forEach((ns) => {
+        updatedSlots.push({ id: generateLocalId(), ...ns });
+      });
 
-    newSlotsVal.forEach((ns) => {
-      updatedSlots.push({ id: generateLocalId(), ...ns });
-    });
+      if (isSupabaseMode && !String(classId).startsWith('local-')) {
+        try {
+          await supabase
+            .from('timetable_slots')
+            .delete()
+            .eq('class_id', classId)
+            .in('period_id', [sourcePeriodId, targetPeriodId]);
 
-    if (isSupabaseMode && !String(classId).startsWith('local-')) {
-      try {
-        await supabase
-          .from('timetable_slots')
-          .delete()
-          .eq('class_id', classId)
-          .in('period_id', [sourcePeriodId, targetPeriodId]);
+          const { data, error } = await supabase
+            .from('timetable_slots')
+            .upsert(newSlotsVal, { onConflict: 'class_id,day,period_id' })
+            .select();
 
-        const { data, error } = await supabase
-          .from('timetable_slots')
-          .upsert(newSlotsVal, { onConflict: 'class_id,day,period_id' })
-          .select();
+          if (error) throw error;
 
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          data.forEach((dbSlot) => {
-            const idx = updatedSlots.findIndex(
-              (s) =>
-                String(s.class_id) === String(dbSlot.class_id) &&
-                s.day === dbSlot.day &&
-                String(s.period_id) === String(dbSlot.period_id)
-            );
-            if (idx > -1) updatedSlots[idx] = dbSlot;
-          });
+          if (data && data.length > 0) {
+            data.forEach((dbSlot) => {
+              const idx = updatedSlots.findIndex(
+                (s) =>
+                  String(s.class_id) === String(dbSlot.class_id) &&
+                  s.day === dbSlot.day &&
+                  String(s.period_id) === String(dbSlot.period_id)
+              );
+              if (idx > -1) updatedSlots[idx] = dbSlot;
+            });
+          }
+        } catch (err) {
+          showToast('DB Error: ' + err.message, 'error');
+          await loadData();
+          return;
         }
-      } catch (err) {
-        showToast('DB Error: ' + err.message, 'error');
-        await loadData();
-        return;
       }
+      saveState({ slots: updatedSlots });
+      showToast('Column moved successfully!', 'success');
+    };
+
+    if (existingTargetSlots.length > 0) {
+      setConfirmConfig({
+        title: 'Overwrite Assignments',
+        message: 'The target column already has assignments for this class. They will be overwritten. Proceed?',
+        type: 'warning',
+        confirmText: 'Overwrite',
+        onConfirm: () => {
+          setConfirmConfig(null);
+          executeMove();
+        },
+      });
+      return;
     }
-    saveState({ slots: updatedSlots });
-    showToast('Column moved successfully!', 'success');
+
+    await executeMove();
   };
 
   // JSON EXPORT HANDLER

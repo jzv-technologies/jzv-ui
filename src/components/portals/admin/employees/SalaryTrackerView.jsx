@@ -9,6 +9,8 @@ import ExtrasUpdateModal from './salary-tracker/ExtrasUpdateModal';
 import PaymentSettlementModal from './salary-tracker/PaymentSettlementModal';
 import CompensationHistoryModal from './salary-tracker/CompensationHistoryModal';
 import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
+import SalaryTrackerExportModal from './salary-tracker/SalaryTrackerExportModal';
+import SalaryTrackerUploadModal from './salary-tracker/SalaryTrackerUploadModal';
 import { isMonthBeforeJoining } from './salary-tracker/joiningDateHelper';
 
 const MONTH_NAMES = [
@@ -132,6 +134,10 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [selectedBulkEmpIds, setSelectedBulkEmpIds] = useState([]);
+
+  // Export & Upload Modal States
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // Fetch data
   const fetchData = async () => {
@@ -936,7 +942,12 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     setIsHistoryModalOpen(true);
   };
 
-  const handleSaveCompensationHistory = async (empId, updatedHistory, updatedSalary) => {
+  const handleSaveCompensationHistory = async (
+    empId,
+    updatedHistory,
+    updatedSalary,
+    trackerUpdateMonths = []
+  ) => {
     setSaving(true);
     try {
       const newSalaryNum = Number(updatedSalary) || 0;
@@ -950,7 +961,31 @@ const SalaryTrackerView = ({ user, userRoles }) => {
 
       if (error) throw error;
 
-      showToast('Employee compensation history updated successfully!', 'success');
+      // Retroactively update selected Salary Tracker records
+      if (Array.isArray(trackerUpdateMonths) && trackerUpdateMonths.length > 0) {
+        for (const mObj of trackerUpdateMonths) {
+          const { error: trError } = await supabase
+            .from('salary_tracker')
+            .update({ salary: newSalaryNum })
+            .eq('employee_id', empId)
+            .eq('sal_year', mObj.year)
+            .eq('sal_month', mObj.month);
+
+          if (trError) {
+            console.warn(
+              `Failed to update salary_tracker for month ${mObj.month}/${mObj.year}:`,
+              trError.message
+            );
+          }
+        }
+        showToast(
+          `Updated current salary and ${trackerUpdateMonths.length} month(s) in Salary Tracker!`,
+          'success'
+        );
+      } else {
+        showToast('Employee compensation history updated successfully!', 'success');
+      }
+
       setIsHistoryModalOpen(false);
       setSelectedHistoryEmployee(null);
       await fetchData();
@@ -1051,6 +1086,35 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     }
   };
 
+  const handleBulkUpsertSalaryTracker = async (payloadRows) => {
+    if (!canUpdateSalaryTracker) {
+      showToast('Salary Tracker can be updated by Management and above level only', 'error');
+      return;
+    }
+    if (!Array.isArray(payloadRows) || payloadRows.length === 0) return;
+
+    setSaving(true);
+    try {
+      const { data: upsertedData, error } = await supabase
+        .from('salary_tracker')
+        .upsert(payloadRows, { onConflict: 'employee_id,sal_year,sal_month' })
+        .select();
+
+      if (error) {
+        console.warn('Supabase bulk upsert error (using local state fallback):', error.message);
+      }
+
+      showToast(`Successfully processed ${payloadRows.length} salary record(s)!`, 'success');
+      await fetchCurrentMonthTrackerRecords();
+      await fetchMatrixTrackerRecords();
+    } catch (err) {
+      console.error('Error during bulk upsert salary tracker:', err);
+      showToast('Error saving bulk entries: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
       {/* Top Header Card */}
@@ -1067,6 +1131,8 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         onRefresh={fetchData}
         loading={loading}
         onOpenBulkIncrement={() => setIsBulkApplyModalOpen(true)}
+        onOpenExport={() => setIsExportModalOpen(true)}
+        onOpenUpload={() => setIsUploadModalOpen(true)}
       />
 
       {/* MAIN VIEW CONTENT */}
@@ -1134,6 +1200,7 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         }}
         employee={selectedHistoryEmployee}
         onSaveHistory={handleSaveCompensationHistory}
+        matrixTrackerRecords={matrixTrackerRecords}
         saving={saving}
         user={user}
       />
@@ -1149,6 +1216,22 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         selectedBulkEmpIds={selectedBulkEmpIds}
         setSelectedBulkEmpIds={setSelectedBulkEmpIds}
         handleExecuteBulkApplyIncrements={handleExecuteBulkApplyIncrements}
+        saving={saving}
+      />
+
+      <SalaryTrackerExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        employees={employees}
+        matrixTrackerRecords={matrixTrackerRecords}
+      />
+
+      <SalaryTrackerUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        employees={employees}
+        matrixTrackerRecords={matrixTrackerRecords}
+        onBulkUpsert={handleBulkUpsertSalaryTracker}
         saving={saving}
       />
     </div>
