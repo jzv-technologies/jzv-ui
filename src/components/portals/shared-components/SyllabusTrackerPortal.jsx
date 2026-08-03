@@ -7,6 +7,7 @@ import DailyActivityTable from './DailyActivityTable';
 import SyllabusProgressGrid from './SyllabusProgressGrid';
 import AddWorkModalCompactView from '../teacher/LessonManager/AddWorkModalCompactView';
 import AddWorkModalCompleteView from '../teacher/components/AddWorkModalCompleteView';
+import LessonManager from '../teacher/LessonManager/LessonManager';
 
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
@@ -35,16 +36,22 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [carryForwards, setCarryForwards] = useState([]);
   const [teacher, setTeacher] = useState(teacherRecord || null);
 
-  // Favorites & Cover Mode (Teacher only)
+  // Favorites (Teacher only)
   const [favorites, setFavorites] = useState([]);
-  const [coverMode, setCoverMode] = useState(false);
 
   // Active Tab
   const [activeTab, setActiveTab] = useState(() => {
     if (role === 'parent') return 'two-weeks-class';
-    if (role === 'teacher') return 'teacher-activity';
+    if (role === 'teacher') return 'upcoming-lessons';
     return 'teacher-activity';
   });
+
+  // Shared teacher filters used by Lesson Planner tab
+  const [lpShowAllClasses, setLpShowAllClasses] = useState(false);
+  const [lpFilterClassId, setLpFilterClassId] = useState('');
+  const [lpFilterClassificationId, setLpFilterClassificationId] = useState('');
+  const [lpFilterSubjectId, setLpFilterSubjectId] = useState('');
+  const [lpFilterBookId, setLpFilterBookId] = useState('');
 
   // ─── Tab 1: Daily Activity States & Filters ───
   const [dailyEntries, setDailyEntries] = useState([]);
@@ -497,7 +504,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       let query = supabase.from('lesson_progress_items').select(`
           *,
           teacher:teachers(name),
-          progress:lesson_progress(
+          lesson_progress:lesson_progress(
             *,
             lesson:syllabus_book_lessons(*)
           )
@@ -516,7 +523,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           return;
         }
         query = query.in('progress_id', progressIds);
-      } else if (role === 'teacher' && teacher?.id && !coverMode) {
+      } else if (role === 'teacher' && teacher?.id) {
         query = query.eq('teacher_id', teacher.id);
       }
 
@@ -529,7 +536,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       items = dbItems || [];
 
       const enriched = items.map((item) => {
-        const progressObj = item.progress;
+        const progressObj = item.lesson_progress || (typeof item.progress === 'object' ? item.progress : null);
         const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
         const lesson = progressObj ? progressObj.lesson : null;
         const book = progressObj
@@ -543,8 +550,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           ? classes.find((c) => String(c.id) === String(progressObj.class_id))
           : null;
 
+        const rawProgress = typeof item.progress === 'number'
+          ? item.progress
+          : (typeof item.progress === 'string' ? parseFloat(item.progress) : null);
+        const finalProgress = rawProgress !== null && !Number.isNaN(rawProgress)
+          ? rawProgress
+          : (progressObj?.completion_percentage || 0);
+
         return {
           ...item,
+          progress: finalProgress,
           lt_log_id: item.progress_id,
           log,
           lesson,
@@ -554,7 +569,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           lessonPath: lesson
             ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
             : 'Unknown',
-          isRevision: lesson?.level1 === '_Revision',
+          isRevision: lesson?.level1 === '_Revision' || item.is_revision === 'Y',
         };
       });
 
@@ -570,7 +585,6 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     activeTab,
     student?.class_id,
     teacher?.id,
-    coverMode,
     timeFilter,
     dateRange.start,
     dateRange.end,
@@ -580,13 +594,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   ]);
 
   // ─── Fetch Teacher Class Progress Logs & Trackers ───
-  const fetchTeacherProgressData = async (overrideCoverMode = null) => {
+  const fetchTeacherProgressData = async () => {
     if (role !== 'teacher') return;
     setProgressLoading(true);
     try {
-      const isCover = overrideCoverMode !== null ? overrideCoverMode : coverMode;
       const progressClasses =
-        isCover || assignments.length === 0
+        assignments.length === 0
           ? classes
           : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
       const classIds = progressClasses.map((c) => c.id);
@@ -676,7 +689,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       date: new Date(entry.date).toLocaleDateString(),
       className,
       subjectName,
-      logId: parentLog?.id || entry.lt_log_id,
+      logId: parentLog?.id || entry.lt_log_id || entry.progress_id,
     });
   };
 
@@ -689,6 +702,40 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         .delete()
         .eq('id', deleteModalConfig.id);
       if (error) throw error;
+
+      if (deleteModalConfig.logId) {
+        const { data: remainingItems } = await supabase
+          .from('lesson_progress_items')
+          .select('progress, is_revision')
+          .eq('progress_id', deleteModalConfig.logId);
+
+        const nonRevisionItems = (remainingItems || []).filter(
+          (item) => item.is_revision !== 'Y'
+        );
+
+        let newProgress = 0;
+        let newStatus = 'not_started';
+
+        if (nonRevisionItems.length > 0) {
+          newProgress = Math.max(
+            ...nonRevisionItems.map((item) => Number(item.progress || 0))
+          );
+          if (newProgress >= 100) {
+            newStatus = 'completed';
+          } else if (newProgress > 0) {
+            newStatus = 'in_progress';
+          }
+        }
+
+        await supabase
+          .from('lesson_progress')
+          .update({
+            completion_percentage: newProgress,
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', deleteModalConfig.logId);
+      }
 
       showToast('Log entry deleted successfully!', 'success');
       setDailyEntries((prev) => prev.filter((item) => item.id !== deleteModalConfig.id));
@@ -802,17 +849,6 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     }
   };
 
-  const handleCoverModeChange = async (checked) => {
-    setCoverMode(checked);
-    if (activeTab === 'teacher-activity') {
-      await fetchDailyEntries();
-    } else if (activeTab === 'class-progress') {
-      await fetchTeacherProgressData(checked);
-      setProgressExpandedBook(null);
-      setProgressExpandedClass(null);
-    }
-  };
-
   const handleAddWorkSuccess = async () => {
     syllabusTrackerPortalCache.data = null;
     syllabusTrackerPortalCache.loadingPromise = null;
@@ -875,7 +911,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const handleCarryForward = async (plan, newStartDate = null, newEndDate = null) => {
     try {
       setDailyLoading(true);
-      
+
       const todayStr = new Date().toISOString().split('T')[0];
       const oldStart = plan.target_start_date ? String(plan.target_start_date).split('T')[0] : null;
       const oldEnd = plan.target_end_date ? String(plan.target_end_date).split('T')[0] : null;
@@ -889,13 +925,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           throw new Error('New start date is required to change plan.');
         }
         newStart = newStartDate;
-        
+
         if (plan.target_start_date && plan.target_end_date) {
           const startD = new Date(plan.target_start_date);
           const endD = new Date(plan.target_end_date);
           const diffTime = endD - startD;
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
+
           const newEndD = new Date(newStartDate);
           newEndD.setDate(newEndD.getDate() + (diffDays > 0 ? diffDays : 0));
           newEnd = newEndD.toISOString().split('T')[0];
@@ -941,7 +977,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         target_end_date: newEnd,
         replan_counter: (plan.replan_counter || 0) + replanIncrement,
         carry_forward_counter: (plan.carry_forward_counter || 0) + carryForwardIncrement,
-        carry_forward_count: (plan.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
+        carry_forward_count:
+          (plan.carry_forward_count || 0) + (replanIncrement || carryForwardIncrement ? 1 : 0),
         delay_start,
         delay_end,
       };
@@ -964,7 +1001,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         }
       }
 
-      showToast(plan.status === 'planned' ? 'Lesson plan changed' : 'Lesson carried forward', 'success');
+      showToast(
+        plan.status === 'planned' ? 'Lesson plan changed' : 'Lesson carried forward',
+        'success'
+      );
       const newPlans = todaysPlans.filter((p) => p.id !== plan.id);
       setTodaysPlans(newPlans);
       syllabusTrackerPortalCache.data = null;
@@ -1108,7 +1148,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       baseClasses = classes.filter((c) => String(c.id) === String(student.class_id));
     } else if (role === 'teacher') {
       baseClasses =
-        coverMode || assignments.length === 0
+        assignments.length === 0
           ? classes
           : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
     }
@@ -1123,6 +1163,97 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       );
     });
   };
+
+  const lpTeacherId = teacher?.id ? String(teacher.id) : '';
+  const lpTeacherClassIds = new Set(
+    assignments.filter((a) => String(a.teacher_id) === lpTeacherId).map((a) => String(a.class_id))
+  );
+
+  const lpAvailableClasses =
+    role !== 'teacher' || lpShowAllClasses || !lpTeacherId
+      ? classes
+      : classes.filter((c) => lpTeacherClassIds.has(String(c.id)));
+
+  const lpClassAssignmentSubjectIds = new Set(
+    assignments
+      .filter(
+        (a) =>
+          String(a.teacher_id) === lpTeacherId && String(a.class_id) === String(lpFilterClassId)
+      )
+      .map((a) => String(a.subject_id))
+  );
+
+  const lpMappedBookIdsForClass = new Set(
+    bookClasses
+      .filter((bc) => String(bc.class_id) === String(lpFilterClassId))
+      .map((bc) => String(bc.book_id))
+  );
+
+  const lpMappedSubjectIdsFromBooks = new Set(
+    books.filter((b) => lpMappedBookIdsForClass.has(String(b.id))).map((b) => String(b.subject_id))
+  );
+
+  const lpAvailableSubjects = !lpFilterClassId
+    ? []
+    : subjects.filter((s) => {
+        const sId = String(s.id);
+        if (role !== 'teacher' || lpShowAllClasses) {
+          return lpMappedSubjectIdsFromBooks.size === 0 || lpMappedSubjectIdsFromBooks.has(sId);
+        }
+        return lpClassAssignmentSubjectIds.has(sId);
+      });
+
+  const lpAvailableClassifications = classifications.filter((cl) =>
+    lpAvailableSubjects.some((s) => String(s.classification_id) === String(cl.id))
+  );
+
+  const lpVisibleSubjects = lpFilterClassificationId
+    ? lpAvailableSubjects.filter(
+        (s) => String(s.classification_id) === String(lpFilterClassificationId)
+      )
+    : lpAvailableSubjects;
+
+  const lpAvailableBooks =
+    !lpFilterClassId || !lpFilterSubjectId
+      ? []
+      : books.filter((b) => {
+          const matchSubject = String(b.subject_id) === String(lpFilterSubjectId);
+          const matchClass = bookClasses.some(
+            (bc) =>
+              String(bc.book_id) === String(b.id) && String(bc.class_id) === String(lpFilterClassId)
+          );
+          return matchSubject && matchClass;
+        });
+
+  // Auto-select Classification, Subject, and Book in Lesson Planner if only 1 option exists
+  useEffect(() => {
+    if (activeTab !== 'lesson-planner') return;
+    if (!lpFilterClassId) return;
+
+    if (!lpFilterClassificationId && lpAvailableClassifications.length === 1) {
+      setLpFilterClassificationId(String(lpAvailableClassifications[0].id));
+      return;
+    }
+
+    if (!lpFilterSubjectId && lpVisibleSubjects.length === 1) {
+      setLpFilterSubjectId(String(lpVisibleSubjects[0].id));
+      return;
+    }
+
+    if (lpFilterSubjectId && !lpFilterBookId && lpAvailableBooks.length === 1) {
+      setLpFilterBookId(String(lpAvailableBooks[0].id));
+      return;
+    }
+  }, [
+    activeTab,
+    lpFilterClassId,
+    lpFilterClassificationId,
+    lpFilterSubjectId,
+    lpFilterBookId,
+    lpAvailableClassifications,
+    lpVisibleSubjects,
+    lpAvailableBooks,
+  ]);
 
   if (loading) {
     return (
@@ -1140,9 +1271,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
     ],
     teacher: [
-      { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
+      { key: 'lesson-planner', label: 'Lesson Planner', icon: 'fa-calendar-check' },
       { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
       { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+      { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
     ],
     admin: [
       { key: 'teacher-activity', label: 'Teacher Activity', icon: 'fa-list-check' },
@@ -1164,8 +1296,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
       <div className="p-6 overflow-y-auto pb-24 flex-1">
         {/* Tab Headers */}
-        <div className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap">
-          <div className="flex gap-4 items-center flex-wrap">
+        <div
+          className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap"
+          data-name="Lesson Planner and Tracker Tabs"
+        >
+          <div className="flex gap-4 items-center flex-wrap" data-name="navigation tabs">
             <div className="flex gap-2">
               {currentTabs.map((tab) => (
                 <button
@@ -1196,9 +1331,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           </div>
 
           {/* Inline Daily Activity Filters */}
-          {(activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') &&
-            role !== 'teacher' && (
-              <div className="flex flex-wrap items-center gap-2">
+          {(activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') && (
+            <div
+              className="w-full flex flex-wrap items-center gap-2 mt-2"
+              data-name="daily activity filters"
+            >
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                 {role !== 'parent' && (
                   <MultiSelectDropdown
                     label=""
@@ -1225,7 +1363,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   selected={filterBooks}
                   onChange={setFilterBooks}
                 />
-                {role !== 'parent' && (
+                {role !== 'parent' && role !== 'teacher' && (
                   <MultiSelectDropdown
                     label=""
                     placeholder="Teacher"
@@ -1265,62 +1403,152 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   </button>
                 )}
               </div>
-            )}
 
-          {/* Inline Class Progress Filters */}
-          {activeTab === 'class-progress' && role !== 'parent' && (
-            <div className="flex flex-wrap items-center gap-2">
-              <MultiSelectDropdown
-                label=""
-                placeholder="Class"
-                options={getClassesToRender().map((c) => ({
-                  id: String(c.id),
-                  label: c.name || c.class_name,
-                }))}
-                selected={cpFilterClasses}
-                onChange={(val) => {
-                  setCpFilterClasses(val);
-                  setProgressExpandedBook(null);
-                  setProgressExpandedClass(null);
+              {activeTab === 'teacher-activity' && (
+                <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto sm:ml-auto justify-end">
+                  <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
+                    {[
+                      { key: '7_days', label: '7 Days' },
+                      { key: '30_days', label: '30 Days' },
+                      { key: 'range', label: 'Custom Range' },
+                    ].map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setTimeFilter(t.key)}
+                        className={`px-3.5 py-1 rounded-md text-[10px] font-extrabold transition-all h-full cursor-pointer flex items-center ${
+                          timeFilter === t.key
+                            ? 'bg-brand-primary text-white shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  {timeFilter === 'range' && (
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-700 w-full sm:w-auto justify-end">
+                      <input
+                        type="date"
+                        value={dateRange.start}
+                        onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                        className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
+                      />
+                      <span>to</span>
+                      <input
+                        type="date"
+                        value={dateRange.end}
+                        onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                        className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
+                      />
+                    </div>
+                  )}
+
+                  {role === 'teacher' && (
+                    <button
+                      onClick={() => setIsAddWorkModalOpen(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
+                    >
+                      <i className="fas fa-plus"></i> Add Work
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'lesson-planner' && role === 'teacher' && (
+            <div
+              className="w-full flex flex-wrap items-center gap-2 mt-2"
+              data-name="lesson planner filters"
+            >
+              <label className="flex items-center gap-2 cursor-pointer bg-white border px-3 py-1 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors h-8">
+                <input
+                  type="checkbox"
+                  checked={lpShowAllClasses}
+                  onChange={(e) => setLpShowAllClasses(e.target.checked)}
+                  className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer"
+                />
+                Show All Classes
+              </label>
+
+              <select
+                value={lpFilterClassId}
+                onChange={(e) => {
+                  setLpFilterClassId(e.target.value);
+                  setLpFilterClassificationId('');
+                  setLpFilterSubjectId('');
+                  setLpFilterBookId('');
                 }}
-              />
-              <MultiSelectDropdown
-                label=""
-                placeholder="Classification"
-                options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
-                selected={cpFilterClassifications}
-                onChange={handleCpClassificationsChange}
-              />
-              <MultiSelectDropdown
-                label=""
-                placeholder="Subject"
-                options={getFilteredSubjectOpts()}
-                selected={cpFilterSubjects}
-                onChange={handleCpSubjectsChange}
-              />
-              <MultiSelectDropdown
-                label=""
-                placeholder="Book"
-                options={getFilteredBookOpts()}
-                selected={cpFilterBooks}
-                onChange={(val) => {
-                  setCpFilterBooks(val);
-                  setProgressExpandedBook(null);
-                  setProgressExpandedClass(null);
+                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
+              >
+                <option value="">Class</option>
+                {lpAvailableClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.class_name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={lpFilterClassificationId}
+                onChange={(e) => {
+                  setLpFilterClassificationId(e.target.value);
+                  setLpFilterSubjectId('');
+                  setLpFilterBookId('');
                 }}
-              />
-              {(cpFilterClasses.length > 0 ||
-                cpFilterBooks.length > 0 ||
-                cpFilterClassifications.length > 0 ||
-                cpFilterSubjects.length > 0) && (
+                disabled={!lpFilterClassId || lpAvailableClassifications.length === 0}
+                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+              >
+                <option value="">Classification</option>
+                {lpAvailableClassifications.map((cl) => (
+                  <option key={cl.id} value={cl.id}>
+                    {cl.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={lpFilterSubjectId}
+                onChange={(e) => {
+                  setLpFilterSubjectId(e.target.value);
+                  setLpFilterBookId('');
+                }}
+                disabled={!lpFilterClassId}
+                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+              >
+                <option value="">Subject</option>
+                {lpVisibleSubjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={lpFilterBookId}
+                onChange={(e) => setLpFilterBookId(e.target.value)}
+                disabled={!lpFilterSubjectId}
+                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+              >
+                <option value="">Book</option>
+                {lpAvailableBooks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+
+              {(lpFilterClassId ||
+                lpFilterClassificationId ||
+                lpFilterSubjectId ||
+                lpFilterBookId) && (
                 <button
                   onClick={() => {
-                    setCpFilterClasses([]);
-                    setCpFilterBooks([]);
-                    setCpFilterClassifications([]);
-                    setCpFilterSubjects([]);
-                    setProgressExpandedBook(null);
-                    setProgressExpandedClass(null);
+                    setLpFilterClassId('');
+                    setLpFilterClassificationId('');
+                    setLpFilterSubjectId('');
+                    setLpFilterBookId('');
                   }}
                   className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8"
                 >
@@ -1330,296 +1558,339 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             </div>
           )}
 
-          {/* Inline Upcoming Lessons Filters */}
-          {activeTab === 'upcoming-lessons' && (
-            <div className="flex flex-wrap items-center gap-2">
-              {role === 'parent' ? null : (
-                <>
-                  {role !== 'teacher' && (
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="Teacher"
-                      options={teachers.map((t) => ({ id: String(t.id), label: t.name }))}
-                      selected={upFilterTeachers}
-                      onChange={setUpFilterTeachers}
-                    />
-                  )}
-                  <MultiSelectDropdown
-                    label=""
-                    placeholder="Class"
-                    options={
-                      role === 'teacher'
-                        ? classes
-                            .filter((c) =>
-                              assignments.some((a) => String(a.class_id) === String(c.id))
-                            )
-                            .map((c) => ({ id: String(c.id), label: c.name || c.class_name }))
-                        : classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }))
-                    }
-                    selected={upFilterClasses}
-                    onChange={setUpFilterClasses}
-                  />
-                  <MultiSelectDropdown
-                    label=""
-                    placeholder="Classification"
-                    options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
-                    selected={upFilterClassifications}
-                    onChange={handleUpClassificationsChange}
-                  />
-                  <MultiSelectDropdown
-                    label=""
-                    placeholder="Subject"
-                    options={getFilteredUpSubjectOpts()}
-                    selected={upFilterSubjects}
-                    onChange={handleUpSubjectsChange}
-                  />
-                  <MultiSelectDropdown
-                    label=""
-                    placeholder="Book"
-                    options={getFilteredUpBookOpts()}
-                    selected={upFilterBooks}
-                    onChange={setUpFilterBooks}
-                  />
-                </>
-              )}
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
-                  className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                    upcomingStartDate !== getLocalDateStr(0) ||
-                    upcomingEndDate !== getDefaultEndDateStr()
-                      ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
-                      : 'bg-white text-gray-600 hover:bg-gray-50'
-                  }`}
-                  title="Select Date Range"
-                >
-                  <i className="fas fa-calendar-alt text-xs"></i>
-                  <span>
-                    {new Date(upcomingStartDate).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                    {' - '}
-                    {new Date(upcomingEndDate).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                  <i
-                    className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
-                  ></i>
-                </button>
-
-                {isUpDatePopoverOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setIsUpDatePopoverOpen(false)}
-                    />
-                    <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
-                      <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
-                        Date Range
-                      </h5>
-                      <div className="space-y-2">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">
-                            From:
-                          </span>
-                          <input
-                            type="date"
-                            value={upcomingStartDate}
-                            onChange={(e) => setUpcomingStartDate(e.target.value)}
-                            className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold text-gray-400 uppercase">To:</span>
-                          <input
-                            type="date"
-                            value={upcomingEndDate}
-                            onChange={(e) => setUpcomingEndDate(e.target.value)}
-                            className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2 pt-2 border-t">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUpcomingStartDate(getLocalDateStr(0));
-                            setUpcomingEndDate(getDefaultEndDateStr());
-                            setIsUpDatePopoverOpen(false);
-                          }}
-                          className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
-                        >
-                          Reset
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsUpDatePopoverOpen(false)}
-                          className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
-                        >
-                          Apply
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {(() => {
-                const hasActiveFilters =
-                  (role !== 'parent' && role !== 'teacher' && upFilterTeachers.length > 0) ||
-                  upFilterClasses.length > 0 ||
-                  upFilterClassifications.length > 0 ||
-                  upFilterSubjects.length > 0 ||
-                  upFilterBooks.length > 0 ||
-                  upcomingStartDate !== getLocalDateStr(0) ||
-                  upcomingEndDate !== getDefaultEndDateStr();
-
-                if (!hasActiveFilters) return null;
-
-                return (
+          {/* Inline Class Progress Filters */}
+          {activeTab === 'class-progress' && role !== 'parent' && (
+            <div
+              className="w-full flex flex-wrap items-center gap-2 mt-2"
+              data-name="class progress filters"
+            >
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                <MultiSelectDropdown
+                  label=""
+                  placeholder="Class"
+                  options={getClassesToRender().map((c) => ({
+                    id: String(c.id),
+                    label: c.name || c.class_name,
+                  }))}
+                  selected={cpFilterClasses}
+                  onChange={(val) => {
+                    setCpFilterClasses(val);
+                    setProgressExpandedBook(null);
+                    setProgressExpandedClass(null);
+                  }}
+                />
+                <MultiSelectDropdown
+                  label=""
+                  placeholder="Classification"
+                  options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
+                  selected={cpFilterClassifications}
+                  onChange={handleCpClassificationsChange}
+                />
+                <MultiSelectDropdown
+                  label=""
+                  placeholder="Subject"
+                  options={getFilteredSubjectOpts()}
+                  selected={cpFilterSubjects}
+                  onChange={handleCpSubjectsChange}
+                />
+                <MultiSelectDropdown
+                  label=""
+                  placeholder="Book"
+                  options={getFilteredBookOpts()}
+                  selected={cpFilterBooks}
+                  onChange={(val) => {
+                    setCpFilterBooks(val);
+                    setProgressExpandedBook(null);
+                    setProgressExpandedClass(null);
+                  }}
+                />
+                {(cpFilterClasses.length > 0 ||
+                  cpFilterBooks.length > 0 ||
+                  cpFilterClassifications.length > 0 ||
+                  cpFilterSubjects.length > 0) && (
                   <button
                     onClick={() => {
-                      if (role !== 'teacher') setUpFilterTeachers([]);
-                      setUpFilterClasses([]);
-                      setUpFilterClassifications([]);
-                      setUpFilterSubjects([]);
-                      setUpFilterBooks([]);
-                      setUpcomingStartDate(getLocalDateStr(0));
-                      setUpcomingEndDate(getDefaultEndDateStr());
+                      setCpFilterClasses([]);
+                      setCpFilterBooks([]);
+                      setCpFilterClassifications([]);
+                      setCpFilterSubjects([]);
+                      setProgressExpandedBook(null);
+                      setProgressExpandedClass(null);
                     }}
-                    className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+                    className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8"
                   >
                     Reset
                   </button>
-                );
-              })()}
-            </div>
-          )}
-
-          {activeTab === 'upcoming-lessons' && (
-            <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none ml-auto">
-              {[
-                { key: 'class_subject', icon: 'fa-graduation-cap', tooltip: 'Sort by Class & Subject' },
-                {
-                  key: 'subject_class',
-                  icon: 'fa-book',
-                  tooltip: 'Sort by Subject & Class',
-                },
-              ].map((t) => (
-                <button
-                  key={t.key}
-                  type="button"
-                  onClick={() => setUpcomingGroupingMode(t.key)}
-                  title={t.tooltip}
-                  aria-label={t.tooltip}
-                  className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
-                    upcomingGroupingMode === t.key
-                      ? 'bg-brand-primary text-white shadow-sm'
-                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                  }`}
-                >
-                  <i className={`fas ${t.icon} text-xs`}></i>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {(activeTab === 'teacher-activity' || activeTab === 'teacher-activity') && (
-            <div className="flex items-center gap-3 flex-wrap ml-auto">
-              <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
-                {[
-                  { key: '7_days', label: '7 Days' },
-                  { key: '30_days', label: '30 Days' },
-                  { key: 'range', label: 'Custom Range' },
-                ].map((t) => (
-                  <button
-                    key={t.key}
-                    type="button"
-                    onClick={() => setTimeFilter(t.key)}
-                    className={`px-3.5 py-1 rounded-md text-[10px] font-extrabold transition-all h-full cursor-pointer flex items-center ${
-                      timeFilter === t.key
-                        ? 'bg-brand-primary text-white shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+                )}
               </div>
-              {timeFilter === 'range' && (
-                <div className="flex items-center gap-2 text-xs font-bold text-gray-700">
-                  <input
-                    type="date"
-                    value={dateRange.start}
-                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                    className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
-                  />
-                  <span>to</span>
-                  <input
-                    type="date"
-                    value={dateRange.end}
-                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                    className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
-                  />
-                </div>
-              )}
 
-              {role === 'teacher' && (
-                <>
-                  <button
-                    onClick={() => setIsAddWorkModalOpen(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
-                  >
-                    <i className="fas fa-plus"></i> Add Work
-                  </button>
-                  <label className="flex items-center gap-2 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-xl cursor-pointer text-xs font-bold text-brand-primary select-none hover:bg-brand-primary/15 transition-colors h-8">
-                    <input
-                      type="checkbox"
-                      checked={coverMode}
-                      onChange={(e) => handleCoverModeChange(e.target.checked)}
-                      className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary"
-                    />
-                    Cover for Absent Teacher
-                  </label>
-                </>
-              )}
+              <div className="w-full sm:w-auto sm:ml-auto flex justify-end">
+                <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-8 select-none gap-0.5">
+                  {[
+                    { key: 'none', label: 'No Group', icon: 'fa-bars' },
+                    { key: 'classification', label: 'Classification', icon: 'fa-tags' },
+                    { key: 'subject', label: 'Subject', icon: 'fa-book' },
+                  ].map((g) => (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setCpGroupingMode(g.key)}
+                      title={g.label}
+                      aria-label={g.label}
+                      className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
+                        cpGroupingMode === g.key
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                      }`}
+                    >
+                      <i className={`fas ${g.icon} text-xs`}></i>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
-          {activeTab === 'class-progress' && role !== 'parent' && (
-            <div className="flex items-center gap-2 flex-nowrap shrink-0 whitespace-nowrap ml-auto">
-              <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-8 select-none gap-0.5">
-                {[
-                  { key: 'none', label: 'No Group', icon: 'fa-bars' },
-                  { key: 'classification', label: 'Classification', icon: 'fa-tags' },
-                  { key: 'subject', label: 'Subject', icon: 'fa-book' },
-                ].map((g) => (
+          {/* Inline Upcoming Lessons Filters */}
+          {activeTab === 'upcoming-lessons' && (
+            <div
+              className="w-full flex flex-wrap items-center gap-2 mt-2"
+              data-name="upcoming lessons filters"
+            >
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                {role === 'parent' ? null : (
+                  <>
+                    {role !== 'teacher' && (
+                      <MultiSelectDropdown
+                        label=""
+                        placeholder="Teacher"
+                        options={teachers.map((t) => ({ id: String(t.id), label: t.name }))}
+                        selected={upFilterTeachers}
+                        onChange={setUpFilterTeachers}
+                      />
+                    )}
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Class"
+                      options={
+                        role === 'teacher'
+                          ? classes
+                              .filter((c) =>
+                                assignments.some((a) => String(a.class_id) === String(c.id))
+                              )
+                              .map((c) => ({ id: String(c.id), label: c.name || c.class_name }))
+                          : classes.map((c) => ({
+                              id: String(c.id),
+                              label: c.name || c.class_name,
+                            }))
+                      }
+                      selected={upFilterClasses}
+                      onChange={setUpFilterClasses}
+                    />
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Classification"
+                      options={classifications.map((cl) => ({ id: String(cl.id), label: cl.name }))}
+                      selected={upFilterClassifications}
+                      onChange={handleUpClassificationsChange}
+                    />
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Subject"
+                      options={getFilteredUpSubjectOpts()}
+                      selected={upFilterSubjects}
+                      onChange={handleUpSubjectsChange}
+                    />
+                    <MultiSelectDropdown
+                      label=""
+                      placeholder="Book"
+                      options={getFilteredUpBookOpts()}
+                      selected={upFilterBooks}
+                      onChange={setUpFilterBooks}
+                    />
+                  </>
+                )}
+
+                <div className="relative">
                   <button
-                    key={g.key}
                     type="button"
-                    onClick={() => setCpGroupingMode(g.key)}
-                    title={g.label}
-                    aria-label={g.label}
-                    className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
-                      cpGroupingMode === g.key
-                        ? 'bg-brand-primary text-white shadow-sm'
-                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                    onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
+                    className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      upcomingStartDate !== getLocalDateStr(0) ||
+                      upcomingEndDate !== getDefaultEndDateStr()
+                        ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
                     }`}
+                    title="Select Date Range"
                   >
-                    <i className={`fas ${g.icon} text-xs`}></i>
+                    <i className="fas fa-calendar-alt text-xs"></i>
+                    <span>
+                      {new Date(upcomingStartDate).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                      {' - '}
+                      {new Date(upcomingEndDate).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <i
+                      className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
+                    ></i>
                   </button>
-                ))}
+
+                  {isUpDatePopoverOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsUpDatePopoverOpen(false)}
+                      />
+                      <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
+                        <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+                          Date Range
+                        </h5>
+                        <div className="space-y-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">
+                              From:
+                            </span>
+                            <input
+                              type="date"
+                              value={upcomingStartDate}
+                              onChange={(e) => setUpcomingStartDate(e.target.value)}
+                              className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">
+                              To:
+                            </span>
+                            <input
+                              type="date"
+                              value={upcomingEndDate}
+                              onChange={(e) => setUpcomingEndDate(e.target.value)}
+                              className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUpcomingStartDate(getLocalDateStr(0));
+                              setUpcomingEndDate(getDefaultEndDateStr());
+                              setIsUpDatePopoverOpen(false);
+                            }}
+                            className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsUpDatePopoverOpen(false)}
+                            className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {(() => {
+                  const hasActiveFilters =
+                    (role !== 'parent' && role !== 'teacher' && upFilterTeachers.length > 0) ||
+                    upFilterClasses.length > 0 ||
+                    upFilterClassifications.length > 0 ||
+                    upFilterSubjects.length > 0 ||
+                    upFilterBooks.length > 0 ||
+                    upcomingStartDate !== getLocalDateStr(0) ||
+                    upcomingEndDate !== getDefaultEndDateStr();
+
+                  if (!hasActiveFilters) return null;
+
+                  return (
+                    <button
+                      onClick={() => {
+                        if (role !== 'teacher') setUpFilterTeachers([]);
+                        setUpFilterClasses([]);
+                        setUpFilterClassifications([]);
+                        setUpFilterSubjects([]);
+                        setUpFilterBooks([]);
+                        setUpcomingStartDate(getLocalDateStr(0));
+                        setUpcomingEndDate(getDefaultEndDateStr());
+                      }}
+                      className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+                    >
+                      Reset
+                    </button>
+                  );
+                })()}
+              </div>
+
+              <div className="w-full sm:w-auto sm:ml-auto flex justify-end">
+                <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
+                  {[
+                    {
+                      key: 'class_subject',
+                      icon: 'fa-graduation-cap',
+                      tooltip: 'Sort by Class & Subject',
+                    },
+                    {
+                      key: 'subject_class',
+                      icon: 'fa-book',
+                      tooltip: 'Sort by Subject & Class',
+                    },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setUpcomingGroupingMode(t.key)}
+                      title={t.tooltip}
+                      aria-label={t.tooltip}
+                      className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
+                        upcomingGroupingMode === t.key
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                      }`}
+                    >
+                      <i className={`fas ${t.icon} text-xs`}></i>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
         </div>
 
         {/* Tab Contents */}
+        {activeTab === 'lesson-planner' && role === 'teacher' && (
+          <div data-lesson-planner="true">
+            <LessonManager
+              user={user}
+              teacherRecord={teacherRecord}
+              role="teacher"
+              hideFilterHeader={true}
+              externalFilters={{
+                classId: lpFilterClassId,
+                classificationId: lpFilterClassificationId,
+                subjectId: lpFilterSubjectId,
+                bookId: lpFilterBookId,
+                showAllClasses: lpShowAllClasses,
+              }}
+              onExternalFiltersChange={(next) => {
+                setLpFilterClassId(next.classId || '');
+                setLpFilterClassificationId(next.classificationId || '');
+                setLpFilterSubjectId(next.subjectId || '');
+                setLpFilterBookId(next.bookId || '');
+                setLpShowAllClasses(Boolean(next.showAllClasses));
+              }}
+            />
+          </div>
+        )}
+
         {activeTab === 'teacher-activity' && role === 'teacher' && (
           <div data-teacher-activity="true">
             <PlannedForToday
@@ -1635,7 +1906,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               classes={classes}
               subjects={subjects}
               books={books}
-              filteredDailyEntries={dailyEntries}
+              filteredDailyEntries={filteredDailyEntries}
               handleDeleteClick={handleDeleteClick}
               isCreatedToday={isCreatedToday}
             />
@@ -1748,8 +2019,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         )}
       </div>
 
-      {isAddWorkModalOpen && (
-        plannedLessonToLog ? (
+      {isAddWorkModalOpen &&
+        (plannedLessonToLog ? (
           <AddWorkModalCompactView
             onClose={() => {
               setIsAddWorkModalOpen(false);
@@ -1783,18 +2054,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             bookClasses={bookClasses}
             setBookClasses={setBookClasses}
             subjects={subjects}
-            classifications={classifications}
+            allTeachers={teachers}
             favorites={favorites}
             setFavorites={(newFavs) => {
               setFavorites(newFavs);
               if (teacher?.id) saveFavoritesToDB(teacher.id, newFavs);
             }}
-            coverMode={coverMode}
             assignments={assignments}
             initialPlan={null}
           />
-        )
-      )}
+        ))}
 
       <ConfirmModal
         isOpen={!!deleteModalConfig}

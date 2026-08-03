@@ -3,6 +3,136 @@ import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import ConfirmModal from '../../../ConfirmModal';
 
+const ViewLogsModal = ({ isOpen, onClose, record, lesson }) => {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (isOpen && record?.id) {
+      setLoading(true);
+      supabase
+        .from('lesson_progress_items')
+        .select('*, teacher:teachers(name)')
+        .eq('progress_id', record.id)
+        .order('date', { ascending: false })
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Failed to fetch logs:', error);
+            setLogs([]);
+          } else {
+            setLogs(data || []);
+          }
+          setLoading(false);
+        });
+    }
+  }, [isOpen, record?.id]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !record) return null;
+
+  const fullPath = lesson
+    ? [lesson.level1, lesson.level2, lesson.level3].filter(Boolean).join(' > ')
+    : 'Lesson Details';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl border border-gray-200 max-h-[85vh] flex flex-col text-left">
+        <div className="flex justify-between items-start pb-3 border-b border-gray-100">
+          <div>
+            <span className="text-[10px] font-extrabold uppercase text-indigo-600 tracking-wider">
+              Activity Logs
+            </span>
+            <h3 className="text-sm font-black text-gray-800 leading-tight mt-0.5">
+              {fullPath}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 font-bold text-lg p-1 cursor-pointer"
+          >
+            <i className="fas fa-times" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 space-y-3">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mr-2" />
+              <span className="text-xs font-bold text-gray-500">Loading log entries...</span>
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 border border-dashed rounded-2xl text-gray-400 text-xs font-semibold">
+              No activity logs recorded for this lesson yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto border rounded-2xl border-gray-100">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/80 border-b border-gray-100 text-gray-400 font-extrabold text-[10px] uppercase tracking-wider">
+                    <th className="px-3 py-2.5">Date</th>
+                    <th className="px-3 py-2.5">Teacher</th>
+                    <th className="px-3 py-2.5">Progress</th>
+                    <th className="px-3 py-2.5">Remarks / Comments</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium text-gray-700">
+                  {logs.map((log) => {
+                    const isRev = log.is_revision === 'Y';
+                    return (
+                      <tr key={log.id} className="hover:bg-gray-50/50">
+                        <td className="px-3 py-2.5 font-bold text-gray-800 whitespace-nowrap">
+                          {new Date(log.date).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-indigo-600 font-extrabold whitespace-nowrap">
+                          {log.teacher?.name || '—'}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          {isRev ? (
+                            <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[10px] font-extrabold">
+                              Revision
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-extrabold">
+                              {Number(log.progress || 0).toFixed(0)}%
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-600 italic">
+                          {log.comments || <span className="text-gray-300 not-italic">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-3 border-t border-gray-100 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TimelinePanel = ({
   selectedClassId,
   selectedSubjectId,
@@ -29,6 +159,7 @@ const TimelinePanel = ({
   const [updateMode, setUpdateMode] = useState('replan'); // 'replan' | 'carry_forward'
   const [updatingDateLevelStr, setUpdatingDateLevelStr] = useState(null);
   const [confirmModalData, setConfirmModalData] = useState(null);
+  const [viewLogsRecord, setViewLogsRecord] = useState(null);
 
 
   const [startDateStr, setStartDateStr] = useState(() => {
@@ -763,6 +894,19 @@ const TimelinePanel = ({
                         setUpdateMode('replan');
                       })}
 
+                      {record.status !== 'planned' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewLogsRecord(record);
+                          }}
+                          className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
+                          title="View activity log entries for this lesson"
+                        >
+                          <i className="fas fa-eye text-[9px]"></i> View Logs
+                        </button>
+                      )}
+
                       {!updatingReplanId && (
                         <button
                           onClick={() => onLogWork(record)}
@@ -982,6 +1126,18 @@ const TimelinePanel = ({
                             ) : (
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 {renderStatusBadge(record, lesson)}
+                                {record.status !== 'planned' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewLogsRecord(record);
+                                    }}
+                                    className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
+                                    title="View activity log entries for this lesson"
+                                  >
+                                    <i className="fas fa-eye text-[9px]"></i> View Logs
+                                  </button>
+                                )}
                                 {renderDateUpdateIcon(record, allPlanned)}
                               </div>
                             )}
@@ -1125,6 +1281,18 @@ const TimelinePanel = ({
                             </span>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               {renderStatusBadge(record, lesson)}
+                              {record.status !== 'planned' && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewLogsRecord(record);
+                                  }}
+                                  className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 px-1.5 py-0.5 rounded flex items-center gap-1 transition-colors cursor-pointer"
+                                  title="View activity log entries for this lesson"
+                                >
+                                  <i className="fas fa-eye text-[9px]"></i> View Logs
+                                </button>
+                              )}
                               {renderDateUpdateIcon(record)}
                               <button
                                 onClick={() => onLogWork(record)}
@@ -1213,6 +1381,15 @@ const TimelinePanel = ({
           confirmText={confirmModalData.confirmText || 'Confirm'}
           onConfirm={confirmModalData.onConfirm}
           onCancel={() => setConfirmModalData(null)}
+        />
+      )}
+
+      {viewLogsRecord && (
+        <ViewLogsModal
+          isOpen={!!viewLogsRecord}
+          onClose={() => setViewLogsRecord(null)}
+          record={viewLogsRecord}
+          lesson={allLessons.find((l) => String(l.id) === String(viewLogsRecord?.lesson_id))}
         />
       )}
     </div>

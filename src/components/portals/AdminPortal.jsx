@@ -35,7 +35,11 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // ----- User Management -----
   const fetchTeachers = async () => {
     try {
-      const { data, error } = await supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true);
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('is_active', true)
+        .eq('is_teacher', true);
       if (error) throw error;
       setTeachers(data || []);
     } catch (err) {
@@ -433,22 +437,13 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       onClick: () => onSetSubView('syllabus-manager'),
     },
     {
-      id: 'syllabus-progress-tracker',
-      title: 'Syllabus Progress Tracker',
+      id: 'lesson-planner-tracker',
+      title: 'Lesson Planner & Tracker',
       description: 'View coverage percentages, average class days spent, and revision metrics.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
-      onClick: () => onSetSubView('syllabus-progress-tracker'),
-    },
-    {
-      id: 'lesson-planner',
-      title: 'Lesson Planner',
-      description: 'View and manage lesson plans across all classes, subjects, and teachers.',
-      icon: 'fa-calendar-check',
-      buttonColor: 'bg-pink-600 text-white',
-      shadow: 'shadow-pink-200',
-      onClick: () => onSetSubView('lesson-planner'),
+      onClick: () => onSetSubView('lesson-planner-tracker'),
     },
     {
       id: 'student-records',
@@ -526,8 +521,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       )}
 
       {/* Syllabus Progress Report view */}
-      {subView === 'syllabus-progress-tracker' && (
-        <div data-syllabus-progress-tracker="true">
+      {subView === 'lesson-planner-tracker' && (
+        <div data-lesson-planner-tracker="true">
           <SyllabusTrackerPortal role="admin" />
         </div>
       )}

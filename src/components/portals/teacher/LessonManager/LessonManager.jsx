@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 
@@ -34,7 +34,14 @@ let lessonManagerCache = {
   showAllClasses: false, // New toggle state
 };
 
-const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
+const LessonManager = ({
+  user,
+  teacherRecord,
+  role = 'teacher',
+  externalFilters = null,
+  onExternalFiltersChange = null,
+  hideFilterHeader = false,
+}) => {
   const isAdminView = role === 'admin' || role === 'management';
 
   const [initialized, setInitialized] = useState(false);
@@ -64,20 +71,30 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   const [progressRecords, setProgressRecords] = useState([]); // Replaces lesson_plans + lesson_tracker_log
 
   // Toggle for filtering classes
-  const [showAllClasses, setShowAllClasses] = useState(() =>
-    lessonManagerCache.userId === user?.id ? lessonManagerCache.showAllClasses : false
+  const [showAllClasses, setShowAllClasses] = useState(
+    () =>
+      externalFilters?.showAllClasses ??
+      (lessonManagerCache.userId === user?.id ? lessonManagerCache.showAllClasses : false)
   );
 
   // Selection
-  const [selectedClassId, setSelectedClassId] = useState(() =>
-    lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedClassId : ''
+  const [selectedClassId, setSelectedClassId] = useState(
+    () =>
+      externalFilters?.classId ??
+      (lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedClassId : '')
   );
-  const [selectedClassificationId, setSelectedClassificationId] = useState('');
-  const [selectedSubjectId, setSelectedSubjectId] = useState(() =>
-    lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedSubjectId : ''
+  const [selectedClassificationId, setSelectedClassificationId] = useState(
+    externalFilters?.classificationId || ''
   );
-  const [selectedBookId, setSelectedBookId] = useState(() =>
-    lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedBookId : ''
+  const [selectedSubjectId, setSelectedSubjectId] = useState(
+    () =>
+      externalFilters?.subjectId ??
+      (lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedSubjectId : '')
+  );
+  const [selectedBookId, setSelectedBookId] = useState(
+    () =>
+      externalFilters?.bookId ??
+      (lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedBookId : '')
   );
   const [selectedLessonIds, setSelectedLessonIds] = useState(() =>
     lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedLessonIds : new Set()
@@ -92,6 +109,7 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   const [planningMode, setPlanningMode] = useState('date');
   const [activeTargetDate, setActiveTargetDate] = useState(null);
   const [activeTargetWeek, setActiveTargetWeek] = useState(null);
+  const isSyncingExternalFilters = useRef(false);
 
   // Keep cache updated
   useEffect(() => {
@@ -116,6 +134,98 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
     showAllClasses,
     bookClasses,
     progressRecords,
+  ]);
+
+  useEffect(() => {
+    if (!externalFilters) return;
+
+    let isApplyingExternal = false;
+
+    if (typeof externalFilters.showAllClasses === 'boolean') {
+      if (showAllClasses !== externalFilters.showAllClasses) isApplyingExternal = true;
+      setShowAllClasses((prev) =>
+        prev === externalFilters.showAllClasses ? prev : externalFilters.showAllClasses
+      );
+    }
+
+    if (externalFilters.classId !== undefined) {
+      if (selectedClassId !== externalFilters.classId) isApplyingExternal = true;
+      setSelectedClassId((prev) =>
+        prev === externalFilters.classId ? prev : externalFilters.classId
+      );
+    }
+
+    if (externalFilters.classificationId !== undefined) {
+      if (selectedClassificationId !== externalFilters.classificationId) isApplyingExternal = true;
+      setSelectedClassificationId((prev) =>
+        prev === externalFilters.classificationId ? prev : externalFilters.classificationId
+      );
+    }
+
+    if (externalFilters.subjectId !== undefined) {
+      if (selectedSubjectId !== externalFilters.subjectId) isApplyingExternal = true;
+      setSelectedSubjectId((prev) =>
+        prev === externalFilters.subjectId ? prev : externalFilters.subjectId
+      );
+    }
+
+    if (externalFilters.bookId !== undefined) {
+      if (selectedBookId !== externalFilters.bookId) isApplyingExternal = true;
+      setSelectedBookId((prev) =>
+        prev === externalFilters.bookId ? prev : externalFilters.bookId
+      );
+    }
+
+    if (isApplyingExternal) {
+      isSyncingExternalFilters.current = true;
+    }
+  }, [externalFilters]);
+
+  useEffect(() => {
+    if (!onExternalFiltersChange) return;
+
+    // Avoid writing stale values back to parent while processing external updates.
+    if (isSyncingExternalFilters.current) {
+      const isSyncedWithExternal =
+        (!externalFilters ||
+          externalFilters.classId === undefined ||
+          selectedClassId === externalFilters.classId) &&
+        (!externalFilters ||
+          externalFilters.classificationId === undefined ||
+          selectedClassificationId === externalFilters.classificationId) &&
+        (!externalFilters ||
+          externalFilters.subjectId === undefined ||
+          selectedSubjectId === externalFilters.subjectId) &&
+        (!externalFilters ||
+          externalFilters.bookId === undefined ||
+          selectedBookId === externalFilters.bookId) &&
+        (!externalFilters ||
+          typeof externalFilters.showAllClasses !== 'boolean' ||
+          showAllClasses === externalFilters.showAllClasses);
+
+      if (!isSyncedWithExternal) {
+        return;
+      }
+
+      isSyncingExternalFilters.current = false;
+      return;
+    }
+
+    onExternalFiltersChange({
+      classId: selectedClassId,
+      classificationId: selectedClassificationId,
+      subjectId: selectedSubjectId,
+      bookId: selectedBookId,
+      showAllClasses,
+    });
+  }, [
+    selectedClassId,
+    selectedClassificationId,
+    selectedSubjectId,
+    selectedBookId,
+    showAllClasses,
+    externalFilters,
+    onExternalFiltersChange,
   ]);
 
   // Data Fetching
@@ -169,7 +279,9 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true));
+          queries.push(
+            supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true)
+          );
         } else {
           let teacherData = teacherRecord || null;
           if (!teacherData) {
@@ -364,12 +476,33 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
     });
   }, [books, bookClasses, selectedClassId, selectedSubjectId]);
 
-  // Auto-select book if only 1 is available
+  // Auto-select Classification, Subject, and Book if only 1 option is available
   useEffect(() => {
-    if (availableBooks.length === 1 && selectedBookId !== String(availableBooks[0].id)) {
-      setSelectedBookId(String(availableBooks[0].id));
+    if (!selectedClassId) return;
+
+    if (!selectedClassificationId && availableClassifications.length === 1) {
+      setSelectedClassificationId(String(availableClassifications[0].id));
+      return;
     }
-  }, [availableBooks, selectedBookId]);
+
+    if (!selectedSubjectId && availableSubjects.length === 1) {
+      setSelectedSubjectId(String(availableSubjects[0].id));
+      return;
+    }
+
+    if (selectedSubjectId && !selectedBookId && availableBooks.length === 1) {
+      setSelectedBookId(String(availableBooks[0].id));
+      return;
+    }
+  }, [
+    selectedClassId,
+    selectedClassificationId,
+    selectedSubjectId,
+    selectedBookId,
+    availableClassifications,
+    availableSubjects,
+    availableBooks,
+  ]);
 
   // UI Handlers
   const handleRefresh = async () => {
@@ -483,147 +616,138 @@ const LessonManager = ({ user, teacherRecord, role = 'teacher' }) => {
   return (
     <div className="flex flex-col h-auto lg:h-[calc(100vh-130px)] lg:min-h-[600px] bg-light-bg font-sans pb-24 lg:pb-0">
       {/* Header and Selectors */}
-      <div className="bg-white border-b px-4 py-4 md:px-6 shadow-sm shrink-0">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center shrink-0">
-              <i className="fas fa-calendar-check text-xl"></i>
-            </div>
-            <div>
-              <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight">
-                Lesson Planner
-              </h1>
-              <p className="text-xs font-bold text-dark-soft">
-                Plan, track, and log syllabus progress
-              </p>
-            </div>
-          </div>
+      {!hideFilterHeader && (
+        <div className="bg-white border-b px-4 py-4 md:px-6 shadow-sm shrink-0">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div
+              className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto pb-2 md:pb-0"
+              data-name="lesson planner filters"
+            >
+              {isAdminView && (
+                <div className="col-span-2 md:col-span-1 md:min-w-[150px] w-full md:w-auto">
+                  <select
+                    value={selectedTeacherId}
+                    onChange={(e) => {
+                      setSelectedTeacherId(e.target.value);
+                      setSelectedClassId('');
+                      setSelectedSubjectId('');
+                      setSelectedBookId('');
+                    }}
+                    className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all"
+                  >
+                    <option value="">All Teachers</option>
+                    {allTeachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          <div className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto pb-2 md:pb-0">
-            {isAdminView && (
-              <div className="col-span-2 md:col-span-1 md:min-w-[150px] w-full md:w-auto">
+              {!isAdminView && (
+                <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+                  <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors h-[34px] w-full">
+                    <input
+                      type="checkbox"
+                      checked={showAllClasses}
+                      onChange={(e) => setShowAllClasses(e.target.checked)}
+                      className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer shrink-0"
+                    />
+                    <span className="truncate">Show All Classes</span>
+                  </label>
+                </div>
+              )}
+
+              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
                 <select
-                  value={selectedTeacherId}
+                  value={selectedClassId}
                   onChange={(e) => {
-                    setSelectedTeacherId(e.target.value);
-                    setSelectedClassId('');
+                    setSelectedClassId(e.target.value);
+                    setSelectedClassificationId('');
                     setSelectedSubjectId('');
                     setSelectedBookId('');
                   }}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all"
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all"
                 >
-                  <option value="">All Teachers</option>
-                  {allTeachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                  <option value="">Select Class...</option>
+                  {availableClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
 
-            {!isAdminView && (
               <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-                <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors h-[34px] w-full">
-                  <input
-                    type="checkbox"
-                    checked={showAllClasses}
-                    onChange={(e) => setShowAllClasses(e.target.checked)}
-                    className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer shrink-0"
-                  />
-                  <span className="truncate">Show All Classes</span>
-                </label>
+                <select
+                  value={selectedClassificationId}
+                  onChange={(e) => {
+                    setSelectedClassificationId(e.target.value);
+                    setSelectedSubjectId('');
+                    setSelectedBookId('');
+                  }}
+                  disabled={!selectedClassId || availableClassifications.length === 0}
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
+                >
+                  <option value="">All Classifications</option>
+                  {availableClassifications.map((cl) => (
+                    <option key={cl.id} value={cl.id}>
+                      {cl.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-            )}
 
-            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-              <select
-                value={selectedClassId}
-                onChange={(e) => {
-                  setSelectedClassId(e.target.value);
-                  setSelectedClassificationId('');
-                  setSelectedSubjectId('');
-                  setSelectedBookId('');
-                }}
-                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all"
-              >
-                <option value="">Select Class...</option>
-                {availableClasses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+                <select
+                  value={selectedSubjectId}
+                  onChange={(e) => {
+                    setSelectedSubjectId(e.target.value);
+                    setSelectedBookId('');
+                  }}
+                  disabled={!selectedClassId}
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
+                >
+                  <option value="">Select Subject...</option>
+                  {availableSubjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-              <select
-                value={selectedClassificationId}
-                onChange={(e) => {
-                  setSelectedClassificationId(e.target.value);
-                  setSelectedSubjectId('');
-                  setSelectedBookId('');
-                }}
-                disabled={!selectedClassId || availableClassifications.length === 0}
-                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
-              >
-                <option value="">All Classifications</option>
-                {availableClassifications.map((cl) => (
-                  <option key={cl.id} value={cl.id}>
-                    {cl.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-              <select
-                value={selectedSubjectId}
-                onChange={(e) => {
-                  setSelectedSubjectId(e.target.value);
-                  setSelectedBookId('');
-                }}
-                disabled={!selectedClassId}
-                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
-              >
-                <option value="">Select Subject...</option>
-                {availableSubjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="col-span-1 md:min-w-[160px] w-full md:w-auto">
-              <select
-                value={selectedBookId}
-                onChange={(e) => {
-                  if (e.target.value === 'map-new-book') {
-                    setIsMapBookModalOpen(true);
-                  } else {
-                    setSelectedBookId(e.target.value);
-                  }
-                }}
-                disabled={!selectedSubjectId}
-                className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50 shadow-sm"
-              >
-                <option value="">Select Book...</option>
-                {availableBooks.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-                {selectedClassId && selectedSubjectId && (
-                  <option value="map-new-book" className="text-indigo-600 font-bold">
-                    + Map Book to Class...
-                  </option>
-                )}
-              </select>
+              <div className="col-span-1 md:min-w-[160px] w-full md:w-auto">
+                <select
+                  value={selectedBookId}
+                  onChange={(e) => {
+                    if (e.target.value === 'map-new-book') {
+                      setIsMapBookModalOpen(true);
+                    } else {
+                      setSelectedBookId(e.target.value);
+                    }
+                  }}
+                  disabled={!selectedSubjectId}
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50 shadow-sm"
+                >
+                  <option value="">Select Book...</option>
+                  {availableBooks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                  {selectedClassId && selectedSubjectId && (
+                    <option value="map-new-book" className="text-indigo-600 font-bold">
+                      + Map Book to Class...
+                    </option>
+                  )}
+                </select>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden min-h-0">

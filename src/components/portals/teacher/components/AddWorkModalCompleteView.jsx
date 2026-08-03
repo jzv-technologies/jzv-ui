@@ -24,15 +24,13 @@ const AddWorkModalCompleteView = ({
   bookClasses,
   setBookClasses,
   subjects,
-  classifications,
+  allTeachers = [],
   favorites,
   setFavorites,
-  coverMode,
   assignments,
   initialPlan,
 }) => {
   const [awClassId, setAwClassId] = useState('');
-  const [awClassificationId, setAwClassificationId] = useState('');
   const [awSubjectId, setAwSubjectId] = useState('');
   const [awBookId, setAwBookId] = useState('');
   const [awBookData, setAwBookData] = useState([]);
@@ -44,6 +42,8 @@ const AddWorkModalCompleteView = ({
   const [awComments, setAwComments] = useState('');
   const [awDate, setAwDate] = useState(todayStr);
   const [isAwForceRevision, setIsAwForceRevision] = useState(false);
+  const [coverMode, setCoverMode] = useState(false);
+  const [coverTeacherId, setCoverTeacherId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [previousMaxProgress, setPreviousMaxProgress] = useState(0);
 
@@ -76,7 +76,6 @@ const AddWorkModalCompleteView = ({
   useEffect(() => {
     if (isOpen && initialPlan) {
       setAwClassId(String(initialPlan.class_id || ''));
-      setAwClassificationId(String(initialPlan.subject?.classification_id || ''));
       setAwSubjectId(String(initialPlan.subject_id || ''));
       setAwBookId(String(initialPlan.book_id || ''));
       setAwLevel1(initialPlan.lesson?.level1 || '');
@@ -85,13 +84,14 @@ const AddWorkModalCompleteView = ({
       setAwStatus('completed');
       setAwProgress(100);
       setAwDate(todayStr);
+      setCoverMode(false);
+      setCoverTeacherId('');
       if (initialPlan.book_id) {
         loadAwBookData(initialPlan.book_id);
       }
     } else if (isOpen) {
       // Reset form states
       setAwClassId('');
-      setAwClassificationId('');
       setAwSubjectId('');
       setAwBookId('');
       setAwBookData([]);
@@ -103,6 +103,8 @@ const AddWorkModalCompleteView = ({
       setAwComments('');
       setAwDate(todayStr);
       setIsAwForceRevision(false);
+      setCoverMode(false);
+      setCoverTeacherId('');
       setPreviousMaxProgress(0);
       setInlineAddType(null);
       setInlineAddName('');
@@ -141,10 +143,31 @@ const AddWorkModalCompleteView = ({
     }
   }, [awBookId, isOpen]);
 
-  const awClasses =
-    coverMode || assignments.length === 0
-      ? classes
-      : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
+  useEffect(() => {
+    if (!coverMode) {
+      setCoverTeacherId('');
+      return;
+    }
+
+    if (!coverTeacherId && allTeachers.length > 0) {
+      const firstOtherTeacher = allTeachers.find((t) => String(t.id) !== String(teacher?.id));
+      if (firstOtherTeacher?.id) {
+        setCoverTeacherId(String(firstOtherTeacher.id));
+      }
+    }
+  }, [coverMode, allTeachers, teacher?.id, coverTeacherId]);
+
+  const effectiveAssignmentTeacherId = coverMode ? coverTeacherId : String(teacher?.id || '');
+  const coveredTeacher = allTeachers.find((t) => String(t.id) === String(coverTeacherId));
+
+  const assignmentScopedRows = assignments.filter((a) => {
+    if (!effectiveAssignmentTeacherId) return false;
+    return String(a.teacher_id) === String(effectiveAssignmentTeacherId);
+  });
+
+  const assignmentClassIds = [...new Set(assignmentScopedRows.map((a) => String(a.class_id)))];
+
+  const awClasses = classes.filter((c) => assignmentClassIds.includes(String(c.id)));
 
   // Cascading filters for logging
   const mappedBookIds = bookClasses
@@ -152,15 +175,20 @@ const AddWorkModalCompleteView = ({
     .map((bc) => String(bc.book_id));
   const awClassBooks = books.filter((b) => mappedBookIds.includes(String(b.id)));
 
-  const awFilteredSubjects = subjects.filter((s) =>
-    awClassBooks.some((b) => String(b.subject_id) === String(s.id))
-  );
-  const awActiveClassifications = classifications.filter((c) =>
-    awFilteredSubjects.some((s) => String(s.classification_id) === String(c.id))
-  );
-  const awActiveSubjects = awClassificationId
-    ? awFilteredSubjects.filter((s) => String(s.classification_id) === String(awClassificationId))
-    : awFilteredSubjects;
+  const assignmentSubjectIds = [
+    ...new Set(
+      assignmentScopedRows
+        .filter((a) => String(a.class_id) === String(awClassId))
+        .map((a) => String(a.subject_id))
+    ),
+  ];
+
+  const awFilteredSubjects = subjects.filter((s) => {
+    const inBookMap = awClassBooks.some((b) => String(b.subject_id) === String(s.id));
+    const inTeacherAssignments = assignmentSubjectIds.includes(String(s.id));
+    return inBookMap && inTeacherAssignments;
+  });
+  const awActiveSubjects = awFilteredSubjects;
   const awFilteredBooks = awClassBooks.filter((b) => String(b.subject_id) === String(awSubjectId));
   const awActiveBook = awFilteredBooks.find((b) => String(b.id) === String(awBookId));
 
@@ -313,7 +341,6 @@ const AddWorkModalCompleteView = ({
   // Favorites handlers
   const applyFavorite = (fav) => {
     setAwClassId(String(fav.classId));
-    setAwClassificationId(String(fav.classificationId || ''));
     setAwSubjectId(String(fav.subjectId));
     setAwBookId(String(fav.bookId));
     setAwLevel1('');
@@ -351,7 +378,7 @@ const AddWorkModalCompleteView = ({
     }
   };
 
-  const handleAddToFavorite = async (classId, classificationId, subjectId, bookId) => {
+  const handleAddToFavorite = async (classId, subjectId, bookId) => {
     const cls = classes.find((c) => String(c.id) === String(classId));
     const book = books.find((b) => String(b.id) === String(bookId));
     const sub = subjects.find((s) => String(s.id) === String(subjectId));
@@ -370,7 +397,7 @@ const AddWorkModalCompleteView = ({
     const newFav = {
       key,
       classId,
-      classificationId,
+      classificationId: '',
       subjectId,
       bookId,
       className: cls.name || cls.class_name,
@@ -652,6 +679,9 @@ const AddWorkModalCompleteView = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (coverMode && !coverTeacherId) {
+      return showToast('Please select the absent teacher you are covering.', 'warning');
+    }
     if (!awClassId || !awBookId) return showToast('Please select Class and Book.', 'warning');
 
     let targetLesson = null;
@@ -739,10 +769,7 @@ const AddWorkModalCompleteView = ({
 
           {/* Favorites pills */}
           {favorites.length > 0 && (
-            <div className="mb-4 p-2.5 bg-amber-50/50 border border-amber-100 rounded-xl text-left">
-              <p className="text-[9px] font-extrabold text-amber-800 uppercase mb-2 flex items-center gap-1">
-                <i className="fas fa-star text-amber-500" /> Favorites
-              </p>
+            <div className="mb-4 p-1 bg-amber-50/50 border border-amber-100 rounded-xl text-left">
               <div className="flex flex-wrap gap-1.5">
                 {favorites.map((fav, idx) => (
                   <button
@@ -765,7 +792,69 @@ const AddWorkModalCompleteView = ({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 text-left">
-            {/* Class */}
+            {/* Cover for Absent Teacher checkbox */}
+            <div className="p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-2xl flex flex-col gap-2">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-brand-primary select-none">
+                <input
+                  type="checkbox"
+                  checked={coverMode}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setCoverMode(isChecked);
+                    setAwClassId('');
+                    setAwSubjectId('');
+                    setAwBookId('');
+                    setAwBookData([]);
+                    setAwLevel1('');
+                    setAwLevel2('');
+                    setAwLevel3('');
+                    if (!isChecked) {
+                      setCoverTeacherId('');
+                    }
+                  }}
+                  className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                />
+                Cover for Absent Teacher
+              </label>
+
+              {coverMode && (
+                <div className="mt-1 pt-2 border-t border-brand-primary/15">
+                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                    Select Absent Teacher
+                  </label>
+                  <select
+                    value={coverTeacherId}
+                    onChange={(e) => {
+                      setCoverTeacherId(e.target.value);
+                      setAwClassId('');
+                      setAwSubjectId('');
+                      setAwBookId('');
+                      setAwBookData([]);
+                      setAwLevel1('');
+                      setAwLevel2('');
+                      setAwLevel3('');
+                    }}
+                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                  >
+                    <option value="">Select Teacher</option>
+                    {allTeachers
+                      .filter((t) => String(t.id) !== String(teacher?.id))
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                  </select>
+                  {coverTeacherId && coveredTeacher?.name && (
+                    <p className="mt-2 text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/20">
+                      Logging work covering for:{' '}
+                      <span className="font-extrabold">{coveredTeacher.name}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
@@ -776,7 +865,6 @@ const AddWorkModalCompleteView = ({
                 value={awClassId}
                 onChange={(e) => {
                   setAwClassId(e.target.value);
-                  setAwClassificationId('');
                   setAwSubjectId('');
                   setAwBookId('');
                   setAwBookData([]);
@@ -794,35 +882,6 @@ const AddWorkModalCompleteView = ({
                 ))}
               </select>
             </div>
-
-            {/* Classification */}
-            {awClassId && (
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Classification
-                </label>
-                <select
-                  value={awClassificationId}
-                  onChange={(e) => {
-                    setAwClassificationId(e.target.value);
-                    setAwSubjectId('');
-                    setAwBookId('');
-                    setAwBookData([]);
-                    setAwLevel1('');
-                    setAwLevel2('');
-                    setAwLevel3('');
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">All Classifications</option>
-                  {awActiveClassifications.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* Subject */}
             {awClassId && (
@@ -1184,9 +1243,7 @@ const AddWorkModalCompleteView = ({
               {awBookId && awClassId && (
                 <button
                   type="button"
-                  onClick={() =>
-                    handleAddToFavorite(awClassId, awClassificationId, awSubjectId, awBookId)
-                  }
+                  onClick={() => handleAddToFavorite(awClassId, awSubjectId, awBookId)}
                   disabled={!awClassId || !awBookId || submitting}
                   className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all border border-amber-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >

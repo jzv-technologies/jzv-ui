@@ -67,7 +67,8 @@ const DailyActivityTable = ({
           </div>
         ) : (
           filteredDailyEntries.map((entry) => {
-            const pct = Number(entry.progress || 0);
+            const rawPct = Number(entry.progress);
+            const pct = Number.isNaN(rawPct) ? 0 : rawPct;
             const status = entry.current_status || 'not_started';
 
             // Resolve subject colors for left border
@@ -297,7 +298,9 @@ const DailyActivityTable = ({
                         {getStatusBadge(entry.current_status, entry.isRevision)}
                       </td>
                       <td className="px-4 py-3 font-bold text-gray-700 whitespace-nowrap">
-                        {entry.isRevision ? '—' : `${Number(entry.progress).toFixed(0)}%`}
+                        {entry.isRevision
+                          ? '—'
+                          : `${(Number.isNaN(Number(entry.progress)) ? 0 : Number(entry.progress)).toFixed(0)}%`}
                       </td>
                       <td
                         className="px-4 py-3 text-gray-500 max-w-[200px] truncate whitespace-nowrap"

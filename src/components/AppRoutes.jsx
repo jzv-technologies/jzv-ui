@@ -20,7 +20,6 @@ import SyllabusTrackerPortal from './portals/shared-components/SyllabusTrackerPo
 import CandidatePortal from './portals/CandidatePortal';
 import TVDisplayDashboard from './portals/shared-components/TVDisplayDashboard';
 
-
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
     <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -198,13 +197,13 @@ export const AppRoutes = ({
                     onClick: () => setParentSubView('tickets'),
                   },
                   {
-                    id: 'progress-tracker',
+                    id: 'lesson-planner-tracker',
                     title: 'Syllabus Progress',
                     description: "View syllabus progress and activity logs for your child's class.",
                     icon: 'fa-book-reader',
                     buttonColor: 'bg-purple-600 text-white',
                     shadow: 'shadow-purple-200',
-                    onClick: () => setParentSubView('progress-tracker'),
+                    onClick: () => setParentSubView('lesson-planner-tracker'),
                   },
                 ])}
                 subView={parentSubView}
@@ -221,8 +220,8 @@ export const AppRoutes = ({
                     <ReporterTicketsView user={user} fullName={fullName} />
                   </div>
                 )}
-                {parentSubView === 'progress-tracker' && (
-                  <div data-progress-tracker="true">
+                {parentSubView === 'lesson-planner-tracker' && (
+                  <div data-lesson-planner-tracker="true">
                     <SyllabusTrackerPortal role="parent" student={user?.student} />
                   </div>
                 )}
@@ -275,29 +274,20 @@ export const AppRoutes = ({
                     onClick: () => setTeacherSubView('syllabus'),
                   },
                   {
-                    id: 'lesson-planner',
-                    title: 'Lesson Planner',
-                    description:
-                      'Plan, track, and log syllabus progress all in one unified dashboard.',
-                    icon: 'fa-calendar-check',
-                    buttonColor: 'bg-pink-600 text-white',
-                    shadow: 'shadow-pink-200',
-                    onClick: () => setTeacherSubView('lesson-planner'),
-                  },
-                  {
-                    id: 'progress-tracker',
-                    title: 'Progress Tracker',
+                    id: 'lesson-planner-tracker',
+                    title: 'Lesson Planner & Tracker',
                     description:
                       'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
                     icon: 'fa-chart-line',
                     buttonColor: 'bg-blue-600 text-white',
                     shadow: 'shadow-blue-200',
-                    onClick: () => setTeacherSubView('progress-tracker'),
+                    onClick: () => setTeacherSubView('lesson-planner-tracker'),
                   },
                   {
                     id: 'personal-info',
                     title: 'Personal Info',
-                    description: 'View your employee profile, designation, and update contact information.',
+                    description:
+                      'View your employee profile, designation, and update contact information.',
                     icon: 'fa-id-card',
                     buttonColor: 'bg-emerald-600 text-white',
                     shadow: 'shadow-emerald-200',
@@ -346,8 +336,8 @@ export const AppRoutes = ({
                     <LessonManager user={user} teacherRecord={teacherRecord} />
                   </div>
                 )}
-                {teacherSubView === 'progress-tracker' && (
-                  <div data-progress-tracker="true">
+                {teacherSubView === 'lesson-planner-tracker' && (
+                  <div data-lesson-planner-tracker="true">
                     <SyllabusTrackerPortal
                       role="teacher"
                       user={user}
@@ -386,10 +376,7 @@ export const AppRoutes = ({
           </div>
         }
       />
-      <Route
-        path="/portal/display"
-        element={<TVDisplayDashboard />}
-      />
+      <Route path="/portal/display" element={<TVDisplayDashboard />} />
       <Route
         path="/portal/candidate"
         element={

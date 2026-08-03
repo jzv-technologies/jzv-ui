@@ -548,13 +548,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     },
 
     {
-      id: 'syllabus-progress-tracker',
-      title: 'Syllabus Progress Tracker',
+      id: 'lesson-planner-tracker',
+      title: 'Lesson Planner & Tracker',
       description: 'View syllabus coverage, time spent on chapters/lessons, and revisions.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
-      onClick: () => onSetSubView('syllabus-progress-tracker'),
+      onClick: () => onSetSubView('lesson-planner-tracker'),
     },
     {
       id: 'syllabus-manager',
@@ -564,15 +564,6 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       buttonColor: 'bg-purple-600 text-white',
       shadow: 'shadow-purple-200',
       onClick: () => onSetSubView('syllabus-manager'),
-    },
-    {
-      id: 'lesson-planner',
-      title: 'Lesson Planner',
-      description: 'Plan, track, and log syllabus progress all in one unified dashboard.',
-      icon: 'fa-calendar-check',
-      buttonColor: 'bg-indigo-600 text-white',
-      shadow: 'shadow-indigo-200',
-      onClick: () => onSetSubView('lesson-planner'),
     },
     {
       id: 'job-applications',
@@ -1458,8 +1449,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         </div>
       )}
       {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}
-      {subView === 'syllabus-progress-tracker' && (
-        <div data-syllabus-progress-tracker="true">
+      {subView === 'lesson-planner-tracker' && (
+        <div data-lesson-planner-tracker="true">
           <SyllabusTrackerPortal role="management" />
         </div>
       )}
