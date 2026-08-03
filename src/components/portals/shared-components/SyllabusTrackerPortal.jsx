@@ -427,13 +427,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       try {
         let teacherData = teacherRecord;
         if (!teacherData) {
-          const { data, error: teachErr } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('auth_id', user.id)
-            .maybeSingle();
+          const { data, error: teachErr } = await supabase.rpc('get_current_teacher_details', {
+            p_auth_id: user.id,
+          });
           if (teachErr) throw teachErr;
-          teacherData = data;
+          teacherData = Array.isArray(data) ? data[0] : data;
         }
         if (teacherData) {
           setTeacher(teacherData);
@@ -536,7 +534,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       items = dbItems || [];
 
       const enriched = items.map((item) => {
-        const progressObj = item.lesson_progress || (typeof item.progress === 'object' ? item.progress : null);
+        const progressObj =
+          item.lesson_progress || (typeof item.progress === 'object' ? item.progress : null);
         const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
         const lesson = progressObj ? progressObj.lesson : null;
         const book = progressObj
@@ -550,12 +549,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           ? classes.find((c) => String(c.id) === String(progressObj.class_id))
           : null;
 
-        const rawProgress = typeof item.progress === 'number'
-          ? item.progress
-          : (typeof item.progress === 'string' ? parseFloat(item.progress) : null);
-        const finalProgress = rawProgress !== null && !Number.isNaN(rawProgress)
-          ? rawProgress
-          : (progressObj?.completion_percentage || 0);
+        const rawProgress =
+          typeof item.progress === 'number'
+            ? item.progress
+            : typeof item.progress === 'string'
+              ? parseFloat(item.progress)
+              : null;
+        const finalProgress =
+          rawProgress !== null && !Number.isNaN(rawProgress)
+            ? rawProgress
+            : progressObj?.completion_percentage || 0;
 
         return {
           ...item,
@@ -709,17 +712,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           .select('progress, is_revision')
           .eq('progress_id', deleteModalConfig.logId);
 
-        const nonRevisionItems = (remainingItems || []).filter(
-          (item) => item.is_revision !== 'Y'
-        );
+        const nonRevisionItems = (remainingItems || []).filter((item) => item.is_revision !== 'Y');
 
         let newProgress = 0;
         let newStatus = 'not_started';
 
         if (nonRevisionItems.length > 0) {
-          newProgress = Math.max(
-            ...nonRevisionItems.map((item) => Number(item.progress || 0))
-          );
+          newProgress = Math.max(...nonRevisionItems.map((item) => Number(item.progress || 0)));
           if (newProgress >= 100) {
             newStatus = 'completed';
           } else if (newProgress > 0) {

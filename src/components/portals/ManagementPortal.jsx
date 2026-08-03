@@ -144,7 +144,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     const fetchPersonOptions = async () => {
       try {
         const [teachersRes, usersRes] = await Promise.all([
-          supabase.from('employees').select('name').eq('is_active', true).eq('is_teacher', true),
+          supabase.rpc('get_active_teacher_names_secure', { p_auth_id: user?.id || null }),
           supabase.from('admin_users_view').select('full_name'),
         ]);
         const namesMap = new Map();
@@ -204,26 +204,37 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
       const [
         { data: dbSubjects },
-        { data: dbTeachers },
         { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
         { data: dbPeriods },
+        { data: secureTeachersData, error: secureTeachersErr },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
-        supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
+        supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null }),
       ]);
 
-      const teachersWithSubjects = (dbTeachers || []).map((t) => ({
-        ...t,
+      let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
+      if (secureTeachersErr) {
+        const { data: fallbackTeachers } = await supabase
+          .from('teachers')
+          .select('teacher_id, name, is_male');
+        teacherRows = Array.isArray(fallbackTeachers) ? fallbackTeachers : [];
+      }
+
+      const teachersWithSubjects = teacherRows.map((t) => ({
+        id: t.teacher_id,
+        name: t.name,
+        is_male: t.is_male,
+        auth_id: t.auth_id || null,
         subjects: (dbTeacherSubjects || [])
-          .filter((ts) => String(ts.teacher_id) === String(t.id))
+          .filter((ts) => String(ts.teacher_id) === String(t.teacher_id))
           .map((ts) => ts.subject_id),
       }));
 

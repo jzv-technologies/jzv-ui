@@ -68,32 +68,48 @@ const TeacherTimetableViewer = ({ user }) => {
 
       const [
         { data: dbSubjects },
-        { data: dbTeachers },
         { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbSlots },
         { data: dbPeriods },
         { data: dbClassifications },
+        { data: currentTeacherData, error: currentTeacherErr },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
-        supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
         supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('subject_classifications').select('*'),
+        supabase.rpc('get_current_teacher_details', { p_auth_id: user?.id || null }),
       ]);
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
         throw new Error('No classes or slots found in database. Loading mock data.');
       }
 
-      const teachersWithSubjects = (dbTeachers || []).map((t) => ({
-        ...t,
-        subjects: (dbTeacherSubjects || [])
-          .filter((ts) => String(ts.teacher_id) === String(t.id))
-          .map((ts) => ts.subject_id),
-      }));
+      if (currentTeacherErr) {
+        throw currentTeacherErr;
+      }
+
+      const currentTeacher = Array.isArray(currentTeacherData)
+        ? currentTeacherData[0]
+        : currentTeacherData || null;
+
+      const teachersWithSubjects = currentTeacher
+        ? [
+            {
+              id: currentTeacher.id,
+              teacher_id: currentTeacher.id,
+              name: currentTeacher.name,
+              is_male: currentTeacher.is_male,
+              auth_id: user?.id || null,
+              subjects: (dbTeacherSubjects || [])
+                .filter((ts) => String(ts.teacher_id) === String(currentTeacher.id))
+                .map((ts) => ts.subject_id),
+            },
+          ]
+        : [];
 
       setSubjects(dbSubjects || []);
       setTeachers(teachersWithSubjects);

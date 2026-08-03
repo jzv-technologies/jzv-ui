@@ -141,6 +141,31 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
   const fetchEmployees = async () => {
     setLoading(true);
     try {
+      if (isEmployeeSelf) {
+        // Security-first: do not send user-identifying query params from client.
+        // Backend should resolve current user from auth context (auth.uid()).
+        const { data: rpcData, error: rpcError } = await supabase.rpc(
+          'get_current_teacher_details'
+        );
+
+        if (rpcError) {
+          console.warn('Supabase get_current_teacher_details RPC error:', rpcError.message);
+        }
+
+        const selfList = Array.isArray(rpcData) ? rpcData : rpcData ? [rpcData] : [];
+        if (selfList.length > 0) {
+          setEmployees(selfList);
+          localStorage.setItem('jzv_employees_local_data', JSON.stringify(selfList));
+        } else if (teacherRecord) {
+          setEmployees([teacherRecord]);
+        } else {
+          setEmployees([]);
+        }
+
+        setAuthUsers([]);
+        return;
+      }
+
       const { data, error } = await supabase.from('employees').select('*');
       if (error) {
         console.warn(
@@ -158,28 +183,20 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         localStorage.setItem('jzv_employees_local_data', JSON.stringify(data));
       }
 
-      // Fetch Auth Users & Roles with Fallback
+      // Fetch Auth Users & Roles via secure RPC bound to authenticated user context.
       let usersList = [];
       try {
-        const { data: authData, error: authErr } = await supabase.rpc('get_auth_users_with_roles');
+        const { data: authData, error: authErr } = await supabase.rpc(
+          'get_auth_users_with_roles_secure',
+          {
+            p_auth_id: user?.id || null,
+          }
+        );
         if (!authErr && Array.isArray(authData) && authData.length > 0) {
           usersList = authData;
         }
       } catch (e) {
-        console.warn('RPC get_auth_users_with_roles failed, trying view fallback...', e);
-      }
-
-      if (usersList.length === 0) {
-        try {
-          const { data: viewData, error: viewErr } = await supabase
-            .from('admin_users_view')
-            .select('*');
-          if (!viewErr && Array.isArray(viewData) && viewData.length > 0) {
-            usersList = viewData;
-          }
-        } catch (e) {
-          console.warn('admin_users_view fetch failed:', e);
-        }
+        console.warn('get_auth_users_with_roles_secure RPC failed:', e);
       }
 
       // Offline / Local state fallback if usersList is still empty
@@ -617,9 +634,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
 
         if (formData.auth_id && formData.mapped_roles_sum) {
-          await supabase.rpc('update_user_role', {
-            target_user_id: formData.auth_id,
-            new_role: parseInt(formData.mapped_roles_sum, 10) || 8,
+          await supabase.rpc('update_user_role_admin', {
+            p_user_id: formData.auth_id,
+            p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
           });
         }
 
@@ -666,9 +683,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
         }
 
         if (formData.auth_id && formData.mapped_roles_sum) {
-          await supabase.rpc('update_user_role', {
-            target_user_id: formData.auth_id,
-            new_role: parseInt(formData.mapped_roles_sum, 10) || 8,
+          await supabase.rpc('update_user_role_admin', {
+            p_user_id: formData.auth_id,
+            p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
           });
         }
 
@@ -1066,13 +1083,13 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
     setSaving(true);
     try {
       const sumNum = parseInt(newRoleSum, 10) || 8;
-      const { error: rpcErr } = await supabase.rpc('update_user_role', {
-        target_user_id: targetUserId,
-        new_role: sumNum,
+      const { error: rpcErr } = await supabase.rpc('update_user_role_admin', {
+        p_user_id: targetUserId,
+        p_role: sumNum,
       });
 
       if (rpcErr) {
-        console.warn('RPC update_user_role error:', rpcErr.message);
+        console.warn('RPC update_user_role_admin error:', rpcErr.message);
       }
 
       const prevEmpLinked = employees.find((e) => String(e.auth_id) === String(targetUserId));

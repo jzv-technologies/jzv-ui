@@ -1,18 +1,14 @@
 // src/hooks/useAuth.js
-import { useState, useEffect, useRef, useCallback } from "react";
-import { supabase } from "../utils/supabase";
-import {
-  getUserDataCookie,
-  setUserDataCookie,
-  clearUserDataCookie,
-} from "../utils/cookies";
-import { showToast } from "../utils/toast";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '../utils/supabase';
+import { getUserDataCookie, setUserDataCookie, clearUserDataCookie } from '../utils/cookies';
+import { showToast } from '../utils/toast';
 
 export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
-  const [studentIds, setStudentIds] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [studentIds, setStudentIds] = useState('');
+  const [fullName, setFullName] = useState('');
   const [rolesLoading, setRolesLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [teacherRecord, setTeacherRecord] = useState(null);
@@ -24,7 +20,7 @@ export const useAuth = () => {
 
   // Use refs to avoid dependency loops in callbacks
   const userRolesRef = useRef([]);
-  const studentIdsRef = useRef("");
+  const studentIdsRef = useRef('');
 
   const updateRoles = (roles) => {
     userRolesRef.current = roles || [];
@@ -32,14 +28,14 @@ export const useAuth = () => {
   };
 
   const updateStudentIds = (ids) => {
-    studentIdsRef.current = ids || "";
-    setStudentIds(ids || "");
+    studentIdsRef.current = ids || '';
+    setStudentIds(ids || '');
   };
 
-  const fullNameRef = useRef("");
+  const fullNameRef = useRef('');
   const updateFullName = (name) => {
-    fullNameRef.current = name || "";
-    setFullName(name || "");
+    fullNameRef.current = name || '';
+    setFullName(name || '');
   };
 
   const teacherRecordRef = useRef(null);
@@ -52,25 +48,28 @@ export const useAuth = () => {
   const fetchTeacherRecord = async (userId) => {
     if (teacherRecordRef.current) return teacherRecordRef.current;
     try {
-      const { data, error } = await supabase
-        .from("employees")
-        .select("*")
-        .eq("auth_id", userId)
-        .maybeSingle();
-      if (data) {
-        updateTeacherRecord(data);
-        if (data.name) {
-          updateFullName(data.name);
+      const { data, error } = await supabase.rpc('get_current_teacher_details', {
+        p_auth_id: userId,
+      });
+      if (error) throw error;
+      const teacherData = Array.isArray(data) ? data[0] : data;
+      if (teacherData) {
+        updateTeacherRecord(teacherData);
+        if (teacherData.name) {
+          updateFullName(teacherData.name);
         }
-        return data;
+        return teacherData;
       }
     } catch (err) {
-      console.warn("Could not load teacher record from Supabase, checking LocalStorage fallback:", err);
+      console.warn(
+        'Could not load teacher record from Supabase, checking LocalStorage fallback:',
+        err
+      );
       const raw = localStorage.getItem('jzv_timetable_data');
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          const t = (parsed.teachers || []).find(t => String(t.auth_id) === String(userId));
+          const t = (parsed.teachers || []).find((t) => String(t.auth_id) === String(userId));
           if (t) {
             updateTeacherRecord(t);
             if (t.name) {
@@ -89,7 +88,7 @@ export const useAuth = () => {
   const forceLogout = useCallback(async (userId, reason) => {
     if (userId) clearUserDataCookie(userId);
     await supabase.auth.signOut();
-    showToast(reason, "error");
+    showToast(reason, 'error');
   }, []);
 
   const fetchRoles = useCallback(
@@ -103,28 +102,26 @@ export const useAuth = () => {
 
       fetchingRef.current = true;
       setRolesLoading(true);
-      console.log(
-        `[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}`,
-      );
+      console.log(`[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}`);
 
       try {
         const { data, error } = await supabase
-          .from("admin_users_view")
-          .select("role")
-          .eq("user_id", userId)
+          .from('admin_users_view')
+          .select('role')
+          .eq('user_id', userId)
           .single();
 
         if (error) {
-          if (error.code === "PGRST116") {
+          if (error.code === 'PGRST116') {
             // No roles found
             updateRoles([]);
-            updateStudentIds("");
+            updateStudentIds('');
             clearUserDataCookie(userId);
             setRolesLoading(false);
             rolesFetchedRef.current = true;
             currentUserIdRef.current = userId;
             fetchingRef.current = false;
-            return { success: true, roles: [], studentIds: "" };
+            return { success: true, roles: [], studentIds: '' };
           }
           throw error;
         }
@@ -135,28 +132,26 @@ export const useAuth = () => {
           if (!isNaN(sumValue)) {
             // Bitwise integer sum format
             const bitwiseRoles = [
-              { id: 1, name: "guest" },
-              { id: 2, name: "parent" },
-              { id: 4, name: "staff" },
-              { id: 8, name: "teacher" },
-              { id: 16, name: "management" },
-              { id: 32, name: "admin" },
+              { id: 1, name: 'guest' },
+              { id: 2, name: 'parent' },
+              { id: 4, name: 'staff' },
+              { id: 8, name: 'teacher' },
+              { id: 16, name: 'management' },
+              { id: 32, name: 'admin' },
             ];
-            roles = bitwiseRoles
-              .filter((r) => (sumValue & r.id) !== 0)
-              .map((r) => r.name);
+            roles = bitwiseRoles.filter((r) => (sumValue & r.id) !== 0).map((r) => r.name);
           } else {
             // Fallback for legacy format
             const roleMap = {
-              A: "admin",
-              M: "management",
-              T: "teacher",
-              P: "parent",
-              G: "guest",
-              S: "staff",
+              A: 'admin',
+              M: 'management',
+              T: 'teacher',
+              P: 'parent',
+              G: 'guest',
+              S: 'staff',
             };
             roles = data.role
-              .split(",")
+              .split(',')
               .map((code) => roleMap[code.trim().toUpperCase()])
               .filter(Boolean);
           }
@@ -173,10 +168,7 @@ export const useAuth = () => {
             initialRolesFromCookie.length === roles.length &&
             [...cookieSet].every((r) => dbSet.has(r));
           if (!isEqual) {
-            await forceLogout(
-              userId,
-              "Your permissions have changed. Please log in again.",
-            );
+            await forceLogout(userId, 'Your permissions have changed. Please log in again.');
             setRolesLoading(false);
             fetchingRef.current = false;
             return { success: false, mismatch: true };
@@ -184,29 +176,26 @@ export const useAuth = () => {
         }
 
         updateRoles(roles);
-        updateStudentIds("");
+        updateStudentIds('');
         setRolesLoading(false);
         rolesFetchedRef.current = true;
         currentUserIdRef.current = userId;
         fetchingRef.current = false;
-        return { success: true, roles, studentIds: "" };
+        return { success: true, roles, studentIds: '' };
       } catch (err) {
-        console.error("[fetchRoles] Error:", err);
-        showToast(
-          "Could not verify permissions. Some features may be unavailable.",
-          "error",
-        );
+        console.error('[fetchRoles] Error:', err);
+        showToast('Could not verify permissions. Some features may be unavailable.', 'error');
         setRolesLoading(false);
         fetchingRef.current = false;
         return { success: false, error: err };
       }
     },
-    [forceLogout],
+    [forceLogout]
   );
   const handleLogout = useCallback(async () => {
-    localStorage.removeItem("jzv_parent_session");
-    localStorage.removeItem("jzv_admin_session");
-    localStorage.removeItem("jzv_candidate_session");
+    localStorage.removeItem('jzv_parent_session');
+    localStorage.removeItem('jzv_admin_session');
+    localStorage.removeItem('jzv_candidate_session');
     if (supabase.rest.headers) {
       if (typeof supabase.rest.headers.delete === 'function') {
         supabase.rest.headers.delete('x-parent-mobile');
@@ -220,17 +209,17 @@ export const useAuth = () => {
     await supabase.auth.signOut();
     setUser(null);
     updateRoles([]);
-    updateStudentIds("");
-    updateFullName("");
+    updateStudentIds('');
+    updateFullName('');
     updateTeacherRecord(null);
     currentUserIdRef.current = null;
   }, [user]);
   const loginAsParent = useCallback((student, students = []) => {
-    const parentMobile = (student.mobile1 || student.mobile2 || "").replace(/\D/g, "");
+    const parentMobile = (student.mobile1 || student.mobile2 || '').replace(/\D/g, '');
     const parentSession = {
       user: {
-        id: "parent-" + student.admission_no,
-        email: student.student_name + " (" + student.admission_no + ")",
+        id: 'parent-' + student.admission_no,
+        email: student.student_name + ' (' + student.admission_no + ')',
         full_name: student.student_name,
         parentMode: true,
         student,
@@ -240,7 +229,7 @@ export const useAuth = () => {
       fullName: student.student_name,
       studentIds: student.admission_no,
     };
-    localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
+    localStorage.setItem('jzv_parent_session', JSON.stringify(parentSession));
     if (parentMobile) {
       if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
         supabase.rest.headers.set('x-parent-mobile', parentMobile);
@@ -250,95 +239,102 @@ export const useAuth = () => {
       }
     }
     setUser(parentSession.user);
-    updateRoles(["parent"]);
+    updateRoles(['parent']);
     updateStudentIds(parentSession.studentIds);
     updateFullName(parentSession.fullName);
     setAuthLoading(false);
   }, []);
 
-  const loginAsCandidate = useCallback((mobileNumber, enabledTests = [], expireOn = "") => {
+  const loginAsCandidate = useCallback((mobileNumber, enabledTests = [], expireOn = '') => {
     const candidateSession = {
       user: {
-        id: "candidate-" + mobileNumber,
-        email: "Candidate (" + mobileNumber + ")",
-        full_name: "Candidate " + mobileNumber,
+        id: 'candidate-' + mobileNumber,
+        email: 'Candidate (' + mobileNumber + ')',
+        full_name: 'Candidate ' + mobileNumber,
         candidateMode: true,
         candidateMobile: mobileNumber,
         enabledTests,
         expire_on: expireOn,
       },
-      fullName: "Candidate " + mobileNumber,
-      studentIds: "",
+      fullName: 'Candidate ' + mobileNumber,
+      studentIds: '',
     };
-    localStorage.setItem("jzv_candidate_session", JSON.stringify(candidateSession));
+    localStorage.setItem('jzv_candidate_session', JSON.stringify(candidateSession));
     setUser(candidateSession.user);
-    updateRoles(["candidate"]);
-    updateStudentIds("");
+    updateRoles(['candidate']);
+    updateStudentIds('');
     updateFullName(candidateSession.fullName);
     setAuthLoading(false);
   }, []);
 
-  const switchParentStudent = useCallback((student, allStudents) => {
-    const parentMobile = (student.mobile1 || student.mobile2 || "").replace(/\D/g, "");
-    const parentSession = {
-      user: {
-        id: "parent-" + student.admission_no,
-        email: student.student_name + " (" + student.admission_no + ")",
-        full_name: student.student_name,
-        parentMode: true,
-        student,
-        students: allStudents || (user && user.students) || [student],
-        parentMobile,
-      },
-      fullName: student.student_name,
-      studentIds: student.admission_no,
-    };
-    localStorage.setItem("jzv_parent_session", JSON.stringify(parentSession));
-    if (parentMobile) {
-      if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
-        supabase.rest.headers.set('x-parent-mobile', parentMobile);
-      } else {
-        if (!supabase.rest.headers) supabase.rest.headers = {};
-        supabase.rest.headers['x-parent-mobile'] = parentMobile;
+  const switchParentStudent = useCallback(
+    (student, allStudents) => {
+      const parentMobile = (student.mobile1 || student.mobile2 || '').replace(/\D/g, '');
+      const parentSession = {
+        user: {
+          id: 'parent-' + student.admission_no,
+          email: student.student_name + ' (' + student.admission_no + ')',
+          full_name: student.student_name,
+          parentMode: true,
+          student,
+          students: allStudents || (user && user.students) || [student],
+          parentMobile,
+        },
+        fullName: student.student_name,
+        studentIds: student.admission_no,
+      };
+      localStorage.setItem('jzv_parent_session', JSON.stringify(parentSession));
+      if (parentMobile) {
+        if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
+          supabase.rest.headers.set('x-parent-mobile', parentMobile);
+        } else {
+          if (!supabase.rest.headers) supabase.rest.headers = {};
+          supabase.rest.headers['x-parent-mobile'] = parentMobile;
+        }
       }
-    }
-    setUser(parentSession.user);
-    updateRoles(["parent"]);
-    updateStudentIds(parentSession.studentIds);
-    updateFullName(parentSession.fullName);
-  }, [user]);
+      setUser(parentSession.user);
+      updateRoles(['parent']);
+      updateStudentIds(parentSession.studentIds);
+      updateFullName(parentSession.fullName);
+    },
+    [user]
+  );
 
   // Setup auth state listener only once
   useEffect(() => {
     // Check if there is a local candidate session first
-    const savedCandidate = localStorage.getItem("jzv_candidate_session");
+    const savedCandidate = localStorage.getItem('jzv_candidate_session');
     if (savedCandidate) {
       try {
         const parsed = JSON.parse(savedCandidate);
         const expireOn = new Date(parsed.user?.expire_on);
         if (expireOn > new Date()) {
           setUser(parsed.user);
-          updateRoles(["candidate"]);
-          updateStudentIds("");
+          updateRoles(['candidate']);
+          updateStudentIds('');
           updateFullName(parsed.fullName);
           setAuthLoading(false);
           return;
         } else {
-          localStorage.removeItem("jzv_candidate_session");
+          localStorage.removeItem('jzv_candidate_session');
         }
       } catch (e) {
-        console.error("Failed to restore candidate session:", e);
+        console.error('Failed to restore candidate session:', e);
       }
     }
 
     // Check if there is a local parent session first
-    const savedParent = localStorage.getItem("jzv_parent_session");
+    const savedParent = localStorage.getItem('jzv_parent_session');
     if (savedParent) {
       try {
         const parsed = JSON.parse(savedParent);
-        const parentMobile = parsed.user?.parentMobile || parsed.user?.student?.mobile1 || parsed.user?.student?.mobile2 || "";
+        const parentMobile =
+          parsed.user?.parentMobile ||
+          parsed.user?.student?.mobile1 ||
+          parsed.user?.student?.mobile2 ||
+          '';
         if (parentMobile) {
-          const formattedMobile = parentMobile.replace(/\D/g, "");
+          const formattedMobile = parentMobile.replace(/\D/g, '');
           if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
             supabase.rest.headers.set('x-parent-mobile', formattedMobile);
           } else {
@@ -347,7 +343,7 @@ export const useAuth = () => {
           }
         }
         setUser(parsed.user);
-        updateRoles(["parent"]);
+        updateRoles(['parent']);
         updateStudentIds(parsed.studentIds);
         updateFullName(parsed.fullName);
         setAuthLoading(false);
@@ -358,13 +354,13 @@ export const useAuth = () => {
     }
 
     // Check if there is a mock admin/staff session
-    const savedAdmin = localStorage.getItem("jzv_admin_session");
+    const savedAdmin = localStorage.getItem('jzv_admin_session');
     if (savedAdmin) {
       try {
         const parsed = JSON.parse(savedAdmin);
         setUser(parsed.user);
-        updateRoles(parsed.roles || ["admin"]);
-        updateStudentIds("");
+        updateRoles(parsed.roles || ['admin']);
+        updateStudentIds('');
         updateFullName(parsed.fullName);
         setAuthLoading(false);
         return;
@@ -378,85 +374,79 @@ export const useAuth = () => {
       setAuthLoading(false);
     }, 5000);
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // If parent session is active, ignore Supabase session events
-        if (localStorage.getItem("jzv_parent_session")) {
-          setAuthLoading(false);
-          return;
-        }
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // If parent session is active, ignore Supabase session events
+      if (localStorage.getItem('jzv_parent_session')) {
+        setAuthLoading(false);
+        return;
+      }
 
-        const currentUser = session?.user ?? null;
+      const currentUser = session?.user ?? null;
 
-        // Avoid duplicate processing if user hasn't changed
-        if (
-          currentUser?.id === currentUserIdRef.current &&
-          event !== "SIGNED_IN"
-        ) {
-          return;
-        }
+      // Avoid duplicate processing if user hasn't changed
+      if (currentUser?.id === currentUserIdRef.current && event !== 'SIGNED_IN') {
+        return;
+      }
 
-        setUser(currentUser);
+      setUser(currentUser);
 
-        if (currentUser) {
-          updateFullName(currentUser.user_metadata?.full_name || fullNameRef.current || "");
+      if (currentUser) {
+        updateFullName(currentUser.user_metadata?.full_name || fullNameRef.current || '');
 
-          // Load cached roles from cookie
-          const cached = getUserDataCookie(currentUser.id);
-          let cookieRoles = cached?.roles || [];
-          let cookieStudentIds = cached?.studentIds || "";
+        // Load cached roles from cookie
+        const cached = getUserDataCookie(currentUser.id);
+        let cookieRoles = cached?.roles || [];
+        let cookieStudentIds = cached?.studentIds || '';
 
-          if (cookieRoles.length > 0) {
-            console.log("[Auth] Using cached roles from cookie");
-            updateRoles(cookieRoles);
-            updateStudentIds(cookieStudentIds);
-            rolesFetchedRef.current = true;
-            currentUserIdRef.current = currentUser.id;
-            if (cookieRoles.includes("teacher")) {
-              fetchTeacherRecord(currentUser.id);
-            }
-          } else {
-            updateRoles([]);
-            updateStudentIds("");
-          }
-
-          // Hide loading spinner immediately
-          setAuthLoading(false);
-
-          // Fetch fresh roles only if:
-          // - New sign in, OR
-          // - No cached roles and INITIAL_SESSION (first load)
-          const shouldFetch =
-            event === "SIGNED_IN" ||
-            (event === "INITIAL_SESSION" && cookieRoles.length === 0);
-
-          if (shouldFetch) {
-            console.log("[Auth] Fetching fresh roles from DB");
-            const res = await fetchRoles(currentUser.id, event, cookieRoles);
-            
-            // Allow only existing users added by admin (must have roles)
-            if (res && res.success && (!res.roles || res.roles.length === 0)) {
-              await forceLogout(
-                currentUser.id,
-                "Access Denied: Your account has not been registered by an administrator."
-              );
-            } else if (res && res.success && res.roles.includes("teacher")) {
-              fetchTeacherRecord(currentUser.id);
-            }
+        if (cookieRoles.length > 0) {
+          console.log('[Auth] Using cached roles from cookie');
+          updateRoles(cookieRoles);
+          updateStudentIds(cookieStudentIds);
+          rolesFetchedRef.current = true;
+          currentUserIdRef.current = currentUser.id;
+          if (cookieRoles.includes('teacher')) {
+            fetchTeacherRecord(currentUser.id);
           }
         } else {
-          // No user – reset everything
           updateRoles([]);
-          updateFullName("");
-          updateStudentIds("");
-          updateTeacherRecord(null);
-          setAuthLoading(false);
-          rolesFetchedRef.current = false;
-          fetchingRef.current = false;
-          currentUserIdRef.current = null;
+          updateStudentIds('');
         }
-      },
-    );
+
+        // Hide loading spinner immediately
+        setAuthLoading(false);
+
+        // Fetch fresh roles only if:
+        // - New sign in, OR
+        // - No cached roles and INITIAL_SESSION (first load)
+        const shouldFetch =
+          event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && cookieRoles.length === 0);
+
+        if (shouldFetch) {
+          console.log('[Auth] Fetching fresh roles from DB');
+          const res = await fetchRoles(currentUser.id, event, cookieRoles);
+
+          // Allow only existing users added by admin (must have roles)
+          if (res && res.success && (!res.roles || res.roles.length === 0)) {
+            await forceLogout(
+              currentUser.id,
+              'Access Denied: Your account has not been registered by an administrator.'
+            );
+          } else if (res && res.success && res.roles.includes('teacher')) {
+            fetchTeacherRecord(currentUser.id);
+          }
+        }
+      } else {
+        // No user – reset everything
+        updateRoles([]);
+        updateFullName('');
+        updateStudentIds('');
+        updateTeacherRecord(null);
+        setAuthLoading(false);
+        rolesFetchedRef.current = false;
+        fetchingRef.current = false;
+        currentUserIdRef.current = null;
+      }
+    });
 
     authListenerRef.current = subscription;
 
@@ -481,5 +471,3 @@ export const useAuth = () => {
     teacherRecord,
   };
 };
-
-

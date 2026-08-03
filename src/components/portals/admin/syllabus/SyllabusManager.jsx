@@ -296,12 +296,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         if (teacherAllocatedIds.length === 0) {
           let teacherData = teacherRecord;
           if (!teacherData) {
-            const { data } = await supabase
-              .from('employees')
-              .select('id')
-              .eq('auth_id', user.id)
-              .maybeSingle();
-            teacherData = data;
+            const { data, error: teacherErr } = await supabase.rpc('get_current_teacher_details', {
+              p_auth_id: user.id,
+            });
+            if (!teacherErr) {
+              teacherData = Array.isArray(data) ? data[0] : data;
+            }
           }
 
           if (teacherData) {

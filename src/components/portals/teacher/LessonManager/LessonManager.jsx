@@ -280,21 +280,50 @@ const LessonManager = ({
 
         if (isAdminView) {
           queries.push(
-            supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true)
+            supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null })
           );
         } else {
           let teacherData = teacherRecord || null;
           if (!teacherData) {
-            const { data, error: teachErr } = await supabase
-              .from('employees')
-              .select('*')
-              .eq('auth_id', user.id)
-              .maybeSingle();
-            if (teachErr) throw teachErr;
-            teacherData = data;
+            const { data, error: teachErr } = await supabase.rpc('get_teachers_with_auth_secure', {
+              p_auth_id: user?.id || null,
+            });
+
+            if (teachErr) {
+              const { data: currentTeacherData, error: currentTeacherErr } = await supabase.rpc(
+                'get_current_teacher_details'
+              );
+              if (currentTeacherErr) throw currentTeacherErr;
+              const currentTeacher = Array.isArray(currentTeacherData)
+                ? currentTeacherData[0]
+                : currentTeacherData || null;
+              teacherData = currentTeacher
+                ? {
+                    id: currentTeacher.id,
+                    teacher_id: currentTeacher.id,
+                    name: currentTeacher.name,
+                    auth_id: user?.id || null,
+                    is_male: currentTeacher.is_male,
+                    is_active: true,
+                  }
+                : null;
+            } else {
+              const teacherRows = Array.isArray(data) ? data : [];
+              teacherData =
+                teacherRows.find((t) => String(t.auth_id || '') === String(user?.id || '')) ||
+                teacherRows[0] ||
+                null;
+            }
           }
-          if (!teacherData?.id) throw new Error('No teacher record found.');
-          setTeacher(teacherData);
+          const normalizedTeacher = teacherData
+            ? {
+                ...teacherData,
+                id: teacherData.id ?? teacherData.teacher_id,
+                name: teacherData.name ?? teacherData.full_name ?? '',
+              }
+            : null;
+          if (!normalizedTeacher?.id) throw new Error('No teacher record found.');
+          setTeacher(normalizedTeacher);
         }
 
         const results = await Promise.all(queries);
@@ -324,8 +353,14 @@ const LessonManager = ({
         setProgressRecords(dbProgress || []);
         setClassifications(dbClassifications || []);
 
+        const normalizedTeachers = ((teachersResult && teachersResult.data) || []).map((t) => ({
+          ...t,
+          id: t.id ?? t.teacher_id,
+          name: t.name ?? t.full_name ?? '',
+        }));
+
         if (isAdminView) {
-          setAllTeachers(teachersResult?.data || []);
+          setAllTeachers(normalizedTeachers);
         }
 
         // Update Cache
@@ -341,7 +376,7 @@ const LessonManager = ({
           allLessons: dbLessons || [],
           progressRecords: dbProgress || [],
           classifications: dbClassifications || [],
-          allTeachers: teachersResult?.data || [],
+          allTeachers: normalizedTeachers,
           teacher: isAdminView ? null : teacherRecord || lessonManagerCache.teacher,
         };
 

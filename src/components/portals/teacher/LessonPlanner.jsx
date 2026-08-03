@@ -198,21 +198,52 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         ];
 
         if (isAdminView) {
-          queries.push(supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true));
+          queries.push(
+            supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null })
+          );
         } else {
           // Resolve teacher for teacher role
           let teacherData = teacherRecord || null;
           if (!teacherData) {
-            const { data, error: teachErr } = await supabase
-              .from('employees')
-              .select('*')
-              .eq('auth_id', user.id)
-              .maybeSingle();
-            if (teachErr) throw teachErr;
-            teacherData = data;
+            const { data, error: teachErr } = await supabase.rpc('get_teachers_with_auth_secure', {
+              p_auth_id: user?.id || null,
+            });
+
+            if (teachErr) {
+              const { data: currentTeacherData, error: currentTeacherErr } = await supabase.rpc(
+                'get_current_teacher_details'
+              );
+              if (currentTeacherErr) throw currentTeacherErr;
+              const currentTeacher = Array.isArray(currentTeacherData)
+                ? currentTeacherData[0]
+                : currentTeacherData || null;
+              teacherData = currentTeacher
+                ? {
+                    id: currentTeacher.id,
+                    teacher_id: currentTeacher.id,
+                    name: currentTeacher.name,
+                    auth_id: user?.id || null,
+                    is_male: currentTeacher.is_male,
+                    is_active: true,
+                  }
+                : null;
+            } else {
+              const teacherRows = Array.isArray(data) ? data : [];
+              teacherData =
+                teacherRows.find((t) => String(t.auth_id || '') === String(user?.id || '')) ||
+                teacherRows[0] ||
+                null;
+            }
           }
-          if (!teacherData?.id) throw new Error(`No teacher record found for this user.`);
-          setTeacher(teacherData);
+          const normalizedTeacher = teacherData
+            ? {
+                ...teacherData,
+                id: teacherData.id ?? teacherData.teacher_id,
+                name: teacherData.name ?? teacherData.full_name ?? '',
+              }
+            : null;
+          if (!normalizedTeacher?.id) throw new Error(`No teacher record found for this user.`);
+          setTeacher(normalizedTeacher);
         }
 
         const results = await Promise.all(queries);
@@ -237,7 +268,14 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         const resolvedBookClasses = dbBookClasses || [];
         const resolvedLessons = dbAllLessons || [];
         const resolvedLessonPlans = dbLessonPlans || [];
-        const resolvedTeachers = isAdminView && teachersResult ? teachersResult.data || [] : [];
+        const resolvedTeachers =
+          isAdminView && teachersResult
+            ? (teachersResult.data || []).map((t) => ({
+                ...t,
+                id: t.id ?? t.teacher_id,
+                name: t.name ?? t.full_name ?? '',
+              }))
+            : [];
 
         setClasses(resolvedClasses);
         setSubjects(resolvedSubjects);
@@ -694,7 +732,8 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
     setSaving(true);
     try {
-      const datesToPlan = planningMode === 'date' ? getDatesInRange(dateStr, endDateStr || dateStr) : [dateStr];
+      const datesToPlan =
+        planningMode === 'date' ? getDatesInRange(dateStr, endDateStr || dateStr) : [dateStr];
 
       const newPlans = datesToPlan.map((dStr) => ({
         class_id: selectedClassId,
@@ -765,7 +804,10 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       return;
     }
 
-    const datesToPlan = planningMode === 'date' ? getDatesInRange(targetDate, targetEndDate || targetDate) : [targetDate];
+    const datesToPlan =
+      planningMode === 'date'
+        ? getDatesInRange(targetDate, targetEndDate || targetDate)
+        : [targetDate];
 
     // Filter out already planned lessons to prevent duplication
     const plansToInsert = [];
@@ -1045,10 +1087,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                     const hasL3 = l2Node.level3s.length > 0;
 
                     return (
-                      <div
-                        key={l2Node.name}
-                        className="space-y-1"
-                      >
+                      <div key={l2Node.name} className="space-y-1">
                         {/* Level 2 Header */}
                         <div className="flex items-center justify-between py-1 hover:bg-gray-100/50 rounded pr-2">
                           <div
@@ -1710,8 +1749,14 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                   const isRangeSelected =
                     activeTargetDate &&
                     activeTargetEndDate &&
-                    dateStr >= (activeTargetDate < activeTargetEndDate ? activeTargetDate : activeTargetEndDate) &&
-                    dateStr <= (activeTargetDate < activeTargetEndDate ? activeTargetEndDate : activeTargetDate);
+                    dateStr >=
+                      (activeTargetDate < activeTargetEndDate
+                        ? activeTargetDate
+                        : activeTargetEndDate) &&
+                    dateStr <=
+                      (activeTargetDate < activeTargetEndDate
+                        ? activeTargetEndDate
+                        : activeTargetDate);
                   const isDraggedOver = draggedOverDate === dateStr;
                   const isToday = dateStr === new Date().toISOString().split('T')[0];
                   const colorStyles = getWeekdayColorStyles(date);
@@ -1752,7 +1797,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                             lesson,
                             dateStr,
                             null,
-                            activeTargetEndDate && (activeTargetDate === dateStr || isRangeSelected) ? activeTargetEndDate : null
+                            activeTargetEndDate && (activeTargetDate === dateStr || isRangeSelected)
+                              ? activeTargetEndDate
+                              : null
                           );
                         }
                       }}
@@ -1790,7 +1837,11 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                             e.stopPropagation();
                             openAssignModal({
                               date: dateStr,
-                              endDate: activeTargetEndDate && (activeTargetDate === dateStr || isRangeSelected) ? activeTargetEndDate : dateStr,
+                              endDate:
+                                activeTargetEndDate &&
+                                (activeTargetDate === dateStr || isRangeSelected)
+                                  ? activeTargetEndDate
+                                  : dateStr,
                             });
                           }}
                           disabled={saving}
