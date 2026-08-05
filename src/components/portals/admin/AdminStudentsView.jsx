@@ -1,16 +1,21 @@
 // src/components/portals/admin/AdminStudentsView.jsx
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "../../../utils/supabase";
 import { showToast } from "../../../utils/toast";
 import { calculateAge } from "../../../utils/dateUtils";
 import DataGrid from "../../DataGrid";
 import ConfirmModal from "../../ConfirmModal";
-import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from "../../../data/mockStudents";
+import StudentFeesView from "./students/StudentFeesView";
 
 const STUDENTS_STORAGE_KEY = "jzv_students_local_data";
 const TIMETABLE_STORAGE_KEY = "jzv_timetable_local_data";
 
 const AdminStudentsView = () => {
+  const [activeTab, setActiveTab] = useState("records"); // "records" | "fees"
+  const [feesControls, setFeesControls] = useState(null);
+  const [selectedClassId, setSelectedClassId] = useState("all");
+  const [recordsSearchQuery, setRecordsSearchQuery] = useState("");
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -279,74 +284,419 @@ const AdminStudentsView = () => {
     }
   };
 
+  // Calculate Class Distribution Statistics
+  const classStats = React.useMemo(() => {
+    const countsMap = new Map();
+    students.forEach((s) => {
+      const cId = s.class_id ? String(s.class_id) : "unassigned";
+      countsMap.set(cId, (countsMap.get(cId) || 0) + 1);
+    });
+
+    const stats = classes.map((cls) => ({
+      id: String(cls.id),
+      name: cls.name,
+      count: countsMap.get(String(cls.id)) || 0,
+    }));
+
+    const unassignedCount = countsMap.get("unassigned") || 0;
+    if (unassignedCount > 0) {
+      stats.push({
+        id: "unassigned",
+        name: "Unassigned",
+        count: unassignedCount,
+      });
+    }
+
+    return stats;
+  }, [students, classes]);
+
   // Map students array to pretty headers for DataGrid rendering
-  const displayData = students.map((s) => {
-    const cls = classes.find((c) => String(c.id) === String(s.class_id));
-    return {
-      id: s.id,
-      class_id: s.class_id,
-      "Admission No": s.admission_no || "",
-      "Edsoft ID": s.edsoft_id || "",
-      "Student Name": s.student_name || "",
-      "Class": cls ? cls.name : "Unassigned",
-      "Father Name": s.father_name || "",
-      "Birth Date": s.birth_date || "",
-      "Age": calculateAge(s.birth_date),
-      "Mobile 1": s.mobile1 || "",
-      "Mobile 2": s.mobile2 || "",
-      "Enrollment": s.enrollment || "Active",
-      "Hostel": s.hostel || "No",
-      "Transport Point": s.transport_point || "",
-    };
-  });
+  const displayData = React.useMemo(() => {
+    let mapped = students.map((s) => {
+      const cls = classes.find((c) => String(c.id) === String(s.class_id));
+      return {
+        id: s.id,
+        class_id: s.class_id,
+        "Admission No": s.admission_no || "",
+        "Edsoft ID": s.edsoft_id || "",
+        "Student Name": s.student_name || "",
+        "Class": cls ? cls.name : "Unassigned",
+        "Father Name": s.father_name || "",
+        "Birth Date": s.birth_date || "",
+        "Age": calculateAge(s.birth_date),
+        "Mobile 1": s.mobile1 || "",
+        "Mobile 2": s.mobile2 || "",
+        "Enrollment": s.enrollment || "Active",
+        "Hostel": s.hostel || "No",
+        "Transport Point": s.transport_point || "",
+      };
+    });
+
+    if (selectedClassId !== "all") {
+      if (selectedClassId === "unassigned") {
+        mapped = mapped.filter((s) => !s.class_id);
+      } else {
+        mapped = mapped.filter((s) => String(s.class_id) === String(selectedClassId));
+      }
+    }
+
+    if (recordsSearchQuery.trim()) {
+      const q = recordsSearchQuery.trim().toLowerCase();
+      mapped = mapped.filter(
+        (s) =>
+          String(s["Student Name"] || "").toLowerCase().includes(q) ||
+          String(s["Admission No"] || "").toLowerCase().includes(q) ||
+          String(s["Father Name"] || "").toLowerCase().includes(q) ||
+          String(s["Mobile 1"] || "").toLowerCase().includes(q)
+      );
+    }
+
+    return mapped;
+  }, [students, classes, selectedClassId, recordsSearchQuery]);
+
+  // Export Student Records to Excel
+  const handleExportRecordsExcel = () => {
+    if (displayData.length === 0) {
+      showToast("No records available to export.", "error");
+      return;
+    }
+    const exportRows = displayData.map((r) => ({
+      "Admission No": r["Admission No"],
+      "Edsoft ID": r["Edsoft ID"],
+      "Student Name": r["Student Name"],
+      Class: r["Class"],
+      "Father Name": r["Father Name"],
+      "Birth Date": r["Birth Date"],
+      Age: r["Age"],
+      "Mobile 1": r["Mobile 1"],
+      "Mobile 2": r["Mobile 2"],
+      Enrollment: r["Enrollment"],
+      Hostel: r["Hostel"],
+      "Transport Point": r["Transport Point"],
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Student Records");
+    XLSX.writeFile(
+      workbook,
+      `Student_Records_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    showToast("Student Records exported to Excel!", "success");
+  };
 
   return (
-    <div className="flex flex-col min-h-[500px]">
-      {/* Top Banner Control Panel */}
-      <div className="bg-light-lbg border border-light-border p-4 sm:p-6 mb-6 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
-            <i className="fas fa-graduation-cap text-green-dark"></i>
-            Student Database
-          </h2>
-          <p className="text-xs sm:text-sm text-dark-soft mt-1">
-            Manage admission records, parent associations, hostel, and transport options.
-            {!isSupabaseMode && (
-              <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-100">
-                <i className="fas fa-wifi-slash"></i> Offline Fallback Mode
-              </span>
-            )}
-          </p>
+    <div className="flex flex-col min-h-[500px] space-y-6">
+      {/* ── Unified Responsive Top Header ── */}
+      <div className="bg-white border border-light-border p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
+          {/* Main Title & Subtitle */}
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-dark-primary flex items-center gap-2">
+              <i className="fas fa-graduation-cap text-green-dark"></i>
+              Student Portal
+            </h2>
+            <p className="text-xs text-dark-muted font-semibold mt-0.5">
+              Manage admission database, student profiles, and fee allocations.
+              {!isSupabaseMode && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                  <i className="fas fa-wifi-slash text-[9px]"></i> Offline Mode
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Navigation Pill Tabs */}
+          <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+            <button
+              onClick={() => setActiveTab("records")}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                activeTab === "records"
+                  ? "bg-green-dark text-white shadow-sm"
+                  : "text-dark-soft hover:text-dark-primary hover:bg-white/50"
+              }`}
+            >
+              <i className="fas fa-user-graduate"></i>
+              Students Record
+            </button>
+
+            <button
+              onClick={() => setActiveTab("fees")}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                activeTab === "fees"
+                  ? "bg-green-dark text-white shadow-sm"
+                  : "text-dark-soft hover:text-dark-primary hover:bg-white/50"
+              }`}
+            >
+              <i className="fas fa-file-invoice-dollar"></i>
+              Student Fees
+            </button>
+          </div>
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => loadStudents(classes)}
-            className="bg-light-bg hover:bg-light-ui border border-light-border px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all"
-            title="Refresh database"
-          >
-            <i className="fas fa-sync-alt"></i> Refresh
-          </button>
-          <button
-            onClick={openAddModal}
-            className="bg-green-dark hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-green-100 flex items-center gap-2 transition-all active:scale-95"
-          >
-            <i className="fas fa-user-plus"></i> Add Student
-          </button>
-        </div>
+        {/* Action Controls Bar for Student Records tab */}
+        {activeTab === "records" && (
+          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-[200px]">
+                <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+                <input
+                  type="text"
+                  placeholder="Search by Admission No, Student Name..."
+                  value={recordsSearchQuery}
+                  onChange={(e) => setRecordsSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:border-brand-primary transition-all"
+                />
+              </div>
+
+              {/* Class Filter Dropdown */}
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
+              >
+                <option value="all">All Classes</option>
+                {classes
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={() => loadStudents(classes)}
+                disabled={loading}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                title="Refresh database"
+              >
+                <i className={`fas fa-sync-alt ${loading ? "animate-spin" : ""}`}></i>
+                Refresh
+              </button>
+
+              <button
+                onClick={handleExportRecordsExcel}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <i className="fas fa-file-excel text-emerald-600"></i>
+                Export Excel
+              </button>
+
+              <button
+                onClick={openAddModal}
+                className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <i className="fas fa-user-plus"></i>
+                Add Student
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action Controls Bar for Student Fees tab */}
+        {activeTab === "fees" && feesControls && (
+          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-[200px]">
+                <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+                <input
+                  type="text"
+                  placeholder="Search by Admission No, Student Name..."
+                  value={feesControls.searchQuery}
+                  onChange={(e) => feesControls.setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:border-brand-primary transition-all"
+                />
+              </div>
+
+              {/* Class Filter Dropdown */}
+              <select
+                value={feesControls.selectedClassFilter}
+                onChange={(e) => feesControls.setSelectedClassFilter(e.target.value)}
+                className="px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
+              >
+                <option value="">All Classes</option>
+                {classes
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={feesControls.onRefresh}
+                disabled={feesControls.loading}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                title="Refresh database"
+              >
+                <i className={`fas fa-sync-alt ${feesControls.loading ? "animate-spin" : ""}`}></i>
+                Refresh
+              </button>
+
+              <button
+                onClick={feesControls.onExportCsv}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <i className="fas fa-file-excel text-emerald-600"></i>
+                Export Excel
+              </button>
+
+              <button
+                onClick={feesControls.onOpenImport}
+                className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+              >
+                <i className="fas fa-file-import"></i>
+                Bulk Import
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Main Student Records Grid */}
-      <div className="flex-1 bg-white border border-light-border rounded-2xl overflow-hidden shadow-sm">
-        <DataGrid
-          data={displayData}
-          loading={loading}
-          error={error}
-          onRetry={() => loadStudents(classes)}
-          onRowClick={openEditModal}
-          excludeColumns={["id", "class_id"]}
+      {activeTab === "fees" ? (
+        <StudentFeesView
+          students={students}
+          classes={classes}
+          onRefreshStudents={() => loadStudents(classes)}
+          onRegisterControls={setFeesControls}
         />
-      </div>
+      ) : (
+        <div className="space-y-6">
+          {/* ── Class Summary Tiles Panel ── */}
+          <div className="bg-white border border-light-border rounded-3xl p-4 sm:p-6 shadow-sm space-y-3.5">
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-light-border/60">
+              <div className="flex items-center gap-2">
+                <i className="fas fa-layer-group text-green-dark text-sm"></i>
+                <h3 className="text-xs sm:text-sm font-extrabold text-dark-primary uppercase tracking-wider">
+                  Class Overview & Enrollment
+                </h3>
+              </div>
+              {selectedClassId !== "all" && (
+                <button
+                  onClick={() => setSelectedClassId("all")}
+                  className="text-[11px] font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition-all active:scale-95 flex items-center gap-1"
+                >
+                  <i className="fas fa-times text-[10px]"></i>
+                  Reset Filter
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedClassId("all")}
+                className={`flex flex-col p-3 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                  selectedClassId === "all"
+                    ? "bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40"
+                    : "bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 w-full mb-1">
+                  <span
+                    className={`text-xs font-black truncate ${
+                      selectedClassId === "all" ? "text-white" : "text-dark-deepblue"
+                    }`}
+                  >
+                    All Classes
+                  </span>
+                  <i
+                    className={`fas fa-users text-[10px] ${
+                      selectedClassId === "all" ? "text-white/80" : "text-brand-primary"
+                    }`}
+                  ></i>
+                </div>
+                <div className="flex items-baseline justify-between w-full mt-auto">
+                  <span
+                    className={`text-[10px] font-bold ${
+                      selectedClassId === "all" ? "text-white/80" : "text-dark-muted"
+                    }`}
+                  >
+                    Total
+                  </span>
+                  <span
+                    className={`text-sm font-black ${
+                      selectedClassId === "all" ? "text-white" : "text-emerald-700"
+                    }`}
+                  >
+                    {students.length}
+                  </span>
+                </div>
+              </button>
+
+              {classStats.map((cls) => (
+                <button
+                  key={cls.id}
+                  type="button"
+                  onClick={() =>
+                    setSelectedClassId(selectedClassId === cls.id ? "all" : cls.id)
+                  }
+                  className={`flex flex-col p-3 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
+                    selectedClassId === cls.id
+                      ? "bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40"
+                      : "bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 w-full mb-1">
+                    <span
+                      className={`text-xs font-black truncate ${
+                        selectedClassId === cls.id ? "text-white" : "text-dark-deepblue"
+                      }`}
+                    >
+                      {cls.name}
+                    </span>
+                    <i
+                      className={`fas fa-[#10B981] fa-user-graduate text-[10px] ${
+                        selectedClassId === cls.id ? "text-white/80" : "text-emerald-600"
+                      }`}
+                    ></i>
+                  </div>
+                  <div className="flex items-baseline justify-between w-full mt-auto">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        selectedClassId === cls.id ? "text-white/80" : "text-dark-muted"
+                      }`}
+                    >
+                      Students
+                    </span>
+                    <span
+                      className={`text-sm font-black ${
+                        selectedClassId === cls.id ? "text-white" : "text-emerald-700"
+                      }`}
+                    >
+                      {cls.count}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main Student Records Grid */}
+          <div className="flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+            <DataGrid
+              data={displayData}
+              loading={loading}
+              error={error}
+              onRetry={() => loadStudents(classes)}
+              onRowClick={openEditModal}
+              excludeColumns={["id", "class_id"]}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Custom Modal for Add / Edit */}
       {isModalOpen && (

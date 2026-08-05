@@ -410,6 +410,15 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       onClick: () => onSetSubView('employee-management'),
     },
     {
+      id: 'student-records',
+      title: 'Students Management',
+      description: 'View and assign student records to parents.',
+      icon: 'fa-user-graduate',
+      buttonColor: 'bg-green-dark text-white',
+      shadow: 'shadow-green-200',
+      onClick: () => onSetSubView('student-records'),
+    },
+    {
       id: 'form-configurations',
       title: 'Form Configurations',
       description: 'Configure fields, validation, and overrides in the database.',
@@ -436,6 +445,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       shadow: 'shadow-purple-200',
       onClick: () => onSetSubView('syllabus-manager'),
     },
+
     {
       id: 'lesson-planner-tracker',
       title: 'Lesson Planner & Tracker',
@@ -445,15 +455,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       shadow: 'shadow-blue-200',
       onClick: () => onSetSubView('lesson-planner-tracker'),
     },
-    {
-      id: 'student-records',
-      title: 'Student Records',
-      description: 'View and assign student records to parents.',
-      icon: 'fa-user-graduate',
-      buttonColor: 'bg-green-dark text-white',
-      shadow: 'shadow-green-200',
-      onClick: () => onSetSubView('student-records'),
-    },
+
     {
       id: 'display-dashboard',
       title: 'TV Display Board',
@@ -476,7 +478,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {/* Employee Management view */}
       {(subView === 'employee-management' || subView === 'user-management') && (
         <div data-employee-management="true">
-          <EmployeeRecordsView role="admin" user={user} />
+          <EmployeeRecordsView role="admin" user={user} userRoles={userRoles} />
         </div>
       )}
 

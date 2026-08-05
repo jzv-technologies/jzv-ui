@@ -92,6 +92,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const [collapsedNodes, setCollapsedNodes] = useState({});
   const [collapsedClassifications, setCollapsedClassifications] = useState({});
   const [activeSubjectId, setActiveSubjectId] = useState(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (isTeacher && !showAllSubjects) {
@@ -1394,7 +1395,10 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               return (
                 <div
                   key={sub.id}
-                  onClick={() => setActiveSubjectId(sub.id)}
+                  onClick={() => {
+                    setActiveSubjectId(sub.id);
+                    setIsMobileSidebarOpen(false);
+                  }}
                   className={`group w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex justify-between items-center cursor-pointer ${isSelected ? 'bg-brand-primary text-white font-bold' : 'text-dark-soft hover:bg-light-ui hover:text-dark-primary'} ${isSubDeactivated ? 'opacity-60' : ''}`}
                 >
                   <span className="flex items-center gap-2 truncate">
@@ -1427,7 +1431,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       </span>
                     )}
                   </span>
-                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
+                  <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2">
                     {(isAdmin || isTeacher) && (
                       <button
                         onClick={(e) => {
@@ -1581,26 +1585,26 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             return (
               <div
                 key={l1}
-                className="border border-dashed border-light-border rounded-xl overflow-hidden pl-2"
+                className="border border-dashed border-light-border rounded-xl overflow-hidden pl-1 sm:pl-2"
               >
-                <div className="bg-blue-400 p-1 flex items-center justify-between gap-4 border-b border-light-border/40 border-dashed">
+                <div className="bg-blue-400 p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-light-border/40 border-dashed">
                   <button
                     onClick={() => toggleCollapse(`${book.id}-${l1}`)}
-                    className="flex items-center gap-3 text-left focus:outline-none flex-1 min-w-0"
+                    className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
                   >
                     <i
-                      className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[9px] text-dark-soft`}
+                      className={`fas fa-chevron-${isL1Collapsed ? 'right' : 'down'} text-[9px] text-dark-soft shrink-0`}
                     />
-                    <i className="fas fa-folder-open text-orange-primary text-xs" />
+                    <i className="fas fa-folder-open text-orange-primary text-xs shrink-0" />
                     <span className="font-extrabold text-xs text-dark-deepblue truncate">
                       {l1 === '_Revision' ? 'Book Revision' : l1}
                     </span>
-                    <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                    <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
                       {Object.keys(l2Groups).filter((k) => k !== '_direct_lessons').length} {l2Name}
                       s
                     </span>
                   </button>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
                     {l2Keys.length > 0 && (
                       <button
                         type="button"
@@ -1691,13 +1695,13 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                           return l2Groups[l2].map((node, idx) => (
                             <div
                               key={idx}
-                              className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
+                              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-3 sm:pl-4"
                             >
-                              <div className="flex items-center gap-2">
-                                <i className="fas fa-file-alt text-dark-soft text-[10px]" />
-                                <span>{node.level3}</span>
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
+                                <span className="truncate">{node.level3}</span>
                               </div>
-                              <div className="flex gap-2 items-center">
+                              <div className="flex gap-2 items-center shrink-0 justify-end">
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
                                   <i className="far fa-file-lines mr-1" />
                                   {node.page_count} pages
@@ -1745,26 +1749,26 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                         return (
                           <div
                             key={l2}
-                            className="bg-blue-100 border border-light-border/40 rounded-lg overflow-hidden pl-4"
+                            className="bg-blue-100 border border-light-border/40 rounded-lg overflow-hidden pl-2 sm:pl-4"
                           >
-                            <div className="p-1 flex items-center justify-between gap-4">
+                            <div className="p-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                               <button
                                 onClick={() => toggleCollapse(`${book.id}-${l1}-${l2}`)}
-                                className="flex items-center gap-2.5 text-left focus:outline-none flex-1 min-w-0"
+                                className="flex items-center gap-2 text-left focus:outline-none flex-1 min-w-0"
                               >
                                 <i
-                                  className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[8px] text-dark-soft`}
+                                  className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[8px] text-dark-soft shrink-0`}
                                 />
-                                <i className="fas fa-bookmark text-emerald-600 text-[10px]" />
+                                <i className="fas fa-bookmark text-emerald-600 text-[10px] shrink-0" />
                                 <span className="font-extrabold text-xs text-dark-primary truncate">
                                   {l2}
                                 </span>
                                 {l3Nodes.lessons.length > 0 ? (
-                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
                                     {l3Nodes.lessons.length} {l3Name}s
                                   </span>
                                 ) : !l3Nodes.hasPlaceholder ? (
-                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1">
+                                  <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
                                     No {l3Name}s
                                   </span>
                                 ) : null}
@@ -1784,7 +1788,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 </div>
                               )}
 
-                              <div className="flex gap-1">
+                              <div className="flex items-center gap-1 shrink-0 justify-end">
                                 {l3Nodes.lessons.length > 0 && (
                                   <button
                                     type="button"
@@ -1862,13 +1866,13 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 {l3Nodes.lessons.map((node, idx) => (
                                   <div
                                     key={idx}
-                                    className="flex justify-between items-center bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-4"
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-3 sm:pl-4"
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <i className="fas fa-file-alt text-dark-soft text-[10px]" />
-                                      <span>{node.level3}</span>
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
+                                      <span className="truncate">{node.level3}</span>
                                     </div>
-                                    <div className="flex gap-2 items-center">
+                                    <div className="flex gap-2 items-center shrink-0 justify-end">
                                       <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
                                         <i className="far fa-file-lines mr-1" />
                                         {node.page_count} pages
@@ -1926,58 +1930,97 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-light-bg overflow-hidden font-sans">
-      <div className="w-80 bg-white border-r border-light-border flex flex-col h-full shadow-sm z-10 shrink-0">
-        <div className="p-2 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
-          <div className="flex justify-between items-center mb-3">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-64px)] bg-light-bg overflow-hidden font-sans relative">
+      {/* Mobile Navigation Header Bar */}
+      <div className="flex md:hidden items-center justify-between p-3 bg-white border-b border-light-border shadow-xs shrink-0 z-20">
+        <button
+          type="button"
+          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          className="px-3 py-1.5 bg-brand-lbg text-brand-primary border border-brand-primary/20 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-2xs active:scale-95"
+        >
+          <i className={`fas ${isMobileSidebarOpen ? 'fa-times' : 'fa-layer-group'}`}></i>
+          <span>{isMobileSidebarOpen ? 'Close Curriculum' : 'Curriculum List'}</span>
+        </button>
+        {activeSubject && (
+          <div className="text-right truncate max-w-[180px]">
+            <span className="text-xs font-black text-dark-primary block truncate">
+              {activeSubject.name}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Curriculum Sidebar Container */}
+      <div
+        className={`${
+          isMobileSidebarOpen ? 'flex' : 'hidden'
+        } md:flex w-full md:w-80 bg-white border-r border-light-border flex-col h-full shadow-sm z-30 shrink-0 absolute md:relative inset-0`}
+      >
+        <div className="p-3 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
+          <div className="flex justify-between items-center mb-2">
             <h2 className="text-xl font-black text-brand-primary flex items-center gap-2 tracking-tight">
               <i className="fas fa-layer-group text-brand-primary"></i> Curriculum
             </h2>
-            {groupedSubjects.length > 0 && (
+            <div className="flex items-center gap-1">
+              {groupedSubjects.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (allClassificationsCollapsed) {
+                      setCollapsedClassifications({});
+                    } else {
+                      const newCollapsed = {};
+                      groupedSubjects.forEach((cls) => {
+                        newCollapsed[cls.name] = true;
+                      });
+                      setCollapsedClassifications(newCollapsed);
+                    }
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
+                  title={
+                    allClassificationsCollapsed
+                      ? 'Expand All Classifications'
+                      : 'Collapse All Classifications'
+                  }
+                >
+                  <i
+                    className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
+                  />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => {
-                  if (allClassificationsCollapsed) {
-                    setCollapsedClassifications({});
-                  } else {
-                    const newCollapsed = {};
-                    groupedSubjects.forEach((cls) => {
-                      newCollapsed[cls.name] = true;
-                    });
-                    setCollapsedClassifications(newCollapsed);
-                  }
-                }}
-                className="p-1 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
-                title={
-                  allClassificationsCollapsed
-                    ? 'Expand All Classifications'
-                    : 'Collapse All Classifications'
-                }
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 md:hidden rounded-xl"
+                title="Close"
               >
-                <i
-                  className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
-                />
+                <i className="fas fa-times text-base"></i>
               </button>
-            )}
-            {(isAdmin || isTeacher) && (
-              <div className="p-4 border-t border-light-border/50 bg-white flex gap-2">
-                {isAdmin && (
-                  <button
-                    onClick={() => setIsClassificationsModalOpen(true)}
-                    className="flex-1  text-green-primary font-bold text-xl transition-colors flex items-center justify-center gap-2"
-                  >
-                    <i className="fas fa-sliders text-green-primary"></i>
-                  </button>
-                )}
-                <button
-                  onClick={() => setModal({ type: 'add', level: 'subject' })}
-                  className="flex-1 text-blue-primary font-bold text-xl transition-colors flex items-center justify-center gap-2"
-                >
-                  <i className="fas fa-book-open"></i>
-                </button>
-              </div>
-            )}
+            </div>
           </div>
+
+          {(isAdmin || isTeacher) && (
+            <div className="flex gap-2 pt-2 border-t border-light-border/50 bg-white">
+              {isAdmin && (
+                <button
+                  onClick={() => setIsClassificationsModalOpen(true)}
+                  className="flex-1 py-1.5 px-3 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                  title="Manage Subject Classifications"
+                >
+                  <i className="fas fa-sliders text-xs"></i>
+                  <span>Classifications</span>
+                </button>
+              )}
+              <button
+                onClick={() => setModal({ type: 'add', level: 'subject' })}
+                className="flex-1 py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                title="Add New Subject"
+              >
+                <i className="fas fa-book-open text-xs"></i>
+                <span>Add Subject</span>
+              </button>
+            </div>
+          )}
           {isTeacher && (
             <div className="flex items-center gap-2 mt-2 px-1 pb-1">
               <label className="relative inline-flex items-center cursor-pointer select-none">
@@ -1996,30 +2039,37 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar">
           {renderSubjectSelector('Unclassified', unclassifiedSubjects, true)}
           {groupedSubjects.map((cls) => renderSubjectSelector(cls.name, cls.subjects))}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 bg-light-bg overflow-y-auto custom-scrollbar relative">
-        <div className=" mx-auto w-full p-4">
+        <div className="mx-auto w-full p-3 sm:p-4 md:p-6 space-y-4">
           {!activeSubject ? (
-            <div className="text-center py-20 px-4">
-              <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
-                <i className="fas fa-book-open text-4xl text-brand-soft/40"></i>
+            <div className="text-center py-16 sm:py-20 px-4">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
+                <i className="fas fa-book-open text-3xl sm:text-4xl text-brand-soft/40"></i>
               </div>
-              <h3 className="text-2xl font-bold text-dark-primary mb-2">No Subject Selected</h3>
-              <p className="text-sm font-semibold text-dark-muted max-w-sm mx-auto">
-                Select a subject from the sidebar or create a new one to begin managing curriculum.
+              <h3 className="text-xl sm:text-2xl font-bold text-dark-primary mb-2">No Subject Selected</h3>
+              <p className="text-xs sm:text-sm font-semibold text-dark-muted max-w-sm mx-auto mb-4">
+                Select a subject from the curriculum sidebar or create a new one to begin managing curriculum.
               </p>
+              <button
+                type="button"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="md:hidden inline-flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-md active:scale-95"
+              >
+                <i className="fas fa-layer-group"></i> Open Curriculum List
+              </button>
             </div>
           ) : (
-            <div className="space-y-2 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex justify-between items-start flex-wrap gap-4 bg-white p-4 rounded-2xl border border-light-border shadow-sm">
+            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-light-border shadow-sm">
                 <div>
                   <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-xl font-black text-dark-primary tracking-tight">
+                    <h1 className="text-lg sm:text-xl font-black text-dark-primary tracking-tight">
                       {activeSubject.name}
                     </h1>
                   </div>
@@ -2037,7 +2087,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     onClick={() =>
                       setModal({ type: 'add', level: 'book', parentId: activeSubject.id })
                     }
-                    className="bg-brand-primary hover:bg-brand-primary/80 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98]"
+                    className="bg-brand-primary hover:bg-brand-primary/80 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto text-center shrink-0"
                   >
                     <i className="fas fa-plus mr-1.5"></i> Add Book
                   </button>
@@ -2083,30 +2133,30 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                         key={book.id}
                         className="bg-white rounded-2xl border border-light-border shadow-sm overflow-hidden animate-in fade-in duration-300"
                       >
-                        <div className="p-5 flex items-center justify-between gap-4">
+                        <div className="p-4 sm:p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-light-border/60">
                           <button
                             onClick={() => toggleCollapse(book.id)}
-                            className="flex items-center gap-4 text-left focus:outline-none flex-1"
+                            className="flex items-center gap-3 text-left focus:outline-none flex-1 min-w-0"
                           >
                             <div
-                              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${isBookCollapsed ? 'bg-light-lbg text-dark-soft' : 'bg-brand-lbg text-brand-primary'}`}
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${isBookCollapsed ? 'bg-light-lbg text-dark-soft' : 'bg-brand-lbg text-brand-primary'}`}
                             >
                               <i
                                 className={`fas fa-chevron-${isBookCollapsed ? 'right' : 'down'} text-xs`}
                               />
                             </div>
-                            <div>
-                              <h3 className="font-extrabold text-base text-dark-primary flex items-center gap-2">
-                                <i className="fas fa-book text-blue-primary text-sm" />
-                                {book.name}
-                                <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold">
+                            <div className="min-w-0">
+                              <h3 className="font-extrabold text-sm sm:text-base text-dark-primary flex items-center gap-2 flex-wrap">
+                                <i className="fas fa-book text-blue-primary text-sm shrink-0" />
+                                <span className="truncate">{book.name}</span>
+                                <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold shrink-0">
                                   {loadedBookIds.has(String(book.id))
                                     ? `${bookL1Count} ${bookL1Name}s / ${bookData.length} Lessons`
                                     : 'Expand to load lessons'}
                                 </span>
                               </h3>
-                              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider">
+                              <div className="flex items-center gap-2 sm:gap-3 mt-1 flex-wrap">
+                                <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider shrink-0">
                                   Book ID: {book.id}
                                 </span>
                                 {mappedClassNames.length > 0 ? (
@@ -2123,7 +2173,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                               </div>
                             </div>
                           </button>
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap w-full xl:w-auto justify-start xl:justify-end border-t xl:border-t-0 pt-2 xl:pt-0">
                             {(isAdmin || isTeacher) && (
                               <>
                                 {l1Keys.length > 0 && (
@@ -2167,7 +2217,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                     e.stopPropagation();
                                     initiateMapping(book);
                                   }}
-                                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 shadow-sm active:scale-[0.98]"
+                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 shadow-2xs active:scale-[0.98]"
                                   title="Map Book to Classes"
                                 >
                                   <i className="fas fa-graduation-cap text-xs"></i>
@@ -2183,7 +2233,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       hierarchy: book.hierarchy_type,
                                     })
                                   }
-                                  className="px-3 py-1.5 bg-blue-primary text-white hover:bg-blue-dark rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
+                                  className="px-2.5 py-1.5 bg-blue-primary text-white hover:bg-blue-dark rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
                                 >
                                   <i className="fas fa-plus"></i> Add {bookL1Name}
                                 </button>

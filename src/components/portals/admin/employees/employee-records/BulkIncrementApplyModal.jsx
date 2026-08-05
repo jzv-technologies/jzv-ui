@@ -13,6 +13,20 @@ const BulkIncrementApplyModal = ({
   handleExecuteBulkApplyIncrements,
   saving,
 }) => {
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setIsBulkApplyModalOpen(false);
+      }
+    };
+    if (isBulkApplyModalOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isBulkApplyModalOpen, setIsBulkApplyModalOpen]);
+
   if (!isBulkApplyModalOpen) return null;
 
   return (
@@ -21,13 +35,10 @@ const BulkIncrementApplyModal = ({
         <div className="flex items-center justify-between border-b pb-3">
           <div>
             <h3 className="text-lg font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-calendar-check text-emerald-600"></i> Bulk Apply Increments to
-              Current Salary
+              <i className="fas fa-calendar-check text-emerald-600"></i> Apply Increment to Current
+              Salary
             </h3>
-            <p className="text-xs text-dark-muted font-semibold mt-0.5">
-              Select a target month or exact date to find matching compensation history entries and
-              update employees' Current Salary in bulk.
-            </p>
+            <p className="text-xs text-dark-muted font-semibold mt-0.5">Salary Increment Data.</p>
           </div>
           <button
             onClick={() => setIsBulkApplyModalOpen(false)}
@@ -39,45 +50,12 @@ const BulkIncrementApplyModal = ({
 
         {/* Date/Month Selection Controls */}
         <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-100 space-y-3">
-          <div className="flex items-center gap-4 text-xs font-bold">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="filterMode"
-                checked={bulkApplyFilterMode === 'month'}
-                onChange={() => {
-                  setBulkApplyFilterMode('month');
-                  const now = new Date();
-                  setBulkApplyDateValue(
-                    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-                  );
-                }}
-                className="text-emerald-600 focus:ring-emerald-500"
-              />
-              Filter by Month (YYYY-MM)
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="filterMode"
-                checked={bulkApplyFilterMode === 'date'}
-                onChange={() => {
-                  setBulkApplyFilterMode('date');
-                  const now = new Date();
-                  setBulkApplyDateValue(now.toISOString().split('T')[0]);
-                }}
-                className="text-emerald-600 focus:ring-emerald-500"
-              />
-              Filter by Specific Date (YYYY-MM-DD)
-            </label>
-          </div>
-
           <div className="flex items-center gap-3">
             <label className="text-xs font-extrabold text-emerald-950 shrink-0">
-              Target {bulkApplyFilterMode === 'month' ? 'Effective Month' : 'Effective Date'}:
+              Effective Month:
             </label>
             <input
-              type={bulkApplyFilterMode === 'month' ? 'month' : 'date'}
+              type="month"
               value={bulkApplyDateValue}
               onChange={(e) => setBulkApplyDateValue(e.target.value)}
               className="px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-extrabold text-emerald-950 outline-none focus:ring-2 focus:ring-emerald-400"
@@ -89,8 +67,8 @@ const BulkIncrementApplyModal = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs font-bold text-dark-primary">
             <span>
-              Matching Employees ({matchingBulkIncrements.length} found,{' '}
-              {selectedBulkEmpIds.length} selected):
+              Matching Employees ({matchingBulkIncrements.length} found, {selectedBulkEmpIds.length}{' '}
+              selected):
             </span>
           </div>
 

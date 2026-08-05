@@ -1,11 +1,50 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Translate from '../Translate';
 
-const Header = ({ user, fullName, onLogout, onLoginClick, onLogoClick, switchParentStudent }) => {
+const Header = ({
+  user,
+  fullName,
+  teacherRecord,
+  onLogout,
+  onLoginClick,
+  onLogoClick,
+  switchParentStudent,
+}) => {
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showMobileDropdown, setShowMobileDropdown] = useState(false);
   const dropdownRef = useRef(null);
   const mobileDropdownRef = useRef(null);
+
+  const teacherId =
+    teacherRecord?.teacher_id ||
+    teacherRecord?.id ||
+    user?.teacher_id ||
+    user?.teacherId ||
+    user?.user_metadata?.teacher_id;
+
+  const empId = (() => {
+    if (teacherRecord?.emp_id) return teacherRecord.emp_id;
+    if (teacherRecord?.employee_id) return teacherRecord.employee_id;
+    if (user?.emp_id) return user.emp_id;
+    if (user?.employee_id) return user.employee_id;
+    if (user?.user_metadata?.emp_id) return user.user_metadata.emp_id;
+
+    // Check local storage for cached employees table record
+    try {
+      const localEmpsRaw = localStorage.getItem('jzv_employees_local_data');
+      if (localEmpsRaw) {
+        const localEmps = JSON.parse(localEmpsRaw);
+        const matched = localEmps.find(
+          (e) =>
+            (user?.id && String(e.auth_id) === String(user.id)) ||
+            (user?.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
+        );
+        if (matched?.emp_id) return matched.emp_id;
+      }
+    } catch (e) {}
+
+    return null;
+  })();
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -46,13 +85,20 @@ const Header = ({ user, fullName, onLogout, onLoginClick, onLogoClick, switchPar
             />
           </div>
 
-          {/* Mobile user info – for teachers (non-parentMode) */}
+          {/* Mobile user info – for staff/teachers (non-parentMode) */}
           {user && !user.parentMode && (
             <div className="flex flex-col items-end mr-2 text-right">
               <span className="text-xs font-bold text-dark-muted uppercase tracking-wider">
                 {fullName || 'User'}
               </span>
               <span className="text-sm font-bold text-dark-deepblue">{user.email}</span>
+              {(teacherId || empId) && (
+                <span className="text-[10px] font-semibold text-dark-soft mt-0.5">
+                  {teacherId ? `Teacher ID: ${teacherId}` : ''}
+                  {teacherId && empId ? ' • ' : ''}
+                  {empId ? `Emp ID: ${empId}` : ''}
+                </span>
+              )}
             </div>
           )}
 
@@ -257,6 +303,13 @@ const Header = ({ user, fullName, onLogout, onLoginClick, onLogoClick, switchPar
                       {fullName || 'User'}
                     </span>
                     <span className="text-sm font-bold text-dark-deepblue">{user.email}</span>
+                    {(teacherId || empId) && (
+                      <span className="text-[10px] font-semibold text-dark-soft mt-0.5">
+                        {teacherId ? `Teacher ID: ${teacherId}` : ''}
+                        {teacherId && empId ? ' • ' : ''}
+                        {empId ? `Emp ID: ${empId}` : ''}
+                      </span>
+                    )}
                   </div>
                 )}
                 <button

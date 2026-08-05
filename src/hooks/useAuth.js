@@ -39,30 +39,70 @@ export const useAuth = () => {
   };
 
   const teacherRecordRef = useRef(null);
+  const fetchingTeacherRef = useRef(false);
 
   const updateTeacherRecord = (record) => {
     teacherRecordRef.current = record;
     setTeacherRecord(record);
   };
 
-  const fetchTeacherRecord = async (userId) => {
-    if (teacherRecordRef.current) return teacherRecordRef.current;
+  const fetchTeacherRecord = async (userId, userEmail) => {
+    if (teacherRecordRef.current && teacherRecordRef.current.emp_id) return teacherRecordRef.current;
+    if (fetchingTeacherRef.current) return null;
+    fetchingTeacherRef.current = true;
     try {
-      const { data, error } = await supabase.rpc('get_current_teacher_details', {
-        p_auth_id: userId,
-      });
-      if (error) throw error;
-      const teacherData = Array.isArray(data) ? data[0] : data;
-      if (teacherData) {
-        updateTeacherRecord(teacherData);
-        if (teacherData.name) {
-          updateFullName(teacherData.name);
+      // 1. Query employees table directly to pull emp_id column
+      let empRecord = null;
+      try {
+        if (userId) {
+          const { data: empsByAuth, error: authErr } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('auth_id', userId);
+          if (!authErr && Array.isArray(empsByAuth) && empsByAuth.length > 0) {
+            empRecord = empsByAuth[0];
+          }
         }
-        return teacherData;
+        if (!empRecord && userEmail) {
+          const { data: empsByEmail, error: emailErr } = await supabase
+            .from('employees')
+            .select('*')
+            .eq('email', userEmail);
+          if (!emailErr && Array.isArray(empsByEmail) && empsByEmail.length > 0) {
+            empRecord = empsByEmail[0];
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load employee record from Supabase employees table:', e);
+      }
+
+      // 2. Query RPC get_current_teacher_details as fallback/enrichment
+      let teacherData = null;
+      try {
+        const { data, error } = await supabase.rpc('get_current_teacher_details', {
+          p_auth_id: userId,
+        });
+        if (!error && data) {
+          teacherData = Array.isArray(data) ? data[0] : data;
+        }
+      } catch (e) {}
+
+      const mergedRecord = {
+        ...(teacherData || {}),
+        ...(empRecord || {}),
+        emp_id: empRecord?.emp_id || teacherData?.emp_id || null,
+      };
+
+      if (mergedRecord.id || mergedRecord.emp_id || mergedRecord.name) {
+        updateTeacherRecord(mergedRecord);
+        if (mergedRecord.name) {
+          updateFullName(mergedRecord.name);
+        }
+        return mergedRecord;
       }
     } catch (err) {
       console.warn(
-        'Could not load teacher record from Supabase, checking LocalStorage fallback:',
+        'Could not load teacher/employee record, checking LocalStorage fallback:',
         err
       );
       const raw = localStorage.getItem('jzv_timetable_data');
@@ -81,6 +121,8 @@ export const useAuth = () => {
           console.error(e);
         }
       }
+    } finally {
+      fetchingTeacherRef.current = false;
     }
     return null;
   };
@@ -404,8 +446,8 @@ export const useAuth = () => {
           updateStudentIds(cookieStudentIds);
           rolesFetchedRef.current = true;
           currentUserIdRef.current = currentUser.id;
-          if (cookieRoles.includes('teacher')) {
-            fetchTeacherRecord(currentUser.id);
+          if (cookieRoles.some((r) => ['teacher', 'admin', 'management', 'staff'].includes(r))) {
+            fetchTeacherRecord(currentUser.id, currentUser.email);
           }
         } else {
           updateRoles([]);
@@ -431,8 +473,12 @@ export const useAuth = () => {
               currentUser.id,
               'Access Denied: Your account has not been registered by an administrator.'
             );
-          } else if (res && res.success && res.roles.includes('teacher')) {
-            fetchTeacherRecord(currentUser.id);
+          } else if (
+            res &&
+            res.success &&
+            res.roles.some((r) => ['teacher', 'admin', 'management', 'staff'].includes(r))
+          ) {
+            fetchTeacherRecord(currentUser.id, currentUser.email);
           }
         }
       } else {

@@ -13,6 +13,7 @@ import SyllabusManager from './admin/syllabus/SyllabusManager';
 import LessonManager from './teacher/LessonManager/LessonManager';
 import EmployeeRecordsView from './admin/employees/EmployeeRecordsView';
 import SalaryTrackerView from './admin/employees/SalaryTrackerView';
+import AdminStudentsView from './admin/AdminStudentsView';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -183,6 +184,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   const [ttPeriods, setTtPeriods] = useState([]);
   const [ttAssignments, setTtAssignments] = useState([]);
   const [ttSlots, setTtSlots] = useState([]);
+  const [ttClassifications, setTtClassifications] = useState([]);
   const [ttLoading, setTtLoading] = useState(false);
 
   // UUID mapping
@@ -209,6 +211,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         { data: dbAssignments },
         { data: dbSlots },
         { data: dbPeriods },
+        { data: dbClassifications },
         { data: secureTeachersData, error: secureTeachersErr },
       ] = await Promise.all([
         supabase.from('subjects').select('*'),
@@ -217,6 +220,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
+        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
         supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null }),
       ]);
 
@@ -243,6 +247,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       setTtClasses(dbClasses || []);
       setTtAssignments(dbAssignments || []);
       setTtSlots(dbSlots || []);
+      setTtClassifications(dbClassifications || []);
       setTtPeriods(dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS);
     } catch (err) {
       // Fallback to localStorage / mock data
@@ -256,6 +261,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           setTtPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
           setTtAssignments(parsed.assignments || []);
           setTtSlots(parsed.slots || DEFAULT_MOCK_SLOTS);
+          setTtClassifications(parsed.classifications || DEFAULT_MOCK_CLASSIFICATIONS);
         } catch (e) {
           setTtSubjects(DEFAULT_MOCK_SUBJECTS);
           setTtTeachers(DEFAULT_MOCK_TEACHERS);
@@ -263,6 +269,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           setTtPeriods(DEFAULT_MOCK_PERIODS);
           setTtAssignments([]);
           setTtSlots(DEFAULT_MOCK_SLOTS);
+          setTtClassifications(DEFAULT_MOCK_CLASSIFICATIONS);
         }
       } else {
         setTtSubjects(DEFAULT_MOCK_SUBJECTS);
@@ -271,6 +278,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         setTtPeriods(DEFAULT_MOCK_PERIODS);
         setTtAssignments([]);
         setTtSlots(DEFAULT_MOCK_SLOTS);
+        setTtClassifications(DEFAULT_MOCK_CLASSIFICATIONS);
       }
     } finally {
       setTtLoading(false);
@@ -514,21 +522,22 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   const baseManagementTiles = [
     {
       id: 'employee-records',
-      title: 'Employee Records',
-      description: 'View employee records, roles, designations, and salary details.',
+      title: 'Employee Management',
+      description:
+        'View employee records, roles, designations, salaries, and salary distribution logs.',
       icon: 'fa-users-gear',
       buttonColor: 'bg-green-600 text-white',
       shadow: 'shadow-green-200',
       onClick: () => onSetSubView('employee-records'),
     },
     {
-      id: 'salary-tracker',
-      title: 'Salary Distribution Log',
-      description: 'Track, settle, and manage monthly salary payments for salaried employees.',
-      icon: 'fa-sack-dollar',
+      id: 'student-records',
+      title: 'Students Management',
+      description: 'View and filter student records in the database.',
+      icon: 'fa-user-graduate',
       buttonColor: 'bg-pink-600 text-white',
       shadow: 'shadow-pink-200',
-      onClick: () => onSetSubView('salary-tracker'),
+      onClick: () => onSetSubView('student-records'),
     },
     {
       id: 'registered-complaints',
@@ -538,15 +547,6 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       buttonColor: 'bg-amber-600 text-white',
       shadow: 'shadow-amber-200',
       onClick: () => onSetSubView('registered-complaints'),
-    },
-    {
-      id: 'student-records',
-      title: 'Student Records',
-      description: 'View and filter student records in the database.',
-      icon: 'fa-user-graduate',
-      buttonColor: 'bg-emerald-600 text-white',
-      shadow: 'shadow-emerald-200',
-      onClick: () => onSetSubView('student-records'),
     },
     {
       id: 'timetable-viewer',
@@ -1438,25 +1438,37 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       subView={subView}
       onSetSubView={onSetSubView}
     >
-      {subView === 'job-applications' ||
-      subView === 'registered-complaints' ||
-      subView === 'student-records' ? (
+      {subView === 'job-applications' || subView === 'registered-complaints' ? (
         <div
           data-job-applications={subView === 'job-applications' ? 'true' : undefined}
           data-registered-complaints={subView === 'registered-complaints' ? 'true' : undefined}
-          data-student-records={subView === 'student-records' ? 'true' : undefined}
         >
           {renderTableView()}
         </div>
       ) : null}
+      {subView === 'student-records' && (
+        <div data-student-records="true">
+          <AdminStudentsView role="management" user={user} />
+        </div>
+      )}
       {subView === 'employee-records' && (
         <div data-employee-records="true">
-          <EmployeeRecordsView role="management" user={user} />
+          <EmployeeRecordsView
+            role="management"
+            user={user}
+            userRoles={userRoles}
+            initialTab="records"
+          />
         </div>
       )}
       {subView === 'salary-tracker' && (
         <div data-salary-tracker="true">
-          <SalaryTrackerView user={user} userRoles={userRoles} />
+          <EmployeeRecordsView
+            role="management"
+            user={user}
+            userRoles={userRoles}
+            initialTab="salary"
+          />
         </div>
       )}
       {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}
@@ -1486,6 +1498,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
               classes={ttClasses}
               teachers={ttTeachers}
               subjects={ttSubjects}
+              classifications={ttClassifications}
               periods={ttPeriods}
               slots={ttSlots}
               assignments={ttAssignments}

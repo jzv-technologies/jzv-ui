@@ -256,13 +256,14 @@ export const AppRoutes = ({
                     onClick: () => setTeacherSubView('timetable'),
                   },
                   {
-                    id: 'students',
-                    title: 'Student Records',
-                    description: 'Browse student list and search details.',
-                    icon: 'fa-user-graduate',
-                    buttonColor: 'bg-brand-primary text-white',
-                    shadow: 'shadow-brand-lbg',
-                    onClick: () => setTeacherSubView('students'),
+                    id: 'lesson-planner-tracker',
+                    title: 'Lesson Planner & Tracker',
+                    description:
+                      'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
+                    icon: 'fa-chart-line',
+                    buttonColor: 'bg-blue-600 text-white',
+                    shadow: 'shadow-blue-200',
+                    onClick: () => setTeacherSubView('lesson-planner-tracker'),
                   },
                   {
                     id: 'syllabus',
@@ -274,14 +275,13 @@ export const AppRoutes = ({
                     onClick: () => setTeacherSubView('syllabus'),
                   },
                   {
-                    id: 'lesson-planner-tracker',
-                    title: 'Lesson Planner & Tracker',
-                    description:
-                      'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
-                    icon: 'fa-chart-line',
-                    buttonColor: 'bg-blue-600 text-white',
-                    shadow: 'shadow-blue-200',
-                    onClick: () => setTeacherSubView('lesson-planner-tracker'),
+                    id: 'students',
+                    title: 'Students Record',
+                    description: 'Browse student list and search details.',
+                    icon: 'fa-user-graduate',
+                    buttonColor: 'bg-brand-primary text-white',
+                    shadow: 'shadow-brand-lbg',
+                    onClick: () => setTeacherSubView('students'),
                   },
                   {
                     id: 'personal-info',

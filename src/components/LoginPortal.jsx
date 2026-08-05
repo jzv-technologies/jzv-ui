@@ -268,7 +268,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
       onClick={handleClose}
     >
       <div
-        className="bg-light-soft w-full h-full sm:w-[95vw] sm:max-w-md lg:w-auto flex flex-col relative sm:border sm:border-light-border overflow-hidden rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl"
+        className="bg-light-soft w-full h-full sm:h-auto sm:max-h-[90vh] sm:w-[95vw] sm:max-w-lg flex flex-col relative sm:border sm:border-light-border overflow-hidden rounded-none sm:rounded-2xl shadow-none sm:shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {renderHeader()}

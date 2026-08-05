@@ -13,6 +13,8 @@ import UserRolesManagementModal from './employee-records/UserRolesManagementModa
 import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
 import ConfirmModal from '../../../ConfirmModal';
 
+import SalaryTrackerView from './SalaryTrackerView';
+
 const DEFAULT_ROLES = [
   'Teacher',
   'Admin',
@@ -24,11 +26,28 @@ const DEFAULT_ROLES = [
   'Librarian',
 ];
 
-const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null }) => {
+const EmployeeRecordsView = ({
+  role = 'admin',
+  user = null,
+  userRoles = [],
+  teacherRecord = null,
+  initialTab = 'records',
+}) => {
   const isAdmin = role === 'admin';
   const isManagement = role === 'management';
   const isEmployeeSelf = role === 'employee' || role === 'teacher';
-
+  const [activeTab, setActiveTab] = useState(() => {
+    if (
+      initialTab === 'salary' ||
+      initialTab === 'salary_dashboard' ||
+      initialTab === 'salary-tracker'
+    ) {
+      return 'salary_dashboard';
+    }
+    if (initialTab === 'salary_list') return 'salary_list';
+    return 'records';
+  }); // 'records' | 'salary_dashboard' | 'salary_list'
+  const [salaryControls, setSalaryControls] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [authUsers, setAuthUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -633,7 +652,7 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if (formData.auth_id && formData.mapped_roles_sum) {
+        if ((isAdmin || isManagement) && formData.auth_id && formData.mapped_roles_sum) {
           await supabase.rpc('update_user_role_admin', {
             p_user_id: formData.auth_id,
             p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
@@ -674,15 +693,27 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
           );
           setEmployees(updatedList);
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
-        } else if (eData?.[0]) {
+        } else if (eData && eData.length > 0) {
           const updatedList = employees.map((e) =>
             String(e.id) === String(targetId) ? eData[0] : e
           );
           setEmployees(updatedList);
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+        } else {
+          console.warn('Supabase update returned 0 rows (using local state fallback)');
+          const updatedList = employees.map((e) =>
+            String(e.id) === String(targetId) ? { ...e, ...teacherPayload, id: targetId } : e
+          );
+          setEmployees(updatedList);
+          localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if (formData.auth_id && formData.mapped_roles_sum) {
+        if (
+          (isAdmin || isManagement) &&
+          formData.auth_id &&
+          formData.mapped_roles_sum &&
+          String(formData.mapped_roles_sum) !== String(existingRec?.mapped_roles_sum)
+        ) {
           await supabase.rpc('update_user_role_admin', {
             p_user_id: formData.auth_id,
             p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
@@ -694,7 +725,9 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
       setInitialFormData({ ...formData });
       setModalMode(null);
-      await fetchEmployees();
+      if (!isEmployeeSelf) {
+        await fetchEmployees();
+      }
       return true;
     } catch (err) {
       console.error('Error saving employee:', err);
@@ -1293,123 +1326,282 @@ const EmployeeRecordsView = ({ role = 'admin', user = null, teacherRecord = null
 
   // Admin & Management View
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
-      {/* Unified Header Card with Search, Filters, and Action Icons */}
-      <div className="bg-white p-5 rounded-3xl border border-light-border shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-primary/10 text-orange-primary flex items-center justify-center shrink-0">
-              <i className="fas fa-users-gear text-xl"></i>
+    <div className="p-4 md:p-6 space-y-6 w-full max-w-[1700px] mx-auto animate-in fade-in duration-300">
+      {/* ── Unified Top Header Panel ── */}
+      <div className="bg-white p-5 rounded-3xl border border-light-border shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-orange-primary/10 text-orange-primary flex items-center justify-center shrink-0">
+                <i className="fas fa-users-gear text-xl"></i>
+              </div>
+              Employee Portal
+            </h1>
+          </div>
+
+          {/* Navigation Pill Tabs */}
+          <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+            <button
+              onClick={() => setActiveTab('records')}
+              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                activeTab === 'records'
+                  ? 'bg-green-dark text-white shadow-sm'
+                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+              }`}
+            >
+              <i className="fas fa-users-gear text-xs"></i>
+              <span className="sm:hidden">Employee</span>
+              <span className="hidden sm:inline">Employee Records</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('salary_dashboard')}
+              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                activeTab === 'salary_dashboard'
+                  ? 'bg-green-dark text-white shadow-sm'
+                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+              }`}
+            >
+              <i className="fas fa-table-cells text-xs"></i>
+              <span className="sm:hidden">Salary Credit</span>
+              <span className="hidden sm:inline">Salary Credit Dashboard</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('salary_list')}
+              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                activeTab === 'salary_list'
+                  ? 'bg-green-dark text-white shadow-sm'
+                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+              }`}
+            >
+              <i className="fas fa-list-check text-xs"></i>
+              <span className="sm:hidden">List View</span>
+              <span className="hidden sm:inline">Salary List View</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search, Filter & Action Controls for Employee Records tab */}
+        {activeTab === 'records' && (
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64">
+              <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+              <input
+                type="text"
+                placeholder="Search Name, ID, Mobile, Role..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
+              />
             </div>
-            Employee Records
-          </h1>
-        </div>
 
-        {/* Search, Filter & Action Controls */}
-        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
-          {/* Search Input */}
-          <div className="relative w-full sm:w-64">
-            <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-            <input
-              type="text"
-              placeholder="Search Name, ID, Mobile, Role..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
-            />
+            {/* Role & Status Filter Row */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Role Filter */}
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
+                title="Filter by Designation"
+              >
+                <option value="">All Designations</option>
+                {DEFAULT_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
+                title="Filter by Status"
+              >
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+                <option value="all">All Statuses</option>
+              </select>
+            </div>
+
+            {/* Action Icon Buttons */}
+            <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start pt-1 sm:pt-0 ml-auto sm:ml-0">
+              <button
+                onClick={fetchEmployees}
+                disabled={loading}
+                className="w-10 h-10 bg-gray-50 text-gray-700 hover:bg-gray-100 rounded-xl text-sm font-bold border border-gray-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                title="Refresh Employee Records"
+              >
+                <i
+                  className={`fas fa-rotate-right ${
+                    loading ? 'fa-spin text-brand-primary' : 'text-gray-600'
+                  } text-base`}
+                ></i>
+              </button>
+
+              <button
+                onClick={handleExportEmployeesExcel}
+                className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                title="Download Employee Records Excel"
+              >
+                <i className="fas fa-download text-blue-600 text-base"></i>
+              </button>
+
+              {(isAdmin || isManagement) && (
+                <>
+                  <button
+                    onClick={() => setIsUserRolesModalOpen(true)}
+                    className="w-10 h-10 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-sm font-bold border border-purple-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                    title="Manage Portal User Roles"
+                  >
+                    <i className="fas fa-link text-purple-600 text-base"></i>
+                  </button>
+                  <button
+                    onClick={() => setIsCsvImportOpen(true)}
+                    className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                    title="Bulk Import Employees"
+                  >
+                    <i className="fas fa-file-arrow-up text-emerald-600 text-base"></i>
+                  </button>
+                  <button
+                    onClick={() => handleOpenModal('add')}
+                    className="w-10 h-10 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-sm font-extrabold shadow-md transition-all flex items-center justify-center active:scale-95 shrink-0"
+                    title="Add Employee"
+                  >
+                    <i className="fas fa-plus text-base"></i>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+        )}
 
-          {/* Role Filter */}
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
-            title="Filter by Designation"
-          >
-            <option value="">All Designations</option>
-            {DEFAULT_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+        {/* Repurposed Controls Bar for Salary tabs */}
+        {(activeTab === 'salary_dashboard' || activeTab === 'salary_list') && salaryControls && (
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1">
+            {/* Search Input for Salary */}
+            <div className="relative w-full sm:w-64">
+              <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+              <input
+                type="text"
+                placeholder="Search Employee Name..."
+                value={salaryControls.searchQuery}
+                onChange={(e) => salaryControls.setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
+              />
+            </div>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
-            title="Filter by Status"
-          >
-            <option value="active">Active Only</option>
-            <option value="inactive">Inactive Only</option>
-            <option value="all">All Statuses</option>
-          </select>
+            {/* Status & Month Controls */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <select
+                value={salaryControls.statusFilter}
+                onChange={(e) => salaryControls.setStatusFilter(e.target.value)}
+                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
+                title="Filter Payment Status"
+              >
+                <option value="all">All Payment Statuses</option>
+                <option value="paid">Fully Paid</option>
+                <option value="partial">Partial</option>
+                <option value="unpaid">Unpaid</option>
+              </select>
 
-          {/* Action Icon Buttons */}
-          <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start">
-            <button
-              onClick={fetchEmployees}
-              disabled={loading}
-              className="w-10 h-10 bg-gray-50 text-gray-700 hover:bg-gray-100 rounded-xl text-sm font-bold border border-gray-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-              title="Refresh Employee Records"
-            >
-              <i
-                className={`fas fa-rotate-right ${
-                  loading ? 'fa-spin text-brand-primary' : 'text-gray-600'
-                } text-base`}
-              ></i>
-            </button>
-            <button
-              onClick={handleExportEmployeesExcel}
-              className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-              title="Download"
-            >
-              <i className="fas fa-download text-blue-600 text-base"></i>
-            </button>
+              <input
+                type="month"
+                value={salaryControls.selectedMonthStr}
+                onChange={(e) => salaryControls.setSelectedMonthStr(e.target.value)}
+                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-extrabold outline-none cursor-pointer"
+              />
+            </div>
 
-            {(isAdmin || isManagement) && (
-              <>
-                <button
-                  onClick={() => setIsUserRolesModalOpen(true)}
-                  className="w-10 h-10 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-sm font-bold border border-purple-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                  title="Manage Portal User Roles"
-                >
-                  <i className="fas fa-link text-purple-600 text-base"></i>
-                </button>
-                <button
-                  onClick={() => setIsCsvImportOpen(true)}
-                  className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                  title="Bulk Import / Update"
-                >
-                  <i className="fas fa-file-arrow-up text-emerald-600 text-base"></i>
-                </button>
-                <button
-                  onClick={() => handleOpenModal('add')}
-                  className="w-10 h-10 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-sm font-extrabold shadow-md transition-all flex items-center justify-center active:scale-95 shrink-0"
-                  title="Add Employee"
-                >
-                  <i className="fas fa-plus text-base"></i>
-                </button>
-              </>
-            )}
+            {/* Repurposed Action Icon Buttons for Salary Distribution */}
+            <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start pt-1 sm:pt-0 ml-auto sm:ml-0">
+              <button
+                onClick={salaryControls.onRefresh}
+                disabled={salaryControls.loading}
+                className="w-10 h-10 bg-gray-50 text-gray-700 hover:bg-gray-100 rounded-xl text-sm font-bold border border-gray-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                title="Refresh Salary Log"
+              >
+                <i
+                  className={`fas fa-rotate-right ${
+                    salaryControls.loading ? 'fa-spin text-brand-primary' : 'text-gray-600'
+                  } text-base`}
+                ></i>
+              </button>
+
+              <button
+                onClick={salaryControls.onOpenExport}
+                className="w-10 h-10 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-bold border border-blue-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                title="Download Salary Log (Excel)"
+              >
+                <i className="fas fa-download text-blue-600 text-base"></i>
+              </button>
+
+              {(isAdmin || isManagement) && (
+                <>
+                  {activeTab === 'salary_list' && salaryControls.onOpenBulkIncrement && (
+                    <button
+                      onClick={salaryControls.onOpenBulkIncrement}
+                      className="w-10 h-10 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-xl text-sm font-bold border border-amber-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                      title="Apply Increment to Current Salary"
+                    >
+                      <i className="fas fa-arrow-up-right-dots text-amber-600 text-base"></i>
+                    </button>
+                  )}
+
+                  {activeTab === 'salary_dashboard' && (
+                    <button
+                      onClick={salaryControls.onOpenUpload}
+                      className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                      title="Update Monthly Salary Tracker"
+                    >
+                      <i className="fas fa-sack-dollar text-emerald-600 text-base"></i>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Employees Table */}
-      <EmployeeRecordsTable
-        filteredEmployees={filteredEmployees}
-        loading={loading}
-        sortField={sortField}
-        sortOrder={sortOrder}
-        handleSort={handleSort}
-        handleOpenModal={handleOpenModal}
-        handleDeleteEmployee={handleDeleteEmployee}
-        isAdmin={isAdmin}
-        isManagement={isManagement}
-        authUsers={authUsers}
-      />
+      {activeTab === 'salary_dashboard' && (
+        <SalaryTrackerView
+          user={user}
+          userRoles={userRoles}
+          viewMode="matrix"
+          onRegisterControls={setSalaryControls}
+          hideHeaderTopRow={true}
+        />
+      )}
+
+      {activeTab === 'salary_list' && (
+        <SalaryTrackerView
+          user={user}
+          userRoles={userRoles}
+          viewMode="monthly"
+          onRegisterControls={setSalaryControls}
+          hideHeaderTopRow={true}
+        />
+      )}
+
+      {activeTab === 'records' && (
+        /* Employees Table */
+        <EmployeeRecordsTable
+          filteredEmployees={filteredEmployees}
+          loading={loading}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          handleSort={handleSort}
+          handleOpenModal={handleOpenModal}
+          handleDeleteEmployee={handleDeleteEmployee}
+          isAdmin={isAdmin}
+          isManagement={isManagement}
+          authUsers={authUsers}
+        />
+      )}
 
       {/* Add / Edit Employee Modal */}
       <EmployeeEditModal

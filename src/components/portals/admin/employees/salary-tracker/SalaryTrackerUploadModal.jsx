@@ -46,6 +46,21 @@ const SalaryTrackerUploadModal = ({
 
   const [gridData, setGridData] = useState([]);
 
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   // Map for quick existing record lookup: `${emp_id}_${org}_${sal_year}_${sal_month}`
   const existingRecordMap = useMemo(() => {
     const map = new Map();
@@ -290,11 +305,8 @@ const SalaryTrackerUploadModal = ({
             </div>
             <div>
               <h3 className="text-base font-black text-dark-primary">
-                Salary Tracker Bulk Upload & Interactive Grid
+                Update Monthly Salary Tracker
               </h3>
-              <p className="text-xs text-dark-muted font-bold">
-                Batch insert / update salary entries via Excel/CSV or live grid
-              </p>
             </div>
           </div>
           <button

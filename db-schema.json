@@ -1,0 +1,2299 @@
+{
+  "schema": [
+    {
+      "table": "admin_configruation",
+      "columns": [
+        {
+          "type": "character varying",
+          "column": "key",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "jsonb",
+          "column": "val",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "admin_users_view",
+      "columns": [
+        {
+          "type": "uuid",
+          "column": "user_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "email",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "full_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "smallint",
+          "column": "role",
+          "default": null,
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "applications",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "student_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "date_of_birth",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "parent_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "mobile_no",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "address",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "area",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "city",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "pincode",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "last_school_attended",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "last_class_attended",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "fathers_education",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "mothers_education",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "fathers_occupation",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "status",
+          "default": "'pending'::character varying",
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "entrance_exam_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "application_id",
+          "default": "''::character varying",
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "book_tracker",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "total_lessons",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "completed",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "in_progress",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "not_started",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "completion_percentage",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "class_assignments",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "classes",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "dynamic_form_configs",
+      "columns": [
+        {
+          "type": "text",
+          "column": "form_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "jsonb",
+          "column": "fields",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "data_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "id_pattern",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "display_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "description",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "icon",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "form_visibility",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "data_visibility",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "conversation_visibility",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "card_theme",
+          "default": null,
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "employees",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_male",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "uuid",
+          "column": "auth_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_active",
+          "default": "true",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "emp_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "organization",
+          "default": "'JZV'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "designation",
+          "default": "'Teacher'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "joining_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "primary_mobile",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "secondary_mobile",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "email",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "date_of_birth",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "blood_group",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "communication_address",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "highest_education",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "numeric",
+          "column": "current_salary",
+          "default": "0.00",
+          "nullable": "YES"
+        },
+        {
+          "type": "jsonb",
+          "column": "compensation_history",
+          "default": "'[]'::jsonb",
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_teacher",
+          "default": "false",
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "login_allowed",
+          "default": "false",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "father_husband_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "marital_status",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "bank_account_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "bank_account_number",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "bank_ifsc_code",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "bank_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "bank_branch_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "jsonb",
+          "column": "emergency_contact_1",
+          "default": "'{}'::jsonb",
+          "nullable": "YES"
+        },
+        {
+          "type": "jsonb",
+          "column": "emergency_contact_2",
+          "default": "'{}'::jsonb",
+          "nullable": "YES"
+        },
+        {
+          "type": "jsonb",
+          "column": "update_history",
+          "default": "'[]'::jsonb",
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_salaried_employee",
+          "default": "true",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "google_sheet_mappings",
+      "columns": [
+        {
+          "type": "integer",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "now()",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "data_sheet_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "google_sheet_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "data_id",
+          "default": null,
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "lesson_plan_carry_forwards",
+      "columns": [
+        {
+          "type": "uuid",
+          "column": "id",
+          "default": "extensions.uuid_generate_v4()",
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "original_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "new_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "plan_id",
+          "default": null,
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "lesson_progress",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "lesson_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "target_start_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "academic_week",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "carry_forward_count",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "status",
+          "default": "'not_started'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "numeric",
+          "column": "completion_percentage",
+          "default": "0.00",
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "start_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "end_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "days_taken",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "revision_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "due_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "target_end_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "replan_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "carry_forward_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "delay_start",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "delay_end",
+          "default": "0",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "lesson_progress_items",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "progress_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "date",
+          "default": "CURRENT_DATE",
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "current_status",
+          "default": "'in_progress'::character varying",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "progress",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "character",
+          "column": "is_revision",
+          "default": "'N'::bpchar",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "comments",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character",
+          "column": "late_reporting",
+          "default": "'N'::bpchar",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "periods",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "period_number",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "time without time zone",
+          "column": "start_time",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "time without time zone",
+          "column": "end_time",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_break",
+          "default": "false",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "salary_tracker",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "employee_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "organization",
+          "default": "''::text",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "sal_year",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "sal_month",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "salary",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "extras",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "total_paid",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "last_payment_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "last_paid_by",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "jsonb",
+          "column": "history",
+          "default": "'[]'::jsonb",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "notes",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "now()",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "now()",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "deductions",
+          "default": "0",
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "students",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "admission_no",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "edsoft_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "student_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "birth_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "father_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "mobile1",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "mobile2",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "enrollment",
+          "default": "'Active'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "hostel",
+          "default": "'No'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "transport_point",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "subject_classifications",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "theme",
+          "default": "'blue'::text",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "subjects",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "classification_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "requires_teacher",
+          "default": "true",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "syllabus_book_classes",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "now()",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "syllabus_book_lessons",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "level1",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "level2",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "level3",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "page_count",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "complexity",
+          "default": "'Easy'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "syllabus_books",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "hierarchy_type",
+          "default": "'Book > Unit > Chapter > Lesson'::character varying",
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "teacher_availability",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "day",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "period_id",
+          "default": null,
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "teacher_cache",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "jsonb",
+          "column": "cache_data",
+          "default": "'{}'::jsonb",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "teacher_subjects",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "teachers",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_male",
+          "default": null,
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "timetable_slots",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "day",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "period_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "useful_links",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "link_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "link_description",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "link",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "roles",
+          "default": "1",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "target",
+          "default": "'_blank'::text",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "user_roles",
+      "columns": [
+        {
+          "type": "uuid",
+          "column": "user_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "NO"
+        },
+        {
+          "type": "smallint",
+          "column": "role",
+          "default": null,
+          "nullable": "YES"
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "admin_configruation",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "admin_configruation",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "applications",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "applications",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "applications",
+      "using": "(auth.role() = 'authenticated'::text)",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "with_check": "(auth.role() = 'authenticated'::text)"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "book_tracker",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "book_tracker",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "book_tracker",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "class_assignments",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "class_assignments",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "classes",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "classes",
+      "using": "has_any_role(((8 | 16) | 32))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "classes",
+      "using": "(has_any_role(56) OR (has_role_above(2) AND is_parent_of_class(id)))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "dynamic_form_configs",
+      "using": "has_role_above(32)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(auth.role() = 'authenticated'::text)"
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "dynamic_form_configs",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "employees",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "employees",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "employees",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "google_sheet_mappings",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "google_sheet_mappings",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_plan_carry_forwards",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_progress",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "lesson_progress",
+      "using": "(has_role_above(2) AND is_parent_of_class(class_id))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_progress",
+      "using": "has_role_above(16)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_progress_items",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_progress_items",
+      "using": "has_role_above(8)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "lesson_progress_items",
+      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM lesson_progress l\n  WHERE ((l.id = lesson_progress_items.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "periods",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "periods",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "salary_tracker",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "has_role_above(16)"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "salary_tracker",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "salary_tracker",
+      "using": "has_role_above(16)",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "with_check": "has_role_above(16)"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "students",
+      "using": "has_role_above(2)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "students",
+      "using": "is_parent_of_student((admission_no)::text)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "subject_classifications",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "subject_classifications",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "subjects",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "subjects",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "syllabus_book_classes",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "syllabus_book_classes",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "syllabus_book_lessons",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "syllabus_book_lessons",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_book_lessons.book_id) AND is_parent_of_class(sbc.class_id))))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "syllabus_books",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "syllabus_books",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_books.id) AND is_parent_of_class(sbc.class_id))))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "teacher_availability",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "teacher_availability",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "teacher_cache",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "teacher_subjects",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "teacher_subjects",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "timetable_slots",
+      "using": "has_role_above(32)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "timetable_slots",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "timetable_slots",
+      "using": "is_parent_of_class(class_id)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "useful_links",
+      "using": "has_role_above(32)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "useful_links",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "user_roles",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "user_roles",
+      "using": "(auth.uid() = user_id)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    }
+  ],
+  "triggers": [
+    {
+      "table": "lesson_progress",
+      "function": "set_current_timestamp_updated_at",
+      "definition": "CREATE TRIGGER set_lesson_progress_updated_at BEFORE UPDATE ON lesson_progress FOR EACH ROW EXECUTE FUNCTION set_current_timestamp_updated_at()"
+    },
+    {
+      "table": "lesson_progress",
+      "function": "fn_update_book_tracker_on_log_change",
+      "definition": "CREATE TRIGGER trg_update_book_tracker_on_log AFTER INSERT OR DELETE OR UPDATE ON lesson_progress FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_log_change()"
+    },
+    {
+      "table": "lesson_progress_items",
+      "function": "fn_update_lesson_tracker_log",
+      "definition": "CREATE TRIGGER trg_update_lesson_tracker_log AFTER INSERT OR DELETE OR UPDATE ON lesson_progress_items FOR EACH ROW EXECUTE FUNCTION fn_update_lesson_tracker_log()"
+    },
+    {
+      "table": "lesson_progress_items",
+      "function": "fn_set_late_reporting",
+      "definition": "CREATE TRIGGER trg_set_late_reporting BEFORE INSERT ON lesson_progress_items FOR EACH ROW EXECUTE FUNCTION fn_set_late_reporting()"
+    },
+    {
+      "table": "salary_tracker",
+      "function": "update_salary_tracker_updated_at",
+      "definition": "CREATE TRIGGER salary_tracker_updated_at BEFORE UPDATE ON salary_tracker FOR EACH ROW EXECUTE FUNCTION update_salary_tracker_updated_at()"
+    },
+    {
+      "table": "syllabus_book_lessons",
+      "function": "fn_update_book_tracker_on_lessons_change",
+      "definition": "CREATE TRIGGER trg_update_book_tracker_on_lessons AFTER INSERT OR DELETE OR UPDATE ON syllabus_book_lessons FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_lessons_change()"
+    },
+    {
+      "table": "syllabus_books",
+      "function": "fn_auto_create_revision_lessons",
+      "definition": "CREATE TRIGGER trg_auto_create_revision_lessons AFTER INSERT ON syllabus_books FOR EACH ROW EXECUTE FUNCTION fn_auto_create_revision_lessons()"
+    },
+    {
+      "table": "timetable_slots",
+      "function": "sync_class_assignments_from_slots",
+      "definition": "CREATE TRIGGER trg_sync_class_assignments AFTER INSERT OR DELETE OR UPDATE ON timetable_slots FOR EACH ROW EXECUTE FUNCTION sync_class_assignments_from_slots()"
+    },
+    {
+      "table": "timetable_slots",
+      "function": "sync_teacher_class_subject_from_slots",
+      "definition": "CREATE TRIGGER trigger_sync_teacher_class_subject AFTER INSERT OR DELETE OR UPDATE ON timetable_slots FOR EACH ROW EXECUTE FUNCTION sync_teacher_class_subject_from_slots()"
+    }
+  ],
+  "functions": [
+    {
+      "name": "create_default_book_revision",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "fn_auto_create_revision_lessons",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "fn_set_late_reporting",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "fn_update_book_tracker_on_lessons_change",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "fn_update_book_tracker_on_log_change",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "fn_update_lesson_tracker_log",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "get_active_teacher_names_secure",
+      "returns": "TABLE(name character varying)",
+      "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "get_active_teachers",
+      "returns": "TABLE(id bigint, name text, auth_id uuid)",
+      "arguments": ""
+    },
+    {
+      "name": "get_auth_users_with_roles_secure",
+      "returns": "TABLE(user_id uuid, email character varying, full_name text, role smallint)",
+      "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "get_class_timetable",
+      "returns": "json",
+      "arguments": "p_class_id bigint"
+    },
+    {
+      "name": "get_current_teacher_details",
+      "returns": "SETOF employees",
+      "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "get_database_context",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_enable_test_config",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_function_context",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_parent_mobile",
+      "returns": "text",
+      "arguments": ""
+    },
+    {
+      "name": "get_policy_context",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_schema_context",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_teachers_with_auth_secure",
+      "returns": "TABLE(teacher_id bigint, name character varying, is_male boolean, auth_id uuid, is_active boolean)",
+      "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "get_trigger_context",
+      "returns": "jsonb",
+      "arguments": ""
+    },
+    {
+      "name": "get_user_role",
+      "returns": "text",
+      "arguments": "p_user_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "has_all_roles",
+      "returns": "boolean",
+      "arguments": "required_role smallint"
+    },
+    {
+      "name": "has_any_role",
+      "returns": "boolean",
+      "arguments": "required_role integer"
+    },
+    {
+      "name": "has_role_above",
+      "returns": "boolean",
+      "arguments": "required_role integer"
+    },
+    {
+      "name": "is_admin",
+      "returns": "boolean",
+      "arguments": ""
+    },
+    {
+      "name": "is_management_or_above",
+      "returns": "boolean",
+      "arguments": "p_user_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "is_parent_of_class",
+      "returns": "boolean",
+      "arguments": "p_class_id bigint"
+    },
+    {
+      "name": "is_parent_of_student",
+      "returns": "boolean",
+      "arguments": "p_admission_no text"
+    },
+    {
+      "name": "is_teacher",
+      "returns": "boolean",
+      "arguments": ""
+    },
+    {
+      "name": "set_current_timestamp_updated_at",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "sync_class_assignments_from_slots",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "sync_teacher_class_subject_from_slots",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "update_employee_by_admin",
+      "returns": "SETOF employees",
+      "arguments": "p_emp_id text DEFAULT NULL::text, p_changes jsonb DEFAULT '{}'::jsonb, p_db_id bigint DEFAULT NULL::bigint"
+    },
+    {
+      "name": "update_salary_tracker_updated_at",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "update_self_employee_profile",
+      "returns": "SETOF employees",
+      "arguments": "p_auth_id uuid DEFAULT NULL::uuid, p_changes jsonb DEFAULT '{}'::jsonb"
+    },
+    {
+      "name": "update_user_role_admin",
+      "returns": "void",
+      "arguments": "p_user_id uuid, p_role integer"
+    },
+    {
+      "name": "verify_parent_login",
+      "returns": "TABLE(admission_no character varying, student_name character varying, class_id bigint, father_name character varying, mobile1 character varying)",
+      "arguments": "p_admission_no character varying, p_mobile character varying"
+    },
+    {
+      "name": "verify_parent_login_by_mobile",
+      "returns": "SETOF students",
+      "arguments": "p_mobile text"
+    }
+  ]
+}

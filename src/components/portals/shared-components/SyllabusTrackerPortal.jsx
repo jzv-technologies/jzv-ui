@@ -1265,27 +1265,27 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
   const roleTabs = {
     parent: [
-      { key: 'two-weeks-class', label: 'Last 2 Weeks Classes', icon: 'fa-calendar-week' },
-      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
+      { key: 'two-weeks-class', label: 'Last 2 Weeks Classes', shortLabel: '2 Weeks', icon: 'fa-calendar-week' },
+      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
     ],
     teacher: [
-      { key: 'lesson-planner', label: 'Lesson Planner', icon: 'fa-calendar-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
-      { key: 'teacher-activity', label: 'My Activity', icon: 'fa-list-check' },
+      { key: 'lesson-planner', label: 'Lesson Planner', shortLabel: 'Planner', icon: 'fa-calendar-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
+      { key: 'teacher-activity', label: 'My Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
     ],
     admin: [
-      { key: 'teacher-activity', label: 'Teacher Activity', icon: 'fa-list-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
-      { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
+      { key: 'teacher-activity', label: 'Teacher Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
+      { key: 'teacher-adherence', label: 'Planning Adherence', shortLabel: 'Adherence', icon: 'fa-clipboard-check' },
     ],
     management: [
-      { key: 'teacher-activity', label: 'Teacher Activity', icon: 'fa-list-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', icon: 'fa-calendar-alt' },
-      { key: 'teacher-adherence', label: 'Planning Adherence', icon: 'fa-clipboard-check' },
+      { key: 'teacher-activity', label: 'Teacher Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
+      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
+      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
+      { key: 'teacher-adherence', label: 'Planning Adherence', shortLabel: 'Adherence', icon: 'fa-clipboard-check' },
     ],
   };
 
@@ -1293,26 +1293,27 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
-      <div className="p-6 overflow-y-auto pb-24 flex-1">
+      <div className="p-3 sm:p-6 overflow-y-auto pb-24 flex-1">
         {/* Tab Headers */}
         <div
           className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap"
           data-name="Lesson Planner and Tracker Tabs"
         >
-          <div className="flex gap-4 items-center flex-wrap" data-name="navigation tabs">
-            <div className="flex gap-2">
+          <div className="flex gap-4 items-center flex-wrap w-full sm:w-auto" data-name="navigation tabs">
+            <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
               {currentTabs.map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => handleTabChange(tab.key)}
-                  className={`px-4 py-2 text-sm font-bold rounded-lg transition-colors flex items-center gap-2 ${
+                  className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
                     activeTab === tab.key
-                      ? 'bg-brand-primary text-white'
-                      : 'bg-white text-gray-600 hover:bg-gray-100 border'
+                      ? 'bg-brand-primary text-white shadow-sm'
+                      : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
                   }`}
                 >
-                  <i className={`fas ${tab.icon} text-xs`}></i>
-                  {tab.label}
+                  <i className={`fas ${tab.icon} text-[10px] sm:text-xs`}></i>
+                  <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               ))}
             </div>

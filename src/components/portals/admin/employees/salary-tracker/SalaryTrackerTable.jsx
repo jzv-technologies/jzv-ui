@@ -5,13 +5,15 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
     <table className="w-full text-left text-xs font-semibold min-w-[850px]">
       <thead className="bg-gray-50/80 border-b border-gray-200 text-[10px] uppercase tracking-wider text-gray-600 font-extrabold">
         <tr>
-          <th className="p-3.5">Employee Details</th>
-          <th className="p-3.5 text-right">Total Payable</th>
-          <th className="p-3.5 text-right">Total Paid</th>
-          <th className="p-3.5 text-right">Balance</th>
-          <th className="p-3.5">Status</th>
-          <th className="p-3.5">Last Settlement</th>
-          <th className="p-3.5 text-center">Actions</th>
+          <th className="p-3.5 w-48 sm:w-56 min-w-[170px] sticky left-0 z-20 bg-gray-50 border-r border-gray-200 shadow-xs">
+            Employee Details
+          </th>
+          <th className="p-3.5 text-right min-w-[130px]">Total Payable</th>
+          <th className="p-3.5 text-right min-w-[110px]">Total Paid</th>
+          <th className="p-3.5 text-right min-w-[110px]">Balance</th>
+          <th className="p-3.5 min-w-[100px]">Status</th>
+          <th className="p-3.5 min-w-[140px]">Last Settlement</th>
+          <th className="p-3.5 text-center min-w-[130px]">Actions</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-100">
@@ -55,16 +57,16 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
                     : 'hover:bg-teal-50/20'
               }`}
             >
-              {/* Single Combined Column for ID, Employee & Designation */}
-              <td className="p-3.5">
-                <div className="font-extrabold text-dark-primary text-xs">
+              {/* Single Combined Column for ID, Employee & Designation (Sticky) */}
+              <td className="p-3.5 w-48 sm:w-56 min-w-[170px] sticky left-0 z-10 bg-white border-r border-gray-200 shadow-xs">
+                <div className="font-extrabold text-dark-primary text-xs truncate max-w-[150px] sm:max-w-none">
                   {emp.name || 'Unknown Employee'}
                 </div>
                 <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">
-                  <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700">
+                  <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700 shrink-0">
                     {emp.emp_id || `EMP-${emp.id || idx}`}
                   </span>
-                  <span className="text-teal-800 font-bold">
+                  <span className="text-teal-800 font-bold truncate max-w-[100px]">
                     {emp.designation || 'Not Defined'}
                   </span>
                 </div>

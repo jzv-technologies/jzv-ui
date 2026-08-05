@@ -15,72 +15,75 @@ const SalaryTrackerHeader = ({
   onOpenBulkIncrement,
   onOpenExport,
   onOpenUpload,
+  hideHeaderTopRow = false,
 }) => {
   return (
     <div className="bg-white p-4 sm:p-5 rounded-3xl border border-light-border shadow-sm space-y-4">
       {/* TOP ROW: Title, Download, Upload & View Mode Switcher */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
-              <i className="fas fa-sack-dollar text-xl"></i>
+      {!hideHeaderTopRow && (
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="w-full sm:w-auto flex items-center justify-between">
+            <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center shrink-0">
+                <i className="fas fa-sack-dollar text-xl"></i>
+              </div>
+              Salary Distribution Log
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end flex-wrap">
+            {/* Download (Export) Button */}
+            {onOpenExport && (
+              <button
+                type="button"
+                onClick={onOpenExport}
+                className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 flex-1 sm:flex-none"
+                title="Download Salary Tracker Log (Excel)"
+              >
+                <i className="fas fa-download text-teal-600"></i>
+                <span>Download</span>
+              </button>
+            )}
+
+            {/* Upload / Bulk Edit Button */}
+            {onOpenUpload && (
+              <button
+                type="button"
+                onClick={onOpenUpload}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 flex-1 sm:flex-none"
+                title="Upload CSV/Excel or Bulk Edit Payments"
+              >
+                <i className="fas fa-file-excel text-amber-600"></i>
+                <span>Upload / Bulk Edit</span>
+              </button>
+            )}
+
+            {/* View Mode Switcher */}
+            <div className="inline-flex p-1 bg-gray-100 rounded-2xl border border-gray-200 justify-center w-full min-[480px]:w-auto">
+              <button
+                onClick={() => setViewMode('matrix')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 flex-1 min-[480px]:flex-none ${
+                  viewMode === 'matrix'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-dark-soft hover:bg-gray-200/80'
+                }`}
+              >
+                <i className="fas fa-table-cells"></i> Dashboard
+              </button>
+              <button
+                onClick={() => setViewMode('monthly')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 flex-1 min-[480px]:flex-none ${
+                  viewMode === 'monthly'
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'text-dark-soft hover:bg-gray-200/80'
+                }`}
+              >
+                <i className="fas fa-building"></i> List View
+              </button>
             </div>
-            Salary Distribution Log
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
-          {/* Download (Export) Button */}
-          {onOpenExport && (
-            <button
-              type="button"
-              onClick={onOpenExport}
-              className="px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
-              title="Download Salary Tracker Log (Excel)"
-            >
-              <i className="fas fa-download text-teal-600"></i>
-              <span>Download</span>
-            </button>
-          )}
-
-          {/* Upload / Bulk Edit Button */}
-          {onOpenUpload && (
-            <button
-              type="button"
-              onClick={onOpenUpload}
-              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
-              title="Upload CSV/Excel or Bulk Edit Payments"
-            >
-              <i className="fas fa-file-excel text-amber-600"></i>
-              <span>Upload / Bulk Edit</span>
-            </button>
-          )}
-
-          {/* View Mode Switcher */}
-          <div className="inline-flex p-1 bg-gray-100 rounded-2xl border border-gray-200 justify-center">
-            <button
-              onClick={() => setViewMode('matrix')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
-                viewMode === 'matrix'
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'text-dark-soft hover:bg-gray-200/80'
-              }`}
-            >
-              <i className="fas fa-table-cells"></i> Dashboard
-            </button>
-            <button
-              onClick={() => setViewMode('monthly')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
-                viewMode === 'monthly'
-                  ? 'bg-teal-600 text-white shadow-xs'
-                  : 'text-dark-soft hover:bg-gray-200/80'
-              }`}
-            >
-              <i className="fas fa-building"></i> List View
-            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* MIDDLE SECTION: Cumulative Stats Tiles */}
       <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 border-t pt-4">
@@ -135,137 +138,146 @@ const SalaryTrackerHeader = ({
         </div>
       </div>
 
-      {/* BOTTOM ROW: Search, Month Selector, Refresh & Status Filters */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 border-t pt-3.5">
-        {/* Left Side: Search, Month Selector & Refresh Button */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Main Header Search Input */}
-          <div className="relative w-full sm:w-64">
-            <i className="fas fa-search absolute left-3.5 top-2.5 text-gray-400 text-xs"></i>
-            <input
-              type="text"
-              placeholder="Search Employee, ID, Designation..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-300 outline-none"
-            />
+      {/* BOTTOM ROW (3rd Row): Search, Month Selector, Refresh & Status Filters (Hidden when controls are in top portal header) */}
+      {!hideHeaderTopRow && (
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 border-t pt-3.5">
+          {/* Left Side: Search, Month Selector & Refresh Button */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto">
+            {/* Main Header Search Input */}
+            <div className="relative w-full sm:w-64">
+              <i className="fas fa-search absolute left-3.5 top-2.5 text-gray-400 text-xs"></i>
+              <input
+                type="text"
+                placeholder="Search Employee, ID, Designation..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-teal-300 outline-none"
+              />
+            </div>
+
+            {/* Month Selector + Refresh Pair */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Month Selector */}
+              <div className="flex items-center justify-center gap-1.5 bg-teal-50/70 p-1 rounded-2xl border border-teal-200 flex-1 sm:flex-none">
+                <i className="fas fa-calendar-day text-teal-600 text-xs ml-1.5 shrink-0"></i>
+                <input
+                  type="month"
+                  value={selectedMonthStr}
+                  onChange={(e) => setSelectedMonthStr(e.target.value)}
+                  className="px-2.5 py-1 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-teal-950 outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer shadow-2xs w-full sm:w-auto"
+                />
+              </div>
+
+              {/* Refresh Button */}
+              {onRefresh && (
+                <button
+                  type="button"
+                  onClick={onRefresh}
+                  disabled={loading}
+                  className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
+                  title="Refresh Salary Data"
+                >
+                  <i
+                    className={`fas fa-rotate-right ${
+                      loading ? 'fa-spin text-teal-600' : 'text-teal-700'
+                    } text-xs`}
+                  ></i>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Month Selector */}
-          <div className="flex items-center gap-1.5 bg-teal-50/70 p-1 rounded-2xl border border-teal-200 shrink-0">
-            <i className="fas fa-calendar-day text-teal-600 text-xs ml-1.5"></i>
-            <input
-              type="month"
-              value={selectedMonthStr}
-              onChange={(e) => setSelectedMonthStr(e.target.value)}
-              className="px-3 py-1 bg-white border border-teal-300 rounded-xl text-xs font-extrabold text-teal-950 outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer shadow-2xs"
-            />
+          {/* Right Side: Bulk Increment & Global Status Filter Badges */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full xl:w-auto justify-start xl:justify-end">
+            {/* Bulk Increment Button */}
+            {onOpenBulkIncrement && (
+              <button
+                type="button"
+                onClick={onOpenBulkIncrement}
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95 w-full sm:w-auto shrink-0"
+                title="Apply Increments in Bulk by Effective Date/Month"
+              >
+                <i className="fas fa-calendar-check text-emerald-600"></i>
+                <span>Bulk Increment</span>
+              </button>
+            )}
+
+            {/* Filter Badges Container */}
+            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-between sm:justify-start bg-gray-50 sm:bg-transparent p-1.5 sm:p-0 rounded-2xl border border-gray-200 sm:border-0">
+              <span className="text-xs font-extrabold text-dark-primary flex items-center gap-1 shrink-0 px-1 sm:px-0">
+                <i className="fas fa-filter text-teal-600 text-xs"></i>
+                <span>Filter:</span>
+              </span>
+
+              {/* Paid Tickbox */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'paid' ? 'all' : 'paid')}
+                className={`inline-flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer flex-1 sm:flex-none ${
+                  statusFilter === 'paid'
+                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                    : 'bg-white border-emerald-500 text-emerald-700 hover:bg-emerald-50/60'
+                }`}
+              >
+                <span
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center text-[9px] sm:text-[10px] transition-colors shrink-0 ${
+                    statusFilter === 'paid'
+                      ? 'border-white bg-white text-emerald-600'
+                      : 'border-emerald-500 bg-white text-transparent'
+                  }`}
+                >
+                  <i className="fas fa-check"></i>
+                </span>
+                Paid
+              </button>
+
+              {/* Partial Tickbox */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'partial' ? 'all' : 'partial')}
+                className={`inline-flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer flex-1 sm:flex-none ${
+                  statusFilter === 'partial'
+                    ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
+                    : 'bg-white border-amber-500 text-amber-700 hover:bg-amber-50/60'
+                }`}
+              >
+                <span
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center text-[9px] sm:text-[10px] transition-colors shrink-0 ${
+                    statusFilter === 'partial'
+                      ? 'border-white bg-white text-amber-600'
+                      : 'border-amber-500 bg-white text-transparent'
+                  }`}
+                >
+                  <i className="fas fa-check"></i>
+                </span>
+                Partial
+              </button>
+
+              {/* Unpaid Tickbox */}
+              <button
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'unpaid' ? 'all' : 'unpaid')}
+                className={`inline-flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] sm:text-xs font-extrabold transition-all cursor-pointer flex-1 sm:flex-none ${
+                  statusFilter === 'unpaid'
+                    ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
+                    : 'bg-white border-rose-500 text-rose-700 hover:bg-rose-50/60'
+                }`}
+              >
+                <span
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border flex items-center justify-center text-[9px] sm:text-[10px] transition-colors shrink-0 ${
+                    statusFilter === 'unpaid'
+                      ? 'border-white bg-white text-rose-600'
+                      : 'border-rose-500 bg-white text-transparent'
+                  }`}
+                >
+                  <i className="fas fa-check"></i>
+                </span>
+                Unpaid
+              </button>
+            </div>
           </div>
-
-          {/* Refresh Button */}
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={loading}
-              className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
-              title="Refresh Salary Data"
-            >
-              <i
-                className={`fas fa-rotate-right ${
-                  loading ? 'fa-spin text-teal-600' : 'text-teal-700'
-                } text-xs`}
-              ></i>
-            </button>
-          )}
         </div>
-
-        {/* Right Side: Global Status Filter Badges */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Bulk Increment Button */}
-          {onOpenBulkIncrement && (
-            <button
-              type="button"
-              onClick={onOpenBulkIncrement}
-              className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-2xl text-xs font-extrabold transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 shrink-0"
-              title="Apply Increments in Bulk by Effective Date/Month"
-            >
-              <i className="fas fa-calendar-check text-emerald-600"></i>
-              <span>Bulk Increment</span>
-            </button>
-          )}
-          <span className="text-xs font-extrabold text-dark-primary flex items-center gap-1.5 mr-1">
-            <i className="fas fa-filter text-teal-600"></i>
-            <span className="hidden sm:inline">Filter:</span>
-          </span>
-
-          {/* Paid Tickbox */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter(statusFilter === 'paid' ? 'all' : 'paid')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-              statusFilter === 'paid'
-                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                : 'bg-white border-emerald-500 text-emerald-700 hover:bg-emerald-50/60'
-            }`}
-          >
-            <span
-              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
-                statusFilter === 'paid'
-                  ? 'border-white bg-white text-emerald-600'
-                  : 'border-emerald-500 bg-white text-transparent'
-              }`}
-            >
-              <i className="fas fa-check"></i>
-            </span>
-            Paid
-          </button>
-
-          {/* Partial Tickbox */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter(statusFilter === 'partial' ? 'all' : 'partial')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-              statusFilter === 'partial'
-                ? 'bg-amber-500 border-amber-500 text-white shadow-xs'
-                : 'bg-white border-amber-500 text-amber-700 hover:bg-amber-50/60'
-            }`}
-          >
-            <span
-              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
-                statusFilter === 'partial'
-                  ? 'border-white bg-white text-amber-600'
-                  : 'border-amber-500 bg-white text-transparent'
-              }`}
-            >
-              <i className="fas fa-check"></i>
-            </span>
-            Partial
-          </button>
-
-          {/* Unpaid Tickbox */}
-          <button
-            type="button"
-            onClick={() => setStatusFilter(statusFilter === 'unpaid' ? 'all' : 'unpaid')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-extrabold transition-all cursor-pointer ${
-              statusFilter === 'unpaid'
-                ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
-                : 'bg-white border-rose-500 text-rose-700 hover:bg-rose-50/60'
-            }`}
-          >
-            <span
-              className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] transition-colors ${
-                statusFilter === 'unpaid'
-                  ? 'border-white bg-white text-rose-600'
-                  : 'border-rose-500 bg-white text-transparent'
-              }`}
-            >
-              <i className="fas fa-check"></i>
-            </span>
-            Unpaid
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -28,7 +28,14 @@ const MONTH_NAMES = [
   'Dec',
 ];
 
-const SalaryTrackerView = ({ user, userRoles }) => {
+const SalaryTrackerView = ({
+  user,
+  userRoles,
+  viewMode: externalViewMode,
+  setViewMode: externalSetViewMode,
+  onRegisterControls,
+  hideHeaderTopRow = false,
+}) => {
   // Role Permission Check: Management and above level can update
   const canUpdateSalaryTracker = useMemo(() => {
     if (!Array.isArray(userRoles) || userRoles.length === 0) return true;
@@ -40,8 +47,10 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     );
   }, [userRoles]);
 
-  // View Mode: 'matrix' (Salary Tracker / Matrix Swatches) | 'monthly' (Payment Update)
-  const [viewMode, setViewMode] = useState('matrix');
+  // View Mode: 'matrix' (Salary Credit Dashboard) | 'monthly' (Salary List View)
+  const [internalViewMode, setInternalViewMode] = useState('matrix');
+  const viewMode = externalViewMode || internalViewMode;
+  const setViewMode = externalSetViewMode || setInternalViewMode;
 
   // Month Selection State: YYYY-MM (Defaults to Previous Month)
   const [selectedMonthStr, setSelectedMonthStr] = useState(() => {
@@ -1115,8 +1124,32 @@ const SalaryTrackerView = ({ user, userRoles }) => {
     }
   };
 
+  useEffect(() => {
+    if (onRegisterControls) {
+      onRegisterControls({
+        loading,
+        onRefresh: fetchData,
+        onOpenExport: () => setIsExportModalOpen(true),
+        onOpenUpload: () => setIsUploadModalOpen(true),
+        onOpenBulkIncrement: () => setIsBulkApplyModalOpen(true),
+        searchQuery,
+        setSearchQuery,
+        statusFilter,
+        setStatusFilter,
+        selectedMonthStr,
+        setSelectedMonthStr,
+      });
+    }
+  }, [
+    loading,
+    onRegisterControls,
+    searchQuery,
+    statusFilter,
+    selectedMonthStr,
+  ]);
+
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="space-y-6 w-full animate-in fade-in duration-300">
       {/* Top Header Card */}
       <SalaryTrackerHeader
         searchQuery={searchQuery}
@@ -1133,6 +1166,7 @@ const SalaryTrackerView = ({ user, userRoles }) => {
         onOpenBulkIncrement={() => setIsBulkApplyModalOpen(true)}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenUpload={() => setIsUploadModalOpen(true)}
+        hideHeaderTopRow={hideHeaderTopRow}
       />
 
       {/* MAIN VIEW CONTENT */}

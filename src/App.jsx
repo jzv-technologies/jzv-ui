@@ -150,6 +150,7 @@ const App = () => {
           user={user}
           userRoles={userRoles}
           fullName={fullName}
+          teacherRecord={teacherRecord}
           onLogout={handleLogout}
           onLoginClick={() => setShowLoginPortal(true)}
           onLogoClick={() => {

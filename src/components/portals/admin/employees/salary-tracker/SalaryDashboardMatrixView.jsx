@@ -14,31 +14,33 @@ const SalaryDashboardMatrixView = ({
           className="bg-white rounded-3xl border border-light-border shadow-sm overflow-hidden space-y-4 p-5"
         >
           {/* Organization Header */}
-          <div className="flex items-center justify-between border-b pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-base font-black shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b pb-3.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center text-base font-black shadow-xs shrink-0">
                 <i className="fas fa-building"></i>
               </div>
-              <div>
-                <h3 className="text-base font-black text-dark-primary">{orgName}</h3>
-                <span className="text-xs font-bold text-teal-800">
+              <div className="min-w-0">
+                <h3 className="text-base sm:text-lg font-black text-dark-primary tracking-tight truncate">
+                  {orgName}
+                </h3>
+                <span className="text-xs font-bold text-teal-800 block">
                   {orgEmps.length} Salaried Employee(s)
                 </span>
               </div>
             </div>
             {/* Legend indicators */}
-            <div className="flex items-center gap-3 text-[11px] font-extrabold">
-              <span className="flex items-center gap-1.5 text-emerald-700">
-                <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Paid
+            <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-extrabold flex-wrap pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 justify-start md:justify-end">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shadow-2xs"></span> Paid
               </span>
-              <span className="flex items-center gap-1.5 text-amber-700">
-                <span className="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Partial
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200/60">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shadow-2xs"></span> Partial
               </span>
-              <span className="flex items-center gap-1.5 text-rose-700">
-                <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span> Unpaid
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 text-rose-800 border border-rose-200/60">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow-2xs"></span> Unpaid
               </span>
-              <span className="flex items-center gap-1.5 text-gray-500">
-                <span className="w-3 h-3 rounded-full bg-gray-200 border border-gray-300 inline-block"></span> Uninitialized
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gray-100 text-gray-600 border border-gray-200/80">
+                <span className="w-2.5 h-2.5 rounded-full bg-gray-300 border border-gray-400 inline-block"></span> Uninitialized
               </span>
             </div>
           </div>
@@ -48,12 +50,13 @@ const SalaryDashboardMatrixView = ({
             <table className="w-full text-left text-xs min-w-[900px]">
               <thead className="bg-gray-50 border-b text-[10px] uppercase tracking-wider text-dark-muted font-bold">
                 <tr>
-                  <th className="p-3.5 w-56">Employee</th>
-                  <th className="p-3.5 w-28 text-right">Base Salary</th>
+                  <th className="p-3 w-44 sm:w-52 md:w-56 min-w-[170px] sticky left-0 z-20 bg-gray-50 border-r border-gray-200 shadow-xs">
+                    Employee
+                  </th>
                   {matrixMonths.map((m) => (
                     <th
                       key={`${m.year}-${m.month}`}
-                      className={`p-3 text-center ${
+                      className={`p-2.5 text-center min-w-[80px] w-24 ${
                         m.isCurrent
                           ? 'bg-teal-100/70 text-teal-900 font-black border-x border-teal-200'
                           : ''
@@ -69,22 +72,19 @@ const SalaryDashboardMatrixView = ({
                   const org = emp.organization || 'Jamia Zaytoonah';
                   return (
                     <tr key={emp.id} className="hover:bg-gray-50/70 transition-colors">
-                      {/* Employee Info */}
-                      <td className="p-3.5">
-                        <div className="font-extrabold text-dark-primary text-xs">{emp.name}</div>
+                      {/* Employee Info (Sticky Column) */}
+                      <td className="p-3 w-44 sm:w-52 md:w-56 min-w-[170px] sticky left-0 z-10 bg-white border-r border-gray-200 shadow-xs">
+                        <div className="font-extrabold text-dark-primary text-xs truncate max-w-[150px] sm:max-w-none">
+                          {emp.name}
+                        </div>
                         <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">
-                          <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700">
+                          <span className="bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 text-gray-700 shrink-0">
                             {emp.emp_id || `EMP-${emp.id}`}
                           </span>
-                          <span className="text-teal-800 font-bold truncate max-w-[110px]">
+                          <span className="text-teal-800 font-bold truncate max-w-[100px]">
                             {emp.designation || 'Teacher'}
                           </span>
                         </div>
-                      </td>
-
-                      {/* Current Salary */}
-                      <td className="p-3.5 text-right font-black text-emerald-700 text-xs">
-                        ₹{Number(emp.current_salary || 0).toLocaleString('en-IN')}
                       </td>
 
                       {/* Month Swatches */}
@@ -100,8 +100,7 @@ const SalaryDashboardMatrixView = ({
 
                         if (record) {
                           const baseSal =
-                            Number(record.salary != null ? record.salary : emp.current_salary) ||
-                            0;
+                            Number(record.salary != null ? record.salary : emp.current_salary) || 0;
                           const extras = Number(record.extras) || 0;
                           const deductions = Number(record.deductions) || 0;
                           payableAmt = baseSal + extras - deductions;
@@ -126,7 +125,7 @@ const SalaryDashboardMatrixView = ({
                         return (
                           <td
                             key={`${m.year}-${m.month}`}
-                            className={`p-2 text-center ${
+                            className={`p-2 text-center min-w-[80px] w-24 ${
                               m.isCurrent ? 'bg-teal-50/40 border-x border-teal-100' : ''
                             }`}
                           >

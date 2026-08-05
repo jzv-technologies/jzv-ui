@@ -178,23 +178,6 @@ const EmployeeRecordsTable = ({
                     </div>
                   </th>
                   <th
-                    onClick={() => handleSort('current_salary')}
-                    className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      Salary
-                      <i
-                        className={`fas ${
-                          sortField === 'current_salary'
-                            ? sortOrder === 'asc'
-                              ? 'fa-sort-up text-brand-primary'
-                              : 'fa-sort-down text-brand-primary'
-                            : 'fa-sort text-gray-300'
-                        }`}
-                      ></i>
-                    </div>
-                  </th>
-                  <th
                     onClick={() => handleSort('is_active')}
                     className="p-4 text-center cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
                   >
@@ -283,19 +266,6 @@ const EmployeeRecordsTable = ({
                         <div className="font-extrabold text-purple-950 text-xs">
                           {formatPortalRoles(roleSum)}
                         </div>
-                      </td>
-                      <td className="p-4 font-bold text-emerald-700">
-                        {emp.is_salaried_employee !== false ? (
-                          emp.current_salary ? (
-                            `₹${Number(emp.current_salary).toLocaleString('en-IN')}`
-                          ) : (
-                            <span className="text-red-500 font-extrabold">Required</span>
-                          )
-                        ) : (
-                          <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-extrabold">
-                            Service
-                          </span>
-                        )}
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center gap-1 flex-wrap justify-center">

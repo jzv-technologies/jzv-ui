@@ -192,7 +192,7 @@ const DataGrid = ({
   return (
     <div className="bg-white border-0 shadow-none overflow-hidden rounded-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-full m-0 p-0 flex flex-col">
       {/* Stats & Column Manager Bar */}
-      <div className="px-6 py-3 border-b border-light-border bg-gray-50 flex justify-between items-center text-sm shrink-0">
+      <div className="px-4 sm:px-6 py-3 border-b border-light-border bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm shrink-0">
         <span className="text-dark-muted font-medium">
           Showing{" "}
           <strong className="text-dark-deepblue">{processedData.length}</strong>{" "}
