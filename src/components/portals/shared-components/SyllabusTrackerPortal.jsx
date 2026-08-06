@@ -282,10 +282,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         resCarryForwards,
       ] = await Promise.all([
         supabase.from('classes').select('*').order('id', { ascending: true }),
-        supabase.from('subjects').select('*').order('name', { ascending: true }),
-        supabase.from('syllabus_books').select('*').order('name', { ascending: true }),
-        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
-        supabase.from('syllabus_book_classes').select('*'),
+        supabase.from('syl_subjects').select('*').order('name', { ascending: true }),
+        supabase.from('syl_books').select('*').order('name', { ascending: true }),
+        supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
+        supabase.from('map_class_books').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase
           .from('employees')
@@ -293,17 +293,17 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           .eq('is_active', true)
           .eq('is_teacher', true)
           .order('name', { ascending: true }),
-        supabase.from('book_tracker').select('*'),
+        supabase.from('trk_book_level_progress').select('*'),
         supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select(
             'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
           ),
-        supabase.from('syllabus_book_lessons').select('*'),
+        supabase.from('syl_lessons').select('*'),
         supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select(
-            '*, lesson:syllabus_book_lessons(*), class:classes(*), subject:subjects(*), book:syllabus_books(*)'
+            '*, lesson:syl_lessons(*), class:classes(*), subject:syl_subjects(*), book:syl_books(*)'
           )
           .in('status', ['planned', 'in_progress', 'completed']),
         supabase.from('lesson_plan_carry_forwards').select('*'),
@@ -411,7 +411,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         setAssignments(parsed.assignments || []);
       } catch (e) {}
     }
-    const rawBC = localStorage.getItem('jzv_syllabus_book_classes');
+    const rawBC = localStorage.getItem('jzv_map_class_books');
     if (rawBC) {
       try {
         const parsedBC = JSON.parse(rawBC);
@@ -499,18 +499,18 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         }
       }
 
-      let query = supabase.from('lesson_progress_items').select(`
+      let query = supabase.from('trk_daily_teacher_progress').select(`
           *,
           teacher:teachers(name),
-          lesson_progress:lesson_progress(
+          lesson_progress:trk_lesson_level_progress(
             *,
-            lesson:syllabus_book_lessons(*)
+            lesson:syl_lessons(*)
           )
         `);
 
       if (role === 'parent' && student?.class_id) {
         const { data: progressRows } = await supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select('id')
           .eq('class_id', student.class_id);
         const progressIds = (progressRows || []).map((r) => r.id);
@@ -615,9 +615,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       }
 
       const [trackerRes, logsRes] = await Promise.all([
-        supabase.from('book_tracker').select('*').in('class_id', classIds),
+        supabase.from('trk_book_level_progress').select('*').in('class_id', classIds),
         supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select(
             'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at'
           )
@@ -701,14 +701,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setDailyLoading(true);
     try {
       const { error } = await supabase
-        .from('lesson_progress_items')
+        .from('trk_daily_teacher_progress')
         .delete()
         .eq('id', deleteModalConfig.id);
       if (error) throw error;
 
       if (deleteModalConfig.logId) {
         const { data: remainingItems } = await supabase
-          .from('lesson_progress_items')
+          .from('trk_daily_teacher_progress')
           .select('progress, is_revision')
           .eq('progress_id', deleteModalConfig.logId);
 
@@ -727,7 +727,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         }
 
         await supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .update({
             completion_percentage: newProgress,
             status: newStatus,
@@ -777,9 +777,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setExpandedLogIds({});
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
-        supabase.from('syllabus_book_lessons').select('*').eq('book_id', bookId),
+        supabase.from('syl_lessons').select('*').eq('book_id', bookId),
         supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select(
             'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
           )
@@ -823,7 +823,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     if (!logItemsMap[logId]) {
       try {
         const { data, error } = await supabase
-          .from('lesson_progress_items')
+          .from('trk_daily_teacher_progress')
           .select('*, teacher:teachers(name)')
           .eq('progress_id', logId)
           .order('date', { ascending: false });
@@ -982,7 +982,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         delay_end,
       };
 
-      const { error } = await supabase.from('lesson_progress').update(updateData).eq('id', plan.id);
+      const { error } = await supabase.from('trk_lesson_level_progress').update(updateData).eq('id', plan.id);
       if (error) throw error;
 
       if (plan.target_start_date && updateData.target_start_date) {

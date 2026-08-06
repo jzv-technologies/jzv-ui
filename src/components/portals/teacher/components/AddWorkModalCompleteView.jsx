@@ -122,7 +122,7 @@ const AddWorkModalCompleteView = ({
     }
     try {
       const { data, error } = await supabase
-        .from('syllabus_book_lessons')
+        .from('syl_lessons')
         .select('*')
         .eq('book_id', bookId);
       if (error) throw error;
@@ -288,7 +288,7 @@ const AddWorkModalCompleteView = ({
 
       try {
         const { data, error } = await supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .select('completion_percentage, status')
           .eq('class_id', Number(awClassId))
           .eq('lesson_id', Number(targetLesson.id))
@@ -455,7 +455,7 @@ const AddWorkModalCompleteView = ({
         if (exists) throw new Error(`${awLabels.lvl1} "${targetLevel1}" already exists.`);
 
         const { data: insRes, error } = await supabase
-          .from('syllabus_book_lessons')
+          .from('syl_lessons')
           .insert([
             {
               book_id: awBookId,
@@ -487,7 +487,7 @@ const AddWorkModalCompleteView = ({
 
           if (!l2Exists) {
             const { data: l2Res, error: l2Err } = await supabase
-              .from('syllabus_book_lessons')
+              .from('syl_lessons')
               .insert([
                 {
                   book_id: awBookId,
@@ -504,7 +504,7 @@ const AddWorkModalCompleteView = ({
           }
 
           const { data: l3Res, error: l3Err } = await supabase
-            .from('syllabus_book_lessons')
+            .from('syl_lessons')
             .insert([
               {
                 book_id: awBookId,
@@ -544,7 +544,7 @@ const AddWorkModalCompleteView = ({
           let updatedData = [...awBookData];
           if (placeholder) {
             const { data: updRes, error } = await supabase
-              .from('syllabus_book_lessons')
+              .from('syl_lessons')
               .update(recordData)
               .eq('id', placeholder.id)
               .select();
@@ -554,7 +554,7 @@ const AddWorkModalCompleteView = ({
             );
           } else {
             const { data: insRes, error } = await supabase
-              .from('syllabus_book_lessons')
+              .from('syl_lessons')
               .insert([recordData])
               .select();
             if (error) throw error;
@@ -591,7 +591,7 @@ const AddWorkModalCompleteView = ({
         let updatedData = [...awBookData];
         if (placeholder) {
           const { data: updRes, error } = await supabase
-            .from('syllabus_book_lessons')
+            .from('syl_lessons')
             .update(recordData)
             .eq('id', placeholder.id)
             .select();
@@ -601,7 +601,7 @@ const AddWorkModalCompleteView = ({
           );
         } else {
           const { data: insRes, error } = await supabase
-            .from('syllabus_book_lessons')
+            .from('syl_lessons')
             .insert([recordData])
             .select();
           if (error) throw error;
@@ -629,7 +629,7 @@ const AddWorkModalCompleteView = ({
   // Submit Helper functions
   const ensureLessonLog = async (classId, lessonId, date, subjectId, bookId) => {
     const { data: existing } = await supabase
-      .from('lesson_progress')
+      .from('trk_lesson_level_progress')
       .select('*')
       .eq('class_id', classId)
       .eq('lesson_id', lessonId)
@@ -637,7 +637,7 @@ const AddWorkModalCompleteView = ({
     if (existing) return existing;
 
     const { data, error } = await supabase
-      .from('lesson_progress')
+      .from('trk_lesson_level_progress')
       .upsert(
         [
           {
@@ -664,7 +664,7 @@ const AddWorkModalCompleteView = ({
     comments,
     isRevision
   ) => {
-    const { error } = await supabase.from('lesson_progress_items').insert([
+    const { error } = await supabase.from('trk_daily_teacher_progress').insert([
       {
         progress_id: progressId,
         teacher_id: teacherId || null,
@@ -1335,7 +1335,7 @@ const AddWorkModalCompleteView = ({
           bookClasses={bookClasses}
           setBookClasses={(updated) => {
             setBookClasses(updated);
-            localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(updated));
+            localStorage.setItem('jzv_map_class_books', JSON.stringify(updated));
           }}
         />
       )}

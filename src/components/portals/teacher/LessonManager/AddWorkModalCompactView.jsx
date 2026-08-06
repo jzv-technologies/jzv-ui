@@ -174,7 +174,7 @@ const AddWorkModalCompactView = ({
           progressId = existing.id;
         } else {
           const { data: upsertData, error: upsertErr } = await supabase
-            .from('lesson_progress')
+            .from('trk_lesson_level_progress')
             .upsert(
               {
                 class_id: Number(classId),
@@ -197,8 +197,8 @@ const AddWorkModalCompactView = ({
       const isRevision =
         selectedLesson?.level1?.toLowerCase().includes('_revision') || isForceRevision ? 'Y' : 'N';
 
-      // 2. Insert into lesson_progress_items
-      const { error: insertErr } = await supabase.from('lesson_progress_items').insert({
+      // 2. Insert into trk_daily_teacher_progress
+      const { error: insertErr } = await supabase.from('trk_daily_teacher_progress').insert({
         progress_id: progressId,
         teacher_id: teacherId || null,
         date: date,
@@ -211,7 +211,7 @@ const AddWorkModalCompactView = ({
 
       // 3. Fetch the updated lesson_progress row (triggers have run)
       const { data: updatedRow, error: fetchErr } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .select('*')
         .eq('id', progressId)
         .single();

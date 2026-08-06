@@ -189,11 +189,11 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       try {
         const queries = [
           supabase.from('classes').select('*'),
-          supabase.from('subjects').select('*'),
+          supabase.from('syl_subjects').select('*'),
           supabase.from('class_assignments').select('*'),
-          supabase.from('syllabus_books').select('*'),
-          supabase.from('syllabus_book_classes').select('*'),
-          supabase.from('syllabus_book_lessons').select('*'),
+          supabase.from('syl_books').select('*'),
+          supabase.from('map_class_books').select('*'),
+          supabase.from('syl_lessons').select('*'),
           supabase.from('lesson_plans').select('*'),
         ];
 

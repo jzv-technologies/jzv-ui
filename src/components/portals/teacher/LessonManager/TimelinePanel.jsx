@@ -11,7 +11,7 @@ const ViewLogsModal = ({ isOpen, onClose, record, lesson }) => {
     if (isOpen && record?.id) {
       setLoading(true);
       supabase
-        .from('lesson_progress_items')
+        .from('trk_daily_teacher_progress')
         .select('*, teacher:teachers(name)')
         .eq('progress_id', record.id)
         .order('date', { ascending: false })
@@ -416,7 +416,7 @@ const TimelinePanel = ({
       if (!upsertData.id) delete upsertData.id;
 
       const { data, error } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id', ignoreDuplicates: false })
         .select(
           'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
@@ -454,7 +454,7 @@ const TimelinePanel = ({
       };
 
       const { data, error } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
         .select(
           'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
@@ -474,7 +474,7 @@ const TimelinePanel = ({
   const executeUnplanLesson = async (record) => {
     try {
       if (record.status === 'planned') {
-        const { error } = await supabase.from('lesson_progress').delete().eq('id', record.id);
+        const { error } = await supabase.from('trk_lesson_level_progress').delete().eq('id', record.id);
         if (error) throw error;
         const updatedRecords = progressRecords.filter((r) => r.id !== record.id);
         setProgressRecords(updatedRecords);
@@ -490,7 +490,7 @@ const TimelinePanel = ({
       };
 
       const { data, error } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
         .select(
           'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
@@ -605,7 +605,7 @@ const TimelinePanel = ({
       };
 
       const { data, error } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
         .select(
           'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
@@ -688,7 +688,7 @@ const TimelinePanel = ({
         };
 
         const { data, error } = await supabase
-          .from('lesson_progress')
+          .from('trk_lesson_level_progress')
           .upsert(upsertData, { onConflict: 'class_id, lesson_id' })
           .select(
             'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'

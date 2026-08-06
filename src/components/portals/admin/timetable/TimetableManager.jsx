@@ -138,10 +138,10 @@ const TimetableManager = () => {
         { data: dbSlots },
         { data: dbPeriods },
       ] = await Promise.all([
-        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
-        supabase.from('subjects').select('*'),
+        supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
+        supabase.from('syl_subjects').select('*'),
         supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
@@ -419,13 +419,13 @@ const TimetableManager = () => {
         if (teacherErr) throw teacherErr;
         const insertedTeacher = teacherData[0];
 
-        // 2. Insert qualified subjects into teacher_subjects
+        // 2. Insert qualified subjects into map_teacher_subject
         if (qualifiedSubjects.length > 0) {
           const relationPayload = qualifiedSubjects.map((subId) => ({
             teacher_id: insertedTeacher.id,
             subject_id: subId,
           }));
-          const { error: relErr } = await supabase.from('teacher_subjects').insert(relationPayload);
+          const { error: relErr } = await supabase.from('map_teacher_subject').insert(relationPayload);
           if (relErr) throw relErr;
         }
 
@@ -477,7 +477,7 @@ const TimetableManager = () => {
 
         // 2. Delete existing relations
         const { error: delErr } = await supabase
-          .from('teacher_subjects')
+          .from('map_teacher_subject')
           .delete()
           .eq('teacher_id', id);
         if (delErr) throw delErr;
@@ -488,7 +488,7 @@ const TimetableManager = () => {
             teacher_id: id,
             subject_id: subId,
           }));
-          const { error: insErr } = await supabase.from('teacher_subjects').insert(relationPayload);
+          const { error: insErr } = await supabase.from('map_teacher_subject').insert(relationPayload);
           if (insErr) throw insErr;
         }
       } catch (err) {
@@ -728,7 +728,7 @@ const TimetableManager = () => {
             subject_id: subId,
           }));
           const { error } = await supabase
-            .from('teacher_subjects')
+            .from('map_teacher_subject')
             .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
           if (error) throw error;
         }
@@ -738,7 +738,7 @@ const TimetableManager = () => {
             subject_id: subId,
           }));
           const { error } = await supabase
-            .from('teacher_subjects')
+            .from('map_teacher_subject')
             .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
           if (error) throw error;
         }
@@ -897,7 +897,7 @@ const TimetableManager = () => {
           subject_id: subId,
         }));
         const { error } = await supabase
-          .from('teacher_subjects')
+          .from('map_teacher_subject')
           .upsert(relationPayload, { onConflict: 'teacher_id,subject_id' });
         if (error) throw error;
       }
@@ -1648,10 +1648,10 @@ const TimetableManager = () => {
                 await Promise.all([
                   supabase.from('timetable_slots').delete().gt('id', 0),
                   supabase.from('class_assignments').delete().gt('id', 0),
-                  supabase.from('teacher_subjects').delete().gt('id', 0),
+                  supabase.from('map_teacher_subject').delete().gt('id', 0),
                   supabase.from('employees').delete().gt('id', 0),
                   supabase.from('classes').delete().gt('id', 0),
-                  supabase.from('subjects').delete().gt('id', 0),
+                  supabase.from('syl_subjects').delete().gt('id', 0),
                   supabase.from('periods').delete().gt('id', 0),
                 ]);
               } catch (err) {
@@ -1971,7 +1971,7 @@ CREATE TABLE public.teachers (
 );
 
 -- 3. Create Teacher Subjects Table
-CREATE TABLE public.teacher_subjects (
+CREATE TABLE public.map_teacher_subject (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   teacher_id BIGINT NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
   subject_id BIGINT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,

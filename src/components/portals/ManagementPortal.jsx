@@ -214,13 +214,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         { data: dbClassifications },
         { data: secureTeachersData, error: secureTeachersErr },
       ] = await Promise.all([
-        supabase.from('subjects').select('*'),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('syl_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
-        supabase.from('subject_classifications').select('*').order('name', { ascending: true }),
+        supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null }),
       ]);
 

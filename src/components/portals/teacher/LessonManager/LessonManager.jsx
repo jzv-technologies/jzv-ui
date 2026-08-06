@@ -264,17 +264,17 @@ const LessonManager = ({
       try {
         const queries = [
           supabase.from('classes').select('*'),
-          supabase.from('subjects').select('*'),
+          supabase.from('syl_subjects').select('*'),
           supabase.from('class_assignments').select('*'),
-          supabase.from('syllabus_books').select('*'),
-          supabase.from('syllabus_book_classes').select('*'),
-          supabase.from('syllabus_book_lessons').select('*'),
+          supabase.from('syl_books').select('*'),
+          supabase.from('map_class_books').select('*'),
+          supabase.from('syl_lessons').select('*'),
           supabase
-            .from('lesson_progress')
+            .from('trk_lesson_level_progress')
             .select(
               'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
             ),
-          supabase.from('subject_classifications').select('*'),
+          supabase.from('syl_classifications').select('*'),
           supabase.from('timetable_slots').select('class_id, teacher_id, subject_id'),
         ];
 
@@ -443,7 +443,7 @@ const LessonManager = ({
     }
 
     // Otherwise (Admin view with no teacher selected OR showAllClasses is true):
-    // Get subject IDs that have books mapped to this class in syllabus_book_classes
+    // Get subject IDs that have books mapped to this class in map_class_books
     const mappedBookIdsForClass = new Set(
       bookClasses
         .filter((bc) => String(bc.class_id) === String(selectedClassId))
@@ -596,7 +596,7 @@ const LessonManager = ({
       });
 
       const { data, error } = await supabase
-        .from('lesson_progress')
+        .from('trk_lesson_level_progress')
         .upsert(upsertData, { onConflict: 'class_id, lesson_id', ignoreDuplicates: false })
         .select(
           'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'

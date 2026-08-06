@@ -75,12 +75,12 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: dbClassifications },
         { data: currentTeacherData, error: currentTeacherErr },
       ] = await Promise.all([
-        supabase.from('subjects').select('*'),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('syl_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
-        supabase.from('subject_classifications').select('*'),
+        supabase.from('syl_classifications').select('*'),
         supabase.rpc('get_current_teacher_details', { p_auth_id: user?.id || null }),
       ]);
 

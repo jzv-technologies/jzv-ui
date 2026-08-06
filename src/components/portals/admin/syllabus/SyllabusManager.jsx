@@ -54,7 +54,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
       if (isSupabaseMode) {
         const { error: delErr } = await supabase
-          .from('syllabus_book_classes')
+          .from('map_class_books')
           .delete()
           .eq('book_id', bookId);
         if (delErr) throw delErr;
@@ -64,7 +64,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             book_id: bookId,
             class_id: Number(cid),
           }));
-          const { error: insErr } = await supabase.from('syllabus_book_classes').insert(insertData);
+          const { error: insErr } = await supabase.from('map_class_books').insert(insertData);
           if (insErr) throw insErr;
         }
       }
@@ -78,7 +78,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         })),
       ];
       setBookClasses(updated);
-      localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(updated));
+      localStorage.setItem('jzv_map_class_books', JSON.stringify(updated));
 
       showToast('Book mapped to classes successfully!', 'success');
       setMappingBook(null);
@@ -189,7 +189,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     try {
       if (isSupabaseMode) {
         await supabase
-          .from('subjects')
+          .from('syl_subjects')
           .update({ deactivated: false, deactivate: false })
           .eq('id', id);
       }
@@ -251,14 +251,14 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     try {
       const [dbClassifications, dbSubjects, dbClasses, dbBookClasses] = await Promise.all([
         getSessionCachedData('jzv_session_classifications', () =>
-          supabase.from('subject_classifications').select('*').order('name', { ascending: true })
+          supabase.from('syl_classifications').select('*').order('name', { ascending: true })
         ),
-        getSessionCachedData('jzv_session_subjects', () => supabase.from('subjects').select('*')),
+        getSessionCachedData('jzv_session_subjects', () => supabase.from('syl_subjects').select('*')),
         getSessionCachedData('jzv_session_classes', () =>
           supabase.from('classes').select('*').order('id', { ascending: true })
         ),
         getSessionCachedData('jzv_session_book_classes', () =>
-          supabase.from('syllabus_book_classes').select('*')
+          supabase.from('map_class_books').select('*')
         ),
       ]);
 
@@ -276,7 +276,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         ];
         if (referencedIds.length > 0) {
           const { data: fallbackCls } = await supabase
-            .from('subject_classifications')
+            .from('syl_classifications')
             .select('*')
             .in('id', referencedIds)
             .order('name', { ascending: true });
@@ -312,7 +312,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                 .select('subject_id')
                 .eq('teacher_id', teacherData.id),
               supabase
-                .from('teacher_subjects')
+                .from('map_teacher_subject')
                 .select('subject_id')
                 .eq('teacher_id', teacherData.id),
             ]);
@@ -371,7 +371,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     }
 
     // Load local book classes mapping
-    const rawBC = localStorage.getItem('jzv_syllabus_book_classes');
+    const rawBC = localStorage.getItem('jzv_map_class_books');
     if (rawBC) {
       try {
         setBookClasses(JSON.parse(rawBC));
@@ -513,7 +513,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
     try {
       const { data, error } = await supabase
-        .from('syllabus_books')
+        .from('syl_books')
         .select('*')
         .eq('subject_id', subjectId);
       if (error) throw error;
@@ -542,7 +542,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     setLoadingBookIds((prev) => new Set(prev).add(String(bookId)));
     try {
       const { data, error } = await supabase
-        .from('syllabus_book_lessons')
+        .from('syl_lessons')
         .select('*')
         .eq('book_id', bookId)
         .range(0, 9999);
@@ -759,7 +759,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             };
             if (isSupabaseMode) {
               const { data, error } = await supabase
-                .from('syllabus_book_lessons')
+                .from('syl_lessons')
                 .insert([newRow])
                 .select();
               if (error) {
@@ -787,7 +787,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             };
             if (isSupabaseMode) {
               const { error } = await supabase
-                .from('syllabus_book_lessons')
+                .from('syl_lessons')
                 .update(updatePayload)
                 .eq('id', existingRow.id);
               if (error) {
@@ -842,7 +842,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         if (data.level === 'subject') {
           if (isSupabaseMode)
             await supabase
-              .from('subjects')
+              .from('syl_subjects')
               .update({
                 name: data.name,
                 classification_id: data.classificationId || null,
@@ -864,7 +864,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         } else if (data.level === 'book') {
           if (isSupabaseMode)
             await supabase
-              .from('syllabus_books')
+              .from('syl_books')
               .update({ name: data.name, hierarchy_type: data.hierarchyType })
               .eq('id', data.node.id);
           saveState({
@@ -881,14 +881,14 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             if (isSupabaseMode) {
               if (data.level === 'level1') {
                 await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .update({ level1: data.name })
                   .eq('book_id', data.bookId)
                   .eq('level1', data.oldLevel1);
               } else if (data.level === 'level2') {
                 // Rename level2 for all sub-rows
                 await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .update({ level2: data.name })
                   .eq('book_id', data.bookId)
                   .eq('level1', data.oldLevel1)
@@ -897,7 +897,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                 // Update page count / complexity for placeholder row if provided
                 if (data.pageCount !== null && data.pageCount !== undefined) {
                   await supabase
-                    .from('syllabus_book_lessons')
+                    .from('syl_lessons')
                     .update({ page_count: data.pageCount, complexity: data.complexity })
                     .eq('book_id', data.bookId)
                     .eq('level1', data.oldLevel1)
@@ -911,7 +911,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   complexity: data.complexity,
                 };
                 await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .update(updates)
                   .eq('book_id', data.bookId)
                   .eq('level1', data.oldLevel1)
@@ -971,7 +971,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           };
           if (isSupabaseMode) {
             const { data: res } = await supabase
-              .from('subjects')
+              .from('syl_subjects')
               .insert([
                 {
                   name: data.name,
@@ -994,7 +994,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           };
           if (isSupabaseMode) {
             const { data: res } = await supabase
-              .from('syllabus_books')
+              .from('syl_books')
               .insert([
                 { subject_id: data.parentId, name: data.name, hierarchy_type: data.hierarchyType },
               ])
@@ -1004,7 +1004,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             if (newBook?.id) {
               // Check if database trigger inserted default _Revision entries for new book
               const { data: revLessons } = await supabase
-                .from('syllabus_book_lessons')
+                .from('syl_lessons')
                 .select('*')
                 .eq('book_id', newBook.id)
                 .eq('level1', '_Revision');
@@ -1012,7 +1012,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               // If database trigger inserted multiple _Revision rows (e.g. 9 rows), keep only 1 and delete the excess
               if (revLessons && revLessons.length > 1) {
                 const idsToDelete = revLessons.slice(1).map((r) => r.id);
-                await supabase.from('syllabus_book_lessons').delete().in('id', idsToDelete);
+                await supabase.from('syl_lessons').delete().in('id', idsToDelete);
               }
             }
           }
@@ -1065,7 +1065,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               // Update existing placeholder
               if (isSupabaseMode) {
                 const { data: updatedRes, error } = await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .update(recordData)
                   .eq('id', placeholder.id)
                   .select();
@@ -1080,7 +1080,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               // Insert new record
               if (isSupabaseMode) {
                 const { data: insertedRes, error } = await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .insert([recordData])
                   .select();
                 if (error) throw error;
@@ -1119,7 +1119,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             if (isSoft) {
               if (isSupabaseMode) {
                 await supabase
-                  .from('subjects')
+                  .from('syl_subjects')
                   .update({ deactivated: true, deactivate: true })
                   .eq('id', id);
               }
@@ -1130,12 +1130,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               });
               showToast('Subject deactivated successfully', 'success');
             } else {
-              if (isSupabaseMode) await supabase.from('subjects').delete().eq('id', id);
+              if (isSupabaseMode) await supabase.from('syl_subjects').delete().eq('id', id);
               saveState({ subjects: subjects.filter((s) => String(s.id) !== String(id)) });
               showToast('Subject deleted permanently', 'success');
             }
           } else if (level === 'book') {
-            if (isSupabaseMode) await supabase.from('syllabus_books').delete().eq('id', id);
+            if (isSupabaseMode) await supabase.from('syl_books').delete().eq('id', id);
             saveState({
               books: books.filter((b) => String(b.id) !== String(id)),
               syllabusData: syllabusData.filter((d) => String(d.book_id) !== String(id)),
@@ -1164,7 +1164,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                 if (siblings.length > 1) {
                   // Safe to delete this row completely from DB & local state
                   if (isSupabaseMode) {
-                    await supabase.from('syllabus_book_lessons').delete().eq('id', targetNode.id);
+                    await supabase.from('syl_lessons').delete().eq('id', targetNode.id);
                   }
                   currentData = currentData.filter((d) => String(d.id) !== String(targetNode.id));
                 } else {
@@ -1172,7 +1172,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   const updates = { level3: null, page_count: 0, complexity: 'Easy' };
                   if (isSupabaseMode) {
                     await supabase
-                      .from('syllabus_book_lessons')
+                      .from('syl_lessons')
                       .update(updates)
                       .eq('id', targetNode.id);
                   }
@@ -1201,7 +1201,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   // Safe to delete these rows completely
                   if (isSupabaseMode) {
                     await supabase
-                      .from('syllabus_book_lessons')
+                      .from('syl_lessons')
                       .delete()
                       .eq('book_id', bookId)
                       .eq('level1', l1)
@@ -1218,10 +1218,10 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
                   if (isSupabaseMode) {
                     if (deleteRowIds.length > 0) {
-                      await supabase.from('syllabus_book_lessons').delete().in('id', deleteRowIds);
+                      await supabase.from('syl_lessons').delete().in('id', deleteRowIds);
                     }
                     await supabase
-                      .from('syllabus_book_lessons')
+                      .from('syl_lessons')
                       .update({ level2: null, level3: null, page_count: 0, complexity: 'Easy' })
                       .eq('id', keepRow.id);
                   }
@@ -1240,7 +1240,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               // Delete level1 node completely
               if (isSupabaseMode) {
                 await supabase
-                  .from('syllabus_book_lessons')
+                  .from('syl_lessons')
                   .delete()
                   .eq('book_id', bookId)
                   .eq('level1', l1);
@@ -1269,13 +1269,13 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         for (const c of updatedCls) {
           if (String(c.id).startsWith('local-') || String(c.id).startsWith('cls-')) {
             await supabase
-              .from('subject_classifications')
+              .from('syl_classifications')
               .insert([{ name: c.name, theme: c.theme || 'blue' }]);
           } else if (c._deleted) {
-            await supabase.from('subject_classifications').delete().eq('id', c.id);
+            await supabase.from('syl_classifications').delete().eq('id', c.id);
           } else {
             await supabase
-              .from('subject_classifications')
+              .from('syl_classifications')
               .update({ name: c.name, theme: c.theme || 'blue' })
               .eq('id', c.id);
           }
@@ -1298,7 +1298,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       if (isSupabaseMode) {
         for (const item of mappingData) {
           await supabase
-            .from('subjects')
+            .from('syl_subjects')
             .update({ classification_id: item.clsId })
             .eq('id', item.subId);
         }

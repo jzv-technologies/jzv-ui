@@ -47,7 +47,7 @@ const TVDisplayDashboard = () => {
         ] = await Promise.all([
           supabase.from('classes').select('*'),
           supabase.from('periods').select('*').order('period_number', { ascending: true }),
-          supabase.from('subjects').select('*'),
+          supabase.from('syl_subjects').select('*'),
           supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
           supabase.from('timetable_slots').select('*')
         ]);

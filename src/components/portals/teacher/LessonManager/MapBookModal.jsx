@@ -61,7 +61,7 @@ const MapBookModal = ({
       
       // Delete existing mappings for this class AND this subject's books
       const { error: delErr } = await supabase
-        .from('syllabus_book_classes')
+        .from('map_class_books')
         .delete()
         .eq('class_id', classId)
         .in('book_id', subjectBookIds);
@@ -76,7 +76,7 @@ const MapBookModal = ({
         }));
         
         const { error: insErr } = await supabase
-          .from('syllabus_book_classes')
+          .from('map_class_books')
           .insert(insertData);
           
         if (insErr) throw insErr;
@@ -96,7 +96,7 @@ const MapBookModal = ({
       ];
       
       setBookClasses(newBC);
-      localStorage.setItem('jzv_syllabus_book_classes', JSON.stringify(newBC));
+      localStorage.setItem('jzv_map_class_books', JSON.stringify(newBC));
       
       showToast('Books mapped successfully', 'success');
       onClose();
