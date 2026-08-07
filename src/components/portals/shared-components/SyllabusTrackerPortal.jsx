@@ -287,12 +287,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.from('map_class_books').select('*'),
         supabase.from('class_assignments').select('*'),
-        supabase
-          .from('employees')
-          .select('*')
-          .eq('is_active', true)
-          .eq('is_teacher', true)
-          .order('name', { ascending: true }),
+        supabase.from('teachers').select('*').order('name', { ascending: true }),
         supabase.from('trk_book_level_progress').select('*'),
         supabase
           .from('trk_lesson_level_progress')
@@ -407,7 +402,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         const parsed = JSON.parse(rawTimetable);
         setClasses(parsed.classes || []);
         setClassifications(parsed.classifications || []);
-        setTeachers((parsed.teachers || []).filter((t) => t.is_active));
+        setTeachers(parsed.teachers || []);
         setAssignments(parsed.assignments || []);
       } catch (e) {}
     }
@@ -982,7 +977,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         delay_end,
       };
 
-      const { error } = await supabase.from('trk_lesson_level_progress').update(updateData).eq('id', plan.id);
+      const { error } = await supabase
+        .from('trk_lesson_level_progress')
+        .update(updateData)
+        .eq('id', plan.id);
       if (error) throw error;
 
       if (plan.target_start_date && updateData.target_start_date) {
@@ -1265,27 +1263,102 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
   const roleTabs = {
     parent: [
-      { key: 'two-weeks-class', label: 'Last 2 Weeks Classes', shortLabel: '2 Weeks', icon: 'fa-calendar-week' },
-      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
+      {
+        key: 'two-weeks-class',
+        label: 'Last 2 Weeks Classes',
+        shortLabel: '2 Weeks',
+        icon: 'fa-calendar-week',
+      },
+      {
+        key: 'class-progress',
+        label: 'Syllabus Progress',
+        shortLabel: 'Progress',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'upcoming-lessons',
+        label: 'Upcoming Lessons',
+        shortLabel: 'Upcoming',
+        icon: 'fa-calendar-alt',
+      },
     ],
     teacher: [
-      { key: 'lesson-planner', label: 'Lesson Planner', shortLabel: 'Planner', icon: 'fa-calendar-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
-      { key: 'teacher-activity', label: 'My Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
+      {
+        key: 'lesson-planner',
+        label: 'Lesson Planner',
+        shortLabel: 'Planner',
+        icon: 'fa-calendar-check',
+      },
+      {
+        key: 'class-progress',
+        label: 'Syllabus Progress',
+        shortLabel: 'Progress',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'upcoming-lessons',
+        label: 'Upcoming Lessons',
+        shortLabel: 'Upcoming',
+        icon: 'fa-calendar-alt',
+      },
+      {
+        key: 'teacher-activity',
+        label: 'My Activity',
+        shortLabel: 'Activity',
+        icon: 'fa-list-check',
+      },
     ],
     admin: [
-      { key: 'teacher-activity', label: 'Teacher Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
-      { key: 'teacher-adherence', label: 'Planning Adherence', shortLabel: 'Adherence', icon: 'fa-clipboard-check' },
+      {
+        key: 'teacher-activity',
+        label: 'Teacher Activity',
+        shortLabel: 'Activity',
+        icon: 'fa-list-check',
+      },
+      {
+        key: 'class-progress',
+        label: 'Syllabus Progress',
+        shortLabel: 'Progress',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'upcoming-lessons',
+        label: 'Upcoming Lessons',
+        shortLabel: 'Upcoming',
+        icon: 'fa-calendar-alt',
+      },
+      {
+        key: 'teacher-adherence',
+        label: 'Planning Adherence',
+        shortLabel: 'Adherence',
+        icon: 'fa-clipboard-check',
+      },
     ],
     management: [
-      { key: 'teacher-activity', label: 'Teacher Activity', shortLabel: 'Activity', icon: 'fa-list-check' },
-      { key: 'class-progress', label: 'Syllabus Progress', shortLabel: 'Progress', icon: 'fa-chart-pie' },
-      { key: 'upcoming-lessons', label: 'Upcoming Lessons', shortLabel: 'Upcoming', icon: 'fa-calendar-alt' },
-      { key: 'teacher-adherence', label: 'Planning Adherence', shortLabel: 'Adherence', icon: 'fa-clipboard-check' },
+      {
+        key: 'teacher-activity',
+        label: 'Teacher Activity',
+        shortLabel: 'Activity',
+        icon: 'fa-list-check',
+      },
+      {
+        key: 'class-progress',
+        label: 'Syllabus Progress',
+        shortLabel: 'Progress',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'upcoming-lessons',
+        label: 'Upcoming Lessons',
+        shortLabel: 'Upcoming',
+        icon: 'fa-calendar-alt',
+      },
+      {
+        key: 'teacher-adherence',
+        label: 'Planning Adherence',
+        shortLabel: 'Adherence',
+        icon: 'fa-clipboard-check',
+      },
     ],
   };
 
@@ -1299,7 +1372,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap"
           data-name="Lesson Planner and Tracker Tabs"
         >
-          <div className="flex gap-4 items-center flex-wrap w-full sm:w-auto" data-name="navigation tabs">
+          <div
+            className="flex gap-4 items-center flex-wrap w-full sm:w-auto"
+            data-name="navigation tabs"
+          >
             <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
               {currentTabs.map((tab) => (
                 <button

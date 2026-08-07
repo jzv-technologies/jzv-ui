@@ -140,7 +140,7 @@ const TimetableManager = () => {
       ] = await Promise.all([
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syl_subjects').select('*'),
-        supabase.from('employees').select('*').eq('is_active', true).eq('is_teacher', true),
+        supabase.from('teachers').select('*').eq('is_active', true),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),

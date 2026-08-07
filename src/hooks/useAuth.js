@@ -51,19 +51,23 @@ export const useAuth = () => {
     if (fetchingTeacherRef.current) return null;
     fetchingTeacherRef.current = true;
     try {
-      // 1. Query employees table directly to pull emp_id column
-      let empRecord = null;
+      // 1. Call RPC — resolves current user from auth.uid() server-side,
+      //    returns emp_id, id, name, is_male, auth_id etc. No client-side
+      //    auth_id leakage in the query string.
+      let teacherData = null;
       try {
-        if (userId) {
-          const { data: empsByAuth, error: authErr } = await supabase
-            .from('employees')
-            .select('*')
-            .eq('auth_id', userId);
-          if (!authErr && Array.isArray(empsByAuth) && empsByAuth.length > 0) {
-            empRecord = empsByAuth[0];
-          }
+        const { data, error } = await supabase.rpc('get_current_teacher_details');
+        if (!error && data) {
+          teacherData = Array.isArray(data) ? data[0] : data;
         }
-        if (!empRecord && userEmail) {
+      } catch (e) {
+        console.warn('get_current_teacher_details RPC failed:', e);
+      }
+
+      // 2. Fallback: email lookup on employees for accounts not yet linked
+      let empRecord = null;
+      if (!teacherData && userEmail) {
+        try {
           const { data: empsByEmail, error: emailErr } = await supabase
             .from('employees')
             .select('*')
@@ -71,26 +75,15 @@ export const useAuth = () => {
           if (!emailErr && Array.isArray(empsByEmail) && empsByEmail.length > 0) {
             empRecord = empsByEmail[0];
           }
+        } catch (e) {
+          console.warn('Could not load employee record by email:', e);
         }
-      } catch (e) {
-        console.warn('Could not load employee record from Supabase employees table:', e);
       }
 
-      // 2. Query RPC get_current_teacher_details as fallback/enrichment
-      let teacherData = null;
-      try {
-        const { data, error } = await supabase.rpc('get_current_teacher_details', {
-          p_auth_id: userId,
-        });
-        if (!error && data) {
-          teacherData = Array.isArray(data) ? data[0] : data;
-        }
-      } catch (e) {}
-
       const mergedRecord = {
-        ...(teacherData || {}),
         ...(empRecord || {}),
-        emp_id: empRecord?.emp_id || teacherData?.emp_id || null,
+        ...(teacherData || {}),
+        emp_id: teacherData?.emp_id || empRecord?.emp_id || null,
       };
 
       if (mergedRecord.id || mergedRecord.emp_id || mergedRecord.name) {
