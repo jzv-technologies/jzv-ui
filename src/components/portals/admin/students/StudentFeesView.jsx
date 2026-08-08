@@ -77,6 +77,22 @@ const StudentFeesView = ({
     loadFeesData();
   }, []);
 
+  // Handle Escape key to close modals
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isEditModalOpen) {
+          setIsEditModalOpen(false);
+        }
+        if (isImportModalOpen) {
+          setIsImportModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditModalOpen, isImportModalOpen]);
+
   // Register controls to parent top panel if callback provided
   useEffect(() => {
     if (onRegisterControls) {

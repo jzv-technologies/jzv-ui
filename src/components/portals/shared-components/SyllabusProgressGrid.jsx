@@ -35,6 +35,11 @@ const SyllabusProgressGrid = ({
   bookClasses,
   subjects,
   classifications,
+  teachers = [],
+  assignments = [],
+  currentTeacherId = null,
+  cpFilterTeachers = [],
+  cpTeacherShowMineOnly = false,
   allTrackers,
   allLogs,
   allLessons,
@@ -540,6 +545,28 @@ const SyllabusProgressGrid = ({
       );
     }
 
+    if (cpFilterTeachers && cpFilterTeachers.length > 0) {
+      filteredBooks = filteredBooks.filter((book) => {
+        const matched = assignments.filter(
+          (a) =>
+            String(a.class_id) === String(classObj.id) &&
+            String(a.subject_id) === String(book.subject_id)
+        );
+        return matched.some((a) => cpFilterTeachers.includes(String(a.teacher_id)));
+      });
+    }
+
+    if (role === 'teacher' && cpTeacherShowMineOnly && currentTeacherId) {
+      filteredBooks = filteredBooks.filter((book) => {
+        return assignments.some(
+          (a) =>
+            String(a.class_id) === String(classObj.id) &&
+            String(a.subject_id) === String(book.subject_id) &&
+            String(a.teacher_id) === String(currentTeacherId)
+        );
+      });
+    }
+
     if (filteredBooks.length === 0) {
       return (
         <div className="p-8 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
@@ -610,6 +637,16 @@ const SyllabusProgressGrid = ({
         classification?.theme && CARD_THEMES[classification.theme]
           ? CARD_THEMES[classification.theme]
           : CARD_THEMES.charcoal;
+
+      // Find assigned teacher(s) for this class & subject
+      const matchedAssignments = assignments.filter(
+        (a) =>
+          String(a.class_id) === String(classObj.id) &&
+          String(a.subject_id) === String(book.subject_id)
+      );
+      const assignedTeachers = matchedAssignments
+        .map((a) => teachers.find((t) => String(t.id || t.teacher_id) === String(a.teacher_id)))
+        .filter(Boolean);
 
       // Compute lesson counts dynamically for revisions count
       const bookLessons = allLessons.filter(
@@ -687,13 +724,33 @@ const SyllabusProgressGrid = ({
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
                 {subj && (
-                  <h3 className=" font-semibold text-gray-500 mt-0.5 block">
+                  <h3 className="font-semibold text-gray-500 mt-0.5 block truncate">
                     {subj.name}
                   </h3>
                 )}
                 <h4 className="text-sm font-black text-dark-primary truncate">
                   {book.name}
                 </h4>
+                {assignedTeachers.length > 0 && (
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {assignedTeachers.map((t) => {
+                      const isFemale = t.is_male === false;
+                      const iconClass = isFemale ? 'fa-female text-purple-600' : 'fa-user-tie text-blue-600';
+                      const textClass = isFemale ? 'text-purple-700 font-bold' : 'text-blue-700 font-bold';
+                      const tName = t.name || t.full_name || t.employee_name;
+                      return (
+                        <div
+                          key={t.id || t.teacher_id}
+                          className="flex items-center gap-1 text-xs truncate"
+                          title={`Assigned Teacher: ${tName}`}
+                        >
+                          <i className={`fas ${iconClass} text-[11px] shrink-0`}></i>
+                          <span className={`truncate ${textClass}`}>{tName}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-2">
                 <span className="text-[10px] text-gray-500 font-bold bg-gray-100 px-2 py-1 rounded border whitespace-nowrap">

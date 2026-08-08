@@ -84,6 +84,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [filterBooks, setFilterBooks] = useState([]);
   const [filterTeachers, setFilterTeachers] = useState([]);
   const [filterTopic, setFilterTopic] = useState('');
+  const [isMobileTopicSearchOpen, setIsMobileTopicSearchOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
 
   const [timeFilter, setTimeFilter] = useState('7_days'); // '7_days' | '30_days' | 'range'
@@ -99,6 +100,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
   const [cpFilterClassifications, setCpFilterClassifications] = useState([]);
   const [cpFilterSubjects, setCpFilterSubjects] = useState([]);
+  const [cpFilterTeachers, setCpFilterTeachers] = useState([]);
+  const [cpTeacherShowMineOnly, setCpTeacherShowMineOnly] = useState(true);
   const [cpGroupingMode, setCpGroupingMode] = useState('none'); // 'classification' | 'subject' | 'none'
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
   const [progressExpandedClass, setProgressExpandedClass] = useState(null);
@@ -1395,12 +1398,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             </div>
 
             {role !== 'parent' && activeTab === 'teacher-activity' && (
-              <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
+              <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
                 Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
               </span>
             )}
             {role === 'parent' && activeTab === 'two-weeks-class' && (
-              <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
+              <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
                 Showing {filteredDailyEntries.length} entries
               </span>
             )}
@@ -1412,7 +1415,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               className="w-full flex flex-wrap items-center gap-2 mt-2"
               data-name="daily activity filters"
             >
-              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                 {role !== 'parent' && (
                   <MultiSelectDropdown
                     label=""
@@ -1451,20 +1454,22 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
+                  className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
                 >
                   <option value="">All Statuses</option>
                   <option value="completed">Completed</option>
                   <option value="in_progress">In Progress</option>
                   <option value="not_started">Not Started</option>
                 </select>
+                {/* Desktop view topic search input */}
                 <input
                   type="text"
                   value={filterTopic}
                   onChange={(e) => setFilterTopic(e.target.value)}
                   placeholder="Filter topic..."
-                  className="border px-3.5 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white min-w-[120px]"
+                  className="hidden sm:block border px-3.5 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white min-w-[120px]"
                 />
+
                 {(filterClasses.length > (role === 'parent' ? 1 : 0) ||
                   filterSubjects.length > 0 ||
                   filterBooks.length > 0 ||
@@ -1472,8 +1477,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   filterTopic ||
                   filterStatus) && (
                   <button
-                    onClick={clearDailyFilters}
-                    className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8"
+                    onClick={() => {
+                      clearDailyFilters();
+                      setIsMobileTopicSearchOpen(false);
+                    }}
+                    className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
                   >
                     Reset
                   </button>
@@ -1481,8 +1489,37 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               </div>
 
               {activeTab === 'teacher-activity' && (
-                <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto sm:ml-auto justify-end">
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:ml-auto justify-between sm:justify-end mt-1 sm:mt-0">
+                  <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+                    {/* Mobile view time filter dropdown */}
+                    <select
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value)}
+                      className="block sm:hidden border border-gray-250 rounded-lg px-2 py-1 text-xs font-bold text-gray-700 bg-white h-8 outline-none focus:ring-1 focus:ring-brand-primary cursor-pointer flex-1"
+                    >
+                      <option value="7_days">7 Days</option>
+                      <option value="30_days">30 Days</option>
+                      <option value="range">Custom Range</option>
+                    </select>
+
+                    {/* Mobile view topic search icon next to Days filter */}
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileTopicSearchOpen((prev) => !prev)}
+                      title="Filter topic"
+                      aria-label="Search topic"
+                      className={`sm:hidden h-8 w-8 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center shrink-0 active:scale-95 ${
+                        isMobileTopicSearchOpen || filterTopic
+                          ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
+                      }`}
+                    >
+                      <i className="fas fa-search text-xs"></i>
+                    </button>
+                  </div>
+
+                  {/* Desktop view pill buttons */}
+                  <div className="hidden sm:flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                     {[
                       { key: '7_days', label: '7 Days' },
                       { key: '30_days', label: '30 Days' },
@@ -1502,6 +1539,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                       </button>
                     ))}
                   </div>
+
                   {timeFilter === 'range' && (
                     <div className="flex items-center gap-2 text-xs font-bold text-gray-700 w-full sm:w-auto justify-end">
                       <input
@@ -1520,12 +1558,46 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                     </div>
                   )}
 
+                  {/* Mobile view showing entries badge next to Add Work button */}
+                  {role !== 'parent' && (
+                    <span className="inline-flex sm:hidden items-center text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-lg select-none whitespace-nowrap h-8">
+                      {filteredDailyEntries.length}/{dailyEntries.length} entries
+                    </span>
+                  )}
+
                   {role === 'teacher' && (
                     <button
                       onClick={() => setIsAddWorkModalOpen(true)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-2 transition-all active:scale-95 cursor-pointer h-8"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0"
                     >
                       <i className="fas fa-plus"></i> Add Work
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Mobile view expandable topic search input */}
+              {(isMobileTopicSearchOpen || filterTopic) && (
+                <div className="w-full sm:hidden relative mt-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <input
+                    type="text"
+                    value={filterTopic}
+                    onChange={(e) => setFilterTopic(e.target.value)}
+                    placeholder="Filter topic..."
+                    autoFocus
+                    className="w-full border pl-8 pr-8 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
+                  />
+                  <i className="fas fa-search text-gray-400 text-xs absolute left-2.5 top-2.5 pointer-events-none"></i>
+                  {filterTopic && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterTopic('');
+                        setIsMobileTopicSearchOpen(false);
+                      }}
+                      className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 p-1"
+                    >
+                      <i className="fas fa-times text-xs"></i>
                     </button>
                   )}
                 </div>
@@ -1538,99 +1610,101 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               className="w-full flex flex-wrap items-center gap-2 mt-2"
               data-name="lesson planner filters"
             >
-              <label className="flex items-center gap-2 cursor-pointer bg-white border px-3 py-1 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors h-8">
-                <input
-                  type="checkbox"
-                  checked={lpShowAllClasses}
-                  onChange={(e) => setLpShowAllClasses(e.target.checked)}
-                  className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer"
-                />
-                Show All Classes
-              </label>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
+                <label className="flex items-center gap-2 cursor-pointer bg-white border px-3 py-1 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors h-8 w-full sm:w-auto justify-center sm:justify-start">
+                  <input
+                    type="checkbox"
+                    checked={lpShowAllClasses}
+                    onChange={(e) => setLpShowAllClasses(e.target.checked)}
+                    className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer"
+                  />
+                  Show All Classes
+                </label>
 
-              <select
-                value={lpFilterClassId}
-                onChange={(e) => {
-                  setLpFilterClassId(e.target.value);
-                  setLpFilterClassificationId('');
-                  setLpFilterSubjectId('');
-                  setLpFilterBookId('');
-                }}
-                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
-              >
-                <option value="">Class</option>
-                {lpAvailableClasses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.class_name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={lpFilterClassificationId}
-                onChange={(e) => {
-                  setLpFilterClassificationId(e.target.value);
-                  setLpFilterSubjectId('');
-                  setLpFilterBookId('');
-                }}
-                disabled={!lpFilterClassId || lpAvailableClassifications.length === 0}
-                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
-              >
-                <option value="">Classification</option>
-                {lpAvailableClassifications.map((cl) => (
-                  <option key={cl.id} value={cl.id}>
-                    {cl.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={lpFilterSubjectId}
-                onChange={(e) => {
-                  setLpFilterSubjectId(e.target.value);
-                  setLpFilterBookId('');
-                }}
-                disabled={!lpFilterClassId}
-                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
-              >
-                <option value="">Subject</option>
-                {lpVisibleSubjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={lpFilterBookId}
-                onChange={(e) => setLpFilterBookId(e.target.value)}
-                disabled={!lpFilterSubjectId}
-                className="border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
-              >
-                <option value="">Book</option>
-                {lpAvailableBooks.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-
-              {(lpFilterClassId ||
-                lpFilterClassificationId ||
-                lpFilterSubjectId ||
-                lpFilterBookId) && (
-                <button
-                  onClick={() => {
-                    setLpFilterClassId('');
+                <select
+                  value={lpFilterClassId}
+                  onChange={(e) => {
+                    setLpFilterClassId(e.target.value);
                     setLpFilterClassificationId('');
                     setLpFilterSubjectId('');
                     setLpFilterBookId('');
                   }}
-                  className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8"
+                  className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
                 >
-                  Reset
-                </button>
-              )}
+                  <option value="">Class</option>
+                  {lpAvailableClasses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.class_name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={lpFilterClassificationId}
+                  onChange={(e) => {
+                    setLpFilterClassificationId(e.target.value);
+                    setLpFilterSubjectId('');
+                    setLpFilterBookId('');
+                  }}
+                  disabled={!lpFilterClassId || lpAvailableClassifications.length === 0}
+                  className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                >
+                  <option value="">Classification</option>
+                  {lpAvailableClassifications.map((cl) => (
+                    <option key={cl.id} value={cl.id}>
+                      {cl.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={lpFilterSubjectId}
+                  onChange={(e) => {
+                    setLpFilterSubjectId(e.target.value);
+                    setLpFilterBookId('');
+                  }}
+                  disabled={!lpFilterClassId}
+                  className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                >
+                  <option value="">Subject</option>
+                  {lpVisibleSubjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={lpFilterBookId}
+                  onChange={(e) => setLpFilterBookId(e.target.value)}
+                  disabled={!lpFilterSubjectId}
+                  className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                >
+                  <option value="">Book</option>
+                  {lpAvailableBooks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+
+                {(lpFilterClassId ||
+                  lpFilterClassificationId ||
+                  lpFilterSubjectId ||
+                  lpFilterBookId) && (
+                  <button
+                    onClick={() => {
+                      setLpFilterClassId('');
+                      setLpFilterClassificationId('');
+                      setLpFilterSubjectId('');
+                      setLpFilterBookId('');
+                    }}
+                    className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1640,7 +1714,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               className="w-full flex flex-wrap items-center gap-2 mt-2"
               data-name="class progress filters"
             >
-              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                 <MultiSelectDropdown
                   label=""
                   placeholder="Class"
@@ -1680,27 +1754,94 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                     setProgressExpandedClass(null);
                   }}
                 />
+                {(role === 'admin' || role === 'management') && (
+                  <MultiSelectDropdown
+                    label=""
+                    placeholder="Teacher"
+                    options={teachers.map((t) => ({
+                      id: String(t.id || t.teacher_id),
+                      label: t.name || t.full_name || t.employee_name,
+                    }))}
+                    selected={cpFilterTeachers}
+                    onChange={(val) => {
+                      setCpFilterTeachers(val);
+                      setProgressExpandedBook(null);
+                      setProgressExpandedClass(null);
+                    }}
+                  />
+                )}
+                {role === 'teacher' && (
+                  <button
+                    type="button"
+                    onClick={() => setCpTeacherShowMineOnly((prev) => !prev)}
+                    title={
+                      cpTeacherShowMineOnly
+                        ? 'Show Mine Only: Active (Showing my subjects)'
+                        : 'Show Mine Only: Inactive (Showing all subjects)'
+                    }
+                    aria-label="Show Mine Only"
+                    className={`hidden sm:flex h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-auto active:scale-95 ${
+                      cpTeacherShowMineOnly
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                        : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-user-check text-xs ${
+                        cpTeacherShowMineOnly ? 'text-white' : 'text-gray-400'
+                      }`}
+                    ></i>
+                    <span>Mine Only</span>
+                  </button>
+                )}
                 {(cpFilterClasses.length > 0 ||
                   cpFilterBooks.length > 0 ||
                   cpFilterClassifications.length > 0 ||
-                  cpFilterSubjects.length > 0) && (
+                  cpFilterSubjects.length > 0 ||
+                  cpFilterTeachers.length > 0) && (
                   <button
                     onClick={() => {
                       setCpFilterClasses([]);
                       setCpFilterBooks([]);
                       setCpFilterClassifications([]);
                       setCpFilterSubjects([]);
+                      setCpFilterTeachers([]);
                       setProgressExpandedBook(null);
                       setProgressExpandedClass(null);
                     }}
-                    className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8"
+                    className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
                   >
                     Reset
                   </button>
                 )}
               </div>
 
-              <div className="w-full sm:w-auto sm:ml-auto flex justify-end">
+              <div className="w-full sm:w-auto sm:ml-auto flex items-center justify-between sm:justify-end gap-2 mt-1 sm:mt-0">
+                {role === 'teacher' && (
+                  <button
+                    type="button"
+                    onClick={() => setCpTeacherShowMineOnly((prev) => !prev)}
+                    title={
+                      cpTeacherShowMineOnly
+                        ? 'Show Mine Only: Active (Showing my subjects)'
+                        : 'Show Mine Only: Inactive (Showing all subjects)'
+                    }
+                    aria-label="Show Mine Only"
+                    className={`flex sm:hidden h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none active:scale-95 ${
+                      cpTeacherShowMineOnly
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                        : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-user-check text-xs ${
+                        cpTeacherShowMineOnly ? 'text-white' : 'text-gray-400'
+                      }`}
+                    ></i>
+                    <span>Mine Only</span>
+                  </button>
+                )}
+
                 <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-8 select-none gap-0.5">
                   {[
                     { key: 'none', label: 'No Group', icon: 'fa-bars' },
@@ -1733,7 +1874,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               className="w-full flex flex-wrap items-center gap-2 mt-2"
               data-name="upcoming lessons filters"
             >
-              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                 {role === 'parent' ? null : (
                   <>
                     {role !== 'teacher' && (
@@ -1787,11 +1928,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   </>
                 )}
 
-                <div className="relative">
+                <div className="hidden sm:block relative">
                   <button
                     type="button"
                     onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
-                    className={`flex items-center gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-between gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
                       upcomingStartDate !== getLocalDateStr(0) ||
                       upcomingEndDate !== getDefaultEndDateStr()
                         ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
@@ -1898,7 +2039,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                         setUpcomingStartDate(getLocalDateStr(0));
                         setUpcomingEndDate(getDefaultEndDateStr());
                       }}
-                      className="text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8"
+                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
                     >
                       Reset
                     </button>
@@ -1906,7 +2047,90 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                 })()}
               </div>
 
-              <div className="w-full sm:w-auto sm:ml-auto flex justify-end">
+              <div className="w-full sm:w-auto sm:ml-auto flex items-center justify-between sm:justify-end gap-2 mt-1 sm:mt-0">
+                {/* Mobile view Date Selector button next to grouping icons */}
+                <div className="sm:hidden relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
+                    className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                      upcomingStartDate !== getLocalDateStr(0) ||
+                      upcomingEndDate !== getDefaultEndDateStr()
+                        ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                    title="Select Date Range"
+                  >
+                    <i className="fas fa-calendar-alt text-xs"></i>
+                    <span>
+                      {new Date(upcomingStartDate).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </span>
+                    <i
+                      className={`fas fa-chevron-down text-[9px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
+                    ></i>
+                  </button>
+
+                  {isUpDatePopoverOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsUpDatePopoverOpen(false)}
+                      />
+                      <div className="absolute left-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
+                        <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+                          Date Range
+                        </h5>
+                        <div className="space-y-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">
+                              From:
+                            </span>
+                            <input
+                              type="date"
+                              value={upcomingStartDate}
+                              onChange={(e) => setUpcomingStartDate(e.target.value)}
+                              className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">
+                              To:
+                            </span>
+                            <input
+                              type="date"
+                              value={upcomingEndDate}
+                              onChange={(e) => setUpcomingEndDate(e.target.value)}
+                              className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUpcomingStartDate(getLocalDateStr(0));
+                              setUpcomingEndDate(getDefaultEndDateStr());
+                              setIsUpDatePopoverOpen(false);
+                            }}
+                            className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsUpDatePopoverOpen(false)}
+                            className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
                   {[
                     {
@@ -2071,6 +2295,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               bookClasses={bookClasses}
               subjects={subjects}
               classifications={classifications}
+              teachers={teachers}
+              assignments={assignments}
+              currentTeacherId={teacher?.id || teacherRecord?.id}
+              cpFilterTeachers={cpFilterTeachers}
+              cpTeacherShowMineOnly={cpTeacherShowMineOnly}
               allTrackers={bookTrackers}
               allLogs={allLogs}
               allLessons={allLessons}
