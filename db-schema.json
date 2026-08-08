@@ -172,71 +172,6 @@
       ]
     },
     {
-      "table": "book_tracker",
-      "columns": [
-        {
-          "type": "bigint",
-          "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "class_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "book_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "integer",
-          "column": "total_lessons",
-          "default": "0",
-          "nullable": "NO"
-        },
-        {
-          "type": "integer",
-          "column": "completed",
-          "default": "0",
-          "nullable": "NO"
-        },
-        {
-          "type": "integer",
-          "column": "in_progress",
-          "default": "0",
-          "nullable": "NO"
-        },
-        {
-          "type": "integer",
-          "column": "not_started",
-          "default": "0",
-          "nullable": "NO"
-        },
-        {
-          "type": "numeric",
-          "column": "completion_percentage",
-          "default": "0.00",
-          "nullable": "NO"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
-          "default": "CURRENT_TIMESTAMP",
-          "nullable": "YES"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "updated_at",
-          "default": "CURRENT_TIMESTAMP",
-          "nullable": "YES"
-        }
-      ]
-    },
-    {
       "table": "class_assignments",
       "columns": [
         {
@@ -651,7 +586,7 @@
       ]
     },
     {
-      "table": "lesson_progress",
+      "table": "map_class_books",
       "columns": [
         {
           "type": "bigint",
@@ -661,7 +596,36 @@
         },
         {
           "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
           "column": "class_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "now()",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "map_teacher_subject",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
           "default": null,
           "nullable": "NO"
         },
@@ -669,179 +633,6 @@
           "type": "bigint",
           "column": "subject_id",
           "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "bigint",
-          "column": "book_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "lesson_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "date",
-          "column": "target_start_date",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "academic_week",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "carry_forward_count",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "character varying",
-          "column": "status",
-          "default": "'not_started'::character varying",
-          "nullable": "YES"
-        },
-        {
-          "type": "numeric",
-          "column": "completion_percentage",
-          "default": "0.00",
-          "nullable": "YES"
-        },
-        {
-          "type": "date",
-          "column": "start_date",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "date",
-          "column": "end_date",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "days_taken",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "revision_counter",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
-          "default": "timezone('utc'::text, now())",
-          "nullable": "YES"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "updated_at",
-          "default": "timezone('utc'::text, now())",
-          "nullable": "YES"
-        },
-        {
-          "type": "date",
-          "column": "due_date",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "date",
-          "column": "target_end_date",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "replan_counter",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "carry_forward_counter",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "delay_start",
-          "default": "0",
-          "nullable": "YES"
-        },
-        {
-          "type": "integer",
-          "column": "delay_end",
-          "default": "0",
-          "nullable": "YES"
-        }
-      ]
-    },
-    {
-      "table": "lesson_progress_items",
-      "columns": [
-        {
-          "type": "bigint",
-          "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "progress_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "date",
-          "column": "date",
-          "default": "CURRENT_DATE",
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "teacher_id",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "character varying",
-          "column": "current_status",
-          "default": "'in_progress'::character varying",
-          "nullable": "NO"
-        },
-        {
-          "type": "numeric",
-          "column": "progress",
-          "default": "0.00",
-          "nullable": "NO"
-        },
-        {
-          "type": "character",
-          "column": "is_revision",
-          "default": "'N'::bpchar",
-          "nullable": "NO"
-        },
-        {
-          "type": "text",
-          "column": "comments",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "character",
-          "column": "late_reporting",
-          "default": "'N'::bpchar",
           "nullable": "NO"
         },
         {
@@ -995,6 +786,83 @@
       ]
     },
     {
+      "table": "student_fees",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "admission_no",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "previous_balance",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "mrqu_sponsorship",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "external_sponsorship",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "student_payable",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "write_off",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "fees_total_payable",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "numeric",
+          "column": "total_paid",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "balance",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
       "table": "students",
       "columns": [
         {
@@ -1084,7 +952,42 @@
       ]
     },
     {
-      "table": "subject_classifications",
+      "table": "syl_books",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "hierarchy_type",
+          "default": "'Book > Unit > Chapter > Lesson'::character varying",
+          "nullable": "NO"
+        }
+      ]
+    },
+    {
+      "table": "syl_classifications",
       "columns": [
         {
           "type": "bigint",
@@ -1113,71 +1016,7 @@
       ]
     },
     {
-      "table": "subjects",
-      "columns": [
-        {
-          "type": "bigint",
-          "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "character varying",
-          "column": "name",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
-          "default": "CURRENT_TIMESTAMP",
-          "nullable": "YES"
-        },
-        {
-          "type": "bigint",
-          "column": "classification_id",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "boolean",
-          "column": "requires_teacher",
-          "default": "true",
-          "nullable": "YES"
-        }
-      ]
-    },
-    {
-      "table": "syllabus_book_classes",
-      "columns": [
-        {
-          "type": "bigint",
-          "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "book_id",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "bigint",
-          "column": "class_id",
-          "default": null,
-          "nullable": "YES"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
-          "default": "now()",
-          "nullable": "YES"
-        }
-      ]
-    },
-    {
-      "table": "syllabus_book_lessons",
+      "table": "syl_lessons",
       "columns": [
         {
           "type": "bigint",
@@ -1230,17 +1069,11 @@
       ]
     },
     {
-      "table": "syllabus_books",
+      "table": "syl_subjects",
       "columns": [
         {
           "type": "bigint",
           "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "subject_id",
           "default": null,
           "nullable": "NO"
         },
@@ -1257,10 +1090,16 @@
           "nullable": "YES"
         },
         {
-          "type": "character varying",
-          "column": "hierarchy_type",
-          "default": "'Book > Unit > Chapter > Lesson'::character varying",
-          "nullable": "NO"
+          "type": "bigint",
+          "column": "classification_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "requires_teacher",
+          "default": "true",
+          "nullable": "YES"
         }
       ]
     },
@@ -1323,35 +1162,6 @@
         {
           "type": "timestamp with time zone",
           "column": "updated_at",
-          "default": "CURRENT_TIMESTAMP",
-          "nullable": "YES"
-        }
-      ]
-    },
-    {
-      "table": "teacher_subjects",
-      "columns": [
-        {
-          "type": "bigint",
-          "column": "id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "teacher_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "bigint",
-          "column": "subject_id",
-          "default": null,
-          "nullable": "NO"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
           "default": "CURRENT_TIMESTAMP",
           "nullable": "YES"
         }
@@ -1423,6 +1233,273 @@
           "type": "timestamp with time zone",
           "column": "created_at",
           "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "trk_book_level_progress",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "total_lessons",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "completed",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "in_progress",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "not_started",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "completion_percentage",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "trk_daily_teacher_progress",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "progress_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "date",
+          "default": "CURRENT_DATE",
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "current_status",
+          "default": "'in_progress'::character varying",
+          "nullable": "NO"
+        },
+        {
+          "type": "numeric",
+          "column": "progress",
+          "default": "0.00",
+          "nullable": "NO"
+        },
+        {
+          "type": "character",
+          "column": "is_revision",
+          "default": "'N'::bpchar",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "comments",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character",
+          "column": "late_reporting",
+          "default": "'N'::bpchar",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "trk_lesson_level_progress",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "lesson_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "date",
+          "column": "target_start_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "academic_week",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "carry_forward_count",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "status",
+          "default": "'not_started'::character varying",
+          "nullable": "YES"
+        },
+        {
+          "type": "numeric",
+          "column": "completion_percentage",
+          "default": "0.00",
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "start_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "end_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "days_taken",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "revision_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "due_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "date",
+          "column": "target_end_date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "replan_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "carry_forward_counter",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "delay_start",
+          "default": "0",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "delay_end",
+          "default": "0",
           "nullable": "YES"
         }
       ]
@@ -1553,36 +1630,6 @@
       "roles": [
         "authenticated"
       ],
-      "table": "book_tracker",
-      "using": "true",
-      "command": "ALL",
-      "permissive": "PERMISSIVE",
-      "with_check": "true"
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "book_tracker",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "book_tracker",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
       "table": "class_assignments",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1654,8 +1701,8 @@
         "authenticated"
       ],
       "table": "employees",
-      "using": "has_role_above(16)",
-      "command": "ALL",
+      "using": "true",
+      "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
@@ -1674,10 +1721,10 @@
         "authenticated"
       ],
       "table": "employees",
-      "using": "true",
-      "command": "SELECT",
+      "using": "((auth.uid() = auth_id) OR has_role_above(16))",
+      "command": "UPDATE",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "((auth.uid() = auth_id) OR has_role_above(16))"
     },
     {
       "roles": [
@@ -1713,7 +1760,7 @@
       "roles": [
         "authenticated"
       ],
-      "table": "lesson_progress",
+      "table": "map_class_books",
       "using": "has_role_above(8)",
       "command": "ALL",
       "permissive": "PERMISSIVE",
@@ -1723,48 +1770,28 @@
       "roles": [
         "public"
       ],
-      "table": "lesson_progress",
-      "using": "(has_role_above(2) AND is_parent_of_class(class_id))",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "lesson_progress",
-      "using": "has_role_above(16)",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "lesson_progress_items",
+      "table": "map_class_books",
       "using": "true",
-      "command": "ALL",
-      "permissive": "PERMISSIVE",
-      "with_check": "true"
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "lesson_progress_items",
-      "using": "has_role_above(8)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
-      "table": "lesson_progress_items",
-      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM lesson_progress l\n  WHERE ((l.id = lesson_progress_items.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "table": "map_teacher_subject",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "map_teacher_subject",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -1823,8 +1850,18 @@
       "roles": [
         "authenticated"
       ],
-      "table": "students",
-      "using": "has_role_above(2)",
+      "table": "student_fees",
+      "using": "has_role_above(16)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "has_role_above(16)"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "student_fees",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -1842,10 +1879,10 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
-      "table": "subject_classifications",
-      "using": "true",
+      "table": "students",
+      "using": "has_role_above(2)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -1854,37 +1891,7 @@
       "roles": [
         "authenticated"
       ],
-      "table": "subject_classifications",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "subjects",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "subjects",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "syllabus_book_classes",
+      "table": "syl_books",
       "using": "has_role_above(8)",
       "command": "ALL",
       "permissive": "PERMISSIVE",
@@ -1894,7 +1901,27 @@
       "roles": [
         "public"
       ],
-      "table": "syllabus_book_classes",
+      "table": "syl_books",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM map_class_books sbc\n  WHERE ((sbc.book_id = syl_books.id) AND is_parent_of_class(sbc.class_id))))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "syl_classifications",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "syl_classifications",
       "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
@@ -1904,7 +1931,7 @@
       "roles": [
         "authenticated"
       ],
-      "table": "syllabus_book_lessons",
+      "table": "syl_lessons",
       "using": "true",
       "command": "ALL",
       "permissive": "PERMISSIVE",
@@ -1914,8 +1941,18 @@
       "roles": [
         "public"
       ],
-      "table": "syllabus_book_lessons",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_book_lessons.book_id) AND is_parent_of_class(sbc.class_id))))))",
+      "table": "syl_lessons",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM map_class_books sbc\n  WHERE ((sbc.book_id = syl_lessons.book_id) AND is_parent_of_class(sbc.class_id))))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "syl_subjects",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -1924,18 +1961,8 @@
       "roles": [
         "authenticated"
       ],
-      "table": "syllabus_books",
-      "using": "has_role_above(8)",
-      "command": "ALL",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "syllabus_books",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_books.id) AND is_parent_of_class(sbc.class_id))))))",
+      "table": "syl_subjects",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -1974,26 +2001,6 @@
       "roles": [
         "authenticated"
       ],
-      "table": "teacher_subjects",
-      "using": "has_role_above(16)",
-      "command": "ALL",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "teacher_subjects",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
       "table": "timetable_slots",
       "using": "has_role_above(32)",
       "command": "ALL",
@@ -2017,6 +2024,96 @@
       ],
       "table": "timetable_slots",
       "using": "is_parent_of_class(class_id)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_book_level_progress",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_book_level_progress",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "trk_book_level_progress",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_daily_teacher_progress",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "trk_daily_teacher_progress",
+      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_daily_teacher_progress",
+      "using": "has_role_above(8)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_lesson_level_progress",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_lesson_level_progress",
+      "using": "has_role_above(16)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "trk_lesson_level_progress",
+      "using": "(has_role_above(2) AND is_parent_of_class(class_id))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2064,39 +2161,24 @@
   ],
   "triggers": [
     {
-      "table": "lesson_progress",
-      "function": "set_current_timestamp_updated_at",
-      "definition": "CREATE TRIGGER set_lesson_progress_updated_at BEFORE UPDATE ON lesson_progress FOR EACH ROW EXECUTE FUNCTION set_current_timestamp_updated_at()"
-    },
-    {
-      "table": "lesson_progress",
-      "function": "fn_update_book_tracker_on_log_change",
-      "definition": "CREATE TRIGGER trg_update_book_tracker_on_log AFTER INSERT OR DELETE OR UPDATE ON lesson_progress FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_log_change()"
-    },
-    {
-      "table": "lesson_progress_items",
-      "function": "fn_update_lesson_tracker_log",
-      "definition": "CREATE TRIGGER trg_update_lesson_tracker_log AFTER INSERT OR DELETE OR UPDATE ON lesson_progress_items FOR EACH ROW EXECUTE FUNCTION fn_update_lesson_tracker_log()"
-    },
-    {
-      "table": "lesson_progress_items",
-      "function": "fn_set_late_reporting",
-      "definition": "CREATE TRIGGER trg_set_late_reporting BEFORE INSERT ON lesson_progress_items FOR EACH ROW EXECUTE FUNCTION fn_set_late_reporting()"
-    },
-    {
       "table": "salary_tracker",
       "function": "update_salary_tracker_updated_at",
       "definition": "CREATE TRIGGER salary_tracker_updated_at BEFORE UPDATE ON salary_tracker FOR EACH ROW EXECUTE FUNCTION update_salary_tracker_updated_at()"
     },
     {
-      "table": "syllabus_book_lessons",
-      "function": "fn_update_book_tracker_on_lessons_change",
-      "definition": "CREATE TRIGGER trg_update_book_tracker_on_lessons AFTER INSERT OR DELETE OR UPDATE ON syllabus_book_lessons FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_lessons_change()"
+      "table": "syl_books",
+      "function": "fn_auto_create_revision_lessons",
+      "definition": "CREATE TRIGGER trg_auto_create_revision_lessons AFTER INSERT ON syl_books FOR EACH ROW EXECUTE FUNCTION fn_auto_create_revision_lessons()"
     },
     {
-      "table": "syllabus_books",
-      "function": "fn_auto_create_revision_lessons",
-      "definition": "CREATE TRIGGER trg_auto_create_revision_lessons AFTER INSERT ON syllabus_books FOR EACH ROW EXECUTE FUNCTION fn_auto_create_revision_lessons()"
+      "table": "syl_lessons",
+      "function": "fn_update_book_tracker_on_lessons_change",
+      "definition": "CREATE TRIGGER trg_update_book_tracker_on_lessons AFTER INSERT OR DELETE OR UPDATE ON syl_lessons FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_lessons_change()"
+    },
+    {
+      "table": "timetable_slots",
+      "function": "sync_teacher_class_subject_from_slots",
+      "definition": "CREATE TRIGGER trigger_sync_teacher_class_subject AFTER INSERT OR DELETE OR UPDATE ON timetable_slots FOR EACH ROW EXECUTE FUNCTION sync_teacher_class_subject_from_slots()"
     },
     {
       "table": "timetable_slots",
@@ -2104,9 +2186,24 @@
       "definition": "CREATE TRIGGER trg_sync_class_assignments AFTER INSERT OR DELETE OR UPDATE ON timetable_slots FOR EACH ROW EXECUTE FUNCTION sync_class_assignments_from_slots()"
     },
     {
-      "table": "timetable_slots",
-      "function": "sync_teacher_class_subject_from_slots",
-      "definition": "CREATE TRIGGER trigger_sync_teacher_class_subject AFTER INSERT OR DELETE OR UPDATE ON timetable_slots FOR EACH ROW EXECUTE FUNCTION sync_teacher_class_subject_from_slots()"
+      "table": "trk_daily_teacher_progress",
+      "function": "fn_update_lesson_tracker_log",
+      "definition": "CREATE TRIGGER trg_update_lesson_tracker_log AFTER INSERT OR DELETE OR UPDATE ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_update_lesson_tracker_log()"
+    },
+    {
+      "table": "trk_daily_teacher_progress",
+      "function": "fn_set_late_reporting",
+      "definition": "CREATE TRIGGER trg_set_late_reporting BEFORE INSERT ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_set_late_reporting()"
+    },
+    {
+      "table": "trk_lesson_level_progress",
+      "function": "set_current_timestamp_updated_at",
+      "definition": "CREATE TRIGGER set_lesson_progress_updated_at BEFORE UPDATE ON trk_lesson_level_progress FOR EACH ROW EXECUTE FUNCTION set_current_timestamp_updated_at()"
+    },
+    {
+      "table": "trk_lesson_level_progress",
+      "function": "fn_update_book_tracker_on_log_change",
+      "definition": "CREATE TRIGGER trg_update_book_tracker_on_log AFTER INSERT OR DELETE OR UPDATE ON trk_lesson_level_progress FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_log_change()"
     }
   ],
   "functions": [

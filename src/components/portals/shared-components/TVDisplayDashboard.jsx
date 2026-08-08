@@ -48,7 +48,7 @@ const TVDisplayDashboard = () => {
           supabase.from('classes').select('*'),
           supabase.from('periods').select('*').order('period_number', { ascending: true }),
           supabase.from('syl_subjects').select('*'),
-          supabase.from('teachers').select('*').eq('is_active', true),
+          supabase.from('teachers').select('*'),
           supabase.from('timetable_slots').select('*')
         ]);
 
@@ -61,7 +61,7 @@ const TVDisplayDashboard = () => {
         setClasses(resClasses.data || []);
         setPeriods(resPeriods.data || []);
         setSubjects(resSubjects.data || []);
-        setTeachers(resTeachers.data || []);
+        setTeachers((resTeachers.data || []).map((t) => ({ ...t, id: t.teacher_id || t.id })));
         setSlots(resSlots.data || []);
       } catch (err) {
         console.error('Failed to load display board data:', err.message);

@@ -35,9 +35,9 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   // ----- User Management -----
   const fetchTeachers = async () => {
     try {
-      const { data, error } = await supabase.from('teachers').select('*').eq('is_active', true);
+      const { data, error } = await supabase.from('teachers').select('*');
       if (error) throw error;
-      setTeachers(data || []);
+      setTeachers((data || []).map((t) => ({ ...t, id: t.teacher_id || t.id })));
     } catch (err) {
       console.warn(
         'Error fetching teachers from Supabase, loading from LocalStorage:',

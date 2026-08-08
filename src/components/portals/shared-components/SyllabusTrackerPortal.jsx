@@ -323,7 +323,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       const dbClassifications = resClassifications.data || [];
       const dbBookClasses = resBookClasses.data || [];
       const dbAssignments = resAssignments.data || [];
-      const dbTeachers = resTeachers.data || [];
+      const dbTeachers = (resTeachers.data || []).map((t) => ({ ...t, id: t.teacher_id || t.id }));
       const dbTrackers = resTrackers.data || [];
       const dbLessons = resLessons.data || [];
       const rawLogs = resLogs.data || [];

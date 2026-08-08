@@ -87,7 +87,7 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
 });
 
 const TimetableManager = () => {
-  const [activeTab, setActiveTab] = useState('view'); // "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
+  const [activeTab, setActiveTab] = useState('scheduler'); // "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
 
   // Timetable State
   const [classifications, setClassifications] = useState([]);
@@ -140,7 +140,7 @@ const TimetableManager = () => {
       ] = await Promise.all([
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syl_subjects').select('*'),
-        supabase.from('teachers').select('*').eq('is_active', true),
+        supabase.from('teachers').select('*'),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
@@ -148,12 +148,16 @@ const TimetableManager = () => {
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
 
-      const teachersWithSubjects = (dbTeachers || []).map((t) => ({
-        ...t,
-        subjects: (dbTeacherSubjects || [])
-          .filter((ts) => String(ts.teacher_id) === String(t.id))
-          .map((ts) => ts.subject_id),
-      }));
+      const teachersWithSubjects = (dbTeachers || []).map((t) => {
+        const tid = t.teacher_id || t.id;
+        return {
+          ...t,
+          id: tid,
+          subjects: (dbTeacherSubjects || [])
+            .filter((ts) => String(ts.teacher_id) === String(tid))
+            .map((ts) => ts.subject_id),
+        };
+      });
 
       setClassifications(dbClassifications || []);
       setSubjects(dbSubjects || []);
@@ -425,7 +429,9 @@ const TimetableManager = () => {
             teacher_id: insertedTeacher.id,
             subject_id: subId,
           }));
-          const { error: relErr } = await supabase.from('map_teacher_subject').insert(relationPayload);
+          const { error: relErr } = await supabase
+            .from('map_teacher_subject')
+            .insert(relationPayload);
           if (relErr) throw relErr;
         }
 
@@ -488,7 +494,9 @@ const TimetableManager = () => {
             teacher_id: id,
             subject_id: subId,
           }));
-          const { error: insErr } = await supabase.from('map_teacher_subject').insert(relationPayload);
+          const { error: insErr } = await supabase
+            .from('map_teacher_subject')
+            .insert(relationPayload);
           if (insErr) throw insErr;
         }
       } catch (err) {
@@ -544,7 +552,10 @@ const TimetableManager = () => {
       }
     }
     saveState({ teachers: updatedTeachers });
-    showToast(`Teacher "${teacher.name}" ${nextActive ? 'reactivated' : 'deactivated'} successfully.`, 'success');
+    showToast(
+      `Teacher "${teacher.name}" ${nextActive ? 'reactivated' : 'deactivated'} successfully.`,
+      'success'
+    );
   };
 
   // CLASS ACTION HANDLERS
@@ -1508,13 +1519,17 @@ const TimetableManager = () => {
       // Remove source slots
       updatedSlots = updatedSlots.filter(
         (s) =>
-          !(String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId))
+          !(
+            String(s.class_id) === String(classId) && String(s.period_id) === String(sourcePeriodId)
+          )
       );
 
       // Remove old target slots (overwrite)
       updatedSlots = updatedSlots.filter(
         (s) =>
-          !(String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId))
+          !(
+            String(s.class_id) === String(classId) && String(s.period_id) === String(targetPeriodId)
+          )
       );
 
       const newSlotsVal = slotsToMove.map((s) => ({
@@ -1569,7 +1584,8 @@ const TimetableManager = () => {
     if (existingTargetSlots.length > 0) {
       setConfirmConfig({
         title: 'Overwrite Assignments',
-        message: 'The target column already has assignments for this class. They will be overwritten. Proceed?',
+        message:
+          'The target column already has assignments for this class. They will be overwritten. Proceed?',
         type: 'warning',
         confirmText: 'Overwrite',
         onConfirm: () => {
@@ -1744,12 +1760,37 @@ const TimetableManager = () => {
           </div>
 
           {/* Workspace Tabs (Inside the Top Banner Card) */}
-          <div className="bg-light-bg/40 p-1 rounded-xl border border-light-border flex flex-wrap gap-1 w-full md:w-auto">
+          {/* Mobile view (< md): Dropdown */}
+          <div className="md:hidden w-full">
+            <div className="relative">
+              <select
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+                className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
+              >
+                {[
+                  { id: 'scheduler', label: 'Scheduler Setup' },
+                  { id: 'classes', label: 'Classes Setup' },
+                  { id: 'teachers', label: 'Teachers Setup' },
+                  { id: 'periods', label: 'Season Setup' },
+                  { id: 'tools', label: 'Switch Teacher' },
+                ].map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}
+                  </option>
+                ))}
+              </select>
+              <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Desktop view (>= md): Pill tabs */}
+          <div className="hidden md:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-wrap gap-1 w-full md:w-auto">
             {[
-              { id: 'view', label: 'Admin View', icon: 'fa-eye' },
+              { id: 'scheduler', label: 'Scheduler Setup', icon: 'fa-eye' },
               { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
               { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
-              { id: 'periods', label: 'Periods Setup', icon: 'fa-clock' },
+              { id: 'periods', label: 'Season Setup', icon: 'fa-clock' },
               { id: 'tools', label: 'Switch Teacher', icon: 'fa-exchange-alt' },
             ].map((tab) => (
               <button
@@ -1805,7 +1846,7 @@ const TimetableManager = () => {
               className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
               title="Compare offline JSON with currently active timetable"
             >
-              <i className="fas fa-balance-scale"></i>
+              <i className="fas fa-wave-square"></i>
             </button>
             <button
               onClick={loadData}
@@ -1828,7 +1869,7 @@ const TimetableManager = () => {
         </div>
       ) : (
         <div className="flex-1">
-          {activeTab === 'view' && (
+          {activeTab === 'scheduler' && (
             <TimetableAdminView
               classes={classes}
               teachers={teachers}

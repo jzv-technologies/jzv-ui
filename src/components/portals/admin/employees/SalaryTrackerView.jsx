@@ -110,7 +110,8 @@ const SalaryTrackerView = ({
   const [saving, setSaving] = useState(false);
   const [initializing, setInitializing] = useState(false);
 
-  // Filters & Options
+  // Options & Grouping
+  const [groupByOrg, setGroupByOrg] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'paid' | 'partial' | 'unpaid'
 
@@ -429,6 +430,9 @@ const SalaryTrackerView = ({
 
   // Grouped by Organization
   const groupedByOrgItems = useMemo(() => {
+    if (!groupByOrg) {
+      return [['All Organizations', filteredItems]];
+    }
     const map = new Map();
     filteredItems.forEach((item) => {
       const org = item.organization || 'Jamia Zaytoonah';
@@ -436,7 +440,7 @@ const SalaryTrackerView = ({
       map.get(org).push(item);
     });
     return Array.from(map.entries());
-  }, [filteredItems]);
+  }, [filteredItems, groupByOrg]);
 
   // 1. Open Extras Modal
   const handleOpenExtrasModal = (item) => {
@@ -907,6 +911,10 @@ const SalaryTrackerView = ({
       return true;
     });
 
+    if (!groupByOrg) {
+      return [['All Organizations', filtered]];
+    }
+
     const map = new Map();
     filtered.forEach((emp) => {
       const org = emp.organization || 'Jamia Zaytoonah';
@@ -914,7 +922,7 @@ const SalaryTrackerView = ({
       map.get(org).push(emp);
     });
     return Array.from(map.entries());
-  }, [employees, searchQuery, statusFilter, salYear, salMonth, matrixLookupMap]);
+  }, [employees, searchQuery, statusFilter, salYear, salMonth, matrixLookupMap, groupByOrg]);
 
   // Cumulative Overall Stats Across Organizations
   const cumulativeStats = useMemo(() => {
@@ -1138,6 +1146,8 @@ const SalaryTrackerView = ({
         setStatusFilter,
         selectedMonthStr,
         setSelectedMonthStr,
+        groupByOrg,
+        setGroupByOrg,
       });
     }
   }, [
@@ -1146,6 +1156,7 @@ const SalaryTrackerView = ({
     searchQuery,
     statusFilter,
     selectedMonthStr,
+    groupByOrg,
   ]);
 
   return (
@@ -1156,6 +1167,8 @@ const SalaryTrackerView = ({
         setSearchQuery={setSearchQuery}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        groupByOrg={groupByOrg}
+        setGroupByOrg={setGroupByOrg}
         selectedMonthStr={selectedMonthStr}
         setSelectedMonthStr={setSelectedMonthStr}
         cumulativeStats={cumulativeStats}
@@ -1189,6 +1202,7 @@ const SalaryTrackerView = ({
           handleOpenExtrasModal={handleOpenExtrasModal}
           handleOpenPaymentModal={handleOpenPaymentModal}
           handleOpenHistoryModal={handleOpenHistoryModal}
+          groupByOrg={groupByOrg}
         />
       ) : (
         /* ================= TAB 2: SALARY DASHBOARD (MATRIX SWATCHES VIEW) ================= */
@@ -1197,6 +1211,8 @@ const SalaryTrackerView = ({
           matrixMonths={matrixMonths}
           matrixLookupMap={matrixLookupMap}
           handleOpenMatrixPaymentModal={handleOpenMatrixPaymentModal}
+          groupByOrg={groupByOrg}
+          prevMonthPendingMap={prevMonthPendingMap}
         />
       )}
 

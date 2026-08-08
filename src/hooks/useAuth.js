@@ -434,7 +434,6 @@ export const useAuth = () => {
         let cookieStudentIds = cached?.studentIds || '';
 
         if (cookieRoles.length > 0) {
-          console.log('[Auth] Using cached roles from cookie');
           updateRoles(cookieRoles);
           updateStudentIds(cookieStudentIds);
           rolesFetchedRef.current = true;
@@ -457,7 +456,6 @@ export const useAuth = () => {
           event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && cookieRoles.length === 0);
 
         if (shouldFetch) {
-          console.log('[Auth] Fetching fresh roles from DB');
           const res = await fetchRoles(currentUser.id, event, cookieRoles);
 
           // Allow only existing users added by admin (must have roles)

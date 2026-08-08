@@ -123,7 +123,7 @@ const ParentTimetableViewer = ({ student }) => {
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('timetable_slots').select('*').eq('class_id', cId),
         supabase.from('syl_subjects').select('id, name'),
-        supabase.from('teachers').select('id, name').eq('is_active', true),
+        supabase.from('teachers').select('*'),
       ]);
 
       if (classRow && periodsRows && slotsRows !== null) {
@@ -133,7 +133,7 @@ const ParentTimetableViewer = ({ student }) => {
         });
         const teacherMap = {};
         (teachersRows || []).forEach((t) => {
-          teacherMap[String(t.id)] = t.name;
+          teacherMap[String(t.teacher_id || t.id)] = t.name;
         });
 
         setTimetableData({

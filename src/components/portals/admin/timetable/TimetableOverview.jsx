@@ -57,7 +57,10 @@ const TimetableOverview = ({
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
   const getSubjectName = (id) => subjects.find((s) => String(s.id) === String(id))?.name || '?';
-  const getTeacherName = (id) => teachers.find((t) => String(t.id) === String(id))?.name || '?';
+  const getTeacherName = (id) => {
+    const t = teachers.find((t) => String(t.id) === String(id));
+    return t?.name?.trim() || 'Unnamed Teacher';
+  };
   const getClassName = (id) => classes.find((c) => String(c.id) === String(id))?.name || '?';
 
   const getSlot = (classId, day, periodId) =>
@@ -390,9 +393,9 @@ const TimetableOverview = ({
       if (selAssignedClasses.length > 0)
         items = items.filter((a) => selAssignedClasses.includes(String(a.classId)));
       if (assignedTeachersGender === 'male') {
-        items = items.filter((a) => a.isFemale === false);
+        items = items.filter((a) => !a.isFemale);
       } else if (assignedTeachersGender === 'female') {
-        items = items.filter((a) => a.isFemale === true);
+        items = items.filter((a) => a.isFemale);
       }
 
       return (
@@ -414,11 +417,8 @@ const TimetableOverview = ({
                     key={i}
                     style={{
                       backgroundColor: p.bg,
-                      borderColor: p.border,
-                      borderLeftColor: a.isFemale ? '#F472B6' : '#3B82F6',
-                      borderLeftWidth: 3,
-                      borderWidth: 1,
-                      borderStyle: 'solid',
+                      border: `1px solid ${p.border}`,
+                      borderLeft: `3px solid ${a.isFemale ? '#F472B6' : '#3B82F6'}`,
                     }}
                     className="rounded-lg px-2 py-1"
                   >
@@ -573,9 +573,8 @@ const TimetableOverview = ({
                         style={{
                           backgroundColor: t.palette.bg,
                           color: t.palette.text,
-                          borderColor: t.palette.border,
-                          borderLeftColor: t.isFemale ? '#F472B6' : '#3B82F6',
-                          borderLeftWidth: 3,
+                          border: `1px solid ${t.palette.border}`,
+                          borderLeft: `3px solid ${t.isFemale ? '#F472B6' : '#3B82F6'}`,
                         }}
                       >
                         <i

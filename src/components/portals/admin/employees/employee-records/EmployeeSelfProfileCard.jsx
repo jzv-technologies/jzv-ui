@@ -5,7 +5,7 @@ const EmployeeSelfProfileCard = ({ currentSelfEmployee, user, handleOpenModal })
   const authUserEmail = user?.email || emp.email || 'Not Available';
 
   return (
-    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* Profile Card Header */}
       <div className="bg-gradient-to-r from-brand-primary to-brand-soft text-white rounded-3xl p-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">

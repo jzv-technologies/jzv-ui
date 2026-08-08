@@ -228,19 +228,22 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       if (secureTeachersErr) {
         const { data: fallbackTeachers } = await supabase
           .from('teachers')
-          .select('teacher_id, name, is_male');
+          .select('*');
         teacherRows = Array.isArray(fallbackTeachers) ? fallbackTeachers : [];
       }
 
-      const teachersWithSubjects = teacherRows.map((t) => ({
-        id: t.teacher_id,
-        name: t.name,
-        is_male: t.is_male,
-        auth_id: t.auth_id || null,
-        subjects: (dbTeacherSubjects || [])
-          .filter((ts) => String(ts.teacher_id) === String(t.teacher_id))
-          .map((ts) => ts.subject_id),
-      }));
+      const teachersWithSubjects = teacherRows.map((t) => {
+        const tid = t.teacher_id || t.id;
+        return {
+          id: tid,
+          name: t.name,
+          is_male: t.is_male,
+          auth_id: t.auth_id || null,
+          subjects: (dbTeacherSubjects || [])
+            .filter((ts) => String(ts.teacher_id) === String(tid))
+            .map((ts) => ts.subject_id),
+        };
+      });
 
       setTtSubjects(dbSubjects || []);
       setTtTeachers(teachersWithSubjects);

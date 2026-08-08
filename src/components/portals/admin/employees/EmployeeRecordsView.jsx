@@ -14,6 +14,7 @@ import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal'
 import ConfirmModal from '../../../ConfirmModal';
 
 import SalaryTrackerView from './SalaryTrackerView';
+import MonthSwatches from './salary-tracker/MonthSwatches';
 
 const DEFAULT_ROLES = [
   'Teacher',
@@ -1326,9 +1327,9 @@ const EmployeeRecordsView = ({
 
   // Admin & Management View
   return (
-    <div className="p-4 md:p-6 space-y-6 w-full max-w-[1700px] mx-auto animate-in fade-in duration-300">
+    <div className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300">
       {/* ── Unified Top Header Panel ── */}
-      <div className="bg-white p-5 rounded-3xl border border-light-border shadow-sm space-y-4">
+      <div className="bg-white border border-light-border p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
           <div>
             <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
@@ -1340,95 +1341,112 @@ const EmployeeRecordsView = ({
           </div>
 
           {/* Navigation Pill Tabs */}
-          <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+          {/* Mobile view (< md): Dropdown */}
+          <div className="md:hidden w-full">
+            <div className="relative">
+              <select
+                value={activeTab}
+                onChange={(e) => setActiveTab(e.target.value)}
+                className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2.5 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
+              >
+                <option value="records">Employee Records</option>
+                <option value="salary_dashboard">Salary Credit Dashboard</option>
+                <option value="salary_list">Salary List View</option>
+              </select>
+              <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Desktop view (>= md): Pill tabs */}
+          <div className="hidden md:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center gap-1 shrink-0 w-auto">
             <button
               onClick={() => setActiveTab('records')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
                 activeTab === 'records'
                   ? 'bg-green-dark text-white shadow-sm'
                   : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
               }`}
             >
               <i className="fas fa-users-gear text-xs"></i>
-              <span className="sm:hidden">Employee</span>
-              <span className="hidden sm:inline">Employee Records</span>
+              <span>Employee Records</span>
             </button>
 
             <button
               onClick={() => setActiveTab('salary_dashboard')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
                 activeTab === 'salary_dashboard'
                   ? 'bg-green-dark text-white shadow-sm'
                   : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
               }`}
             >
               <i className="fas fa-table-cells text-xs"></i>
-              <span className="sm:hidden">Salary Credit</span>
-              <span className="hidden sm:inline">Salary Credit Dashboard</span>
+              <span>Salary Credit Dashboard</span>
             </button>
 
             <button
               onClick={() => setActiveTab('salary_list')}
-              className={`flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
                 activeTab === 'salary_list'
                   ? 'bg-green-dark text-white shadow-sm'
                   : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
               }`}
             >
               <i className="fas fa-list-check text-xs"></i>
-              <span className="sm:hidden">List View</span>
-              <span className="hidden sm:inline">Salary List View</span>
+              <span>Salary List View</span>
             </button>
           </div>
         </div>
 
         {/* Search, Filter & Action Controls for Employee Records tab */}
         {activeTab === 'records' && (
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-              <input
-                type="text"
-                placeholder="Search Name, ID, Mobile, Role..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
-              />
-            </div>
+          <div className="flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-2.5 w-full justify-between pt-1">
+            {/* Left section: Search & 50/50 split filters on mobile */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto flex-1">
+              {/* Search Input */}
+              <div className="relative w-full sm:w-64 shrink-0">
+                <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+                <input
+                  type="text"
+                  placeholder="Search Name, ID, Mobile, Role..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                />
+              </div>
 
-            {/* Role & Status Filter Row */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              {/* Role Filter */}
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
-                title="Filter by Designation"
-              >
-                <option value="">All Designations</option>
-                {DEFAULT_ROLES.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+              {/* Designation & Status Filter Row (50/50 split on mobile) */}
+              <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center">
+                {/* Role Filter */}
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                  title="Filter by Designation"
+                >
+                  <option value="">All Designations</option>
+                  {DEFAULT_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
 
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
-                title="Filter by Status"
-              >
-                <option value="active">Active Only</option>
-                <option value="inactive">Inactive Only</option>
-                <option value="all">All Statuses</option>
-              </select>
+                {/* Status Filter */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer"
+                  title="Filter by Status"
+                >
+                  <option value="active">Active Only</option>
+                  <option value="inactive">Inactive Only</option>
+                  <option value="all">All Statuses</option>
+                </select>
+              </div>
             </div>
 
             {/* Action Icon Buttons */}
-            <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start pt-1 sm:pt-0 ml-auto sm:ml-0">
+            <div className="flex items-center gap-2 shrink-0 justify-end ml-auto">
               <button
                 onClick={fetchEmployees}
                 disabled={loading}
@@ -1482,42 +1500,65 @@ const EmployeeRecordsView = ({
         {/* Repurposed Controls Bar for Salary tabs */}
         {(activeTab === 'salary_dashboard' || activeTab === 'salary_list') && salaryControls && (
           <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1">
-            {/* Search Input for Salary */}
-            <div className="relative w-full sm:w-64">
-              <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
-              <input
-                type="text"
-                placeholder="Search Employee Name..."
-                value={salaryControls.searchQuery}
-                onChange={(e) => salaryControls.setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
-              />
+            {/* Left section: Search & 50/50 split controls on mobile */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto flex-1">
+              {/* Search Input for Salary */}
+              <div className="relative w-full sm:w-64 shrink-0">
+                <i className="fas fa-search absolute left-3.5 top-3 text-gray-400 text-xs"></i>
+                <input
+                  type="text"
+                  placeholder="Search Employee Name..."
+                  value={salaryControls.searchQuery}
+                  onChange={(e) => salaryControls.setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 outline-none"
+                />
+              </div>
+
+              {/* Status & Grouping Controls (50/50 split on mobile, inline next to Search on desktop) */}
+              <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center shrink-0">
+                {/* Org Grouping Toggle Button */}
+                {typeof salaryControls.setGroupByOrg === 'function' && (
+                  <button
+                    type="button"
+                    onClick={() => salaryControls.setGroupByOrg((v) => !v)}
+                    className={`w-full sm:w-auto px-3 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 border cursor-pointer active:scale-95 shrink-0 ${
+                      salaryControls.groupByOrg
+                        ? 'bg-teal-50 border-teal-200 text-teal-800 shadow-2xs'
+                        : 'bg-gray-50 border-gray-200 text-dark-soft hover:bg-gray-100'
+                    }`}
+                    title={
+                      salaryControls.groupByOrg
+                        ? 'Currently grouped by Organization. Click for single view for all.'
+                        : 'Currently showing single view for all. Click to enable Org grouping.'
+                    }
+                  >
+                    <i className={`fas ${salaryControls.groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}></i>
+                    <span className="truncate">{salaryControls.groupByOrg ? 'Grouping On' : 'Grouping Off'}</span>
+                  </button>
+                )}
+
+                <select
+                  value={salaryControls.statusFilter}
+                  onChange={(e) => salaryControls.setStatusFilter(e.target.value)}
+                  className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer shrink-0"
+                  title="Filter Payment Status"
+                >
+                  <option value="all">All</option>
+                  <option value="paid">Fully Paid</option>
+                  <option value="partial">Partial</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+              </div>
             </div>
 
-            {/* Status & Month Controls */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <select
-                value={salaryControls.statusFilter}
-                onChange={(e) => salaryControls.setStatusFilter(e.target.value)}
-                className="w-full sm:w-auto px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold outline-none cursor-pointer flex-1 sm:flex-none"
-                title="Filter Payment Status"
-              >
-                <option value="all">All Payment Statuses</option>
-                <option value="paid">Fully Paid</option>
-                <option value="partial">Partial</option>
-                <option value="unpaid">Unpaid</option>
-              </select>
-
-              <input
-                type="month"
-                value={salaryControls.selectedMonthStr}
-                onChange={(e) => salaryControls.setSelectedMonthStr(e.target.value)}
-                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-extrabold outline-none cursor-pointer"
-              />
-            </div>
+            {/* Month Swatches (Inline in same row on desktop) */}
+            <MonthSwatches
+              selectedMonthStr={salaryControls.selectedMonthStr}
+              onChangeMonth={salaryControls.setSelectedMonthStr}
+            />
 
             {/* Repurposed Action Icon Buttons for Salary Distribution */}
-            <div className="flex items-center gap-2 shrink-0 justify-end sm:justify-start pt-1 sm:pt-0 ml-auto sm:ml-0">
+            <div className="flex items-center gap-2 shrink-0 justify-end ml-auto md:ml-0">
               <button
                 onClick={salaryControls.onRefresh}
                 disabled={salaryControls.loading}
