@@ -98,7 +98,8 @@ const SalaryPaymentLogView = ({
                 {/* 5 Org-Specific Stat Tiles (Only shown when Grouping is ON) */}
                 {groupByOrg && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
-                    <div className="bg-amber-50/60 p-3 rounded-2xl border border-amber-200 space-y-0.5">
+                    <div className="bg-amber-50/60 p-3 rounded-2xl border border-amber-200 space-y-0.5 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
                       <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-amber-800">
                         <span>Last Month Pending</span>
                         <i className="fas fa-clock-rotate-left text-amber-600"></i>
@@ -109,7 +110,8 @@ const SalaryPaymentLogView = ({
                       </div>
                     </div>
 
-                    <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200 space-y-0.5">
+                    <div className="bg-emerald-50/60 p-3 rounded-2xl border border-emerald-200 space-y-0.5 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500" />
                       <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-emerald-800">
                         <span>Paid Count</span>
                         <i className="fas fa-circle-check text-emerald-600"></i>
@@ -120,7 +122,8 @@ const SalaryPaymentLogView = ({
                       </div>
                     </div>
 
-                    <div className="bg-rose-50/60 p-3 rounded-2xl border border-rose-200 space-y-0.5">
+                    <div className="bg-rose-50/60 p-3 rounded-2xl border border-rose-200 space-y-0.5 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-rose-500" />
                       <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-rose-800">
                         <span>Unpaid / Partial</span>
                         <i className="fas fa-hourglass-half text-rose-600"></i>
@@ -131,7 +134,8 @@ const SalaryPaymentLogView = ({
                       </div>
                     </div>
 
-                    <div className="bg-blue-50/60 p-3 rounded-2xl border border-blue-200 space-y-0.5">
+                    <div className="bg-blue-50/60 p-3 rounded-2xl border border-blue-200 space-y-0.5 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500" />
                       <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-blue-800">
                         <span>Total Paid</span>
                         <i className="fas fa-money-bill-wave text-blue-600"></i>
@@ -141,7 +145,8 @@ const SalaryPaymentLogView = ({
                       </div>
                     </div>
 
-                    <div className="bg-purple-50/60 p-3 rounded-2xl border border-purple-200 space-y-0.5 col-span-2 sm:col-span-1">
+                    <div className="bg-purple-50/60 p-3 rounded-2xl border border-purple-200 space-y-0.5 col-span-2 sm:col-span-1 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-1 bg-purple-500" />
                       <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-purple-800">
                         <span>Balance To Pay</span>
                         <i className="fas fa-wallet text-purple-600"></i>
