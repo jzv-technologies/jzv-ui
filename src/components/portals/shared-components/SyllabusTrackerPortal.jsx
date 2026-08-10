@@ -7,6 +7,7 @@ import DailyActivityTable from './DailyActivityTable';
 import SyllabusProgressGrid from './SyllabusProgressGrid';
 import AddWorkModalCompactView from '../teacher/LessonManager/AddWorkModalCompactView';
 import AddWorkModalCompleteView from '../teacher/components/AddWorkModalCompleteView';
+import AddWorkExceptionsModal from '../admin/AddWorkExceptionsModal';
 import LessonManager from '../teacher/LessonManager/LessonManager';
 
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
@@ -112,6 +113,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [expandedLogIds, setExpandedLogIds] = useState({});
   const [logItemsMap, setLogItemsMap] = useState({});
   const [showNotStarted, setShowNotStarted] = useState(false);
+  const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
 
   // ─── Tab 3: Upcoming Lessons Filters & Grouping ───
   const [upcomingGroupingMode, setUpcomingGroupingMode] = useState('class_subject');
@@ -1591,6 +1593,16 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                       <i className="fas fa-plus"></i> Add Work
                     </button>
                   )}
+
+                  {(role === 'admin' || role === 'management') && (
+                    <button
+                      onClick={() => setIsExceptionsModalOpen(true)}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0"
+                      title="Manage Requests & Exceptions"
+                    >
+                      <i className="fas fa-comment-dots"></i> Requests
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -2397,6 +2409,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         type="danger"
         onConfirm={handleExecuteDelete}
         onCancel={() => setDeleteModalConfig(null)}
+      />
+
+      <AddWorkExceptionsModal
+        isOpen={isExceptionsModalOpen}
+        onClose={() => setIsExceptionsModalOpen(false)}
+        user={user}
+        fullName={user?.fullName || user?.user_metadata?.full_name}
       />
     </div>
   );

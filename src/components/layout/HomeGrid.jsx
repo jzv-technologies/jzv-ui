@@ -1,5 +1,5 @@
-import React from "react";
-import Translate from "../Translate";
+import React from 'react';
+import Translate from '../Translate';
 
 const HomeGrid = ({ gridCards, openModal }) => {
   return (
@@ -16,15 +16,13 @@ const HomeGrid = ({ gridCards, openModal }) => {
               className="bg-light-white bg-opacity-90 rounded-2xl shadow-sm border border-light-border p-5 sm:p-6 lg:p-8 cursor-pointer transition-all duration-200 ease-out group overflow-hidden relative select-none flex flex-col items-center justify-center text-center h-full min-h-[160px] hover:bg-olive-500"
               onClick={() => openModal(card.id)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+                if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   openModal(card.id);
                 }
               }}
             >
-              <div
-                className={`absolute top-0 left-0 right-0 h-2 bg-${card.color}`}
-              />
+              <div className={`absolute top-0 left-0 right-0 h-2 bg-${card.color}`} />
               <div
                 className={`text-3xl sm:text-4xl mb-3 sm:mb-4 mt-2 group-hover:scale-110 transition-transform origin-center text-${card.color} group-hover:text-pine-900 duration-200 ease-out`}
               >

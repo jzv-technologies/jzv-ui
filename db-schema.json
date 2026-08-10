@@ -1698,7 +1698,7 @@
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "employees",
       "using": "true",
@@ -1708,7 +1708,7 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "employees",
       "using": "true",
@@ -1868,12 +1868,11 @@
     },
     {
       "roles": [
-        "anon",
         "authenticated"
       ],
       "table": "students",
-      "using": "is_parent_of_student((admission_no)::text)",
-      "command": "SELECT",
+      "using": "has_role_above(16)",
+      "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
@@ -1883,6 +1882,17 @@
       ],
       "table": "students",
       "using": "has_role_above(2)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "students",
+      "using": "is_parent_of_student((admission_no)::text)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2009,16 +2019,6 @@
     },
     {
       "roles": [
-        "authenticated"
-      ],
-      "table": "timetable_slots",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
         "anon",
         "authenticated"
       ],
@@ -2032,11 +2032,11 @@
       "roles": [
         "authenticated"
       ],
-      "table": "trk_book_level_progress",
+      "table": "timetable_slots",
       "using": "true",
-      "command": "ALL",
+      "command": "SELECT",
       "permissive": "PERMISSIVE",
-      "with_check": "true"
+      "with_check": null
     },
     {
       "roles": [
@@ -2044,9 +2044,9 @@
       ],
       "table": "trk_book_level_progress",
       "using": "true",
-      "command": "SELECT",
+      "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "true"
     },
     {
       "roles": [
@@ -2062,18 +2062,8 @@
       "roles": [
         "authenticated"
       ],
-      "table": "trk_daily_teacher_progress",
+      "table": "trk_book_level_progress",
       "using": "true",
-      "command": "ALL",
-      "permissive": "PERMISSIVE",
-      "with_check": "true"
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "trk_daily_teacher_progress",
-      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2083,7 +2073,27 @@
         "authenticated"
       ],
       "table": "trk_daily_teacher_progress",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_daily_teacher_progress",
       "using": "has_role_above(8)",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "public"
+      ],
+      "table": "trk_daily_teacher_progress",
+      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null

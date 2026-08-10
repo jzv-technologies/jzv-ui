@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../../../../utils/supabase';
 import { showToast } from '../../../../utils/toast';
 import ClassificationsModal from '../timetable/ClassificationsModal';
 import ConfirmModal from '../../../ConfirmModal';
 import SyllabusCsvMappingModal from './SyllabusCsvMappingModal';
-import * as XLSX from 'xlsx';
+import {
+  HIERARCHY_TYPES,
+  NOT_AVAILABLE,
+  getLevel1Options,
+  getLevel2Options,
+  getLevel3Options,
+  parseHierarchyType,
+  formatHierarchyType,
+  getLevelsAvailableFromHierarchy,
+} from '../../../../utils/hierarchyConfig';
 
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
 
@@ -253,7 +263,9 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         getSessionCachedData('jzv_session_classifications', () =>
           supabase.from('syl_classifications').select('*').order('name', { ascending: true })
         ),
-        getSessionCachedData('jzv_session_subjects', () => supabase.from('syl_subjects').select('*')),
+        getSessionCachedData('jzv_session_subjects', () =>
+          supabase.from('syl_subjects').select('*')
+        ),
         getSessionCachedData('jzv_session_classes', () =>
           supabase.from('classes').select('*').order('id', { ascending: true })
         ),
@@ -498,19 +510,6 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
   const fetchBooksForSubject = async (subjectId) => {
     if (!subjectId || !isSupabaseMode) return;
-    const cacheKey = `jzv_session_books_subject_${subjectId}`;
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const data = JSON.parse(cached);
-        setBooks((prev) => {
-          const otherBooks = prev.filter((b) => String(b.subject_id) !== String(subjectId));
-          return [...otherBooks, ...data];
-        });
-        return;
-      }
-    } catch (e) {}
-
     try {
       const { data, error } = await supabase
         .from('syl_books')
@@ -518,9 +517,6 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         .eq('subject_id', subjectId);
       if (error) throw error;
       if (data) {
-        try {
-          sessionStorage.setItem(cacheKey, JSON.stringify(data));
-        } catch (e) {}
         setBooks((prev) => {
           const otherBooks = prev.filter((b) => String(b.subject_id) !== String(subjectId));
           return [...otherBooks, ...data];
@@ -599,15 +595,33 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         return (Number(a.id) || 0) - (Number(b.id) || 0);
       });
 
-      const sheetData = sortedData.map((d, index) => ({
-        Sequence: d.sequence !== null && d.sequence !== undefined ? d.sequence : index + 1,
-        ID: d.id || '',
-        Level1: d.level1 || '',
-        Level2: d.level2 || '',
-        Level3: d.level3 || '',
-        page: d.page_count !== undefined && d.page_count !== null ? d.page_count : 0,
-        complexity: d.complexity || 'Easy',
-      }));
+      const levels = (book.hierarchy_type || 'Unit, Chapter, Lesson')
+        .split(',')
+        .map((s) => s.trim());
+      const l1Name = levels[0] || 'Level 1';
+      const l2Name = levels[1] || 'Level 2';
+      const l3Name = levels[2] || 'Level 3';
+      const levelsAvailable = getLevelsAvailableFromHierarchy(
+        book.hierarchy_type,
+        book.levels_available
+      );
+
+      const sheetData = sortedData.map((d, index) => {
+        const row = {
+          Sequence: d.sequence !== null && d.sequence !== undefined ? d.sequence : index + 1,
+          ID: d.id || '',
+          [l1Name]: d.level1 || '',
+        };
+        if (levelsAvailable >= 2) {
+          row[l2Name] = d.level2 || '';
+        }
+        if (levelsAvailable >= 3) {
+          row[l3Name] = d.level3 || '';
+        }
+        row.Pages = d.page_count !== undefined && d.page_count !== null ? d.page_count : 0;
+        row.Complexity = d.complexity || 'Easy';
+        return row;
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(sheetData);
       const workbook = XLSX.utils.book_new();
@@ -677,8 +691,16 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     setLoading(true);
     setImportProgress({ current: 0, total: csvRows.length });
 
-    const { isUpdateMode, idCol, unitCol, chapterCol, lessonCol, sequenceCol, complexityCol, pageCol } =
-      mappings;
+    const {
+      isUpdateMode,
+      idCol,
+      unitCol,
+      chapterCol,
+      lessonCol,
+      sequenceCol,
+      complexityCol,
+      pageCol,
+    } = mappings;
     const idIdx = isUpdateMode && idCol ? csvHeaders.indexOf(idCol) : -1;
     const unitIdx = unitCol ? csvHeaders.indexOf(unitCol) : -1;
     const chapterIdx = chapterCol ? csvHeaders.indexOf(chapterCol) : -1;
@@ -774,10 +796,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               complexity: compVal,
             };
             if (isSupabaseMode) {
-              const { data, error } = await supabase
-                .from('syl_lessons')
-                .insert([newRow])
-                .select();
+              const { data, error } = await supabase.from('syl_lessons').insert([newRow]).select();
               if (error) {
                 const confId = existingByHierarchy?.id || 'unknown';
                 const msg =
@@ -794,7 +813,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             rowsInserted++;
           } else {
             // Updating existing record
-            const finalSeq = seqIdx !== -1 ? seqVal : (existingRow.sequence || seqVal);
+            const finalSeq = seqIdx !== -1 ? seqVal : existingRow.sequence || seqVal;
             const updatePayload = {
               level1: l1,
               level2: l2,
@@ -881,15 +900,43 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             ),
           });
         } else if (data.level === 'book') {
-          if (isSupabaseMode)
+          if (isSupabaseMode) {
             await supabase
               .from('syl_books')
-              .update({ name: data.name, hierarchy_type: data.hierarchyType })
+              .update({
+                name: data.name,
+                hierarchy_type: data.hierarchyType,
+                levels_available: data.levelsAvailable,
+              })
               .eq('id', data.node.id);
+
+            if (data.levelsAvailable > data.oldLevelsAvailable) {
+              if (data.oldLevelsAvailable === 1 && data.levelsAvailable >= 2) {
+                await supabase
+                  .from('syl_lessons')
+                  .update({ level2: data.defaultL2Name || 'General Chapter' })
+                  .eq('book_id', data.node.id)
+                  .is('level2', null);
+              }
+              if (data.levelsAvailable === 3) {
+                await supabase
+                  .from('syl_lessons')
+                  .update({ level3: data.defaultL3Name || 'General Lesson' })
+                  .eq('book_id', data.node.id)
+                  .is('level3', null);
+              }
+              fetchLessonsForBook(data.node.id);
+            }
+          }
           saveState({
             books: books.map((b) =>
               String(b.id) === String(data.node.id)
-                ? { ...b, name: data.name, hierarchy_type: data.hierarchyType }
+                ? {
+                    ...b,
+                    name: data.name,
+                    hierarchy_type: data.hierarchyType,
+                    levels_available: data.levelsAvailable,
+                  }
                 : b
             ),
           });
@@ -1010,12 +1057,18 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             subject_id: data.parentId,
             name: data.name,
             hierarchy_type: data.hierarchyType,
+            levels_available: data.levelsAvailable || 3,
           };
           if (isSupabaseMode) {
             const { data: res } = await supabase
               .from('syl_books')
               .insert([
-                { subject_id: data.parentId, name: data.name, hierarchy_type: data.hierarchyType },
+                {
+                  subject_id: data.parentId,
+                  name: data.name,
+                  hierarchy_type: data.hierarchyType,
+                  levels_available: data.levelsAvailable || 3,
+                },
               ])
               .select();
             newBook = res[0];
@@ -1190,10 +1243,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   // Only sibling: update to set level3 = null
                   const updates = { level3: null, page_count: 0, complexity: 'Easy' };
                   if (isSupabaseMode) {
-                    await supabase
-                      .from('syl_lessons')
-                      .update(updates)
-                      .eq('id', targetNode.id);
+                    await supabase.from('syl_lessons').update(updates).eq('id', targetNode.id);
                   }
                   currentData = currentData.map((d) =>
                     String(d.id) === String(targetNode.id) ? { ...d, ...updates } : d
@@ -1258,11 +1308,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             } else if (level === 'level1') {
               // Delete level1 node completely
               if (isSupabaseMode) {
-                await supabase
-                  .from('syl_lessons')
-                  .delete()
-                  .eq('book_id', bookId)
-                  .eq('level1', l1);
+                await supabase.from('syl_lessons').delete().eq('book_id', bookId).eq('level1', l1);
               }
               currentData = currentData.filter(
                 (d) => !(String(d.book_id) === String(bookId) && d.level1 === l1)
@@ -1594,6 +1640,10 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
 
+    const levelsAvailable = getLevelsAvailableFromHierarchy(
+      book.hierarchy_type,
+      book.levels_available
+    );
     const levels = (book.hierarchy_type || 'Unit, Chapter, Lesson').split(',').map((s) => s.trim());
     const l1Name = levels[0] || 'Level 1';
     const l2Name = levels[1] || 'Level 2';
@@ -1608,7 +1658,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       const l2 = d.level2 && String(d.level2).trim() ? String(d.level2).trim() : null;
       const l3 = d.level3 && String(d.level3).trim() ? String(d.level3).trim() : null;
 
-      if (l2) {
+      if (l2 && levelsAvailable >= 2) {
         if (!grouped[l1][l2]) {
           grouped[l1][l2] = {
             lessons: [],
@@ -1618,7 +1668,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             placeholderId: null,
           };
         }
-        if (l3) {
+        if (l3 && levelsAvailable >= 3) {
           grouped[l1][l2].lessons.push(d);
         } else {
           // It's a Level 2 leaf/placeholder record
@@ -1629,11 +1679,9 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           grouped[l1][l2].placeholderNode = d;
         }
       } else {
-        // If it's just a level1 leaf (e.g. just a unit without chapters)
-        if (l3) {
-          if (!grouped[l1]['_direct_lessons']) grouped[l1]['_direct_lessons'] = [];
-          grouped[l1]['_direct_lessons'].push(d);
-        }
+        // If it's a level1 leaf (1-level book or unit without chapters)
+        if (!grouped[l1]['_direct_lessons']) grouped[l1]['_direct_lessons'] = [];
+        grouped[l1]['_direct_lessons'].push(d);
       }
     });
 
@@ -1666,6 +1714,97 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             const isL1Collapsed = collapsedNodes[`${book.id}-${l1}`];
             const l2Groups = grouped[l1];
             const l2Keys = Object.keys(l2Groups).filter((k) => k !== '_direct_lessons' && k);
+
+            if (levelsAvailable === 1) {
+              const directNode = (l2Groups['_direct_lessons'] && l2Groups['_direct_lessons'][0]) || {
+                level1: l1,
+                page_count: 0,
+                complexity: 'Easy',
+              };
+              return (
+                <div
+                  key={l1}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50 border border-light-border/40 p-2.5 rounded-xl text-xs font-semibold pl-3 sm:pl-4"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
+                    <span className="font-extrabold text-xs text-dark-primary truncate">
+                      {l1 === '_Revision' ? 'Book Revision' : l1}
+                    </span>
+                    {directNode.sequence !== undefined && directNode.sequence !== null && (
+                      <span
+                        className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
+                        title="Sequence Number"
+                      >
+                        #{directNode.sequence}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5 items-center shrink-0 justify-end">
+                    {(isAdmin || isTeacher) && (
+                      <div className="flex items-center gap-0.5 border rounded bg-white px-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSequence(directNode, 'up')}
+                          className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                          title="Move Sequence Up"
+                        >
+                          <i className="fas fa-arrow-up"></i>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveSequence(directNode, 'down')}
+                          className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                          title="Move Sequence Down"
+                        >
+                          <i className="fas fa-arrow-down"></i>
+                        </button>
+                      </div>
+                    )}
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                      <i className="far fa-file-lines mr-1" />
+                      {directNode.page_count} pages
+                    </span>
+                    <span
+                      className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(directNode.complexity)}`}
+                    >
+                      {directNode.complexity}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setModal({
+                          type: 'edit',
+                          level: 'level1',
+                          isLeaf: true,
+                          bookId: book.id,
+                          node: directNode,
+                          oldLevel1: l1,
+                          name: l1 === '_Revision' ? 'Book Revision' : l1,
+                          pageCount: directNode.page_count,
+                          complexity: directNode.complexity,
+                          sequence: directNode.sequence,
+                          hierarchy: book.hierarchy_type,
+                        })
+                      }
+                      className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                    >
+                      <i className="fas fa-edit text-xs"></i>
+                    </button>
+                    {(isAdmin || isTeacher) && (
+                      <button
+                        onClick={() =>
+                          handleDeleteNode('level1', null, { bookId: book.id, level1: l1 })
+                        }
+                        className="p-1 text-red-primary hover:bg-red-50 rounded"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div
                 key={l1}
@@ -1683,13 +1822,15 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     <span className="font-extrabold text-xs text-dark-deepblue truncate">
                       {l1 === '_Revision' ? 'Book Revision' : l1}
                     </span>
-                    <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
-                      {Object.keys(l2Groups).filter((k) => k !== '_direct_lessons').length} {l2Name}
-                      s
-                    </span>
+                    {levelsAvailable >= 2 && (
+                      <span className="text-[10px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
+                        {Object.keys(l2Groups).filter((k) => k !== '_direct_lessons').length}{' '}
+                        {l2Name}s
+                      </span>
+                    )}
                   </button>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                    {l2Keys.length > 0 && (
+                    {l2Keys.length > 0 && levelsAvailable >= 2 && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1724,21 +1865,23 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                         />
                       </button>
                     )}
-                    <button
-                      onClick={() =>
-                        setModal({
-                          type: 'add',
-                          level: 'node',
-                          bookId: book.id,
-                          parentLevel: 'level1',
-                          parent1: l1,
-                          hierarchy: book.hierarchy_type,
-                        })
-                      }
-                      className="px-2 py-1 rounded-md text-[9px] font-bold bg-white border border-light-border hover:bg-orange-50 transition-all"
-                    >
-                      <i className="fas fa-plus"></i> Add {l2Name}
-                    </button>
+                    {levelsAvailable >= 2 && (
+                      <button
+                        onClick={() =>
+                          setModal({
+                            type: 'add',
+                            level: 'node',
+                            bookId: book.id,
+                            parentLevel: 'level1',
+                            parent1: l1,
+                            hierarchy: book.hierarchy_type,
+                          })
+                        }
+                        className="px-2 py-1 rounded-md text-[9px] font-bold bg-white border border-light-border hover:bg-orange-50 transition-all"
+                      >
+                        <i className="fas fa-plus"></i> Add {l2Name}
+                      </button>
+                    )}
                     <button
                       onClick={() =>
                         setModal({
@@ -1783,9 +1926,14 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                             >
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
-                                <span className="truncate">{node.level3}</span>
+                                <span className="truncate">
+                                  {node.level3 || node.level2 || node.level1}
+                                </span>
                                 {node.sequence !== undefined && node.sequence !== null && (
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0" title="Sequence Number">
+                                  <span
+                                    className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
+                                    title="Sequence Number"
+                                  >
                                     #{node.sequence}
                                   </span>
                                 )}
@@ -1824,15 +1972,21 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   onClick={() =>
                                     setModal({
                                       type: 'edit',
-                                      level: 'level3',
+                                      level: node.level3
+                                        ? 'level3'
+                                        : node.level2
+                                          ? 'level2'
+                                          : 'level1',
                                       bookId: book.id,
                                       node: node,
                                       oldLevel1: l1,
+                                      oldLevel2: node.level2,
                                       oldLevel3: node.level3,
-                                      name: node.level3,
+                                      name: node.level3 || node.level2 || node.level1,
                                       pageCount: node.page_count,
                                       complexity: node.complexity,
                                       sequence: node.sequence,
+                                      isLeaf: true,
                                       hierarchy: book.hierarchy_type,
                                     })
                                   }
@@ -1863,21 +2017,37 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                           >
                             <div className="p-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                               <button
-                                onClick={() => toggleCollapse(`${book.id}-${l1}-${l2}`)}
-                                className="flex items-center gap-2 text-left focus:outline-none flex-1 min-w-0"
+                                onClick={() =>
+                                  levelsAvailable >= 3 && toggleCollapse(`${book.id}-${l1}-${l2}`)
+                                }
+                                className={`flex items-center gap-2 text-left focus:outline-none flex-1 min-w-0 ${levelsAvailable < 3 ? 'cursor-default' : ''}`}
                               >
-                                <i
-                                  className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[8px] text-dark-soft shrink-0`}
-                                />
+                                {levelsAvailable >= 3 ? (
+                                  <i
+                                    className={`fas fa-chevron-${isL2Collapsed ? 'right' : 'down'} text-[8px] text-dark-soft shrink-0`}
+                                  />
+                                ) : (
+                                  <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
+                                )}
                                 <i className="fas fa-bookmark text-emerald-600 text-[10px] shrink-0" />
                                 <span className="font-extrabold text-xs text-dark-primary truncate">
                                   {l2}
                                 </span>
-                                {l3Nodes.lessons.length > 0 ? (
+                                {levelsAvailable < 3 &&
+                                  l3Nodes.placeholderNode?.sequence !== undefined &&
+                                  l3Nodes.placeholderNode?.sequence !== null && (
+                                    <span
+                                      className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
+                                      title="Sequence Number"
+                                    >
+                                      #{l3Nodes.placeholderNode.sequence}
+                                    </span>
+                                  )}
+                                {levelsAvailable >= 3 && l3Nodes.lessons.length > 0 ? (
                                   <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
                                     {l3Nodes.lessons.length} {l3Name}s
                                   </span>
-                                ) : !l3Nodes.hasPlaceholder ? (
+                                ) : levelsAvailable >= 3 && !l3Nodes.hasPlaceholder ? (
                                   <span className="text-[9px] text-dark-muted bg-white border border-light-border px-1.5 py-0.5 rounded-full font-bold ml-1 shrink-0">
                                     No {l3Name}s
                                   </span>
@@ -1885,7 +2055,33 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                               </button>
 
                               {l3Nodes.lessons.length === 0 && l3Nodes.hasPlaceholder && (
-                                <div className="flex gap-2 items-center shrink-0">
+                                <div className="flex gap-1.5 items-center shrink-0">
+                                  {levelsAvailable < 3 &&
+                                    (isAdmin || isTeacher) &&
+                                    l3Nodes.placeholderNode && (
+                                      <div className="flex items-center gap-0.5 border rounded bg-white px-1">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleMoveSequence(l3Nodes.placeholderNode, 'up')
+                                          }
+                                          className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                          title="Move Sequence Up"
+                                        >
+                                          <i className="fas fa-arrow-up"></i>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleMoveSequence(l3Nodes.placeholderNode, 'down')
+                                          }
+                                          className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                          title="Move Sequence Down"
+                                        >
+                                          <i className="fas fa-arrow-down"></i>
+                                        </button>
+                                      </div>
+                                    )}
                                   <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full bg-white text-dark-soft">
                                     <i className="far fa-file-lines mr-1" />
                                     {l3Nodes.page_count} pages
@@ -1899,7 +2095,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                               )}
 
                               <div className="flex items-center gap-1 shrink-0 justify-end">
-                                {l3Nodes.lessons.length > 0 && (
+                                {levelsAvailable >= 3 && l3Nodes.lessons.length > 0 && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1918,22 +2114,24 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                     />
                                   </button>
                                 )}
-                                <button
-                                  onClick={() =>
-                                    setModal({
-                                      type: 'add',
-                                      level: 'node',
-                                      bookId: book.id,
-                                      parentLevel: 'level2',
-                                      parent1: l1,
-                                      parent2: l2,
-                                      hierarchy: book.hierarchy_type,
-                                    })
-                                  }
-                                  className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all"
-                                >
-                                  <i className="fas fa-plus"></i> Add {l3Name}
-                                </button>
+                                {levelsAvailable >= 3 && (
+                                  <button
+                                    onClick={() =>
+                                      setModal({
+                                        type: 'add',
+                                        level: 'node',
+                                        bookId: book.id,
+                                        parentLevel: 'level2',
+                                        parent1: l1,
+                                        parent2: l2,
+                                        hierarchy: book.hierarchy_type,
+                                      })
+                                    }
+                                    className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all"
+                                  >
+                                    <i className="fas fa-plus"></i> Add {l3Name}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     setModal({
@@ -1945,9 +2143,16 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       name: l2,
                                       hierarchy: book.hierarchy_type,
                                       pageCount:
-                                        l3Nodes.lessons.length === 0 ? l3Nodes.page_count : null,
+                                        l3Nodes.lessons.length === 0 || levelsAvailable < 3
+                                          ? l3Nodes.page_count
+                                          : null,
                                       complexity:
-                                        l3Nodes.lessons.length === 0 ? l3Nodes.complexity : null,
+                                        l3Nodes.lessons.length === 0 || levelsAvailable < 3
+                                          ? l3Nodes.complexity
+                                          : null,
+                                      sequence: l3Nodes.placeholderNode?.sequence,
+                                      node: l3Nodes.placeholderNode,
+                                      isLeaf: levelsAvailable < 3,
                                       placeholderId: l3Nodes.placeholderId,
                                     })
                                   }
@@ -1958,7 +2163,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 {(isAdmin || isTeacher) && (
                                   <button
                                     onClick={() =>
-                                      handleDeleteNode('level2', null, {
+                                      handleDeleteNode('level2', l3Nodes.placeholderId, {
                                         bookId: book.id,
                                         level1: l1,
                                         level2: l2,
@@ -1971,86 +2176,93 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 )}
                               </div>
                             </div>
-                            {!isL2Collapsed && l3Nodes.lessons.length > 0 && (
-                              <div className="p-2 bg-white space-y-1.5">
-                                {l3Nodes.lessons.map((node, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-3 sm:pl-4"
-                                  >
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
-                                      <span className="truncate">{node.level3}</span>
-                                      {node.sequence !== undefined && node.sequence !== null && (
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0" title="Sequence Number">
-                                          #{node.sequence}
+                            {levelsAvailable >= 3 &&
+                              !isL2Collapsed &&
+                              l3Nodes.lessons.length > 0 && (
+                                <div className="p-2 bg-white space-y-1.5">
+                                  {l3Nodes.lessons.map((node, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-blue-50 border border-light-border/40 p-2 rounded-lg text-xs font-semibold pl-3 sm:pl-4"
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
+                                        <span className="truncate">{node.level3}</span>
+                                        {node.sequence !== undefined && node.sequence !== null && (
+                                          <span
+                                            className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
+                                            title="Sequence Number"
+                                          >
+                                            #{node.sequence}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-1.5 items-center shrink-0 justify-end">
+                                        {(isAdmin || isTeacher) && (
+                                          <div className="flex items-center gap-0.5 border rounded bg-white px-1">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveSequence(node, 'up')}
+                                              className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                              title="Move Sequence Up"
+                                            >
+                                              <i className="fas fa-arrow-up"></i>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveSequence(node, 'down')}
+                                              className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                              title="Move Sequence Down"
+                                            >
+                                              <i className="fas fa-arrow-down"></i>
+                                            </button>
+                                          </div>
+                                        )}
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                          <i className="far fa-file-lines mr-1" />
+                                          {node.page_count} pages
                                         </span>
-                                      )}
-                                    </div>
-                                    <div className="flex gap-1.5 items-center shrink-0 justify-end">
-                                      {(isAdmin || isTeacher) && (
-                                        <div className="flex items-center gap-0.5 border rounded bg-white px-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleMoveSequence(node, 'up')}
-                                            className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
-                                            title="Move Sequence Up"
-                                          >
-                                            <i className="fas fa-arrow-up"></i>
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleMoveSequence(node, 'down')}
-                                            className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
-                                            title="Move Sequence Down"
-                                          >
-                                            <i className="fas fa-arrow-down"></i>
-                                          </button>
-                                        </div>
-                                      )}
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
-                                        <i className="far fa-file-lines mr-1" />
-                                        {node.page_count} pages
-                                      </span>
-                                      <span
-                                        className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
-                                      >
-                                        {node.complexity}
-                                      </span>
-                                      <button
-                                        onClick={() =>
-                                          setModal({
-                                            type: 'edit',
-                                            level: 'level3',
-                                            bookId: book.id,
-                                            node: node,
-                                            oldLevel1: l1,
-                                            oldLevel2: l2,
-                                            oldLevel3: node.level3,
-                                            name: node.level3,
-                                            pageCount: node.page_count,
-                                            complexity: node.complexity,
-                                            sequence: node.sequence,
-                                            hierarchy: book.hierarchy_type,
-                                          })
-                                        }
-                                        className="p-1 text-blue-500"
-                                      >
-                                        <i className="fas fa-edit text-[10px]"></i>
-                                      </button>
-                                      {(isAdmin || isTeacher) && (
-                                        <button
-                                          onClick={() => handleDeleteNode('level3', node.id, node)}
-                                          className="p-1 text-red-primary"
+                                        <span
+                                          className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
                                         >
-                                          <i className="fas fa-trash-alt text-[10px]"></i>
+                                          {node.complexity}
+                                        </span>
+                                        <button
+                                          onClick={() =>
+                                            setModal({
+                                              type: 'edit',
+                                              level: 'level3',
+                                              bookId: book.id,
+                                              node: node,
+                                              oldLevel1: l1,
+                                              oldLevel2: l2,
+                                              oldLevel3: node.level3,
+                                              name: node.level3,
+                                              pageCount: node.page_count,
+                                              complexity: node.complexity,
+                                              sequence: node.sequence,
+                                              hierarchy: book.hierarchy_type,
+                                            })
+                                          }
+                                          className="p-1 text-blue-500"
+                                        >
+                                          <i className="fas fa-edit text-[10px]"></i>
                                         </button>
-                                      )}
+                                        {(isAdmin || isTeacher) && (
+                                          <button
+                                            onClick={() =>
+                                              handleDeleteNode('level3', node.id, node)
+                                            }
+                                            className="p-1 text-red-primary"
+                                          >
+                                            <i className="fas fa-trash-alt text-[10px]"></i>
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                                  ))}
+                                </div>
+                              )}
                           </div>
                         );
                       })
@@ -2188,9 +2400,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
                 <i className="fas fa-book-open text-3xl sm:text-4xl text-brand-soft/40"></i>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-dark-primary mb-2">No Subject Selected</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-dark-primary mb-2">
+                No Subject Selected
+              </h3>
               <p className="text-xs sm:text-sm font-semibold text-dark-muted max-w-sm mx-auto mb-4">
-                Select a subject from the curriculum sidebar or create a new one to begin managing curriculum.
+                Select a subject from the curriculum sidebar or create a new one to begin managing
+                curriculum.
               </p>
               <button
                 type="button"
@@ -2707,27 +2922,82 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
   const [requiresTeacher, setRequiresTeacher] = useState(
     isEdit && level === 'subject' ? modal.node?.requires_teacher !== false : true
   );
-  const [hierarchyType, setHierarchyType] = useState(
+
+  const initialParsed = parseHierarchyType(
     isEdit && level === 'book'
-      ? modal.node?.hierarchy_type || 'Unit, Chapter, Title'
-      : 'Unit, Chapter, Title'
+      ? modal.node?.hierarchy_type || 'Unit, Chapter, Lesson'
+      : 'Unit, Chapter, Lesson'
   );
+
+  const [l1Key, setL1Key] = useState(initialParsed.l1);
+  const [l2Key, setL2Key] = useState(initialParsed.l2);
+  const [l3Key, setL3Key] = useState(initialParsed.l3);
+
+  const oldLevelsAvailable =
+    isEdit && level === 'book'
+      ? getLevelsAvailableFromHierarchy(modal.node?.hierarchy_type, modal.node?.levels_available)
+      : 3;
+
+  const [defaultL2Name, setDefaultL2Name] = useState('General Chapter');
+  const [defaultL3Name, setDefaultL3Name] = useState('General Lesson');
+
+  const l1Opts = getLevel1Options();
+  const l2Opts = getLevel2Options(l1Key);
+  const l3Opts = getLevel3Options(l2Key);
+
+  const handleL1Change = (newL1) => {
+    setL1Key(newL1);
+    const newL2Opts = getLevel2Options(newL1);
+    const validL2Keys = newL2Opts.map((o) => o.key);
+    let nextL2 = l2Key;
+    if (!validL2Keys.includes(nextL2)) {
+      nextL2 = validL2Keys[0] || 'NONE';
+    }
+    setL2Key(nextL2);
+
+    const newL3Opts = getLevel3Options(nextL2);
+    const validL3Keys = newL3Opts.map((o) => o.key);
+    if (!validL3Keys.includes(l3Key)) {
+      setL3Key(validL3Keys[0] || 'NONE');
+    }
+  };
+
+  const handleL2Change = (newL2) => {
+    setL2Key(newL2);
+    const newL3Opts = getLevel3Options(newL2);
+    const validL3Keys = newL3Opts.map((o) => o.key);
+    if (!validL3Keys.includes(l3Key)) {
+      setL3Key(validL3Keys[0] || 'NONE');
+    }
+  };
+
+  const currentLevelsAvailable = l2Key === 'NONE' ? 1 : l3Key === 'NONE' ? 2 : 3;
+  const isLevelUpgrade = isEdit && level === 'book' && currentLevelsAvailable > oldLevelsAvailable;
+
   const [pageCount, setPageCount] = useState(
     isEdit &&
       (level === 'level3' ||
-        (level === 'level2' && modal.pageCount !== null && modal.pageCount !== undefined))
+        (level === 'level2' && modal.pageCount !== null && modal.pageCount !== undefined) ||
+        (level === 'level1' && modal.isLeaf))
       ? pCount
       : 5
   );
   const [complexity, setComplexity] = useState(
     isEdit &&
       (level === 'level3' ||
-        (level === 'level2' && modal.pageCount !== null && modal.pageCount !== undefined))
+        (level === 'level2' && modal.pageCount !== null && modal.pageCount !== undefined) ||
+        (level === 'level1' && modal.isLeaf))
       ? pComp
       : 'Easy'
   );
   const [sequence, setSequence] = useState(
-    isEdit ? (modal.sequence !== undefined ? modal.sequence : (modal.node?.sequence !== undefined ? modal.node.sequence : '')) : ''
+    isEdit
+      ? modal.sequence !== undefined
+        ? modal.sequence
+        : modal.node?.sequence !== undefined
+          ? modal.node.sequence
+          : ''
+      : ''
   );
 
   const [bulkNodes, setBulkNodes] = useState([
@@ -2770,13 +3040,18 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
     e.preventDefault();
     if (isEdit) {
       if (!name.trim()) return showToast('Name field required.', 'error');
+      const finalHierarchyType = formatHierarchyType(l1Key, l2Key, l3Key);
       onSave({
         type: 'edit',
         level,
         name: name.trim(),
         classificationId,
         requires_teacher: level === 'subject' ? requiresTeacher : undefined,
-        hierarchyType,
+        hierarchyType: finalHierarchyType,
+        levelsAvailable: currentLevelsAvailable,
+        oldLevelsAvailable,
+        defaultL2Name,
+        defaultL3Name,
         bookId,
         oldLevel1,
         oldLevel2,
@@ -2789,13 +3064,15 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
     } else {
       if (level === 'subject' || level === 'book') {
         if (!name.trim()) return showToast('Name field required.', 'error');
+        const finalHierarchyType = formatHierarchyType(l1Key, l2Key, l3Key);
         onSave({
           type: 'add',
           level,
           name: name.trim(),
           classificationId,
           requires_teacher: level === 'subject' ? requiresTeacher : undefined,
-          hierarchyType,
+          hierarchyType: finalHierarchyType,
+          levelsAvailable: currentLevelsAvailable,
           parentId: modal.parentId,
         });
       } else if (level === 'node') {
@@ -2809,8 +3086,8 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
             level1: modal.parent1,
             level2: n.name.trim(),
             level3: null,
-            pageCount: !level3Exists ? n.pageCount : 0,
-            complexity: !level3Exists ? n.complexity : 'Easy',
+            pageCount: !level3Exists || modal.isLeaf ? n.pageCount : 0,
+            complexity: !level3Exists || modal.isLeaf ? n.complexity : 'Easy',
           }));
         } else if (modal.parentLevel === 'level2') {
           // Adding Level 3s under Level 2
@@ -2827,6 +3104,8 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
             level1: n.name.trim(),
             level2: null,
             level3: null,
+            pageCount: modal.isLeaf ? n.pageCount : 0,
+            complexity: modal.isLeaf ? n.complexity : 'Easy',
           }));
         }
         onSave({ type: 'add', level, bookId, nodesList });
@@ -2904,30 +3183,120 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
                 </>
               )}
               {level === 'book' && (
-                <div>
-                  <label className="block text-xs font-bold text-dark-soft mb-1.5">Hierarchy</label>
-                  <select
-                    value={hierarchyType}
-                    onChange={(e) => setHierarchyType(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
-                  >
-                    <option value="Unit, Chapter, Title">Unit, Chapter, Title</option>
-                    <option value="Section, Chapter, Lesson">Section, Chapter, Lesson</option>
-                    <option value="Module, Topic, Subtopic">Module, Topic, Subtopic</option>
-                    <option value="Heading, Sub Heading, Lesson">
-                      Heading, Sub Heading, Lesson
-                    </option>
-                  </select>
+                <div className="space-y-3 bg-light-bg/20 p-3.5 rounded-2xl border border-light-border">
+                  <div className="text-xs font-bold text-dark-primary flex items-center justify-between">
+                    <span>Book Hierarchy Levels</span>
+                    <span className="text-[10px] bg-brand-lbg text-brand-primary font-extrabold px-2 py-0.5 rounded-full">
+                      {currentLevelsAvailable} Level{currentLevelsAvailable > 1 ? 's' : ''} Active
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-dark-soft mb-1">
+                      Level 1 Type (Root) *
+                    </label>
+                    <select
+                      value={l1Key}
+                      onChange={(e) => handleL1Change(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-semibold"
+                    >
+                      {l1Opts.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-dark-soft mb-1">
+                      Level 2 Type
+                    </label>
+                    <select
+                      value={l2Key}
+                      onChange={(e) => handleL2Change(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-semibold"
+                    >
+                      {l2Opts.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-dark-soft mb-1">
+                      Level 3 Type
+                    </label>
+                    <select
+                      value={l3Key}
+                      onChange={(e) => setL3Key(e.target.value)}
+                      disabled={l2Key === 'NONE'}
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-semibold disabled:opacity-50"
+                    >
+                      {l3Opts.map((o) => (
+                        <option key={o.key} value={o.key}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {isLevelUpgrade && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2 mt-2">
+                      <p className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                        <i className="fas fa-exclamation-triangle"></i> Level Expansion Migration
+                      </p>
+                      <p className="text-[10px] text-amber-800">
+                        Existing lessons in this book will be updated with default values for the
+                        new level(s).
+                      </p>
+                      {oldLevelsAvailable < 2 && currentLevelsAvailable >= 2 && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-900 mb-1">
+                            Default Level 2 Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={defaultL2Name}
+                            onChange={(e) => setDefaultL2Name(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs"
+                            placeholder="e.g. General Chapter"
+                          />
+                        </div>
+                      )}
+                      {currentLevelsAvailable === 3 && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-amber-900 mb-1">
+                            Default Level 3 Name
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={defaultL3Name}
+                            onChange={(e) => setDefaultL3Name(e.target.value)}
+                            className="w-full px-3 py-1.5 border border-amber-300 rounded-lg text-xs"
+                            placeholder="e.g. General Lesson"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               {isEdit &&
                 (level === 'level3' ||
+                  modal.isLeaf ||
                   (level === 'level2' &&
                     modal.pageCount !== null &&
                     modal.pageCount !== undefined)) && (
                   <div className="flex gap-3">
                     <div className="w-1/3">
-                      <label className="block text-xs font-bold text-dark-soft mb-1.5">Sequence</label>
+                      <label className="block text-xs font-bold text-dark-soft mb-1.5">
+                        Sequence
+                      </label>
                       <input
                         type="number"
                         min="1"

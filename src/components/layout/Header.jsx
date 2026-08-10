@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Translate from '../Translate';
+import { supabase } from '../../utils/supabase';
+import AddWorkExceptionsModal from '../portals/admin/AddWorkExceptionsModal';
 
 const Header = ({
   user,
@@ -12,8 +14,49 @@ const Header = ({
 }) => {
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showMobileDropdown, setShowMobileDropdown] = useState(false);
+  const [pendingExceptionsCount, setPendingExceptionsCount] = useState(0);
+  const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
   const dropdownRef = useRef(null);
   const mobileDropdownRef = useRef(null);
+
+  const isManagementOrAdmin = (() => {
+    if (!user) return false;
+    const roles = user.userRoles || user.roles || user.user_metadata?.roles || [];
+    const rolesLower = Array.isArray(roles) ? roles.map((r) => String(r).toLowerCase()) : [];
+    const userRoleStr = String(user.role || '').toLowerCase();
+    return (
+      rolesLower.includes('management') ||
+      rolesLower.includes('admin') ||
+      userRoleStr === 'management' ||
+      userRoleStr === 'admin'
+    );
+  })();
+
+  const fetchPendingExceptions = async () => {
+    if (!isManagementOrAdmin) return;
+    try {
+      const { count, error } = await supabase
+        .from('request_tracker')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      if (!error && count !== null) {
+        setPendingExceptionsCount(count);
+      } else {
+        setPendingExceptionsCount(0);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch pending exceptions:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isManagementOrAdmin) {
+      fetchPendingExceptions();
+      const interval = setInterval(fetchPendingExceptions, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isManagementOrAdmin]);
 
   const teacherId =
     teacherRecord?.teacher_id ||
@@ -312,6 +355,21 @@ const Header = ({
                     )}
                   </div>
                 )}
+                {isManagementOrAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsExceptionsModalOpen(true)}
+                    className="relative p-2.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl text-amber-800 transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-sm"
+                    title="Requests & Exception Approvals"
+                  >
+                    <i className="fas fa-comment-dots text-base" />
+                    {pendingExceptionsCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-pulse">
+                        {pendingExceptionsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={onLogout}
                   className="flex items-center gap-2 px-4 sm:px-6 py-3 bg-red-500 hover:bg-red-700 text-white font-bold rounded-lg transition-all active:scale-95 mr-10"
@@ -343,6 +401,14 @@ const Header = ({
           </div>
         </div>
       </div>
+
+      <AddWorkExceptionsModal
+        isOpen={isExceptionsModalOpen}
+        onClose={() => setIsExceptionsModalOpen(false)}
+        onUpdate={fetchPendingExceptions}
+        user={user}
+        fullName={fullName}
+      />
     </header>
   );
 };

@@ -63,6 +63,103 @@ const AddWorkModalCompleteView = ({
   const [inlineAddWithLevel3, setInlineAddWithLevel3] = useState(false);
   const [inlineAddLevel3Name, setInlineAddLevel3Name] = useState('');
 
+  // Permission & Exception states for Add Work
+  const [checkingPermission, setCheckingPermission] = useState(false);
+  const [isAddWorkAllowed, setIsAddWorkAllowed] = useState(true);
+  const [showRaiseException, setShowRaiseException] = useState(false);
+  const [exceptionNotes, setExceptionNotes] = useState('');
+  const [submittingException, setSubmittingException] = useState(false);
+  const [existingPendingRequest, setExistingPendingRequest] = useState(null);
+
+  const checkAddWorkPermission = async () => {
+    if (!teacher?.id || initialPlan) {
+      setIsAddWorkAllowed(true);
+      return;
+    }
+    setCheckingPermission(true);
+    try {
+      const teacherIdStr = String(teacher.id);
+
+      // 1. Check add_work config table
+      const { data: configData } = await supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'add_work')
+        .maybeSingle();
+
+      const teacherConfig =
+        configData?.val?.[teacherIdStr] || configData?.val?.[Number(teacher.id)];
+      const expireAt = teacherConfig?.expire_at;
+      const allowed = expireAt ? new Date() < new Date(expireAt) : false;
+      setIsAddWorkAllowed(allowed);
+
+      // 2. Check pending exception requests
+      const { data: excData } = await supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'add_work_exceptions')
+        .maybeSingle();
+
+      const allRequests = Array.isArray(excData?.val) ? excData.val : [];
+      const pending = allRequests.find(
+        (r) =>
+          String(r.teacher_id) === teacherIdStr && r.date === todayStr && r.status === 'pending'
+      );
+      setExistingPendingRequest(pending || null);
+    } catch (err) {
+      console.warn('Failed to check add_work permission:', err);
+      setIsAddWorkAllowed(false);
+    } finally {
+      setCheckingPermission(false);
+    }
+  };
+
+  const handleSubmitExceptionRequest = async (e) => {
+    e.preventDefault();
+    if (!exceptionNotes.trim()) {
+      return showToast('Please enter a note for your exception request.', 'warning');
+    }
+    setSubmittingException(true);
+    try {
+      const newReq = {
+        id: 'exc_' + Date.now(),
+        teacher_id: String(teacher.id),
+        teacher_name: teacher.name || 'Teacher',
+        notes: exceptionNotes.trim(),
+        date: todayStr,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      };
+
+      const { data: excData } = await supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'add_work_exceptions')
+        .maybeSingle();
+
+      const currentList = Array.isArray(excData?.val) ? excData.val : [];
+      const updatedList = [newReq, ...currentList.filter((r) => r.id !== newReq.id)];
+
+      const { error } = await supabase
+        .from('admin_configruation')
+        .upsert(
+          { key: 'add_work_exceptions', val: updatedList, updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        );
+
+      if (error) throw error;
+
+      setExistingPendingRequest(newReq);
+      setShowRaiseException(false);
+      setExceptionNotes('');
+      showToast('Exception request submitted to Management for approval.', 'success');
+    } catch (err) {
+      showToast('Failed to submit exception request: ' + err.message, 'error');
+    } finally {
+      setSubmittingException(false);
+    }
+  };
+
   // Close on Escape key press
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -75,6 +172,7 @@ const AddWorkModalCompleteView = ({
   // Initialize from initialPlan if provided
   useEffect(() => {
     if (isOpen && initialPlan) {
+      setIsAddWorkAllowed(true);
       setAwClassId(String(initialPlan.class_id || ''));
       setAwSubjectId(String(initialPlan.subject_id || ''));
       setAwBookId(String(initialPlan.book_id || ''));
@@ -90,6 +188,7 @@ const AddWorkModalCompleteView = ({
         loadAwBookData(initialPlan.book_id);
       }
     } else if (isOpen) {
+      checkAddWorkPermission();
       // Reset form states
       setAwClassId('');
       setAwSubjectId('');
@@ -112,6 +211,8 @@ const AddWorkModalCompleteView = ({
       setInlineAddComplexity('Easy');
       setInlineAddWithLevel3(false);
       setInlineAddLevel3Name('');
+      setShowRaiseException(false);
+      setExceptionNotes('');
     }
   }, [isOpen, initialPlan]);
 
@@ -452,7 +553,9 @@ const AddWorkModalCompleteView = ({
       let targetLevel3 = null;
 
       const getNextSequence = (dataList, bId) => {
-        const seqs = (dataList || []).filter((d) => String(d.book_id) === String(bId)).map((d) => Number(d.sequence) || 0);
+        const seqs = (dataList || [])
+          .filter((d) => String(d.book_id) === String(bId))
+          .map((d) => Number(d.sequence) || 0);
         return (seqs.length > 0 ? Math.max(...seqs) : 0) + 1;
       };
 
@@ -784,66 +887,197 @@ const AddWorkModalCompleteView = ({
             </button>
           </div>
 
-          {/* Favorites pills */}
-          {favorites.length > 0 && (
-            <div className="mb-4 p-1 bg-amber-50/50 border border-amber-100 rounded-xl text-left">
-              <div className="flex flex-wrap gap-1.5">
-                {favorites.map((fav, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => applyFavorite(fav)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                      String(awClassId) === String(fav.classId) &&
-                      String(awBookId) === String(fav.bookId)
-                        ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
-                        : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50 hover:text-amber-800'
-                    }`}
-                  >
-                    <i className="fas fa-star text-amber-400 text-[8px] mr-1" />
-                    {fav.className} - {fav.bookName}
-                  </button>
-                ))}
-              </div>
+          {checkingPermission ? (
+            <div className="py-12 text-center text-xs font-bold text-gray-400">
+              <i className="fas fa-spinner fa-spin mr-2" /> Checking permissions...
             </div>
-          )}
+          ) : !initialPlan && !isAddWorkAllowed ? (
+            <div className="py-4 space-y-4">
+              {existingPendingRequest ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center space-y-2 my-2">
+                  <div className="w-10 h-10 bg-amber-100 text-amber-800 rounded-full flex items-center justify-center mx-auto text-base font-bold">
+                    <i className="fas fa-hourglass-half animate-pulse" />
+                  </div>
+                  <h4 className="font-extrabold text-xs text-amber-900">
+                    Exception Request Pending Approval
+                  </h4>
+                  <p className="text-[11px] text-amber-800 font-semibold leading-relaxed max-w-sm mx-auto">
+                    Your exception request submitted today is awaiting Management review.
+                  </p>
+                  <div className="bg-white p-2.5 rounded-xl border border-amber-200 text-xs italic text-gray-700 text-left font-semibold">
+                    "{existingPendingRequest.notes}"
+                  </div>
+                </div>
+              ) : showRaiseException ? (
+                <form onSubmit={handleSubmitExceptionRequest} className="space-y-3 text-left my-2">
+                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 text-xs text-blue-900 font-extrabold flex items-center gap-2">
+                    <i className="fas fa-[#3b82f6] fa-note-sticky text-blue-600 text-sm"></i>
+                    <span>Requesting Add Work Exception for Today ({todayStr})</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-extrabold text-dark-soft mb-1">
+                      Notes / Reason for Exception *
+                    </label>
+                    <textarea
+                      rows="3"
+                      required
+                      value={exceptionNotes}
+                      onChange={(e) => setExceptionNotes(e.target.value)}
+                      placeholder="Type reason for exception (e.g. Internet connectivity issue, unassigned period, missed logging)..."
+                      className="w-full border rounded-xl p-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft border-gray-300"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRaiseException(false)}
+                      className="px-3.5 py-2 text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingException}
+                      className="px-4 py-2 text-xs font-black text-white bg-brand-primary hover:bg-brand-primary/95 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+                    >
+                      {submittingException ? (
+                        <>
+                          <i className="fas fa-spinner fa-spin"></i> Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-paper-plane"></i> Submit Exception Request
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 text-center space-y-4 my-2">
+                  <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl font-bold">
+                    <i className="fas fa-calendar-xmark"></i>
+                  </div>
+                  <div>
+                    <h4 className="font-black text-sm text-rose-900 mb-1">
+                      Direct Activity Logging Restricted
+                    </h4>
+                    <p className="text-xs text-rose-800 font-bold leading-relaxed max-w-sm mx-auto">
+                      Plan your lesson and then submit the activity from upcoming lessons screen Or
+                      request exception for today
+                    </p>
+                  </div>
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowRaiseException(true)}
+                      className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md inline-flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    >
+                      <i className="fas fa-hand-holding-hand"></i> Raise Exception
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Favorites pills */}
+              {favorites.length > 0 && (
+                <div className="mb-4 p-1 bg-amber-50/50 border border-amber-100 rounded-xl text-left">
+                  <div className="flex flex-wrap gap-1.5">
+                    {favorites.map((fav, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => applyFavorite(fav)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                          String(awClassId) === String(fav.classId) &&
+                          String(awBookId) === String(fav.bookId)
+                            ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-amber-50 hover:text-amber-800'
+                        }`}
+                      >
+                        <i className="fas fa-star text-amber-400 text-[8px] mr-1" />
+                        {fav.className} - {fav.bookName}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          <form onSubmit={handleSubmit} className="space-y-4 text-left">
-            {/* Cover for Absent Teacher checkbox */}
-            <div className="p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-2xl flex flex-col gap-2">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-brand-primary select-none">
-                <input
-                  type="checkbox"
-                  checked={coverMode}
-                  onChange={(e) => {
-                    const isChecked = e.target.checked;
-                    setCoverMode(isChecked);
-                    setAwClassId('');
-                    setAwSubjectId('');
-                    setAwBookId('');
-                    setAwBookData([]);
-                    setAwLevel1('');
-                    setAwLevel2('');
-                    setAwLevel3('');
-                    if (!isChecked) {
-                      setCoverTeacherId('');
-                    }
-                  }}
-                  className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
-                />
-                Cover for Absent Teacher
-              </label>
-
-              {coverMode && (
-                <div className="mt-1 pt-2 border-t border-brand-primary/15">
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                    Select Absent Teacher
+              <form onSubmit={handleSubmit} className="space-y-4 text-left">
+                {/* Cover for Absent Teacher checkbox */}
+                <div className="p-3 bg-brand-primary/5 border border-brand-primary/20 rounded-2xl flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-brand-primary select-none">
+                    <input
+                      type="checkbox"
+                      checked={coverMode}
+                      onChange={(e) => {
+                        const isChecked = e.target.checked;
+                        setCoverMode(isChecked);
+                        setAwClassId('');
+                        setAwSubjectId('');
+                        setAwBookId('');
+                        setAwBookData([]);
+                        setAwLevel1('');
+                        setAwLevel2('');
+                        setAwLevel3('');
+                        if (!isChecked) {
+                          setCoverTeacherId('');
+                        }
+                      }}
+                      className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
+                    />
+                    Cover for Absent Teacher
                   </label>
+
+                  {coverMode && (
+                    <div className="mt-1 pt-2 border-t border-brand-primary/15">
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                        Select Absent Teacher
+                      </label>
+                      <select
+                        value={coverTeacherId}
+                        onChange={(e) => {
+                          setCoverTeacherId(e.target.value);
+                          setAwClassId('');
+                          setAwSubjectId('');
+                          setAwBookId('');
+                          setAwBookData([]);
+                          setAwLevel1('');
+                          setAwLevel2('');
+                          setAwLevel3('');
+                        }}
+                        className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                      >
+                        <option value="">Select Teacher</option>
+                        {allTeachers
+                          .filter((t) => String(t.id) !== String(teacher?.id))
+                          .map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                      </select>
+                      {coverTeacherId && coveredTeacher?.name && (
+                        <p className="mt-2 text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/20">
+                          Logging work covering for:{' '}
+                          <span className="font-extrabold">{coveredTeacher.name}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
+                      Class
+                    </label>
+                  </div>
                   <select
-                    value={coverTeacherId}
+                    value={awClassId}
                     onChange={(e) => {
-                      setCoverTeacherId(e.target.value);
-                      setAwClassId('');
+                      setAwClassId(e.target.value);
                       setAwSubjectId('');
                       setAwBookId('');
                       setAwBookData([]);
@@ -853,438 +1087,402 @@ const AddWorkModalCompleteView = ({
                     }}
                     className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
                   >
-                    <option value="">Select Teacher</option>
-                    {allTeachers
-                      .filter((t) => String(t.id) !== String(teacher?.id))
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
+                    <option value="">Select Class</option>
+                    {awClasses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name || c.class_name}
+                      </option>
+                    ))}
                   </select>
-                  {coverTeacherId && coveredTeacher?.name && (
-                    <p className="mt-2 text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/20">
-                      Logging work covering for:{' '}
-                      <span className="font-extrabold">{coveredTeacher.name}</span>
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
-                  Class
-                </label>
-              </div>
-              <select
-                value={awClassId}
-                onChange={(e) => {
-                  setAwClassId(e.target.value);
-                  setAwSubjectId('');
-                  setAwBookId('');
-                  setAwBookData([]);
-                  setAwLevel1('');
-                  setAwLevel2('');
-                  setAwLevel3('');
-                }}
-                className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-              >
-                <option value="">Select Class</option>
-                {awClasses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.class_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Subject */}
-            {awClassId && (
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Subject
-                </label>
-                <select
-                  value={awSubjectId}
-                  onChange={(e) => {
-                    setAwSubjectId(e.target.value);
-                    setAwBookId('');
-                    setAwBookData([]);
-                    setAwLevel1('');
-                    setAwLevel2('');
-                    setAwLevel3('');
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">Select Subject</option>
-                  {awActiveSubjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Book */}
-            {awClassId && awSubjectId && (
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Syllabus Book
-                </label>
-                <select
-                  value={awBookId}
-                  onChange={(e) => {
-                    if (e.target.value === 'map-new-book') {
-                      setIsMapBookModalOpen(true);
-                    } else {
-                      setAwBookId(e.target.value);
-                      setAwBookData([]);
-                      setAwLevel1('');
-                      setAwLevel2('');
-                      setAwLevel3('');
-                    }
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">Select Book</option>
-                  {awFilteredBooks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                  {awClassId && awSubjectId && (
-                    <option value="map-new-book" className="text-indigo-600 font-bold">
-                      + Map Book to Class...
-                    </option>
-                  )}
-                </select>
-              </div>
-            )}
-
-            {/* Level 1 dropdown */}
-            {awBookId && awBookData.length > 0 && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
-                    Level 1 (Topic/Unit)
-                  </label>
-                  {!initialPlan && (
-                    <button
-                      type="button"
-                      onClick={() => setInlineAddType('level1')}
-                      className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
-                    >
-                      + Add {awLabels.lvl1}
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={awLevel1}
-                  onChange={(e) => {
-                    setAwLevel1(e.target.value);
-                    setAwLevel2('');
-                    setAwLevel3('');
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">Select Level 1</option>
-                  {awLevel1sWithRevision.map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl === '_Revision' ? 'Revision' : lvl}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Level 2 dropdown */}
-            {awLevel1 && awLevel2s.length > 0 && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
-                    Level 2 (Chapter/Sub-unit)
-                  </label>
-                  {!initialPlan && !isRevisionMode && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInlineAddType('level2');
-                        setInlineAddWithLevel3(level3ExistsForLevel1(awLevel1));
-                      }}
-                      className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
-                    >
-                      + Add {awLabels.lvl2}
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={awLevel2}
-                  onChange={(e) => {
-                    setAwLevel2(e.target.value);
-                    setAwLevel3('');
-                  }}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">Select Level 2</option>
-                  {awLevel2s.map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Level 3 dropdown */}
-            {awLevel1 && awLevel2 && awLevel3s.length > 0 && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
-                    Level 3 (Lesson/Detail)
-                  </label>
-                  {!initialPlan && !isRevisionMode && (
-                    <button
-                      type="button"
-                      onClick={() => setInlineAddType('level3')}
-                      className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
-                    >
-                      + Add {awLabels.lvl3}
-                    </button>
-                  )}
-                </div>
-                <select
-                  value={awLevel3}
-                  onChange={(e) => setAwLevel3(e.target.value)}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                >
-                  <option value="">Select Level 3</option>
-                  {awLevel3s.map((lvl) => (
-                    <option key={lvl} value={lvl}>
-                      {lvl}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* If selected path has level3 but level3 not selected, prompt user */}
-            {awLevel2 && level3ExistsForLevel1(awLevel1) && !awLevel3 && (
-              <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
-                <i className="fas fa-circle-info mr-1" /> This topic contains Level-3 subtopics.
-                Please select a Level-3 subtopic to log progress.
-              </p>
-            )}
-
-            {/* Inline Add Level Form */}
-            {inlineAddType && (
-              <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-extrabold text-emerald-800 uppercase">
-                    New{' '}
-                    {inlineAddType === 'level1'
-                      ? awLabels.lvl1
-                      : inlineAddType === 'level2'
-                        ? awLabels.lvl2
-                        : awLabels.lvl3}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setInlineAddType(null)}
-                    className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
-                  >
-                    <i className="fas fa-times" />
-                  </button>
                 </div>
 
-                <input
-                  type="text"
-                  placeholder={`${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3} Name`}
-                  value={inlineAddName}
-                  onChange={(e) => setInlineAddName(e.target.value)}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
-                />
-
-                {inlineAddType === 'level2' && level3ExistsForLevel1(awLevel1) && (
-                  <label className="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 p-2 rounded-xl border border-indigo-100 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={inlineAddWithLevel3}
-                      onChange={(e) => {
-                        setInlineAddWithLevel3(e.target.checked);
-                        setInlineAddLevel3Name('');
-                      }}
-                      className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
-                    />
-                    Add with {awLabels.lvl3}?
-                  </label>
-                )}
-
-                {inlineAddType === 'level2' && inlineAddWithLevel3 && (
-                  <input
-                    type="text"
-                    placeholder={`${awLabels.lvl3} Name`}
-                    value={inlineAddLevel3Name}
-                    onChange={(e) => setInlineAddLevel3Name(e.target.value)}
-                    className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
-                  />
-                )}
-
-                {inlineAddType !== 'level1' && (
-                  <div className="flex gap-3">
-                    <div className="flex-1">
-                      <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                        Page Count
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={inlineAddPageCount}
-                        onChange={(e) => setInlineAddPageCount(Number(e.target.value))}
-                        className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
-                        Complexity
-                      </label>
-                      <select
-                        value={inlineAddComplexity}
-                        onChange={(e) => setInlineAddComplexity(e.target.value)}
-                        className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold text-gray-700"
-                      >
-                        <option value="Easy">Easy</option>
-                        <option value="Moderate">Moderate</option>
-                        <option value="Complex">Complex</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleInlineAddLevel}
-                  disabled={submitting}
-                  className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center"
-                >
-                  {submitting
-                    ? 'Adding...'
-                    : `Add ${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3}`}
-                </button>
-              </div>
-            )}
-
-            {/* Date */}
-            {awBookId && (
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Log Date
-                </label>
-                <input
-                  type="date"
-                  value={awDate}
-                  onChange={(e) => setAwDate(e.target.value)}
-                  className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
-                />
-              </div>
-            )}
-
-            {/* Status & Progress slider (rendered only for leaf nodes and non-revision) */}
-            {awBookId &&
-              awLevel1 &&
-              !isRevisionMode &&
-              isLeafNodeSelected &&
-              !isAwForceRevision && (
-                <div className="space-y-4 bg-gray-50/50 p-4 border border-dashed rounded-2xl">
+                {/* Subject */}
+                {awClassId && (
                   <div>
                     <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      Completion Status
+                      Subject
                     </label>
                     <select
-                      value={awStatus}
-                      onChange={(e) => handleAwStatusChange(e.target.value)}
-                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft cursor-pointer font-bold text-gray-700"
+                      value={awSubjectId}
+                      onChange={(e) => {
+                        setAwSubjectId(e.target.value);
+                        setAwBookId('');
+                        setAwBookData([]);
+                        setAwLevel1('');
+                        setAwLevel2('');
+                        setAwLevel3('');
+                      }}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
                     >
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
+                      <option value="">Select Subject</option>
+                      {awActiveSubjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
+                )}
 
+                {/* Book */}
+                {awClassId && awSubjectId && (
                   <div>
-                    <div className="flex justify-between items-center text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                      <span>Current Progress</span>
-                      <span className="text-brand-primary text-xs font-black bg-brand-primary/10 px-2 py-0.5 rounded-full select-none">
-                        {awProgress}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={awStatus === 'in_progress' ? previousMaxProgress : 0}
-                      max="100"
-                      value={awProgress}
-                      onChange={(e) => handleAwProgressChange(e.target.value)}
-                      className="w-full accent-brand-primary cursor-pointer py-1"
-                    />
-                    <div className="flex justify-between text-[9px] font-bold text-gray-400">
-                      <span>0%</span>
-                      {previousMaxProgress > 0 && (
-                        <span className="text-amber-600 font-extrabold">
-                          Previous Max: {previousMaxProgress}%
-                        </span>
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                      Syllabus Book
+                    </label>
+                    <select
+                      value={awBookId}
+                      onChange={(e) => {
+                        if (e.target.value === 'map-new-book') {
+                          setIsMapBookModalOpen(true);
+                        } else {
+                          setAwBookId(e.target.value);
+                          setAwBookData([]);
+                          setAwLevel1('');
+                          setAwLevel2('');
+                          setAwLevel3('');
+                        }
+                      }}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                    >
+                      <option value="">Select Book</option>
+                      {awFilteredBooks.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                      {awClassId && awSubjectId && (
+                        <option value="map-new-book" className="text-indigo-600 font-bold">
+                          + Map Book to Class...
+                        </option>
                       )}
-                      <span>100%</span>
+                    </select>
+                  </div>
+                )}
+
+                {/* Level 1 dropdown */}
+                {awBookId && awBookData.length > 0 && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
+                        Level 1 (Topic/Unit)
+                      </label>
+                      {!initialPlan && (
+                        <button
+                          type="button"
+                          onClick={() => setInlineAddType('level1')}
+                          className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
+                        >
+                          + Add {awLabels.lvl1}
+                        </button>
+                      )}
                     </div>
+                    <select
+                      value={awLevel1}
+                      onChange={(e) => {
+                        setAwLevel1(e.target.value);
+                        setAwLevel2('');
+                        setAwLevel3('');
+                      }}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                    >
+                      <option value="">Select Level 1</option>
+                      {awLevel1sWithRevision.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl === '_Revision' ? 'Revision' : lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Level 2 dropdown */}
+                {awLevel1 && awLevel2s.length > 0 && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
+                        Level 2 (Chapter/Sub-unit)
+                      </label>
+                      {!initialPlan && !isRevisionMode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInlineAddType('level2');
+                            setInlineAddWithLevel3(level3ExistsForLevel1(awLevel1));
+                          }}
+                          className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
+                        >
+                          + Add {awLabels.lvl2}
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={awLevel2}
+                      onChange={(e) => {
+                        setAwLevel2(e.target.value);
+                        setAwLevel3('');
+                      }}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                    >
+                      <option value="">Select Level 2</option>
+                      {awLevel2s.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Level 3 dropdown */}
+                {awLevel1 && awLevel2 && awLevel3s.length > 0 && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] font-extrabold text-dark-soft uppercase">
+                        Level 3 (Lesson/Detail)
+                      </label>
+                      {!initialPlan && !isRevisionMode && (
+                        <button
+                          type="button"
+                          onClick={() => setInlineAddType('level3')}
+                          className="text-[10px] font-black text-brand-primary hover:underline cursor-pointer"
+                        >
+                          + Add {awLabels.lvl3}
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={awLevel3}
+                      onChange={(e) => setAwLevel3(e.target.value)}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                    >
+                      <option value="">Select Level 3</option>
+                      {awLevel3s.map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* If selected path has level3 but level3 not selected, prompt user */}
+                {awLevel2 && level3ExistsForLevel1(awLevel1) && !awLevel3 && (
+                  <p className="text-[10px] font-bold text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
+                    <i className="fas fa-circle-info mr-1" /> This topic contains Level-3 subtopics.
+                    Please select a Level-3 subtopic to log progress.
+                  </p>
+                )}
+
+                {/* Inline Add Level Form */}
+                {inlineAddType && (
+                  <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-extrabold text-emerald-800 uppercase">
+                        New{' '}
+                        {inlineAddType === 'level1'
+                          ? awLabels.lvl1
+                          : inlineAddType === 'level2'
+                            ? awLabels.lvl2
+                            : awLabels.lvl3}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setInlineAddType(null)}
+                        className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                      >
+                        <i className="fas fa-times" />
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder={`${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3} Name`}
+                      value={inlineAddName}
+                      onChange={(e) => setInlineAddName(e.target.value)}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
+                    />
+
+                    {inlineAddType === 'level2' && level3ExistsForLevel1(awLevel1) && (
+                      <label className="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50 p-2 rounded-xl border border-indigo-100 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={inlineAddWithLevel3}
+                          onChange={(e) => {
+                            setInlineAddWithLevel3(e.target.checked);
+                            setInlineAddLevel3Name('');
+                          }}
+                          className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                        />
+                        Add with {awLabels.lvl3}?
+                      </label>
+                    )}
+
+                    {inlineAddType === 'level2' && inlineAddWithLevel3 && (
+                      <input
+                        type="text"
+                        placeholder={`${awLabels.lvl3} Name`}
+                        value={inlineAddLevel3Name}
+                        onChange={(e) => setInlineAddLevel3Name(e.target.value)}
+                        className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
+                      />
+                    )}
+
+                    {inlineAddType !== 'level1' && (
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
+                            Page Count
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={inlineAddPageCount}
+                            onChange={(e) => setInlineAddPageCount(Number(e.target.value))}
+                            className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">
+                            Complexity
+                          </label>
+                          <select
+                            value={inlineAddComplexity}
+                            onChange={(e) => setInlineAddComplexity(e.target.value)}
+                            className="w-full bg-white border rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-300 font-bold text-gray-700"
+                          >
+                            <option value="Easy">Easy</option>
+                            <option value="Moderate">Moderate</option>
+                            <option value="Complex">Complex</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleInlineAddLevel}
+                      disabled={submitting}
+                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors disabled:opacity-50 cursor-pointer flex items-center justify-center"
+                    >
+                      {submitting
+                        ? 'Adding...'
+                        : `Add ${inlineAddType === 'level1' ? awLabels.lvl1 : inlineAddType === 'level2' ? awLabels.lvl2 : awLabels.lvl3}`}
+                    </button>
+                  </div>
+                )}
+
+                {/* Date */}
+                {awBookId && (
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                      Log Date
+                    </label>
+                    <input
+                      type="date"
+                      value={awDate}
+                      onChange={(e) => setAwDate(e.target.value)}
+                      className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft font-bold text-gray-700"
+                    />
+                  </div>
+                )}
+
+                {/* Status & Progress slider (rendered only for leaf nodes and non-revision) */}
+                {awBookId &&
+                  awLevel1 &&
+                  !isRevisionMode &&
+                  isLeafNodeSelected &&
+                  !isAwForceRevision && (
+                    <div className="space-y-4 bg-gray-50/50 p-4 border border-dashed rounded-2xl">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                          Completion Status
+                        </label>
+                        <select
+                          value={awStatus}
+                          onChange={(e) => handleAwStatusChange(e.target.value)}
+                          className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft cursor-pointer font-bold text-gray-700"
+                        >
+                          <option value="in_progress">In Progress</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                          <span>Current Progress</span>
+                          <span className="text-brand-primary text-xs font-black bg-brand-primary/10 px-2 py-0.5 rounded-full select-none">
+                            {awProgress}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={awStatus === 'in_progress' ? previousMaxProgress : 0}
+                          max="100"
+                          value={awProgress}
+                          onChange={(e) => handleAwProgressChange(e.target.value)}
+                          className="w-full accent-brand-primary cursor-pointer py-1"
+                        />
+                        <div className="flex justify-between text-[9px] font-bold text-gray-400">
+                          <span>0%</span>
+                          {previousMaxProgress > 0 && (
+                            <span className="text-amber-600 font-extrabold">
+                              Previous Max: {previousMaxProgress}%
+                            </span>
+                          )}
+                          <span>100%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Remarks */}
+                {awBookId && (
+                  <div>
+                    <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
+                      Comments / Remarks
+                    </label>
+                    <textarea
+                      value={awComments}
+                      onChange={(e) => setAwComments(e.target.value)}
+                      placeholder="Optional remarks on progress, coverage, issues..."
+                      className="w-full bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft h-16 resize-none font-bold text-gray-755"
+                    />
+                  </div>
+                )}
+
+                {/* Form actions */}
+                <div className="flex justify-between items-center pt-4 border-t flex-wrap gap-3">
+                  {awBookId && awClassId && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddToFavorite(awClassId, awSubjectId, awBookId)}
+                      disabled={!awClassId || !awBookId || submitting}
+                      className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all border border-amber-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <i className="fas fa-star text-amber-500" /> Save Favorite
+                    </button>
+                  )}
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-4 py-2 border rounded-xl text-xs font-black hover:bg-gray-50 transition-all cursor-pointer h-[34px]"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="bg-brand-primary hover:bg-brand-secondary text-white px-5 py-2 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer disabled:opacity-50 h-[34px] flex items-center justify-center"
+                    >
+                      {submitting ? 'Saving...' : 'Save Changes '}
+                    </button>
                   </div>
                 </div>
-              )}
-
-            {/* Remarks */}
-            {awBookId && (
-              <div>
-                <label className="block text-[10px] font-extrabold text-dark-soft uppercase mb-1">
-                  Comments / Remarks
-                </label>
-                <textarea
-                  value={awComments}
-                  onChange={(e) => setAwComments(e.target.value)}
-                  placeholder="Optional remarks on progress, coverage, issues..."
-                  className="w-full bg-white border border-gray-250 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand-soft h-16 resize-none font-bold text-gray-755"
-                />
-              </div>
-            )}
-
-            {/* Form actions */}
-            <div className="flex justify-between items-center pt-4 border-t flex-wrap gap-3">
-              {awBookId && awClassId && (
-                <button
-                  type="button"
-                  onClick={() => handleAddToFavorite(awClassId, awSubjectId, awBookId)}
-                  disabled={!awClassId || !awBookId || submitting}
-                  className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all border border-amber-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <i className="fas fa-star text-amber-500" /> Save Favorite
-                </button>
-              )}
-              <div className="flex gap-2 ml-auto">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 border rounded-xl text-xs font-black hover:bg-gray-50 transition-all cursor-pointer h-[34px]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="bg-brand-primary hover:bg-brand-secondary text-white px-5 py-2 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer disabled:opacity-50 h-[34px] flex items-center justify-center"
-                >
-                  {submitting ? 'Saving...' : 'Save Changes '}
-                </button>
-              </div>
-            </div>
-          </form>
+              </form>
+            </>
+          )}
         </div>
       </div>
 

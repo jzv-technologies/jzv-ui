@@ -14,6 +14,7 @@ import LessonManager from './teacher/LessonManager/LessonManager';
 import EmployeeRecordsView from './admin/employees/EmployeeRecordsView';
 import SalaryTrackerView from './admin/employees/SalaryTrackerView';
 import AdminStudentsView from './admin/AdminStudentsView';
+import AddWorkExceptionsModal from './admin/AddWorkExceptionsModal';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -41,6 +42,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   const [enableSelectedTests, setEnableSelectedTests] = useState([]);
   const [enableExpiryHours, setEnableExpiryHours] = useState(2);
   const [savingEnable, setSavingEnable] = useState(false);
+  const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchConfigs = async () => {
@@ -605,6 +607,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       buttonColor: 'bg-emerald-600 text-white',
       shadow: 'shadow-emerald-200',
       onClick: () => window.open('/portal/display', '_blank'),
+    },
+    {
+      id: 'add-work-exceptions',
+      title: 'Requests & Exceptions',
+      description: 'Review teacher permission requests, exceptions, and track approvals.',
+      icon: 'fa-comment-dots',
+      buttonColor: 'bg-rose-600 text-white',
+      shadow: 'shadow-rose-200',
+      onClick: () => setIsExceptionsModalOpen(true),
     },
   ];
 
@@ -1512,6 +1523,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           )}
         </div>
       )}
+
+      <AddWorkExceptionsModal
+        isOpen={isExceptionsModalOpen}
+        onClose={() => setIsExceptionsModalOpen(false)}
+        user={user}
+        fullName={fullName}
+      />
     </RolePortal>
   );
 };
