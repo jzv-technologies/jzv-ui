@@ -707,6 +707,13 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       let rowsInserted = 0;
       let importFailed = false;
 
+      const maxExistingSeq = Math.max(
+        0,
+        ...currentData
+          .filter((d) => String(d.book_id) === String(importBookId))
+          .map((d) => Number(d.sequence) || 0)
+      );
+
       for (let i = 0; i < csvRows.length; i++) {
         const row = csvRows[i];
         const rowNumInFile = i + 2; // 1-indexed line in file (row 1 is header)
@@ -718,8 +725,8 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         const l3 = toProperCase(lessonIdx !== -1 ? row[lessonIdx] : null);
         if (!l1) continue;
 
-        let seqVal = seqIdx !== -1 ? parseInt(row[seqIdx]) : i + 1;
-        if (isNaN(seqVal)) seqVal = i + 1;
+        let seqVal = seqIdx !== -1 ? parseInt(row[seqIdx]) : maxExistingSeq + i + 1;
+        if (isNaN(seqVal)) seqVal = maxExistingSeq + i + 1;
 
         const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
         let compVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
@@ -787,11 +794,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             rowsInserted++;
           } else {
             // Updating existing record
+            const finalSeq = seqIdx !== -1 ? seqVal : (existingRow.sequence || seqVal);
             const updatePayload = {
               level1: l1,
               level2: l2,
               level3: l3,
-              sequence: seqVal,
+              sequence: finalSeq,
               page_count: pageVal,
               complexity: compVal,
             };
@@ -812,7 +820,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             existingRow.level1 = l1;
             existingRow.level2 = l2;
             existingRow.level3 = l3;
-            existingRow.sequence = seqVal;
+            existingRow.sequence = finalSeq;
             existingRow.page_count = pageVal;
             existingRow.complexity = compVal;
             rowsUpdated++;
