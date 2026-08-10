@@ -677,6 +677,42 @@ const TimetableManager = () => {
     saveState({ assignments: updatedAssignments, slots: updatedSlots });
   };
 
+  const handleRemoveMultipleAssignments = async (idsToRemove) => {
+    if (!idsToRemove || idsToRemove.length === 0) return;
+    const idsSet = new Set(idsToRemove.map(String));
+
+    const removedAssList = assignments.filter((a) => idsSet.has(String(a.id)));
+    const updatedAssignments = assignments.filter((a) => !idsSet.has(String(a.id)));
+
+    // Clear any slots scheduled with these removed assignments
+    const updatedSlots = slots.map((s) => {
+      const match = removedAssList.some(
+        (ass) =>
+          String(s.class_id) === String(ass.class_id) &&
+          String(s.subject_id) === String(ass.subject_id) &&
+          String(s.teacher_id) === String(ass.teacher_id)
+      );
+      if (match) {
+        return { ...s, subject_id: null, teacher_id: null };
+      }
+      return s;
+    });
+
+    if (isSupabaseMode) {
+      const dbIds = idsToRemove.filter((id) => !id.toString().startsWith('local-'));
+      if (dbIds.length > 0) {
+        try {
+          await supabase.from('class_assignments').delete().in('id', dbIds);
+        } catch (err) {
+          console.error('Failed to batch delete class_assignments:', err);
+        }
+      }
+    }
+
+    saveState({ assignments: updatedAssignments, slots: updatedSlots });
+    showToast(`Removed ${idsToRemove.length} duplicate assignment(s)`, 'success');
+  };
+
   const handleSwapTeachers = async ({ teacherAId, teacherBId, classIds, mapMode }) => {
     setLoading(true);
     try {
@@ -1913,6 +1949,7 @@ const TimetableManager = () => {
               onDeleteClass={handleDeleteClass}
               onAddAssignment={handleAddAssignment}
               onRemoveAssignment={handleRemoveAssignment}
+              onRemoveMultipleAssignments={handleRemoveMultipleAssignments}
               slots={slots}
             />
           )}

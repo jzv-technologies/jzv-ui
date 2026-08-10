@@ -118,7 +118,7 @@ const UpcomingLessonsGrid = ({
     return true;
   });
 
-  const renderCard = (plan) => {
+  const renderCard = (plan, delayedType = null) => {
     const title = [plan.lesson?.level1, plan.lesson?.level2, plan.lesson?.level3]
       .filter(Boolean)
       .join(' > ');
@@ -180,13 +180,23 @@ const UpcomingLessonsGrid = ({
           <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
             {formattedDate}
           </span>
-          <div className="flex gap-1">
-            {plan.status === 'in_progress' && (
+          <div className="flex flex-wrap gap-1">
+            {delayedType === 'start_delayed' && (
+              <span className="text-[10px] text-amber-900 font-extrabold bg-amber-200/90 px-2 py-0.5 rounded border border-amber-300 flex items-center gap-1">
+                <i className="fas fa-hourglass-start text-[9px]" /> Start Delayed
+              </span>
+            )}
+            {delayedType === 'completion_delayed' && (
+              <span className="text-[10px] text-rose-900 font-extrabold bg-rose-200/90 px-2 py-0.5 rounded border border-rose-300 flex items-center gap-1">
+                <i className="fas fa-hourglass-half text-[9px]" /> Completion Delayed
+              </span>
+            )}
+            {!delayedType && plan.status === 'in_progress' && (
               <span className="text-[10px] text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded">
                 In Progress
               </span>
             )}
-            {plan.status === 'completed' && (
+            {!delayedType && plan.status === 'completed' && (
               <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">
                 Completed
               </span>
@@ -203,7 +213,8 @@ const UpcomingLessonsGrid = ({
             )}
             {!plan.replan_counter &&
               !plan.carry_forward_counter &&
-              plan.carry_forward_count > 0 && (
+              plan.carry_forward_count > 0 &&
+              !delayedType && (
                 <span className="text-[10px] text-orange-650 font-bold bg-orange-50 px-2 py-0.5 rounded">
                   Delayed
                 </span>
@@ -349,32 +360,34 @@ const UpcomingLessonsGrid = ({
   return (
     <div className="space-y-8 text-left">
       {hasActionRequired && (
-        <div className="p-5 bg-red-100 border border-red-200 rounded-2xl space-y-4">
-          <h3 className="text-xs font-black text-red-800 uppercase tracking-wider flex items-center gap-1.5">
-            <i className="fas fa-exclamation-triangle text-red-500 animate-pulse"></i> Action
+        <div className="p-5 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-rose-500/10 border border-amber-200/80 rounded-2xl space-y-4">
+          <h3 className="text-xs font-black text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+            <i className="fas fa-exclamation-triangle text-amber-600 animate-pulse"></i> Action
             Required
           </h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {startDelayedLessons.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[10px] font-black text-red-700 uppercase tracking-wider">
-                  <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping"></span>
+              <div className="space-y-3 p-4 bg-amber-100/80 border border-amber-300/80 rounded-2xl">
+                <div className="flex items-center gap-2 text-[10px] font-black text-amber-950 uppercase tracking-wider">
+                  <span className="w-2 h-2 bg-amber-600 rounded-full animate-ping"></span>
+                  <i className="fas fa-hourglass-start text-amber-700 text-xs"></i>
                   Start Delayed ({startDelayedLessons.length})
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
-                  {startDelayedLessons.map((plan) => renderCard(plan))}
+                  {startDelayedLessons.map((plan) => renderCard(plan, 'start_delayed'))}
                 </div>
               </div>
             )}
 
             {completionDelayedLessons.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[10px] font-black text-red-700 uppercase tracking-wider">
-                  <span className="w-1.5 h-1.5 bg-red-600 rounded-full animate-ping"></span>
+              <div className="space-y-3 p-4 bg-rose-100/80 border border-rose-300/80 rounded-2xl">
+                <div className="flex items-center gap-2 text-[10px] font-black text-rose-950 uppercase tracking-wider">
+                  <span className="w-2 h-2 bg-rose-600 rounded-full animate-ping"></span>
+                  <i className="fas fa-hourglass-half text-rose-700 text-xs"></i>
                   Completion Delayed ({completionDelayedLessons.length})
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
-                  {completionDelayedLessons.map((plan) => renderCard(plan))}
+                  {completionDelayedLessons.map((plan) => renderCard(plan, 'completion_delayed'))}
                 </div>
               </div>
             )}

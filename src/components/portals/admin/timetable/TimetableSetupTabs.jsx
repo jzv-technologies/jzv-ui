@@ -683,6 +683,158 @@ export const TeachersSetup = ({
 // ==========================================
 // 3. CLASSES SETUP (CRUD + Teacher assignments)
 // ==========================================
+const ResolveDuplicatesModal = ({
+  isOpen,
+  onClose,
+  activeClass,
+  duplicateGroups,
+  onResolve,
+}) => {
+  const [selectedKeeps, setSelectedKeeps] = useState({});
+
+  useEffect(() => {
+    if (!duplicateGroups) return;
+    const initial = {};
+    duplicateGroups.forEach((group) => {
+      if (group.assignments.length > 0) {
+        // Auto-select to keep the teacher who has scheduled slots in the timetable
+        const scheduledAss = group.assignments.find((a) => a.scheduledCount > 0);
+        initial[group.subjectId] = scheduledAss ? scheduledAss.id : group.assignments[0].id;
+      }
+    });
+    setSelectedKeeps(initial);
+  }, [duplicateGroups]);
+
+  if (!isOpen || !duplicateGroups || duplicateGroups.length === 0) return null;
+
+  const handleConfirmSave = () => {
+    const idsToRemove = [];
+    duplicateGroups.forEach((group) => {
+      const keepId = selectedKeeps[group.subjectId];
+      group.assignments.forEach((ass) => {
+        if (String(ass.id) !== String(keepId)) {
+          idsToRemove.push(ass.id);
+        }
+      });
+    });
+
+    if (typeof onResolve === 'function') {
+      onResolve(idsToRemove);
+    }
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white border border-light-border rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="px-5 py-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-900 font-extrabold text-sm">
+            <i className="fas fa-tools text-amber-600 text-base" />
+            <span>Resolve Duplicate Mappings: {activeClass?.name}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-amber-800 hover:text-amber-950 text-xs font-bold p-1 rounded-lg hover:bg-amber-100/60 transition-all"
+          >
+            <i className="fas fa-times text-sm" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">
+          <p className="text-xs text-dark-soft font-semibold">
+            Select which teacher should teach each subject for <strong>{activeClass?.name}</strong>. Unselected duplicate mappings will be removed from class assignments and scheduled timetable slots.
+          </p>
+
+          {duplicateGroups.map((group) => (
+            <div key={group.subjectId} className="border border-amber-200 bg-amber-50/40 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-dark-deepblue flex items-center gap-1.5">
+                  <i className="fas fa-book text-amber-600 text-[11px]" />
+                  {group.subjectName}
+                </span>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                  {group.assignments.length} Teachers Mapped
+                </span>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                {group.assignments.map((ass) => {
+                  const isChecked = String(selectedKeeps[group.subjectId]) === String(ass.id);
+                  return (
+                    <label
+                      key={ass.id}
+                      className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                        isChecked
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold'
+                          : 'bg-white border-light-border text-dark-soft hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="radio"
+                          name={`keep-${group.subjectId}`}
+                          checked={isChecked}
+                          onChange={() =>
+                            setSelectedKeeps((prev) => ({
+                              ...prev,
+                              [group.subjectId]: ass.id,
+                            }))
+                          }
+                          className="text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span>{ass.teacherName}</span>
+                          {ass.scheduledCount > 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                              <i className="fas fa-calendar-check text-[8px] mr-1" />
+                              {ass.scheduledCount} slot{ass.scheduledCount > 1 ? 's' : ''} in timetable
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {isChecked ? (
+                        <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded">
+                          Keep
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-red-600 font-semibold bg-red-50 px-2 py-0.5 rounded">
+                          Will Remove
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3.5 bg-gray-50 border-t border-light-border flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-dark-soft bg-white border border-light-border hover:bg-gray-100 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmSave}
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all flex items-center gap-1.5"
+          >
+            <i className="fas fa-check-circle" />
+            Apply Cleanup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const ClassesSetup = ({
   classes,
   teachers,
@@ -694,12 +846,14 @@ export const ClassesSetup = ({
   onDeleteClass,
   onAddAssignment,
   onRemoveAssignment,
+  onRemoveMultipleAssignments,
   slots,
 }) => {
   const [classNameInput, setClassNameInput] = useState('');
   const [editingClassId, setEditingClassId] = useState(null);
   const [editClassName, setEditClassName] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
 
   // Assignment states
   const [newSubId, setNewSubId] = useState('');
@@ -711,6 +865,50 @@ export const ClassesSetup = ({
       setSelectedClassId(classes[0].id);
     }
   }, [classes]);
+
+  // Duplicate detection helper
+  const duplicateMapByClass = useMemo(() => {
+    const map = {};
+    (assignments || []).forEach((ass) => {
+      const cid = String(ass.class_id);
+      const sid = String(ass.subject_id);
+      if (!map[cid]) map[cid] = {};
+      if (!map[cid][sid]) map[cid][sid] = [];
+      map[cid][sid].push(ass);
+    });
+
+    const duplicates = {};
+    Object.keys(map).forEach((cid) => {
+      Object.keys(map[cid]).forEach((sid) => {
+        if (map[cid][sid].length > 1) {
+          if (!duplicates[cid]) duplicates[cid] = [];
+          const subName = subjects.find((s) => String(s.id) === String(sid))?.name || 'Unknown Subject';
+          const assList = map[cid][sid].map((ass) => {
+            const tName = teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name || 'Unknown Teacher';
+            const scheduledCount = (slots || []).filter(
+              (s) =>
+                String(s.class_id) === String(ass.class_id) &&
+                String(s.subject_id) === String(ass.subject_id) &&
+                String(s.teacher_id) === String(ass.teacher_id)
+            ).length;
+            return { ...ass, teacherName: tName, scheduledCount };
+          });
+          duplicates[cid].push({
+            subjectId: sid,
+            subjectName: subName,
+            assignments: assList,
+          });
+        }
+      });
+    });
+    return duplicates;
+  }, [assignments, subjects, teachers, slots]);
+
+  const activeClassDuplicates = duplicateMapByClass[String(selectedClassId)] || [];
+  const duplicateSubjectIdsSet = useMemo(
+    () => new Set(activeClassDuplicates.map((d) => String(d.subjectId))),
+    [activeClassDuplicates]
+  );
 
   const handleCreateClass = (e) => {
     e.preventDefault();
@@ -773,7 +971,6 @@ export const ClassesSetup = ({
   };
 
   const handleRemoveAssignment = (assId, subjectName, teacherName) => {
-    // Check if slot assignments are scheduled in timetable with this mapping
     const ass = assignments.find((a) => String(a.id) === String(assId));
     const isScheduled = slots.some(
       (s) =>
@@ -831,72 +1028,92 @@ export const ClassesSetup = ({
 
         {/* Classes List */}
         <div className="bg-white border border-light-border rounded-xl overflow-hidden">
-          <div className="bg-light-lbg px-4 py-2 border-b border-light-border text-xs font-bold text-dark-primary uppercase tracking-wide">
-            School Classes ({classes.length})
+          <div className="bg-light-lbg px-4 py-2 border-b border-light-border text-xs font-bold text-dark-primary uppercase tracking-wide flex items-center justify-between">
+            <span>School Classes ({classes.length})</span>
           </div>
           <div className="divide-y divide-light-border max-h-[300px] overflow-y-auto">
             {classes.length === 0 ? (
               <div className="p-4 text-center text-xs text-dark-muted">No classes configured.</div>
             ) : (
-              classes.map((cls) => (
-                <div
-                  key={cls.id}
-                  onClick={() => setSelectedClassId(cls.id)}
-                  className={`flex items-center justify-between px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${
-                    String(selectedClassId) === String(cls.id)
-                      ? 'bg-brand-lbg/50 border-l-4 border-brand-primary font-bold text-brand-primary'
-                      : 'text-dark-primary hover:bg-light-bg/40'
-                  }`}
-                >
-                  {editingClassId === cls.id ? (
-                    <input
-                      type="text"
-                      value={editClassName}
-                      onChange={(e) => setEditClassName(e.target.value)}
-                      className="bg-white border border-light-border rounded px-2 py-1 outline-none text-xs font-bold text-dark-primary w-24"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span>{cls.name}</span>
-                  )}
+              classes.map((cls) => {
+                const hasDupes = duplicateMapByClass[String(cls.id)]?.length > 0;
+                const dupeCount = duplicateMapByClass[String(cls.id)]?.length || 0;
 
-                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                return (
+                  <div
+                    key={cls.id}
+                    onClick={() => setSelectedClassId(cls.id)}
+                    className={`flex items-center justify-between px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${
+                      String(selectedClassId) === String(cls.id)
+                        ? 'bg-brand-lbg/50 border-l-4 border-brand-primary font-bold text-brand-primary'
+                        : 'text-dark-primary hover:bg-light-bg/40'
+                    }`}
+                  >
                     {editingClassId === cls.id ? (
-                      <>
-                        <button
-                          onClick={() => handleSaveEdit(cls.id)}
-                          className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"
-                        >
-                          <i className="fas fa-check"></i>
-                        </button>
-                        <button
-                          onClick={() => setEditingClassId(null)}
-                          className="text-dark-soft hover:bg-light-ui p-1 rounded"
-                        >
-                          <i className="fas fa-times"></i>
-                        </button>
-                      </>
+                      <input
+                        type="text"
+                        value={editClassName}
+                        onChange={(e) => setEditClassName(e.target.value)}
+                        className="bg-white border border-light-border rounded px-2 py-1 outline-none text-xs font-bold text-dark-primary w-24"
+                        onClick={(e) => e.stopPropagation()}
+                      />
                     ) : (
-                      <>
-                        <button
-                          onClick={() => handleStartEdit(cls)}
-                          className="text-blue-medium hover:bg-blue-lbg/50 p-1 rounded"
-                          title="Rename"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClass(cls.id, cls.name)}
-                          className="text-red-primary hover:bg-red-lbg/50 p-1 rounded"
-                          title="Delete Class"
-                        >
-                          <i className="fas fa-trash-alt"></i>
-                        </button>
-                      </>
+                      <span className="flex items-center gap-1.5 truncate min-w-0">
+                        <span className="truncate">{cls.name}</span>
+                        {hasDupes && (
+                          <span
+                            title={`${dupeCount} subject(s) have multiple mapped teachers`}
+                            className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shrink-0"
+                          >
+                            <i className="fas fa-exclamation-triangle mr-0.5 text-[8px]" />
+                            {dupeCount}
+                          </span>
+                        )}
+                      </span>
                     )}
+
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      {editingClassId === cls.id ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(cls.id)}
+                            className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"
+                          >
+                            <i className="fas fa-check"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingClassId(null)}
+                            className="text-dark-soft hover:bg-light-ui p-1 rounded"
+                          >
+                            <i className="fas fa-times"></i>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(cls)}
+                            className="text-blue-medium hover:bg-blue-lbg/50 p-1 rounded"
+                            title="Rename"
+                          >
+                            <i className="fas fa-edit"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClass(cls.id, cls.name)}
+                            className="text-red-primary hover:bg-red-lbg/50 p-1 rounded"
+                            title="Delete Class"
+                          >
+                            <i className="fas fa-trash-alt"></i>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -917,6 +1134,31 @@ export const ClassesSetup = ({
               </p>
             </div>
 
+            {/* Warning Banner if duplicates exist for this class */}
+            {activeClassDuplicates.length > 0 && (
+              <div className="bg-amber-50 border border-amber-300 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-start gap-3">
+                  <i className="fas fa-exclamation-triangle text-amber-600 text-lg shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wide">
+                      Duplicate Teacher Mappings ({activeClassDuplicates.length} Subject{activeClassDuplicates.length > 1 ? 's' : ''})
+                    </h4>
+                    <p className="text-xs text-amber-700 font-semibold mt-0.5">
+                      Some subjects in {activeClass.name} have multiple teachers mapped. This causes conflicts in the Timetable Planner.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsResolveModalOpen(true)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow-sm transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <i className="fas fa-tools text-[11px]" />
+                  Resolve Duplicates
+                </button>
+              </div>
+            )}
+
             {/* Add Assignment form */}
             <div className="bg-light-lbg/50 border border-light-border p-4 rounded-xl">
               <h4 className="text-xs font-bold text-dark-deepblue uppercase tracking-wide mb-2.5">
@@ -935,7 +1177,7 @@ export const ClassesSetup = ({
                     value={newSubId}
                     onChange={(e) => {
                       setNewSubId(e.target.value);
-                      setNewTeacherId(''); // reset teacher
+                      setNewTeacherId('');
                     }}
                     className="w-full bg-white border border-light-border rounded-lg px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
                     required
@@ -983,8 +1225,17 @@ export const ClassesSetup = ({
 
             {/* Mapped Assignments List */}
             <div className="border border-light-border rounded-xl overflow-hidden bg-white">
-              <div className="bg-light-lbg px-4 py-2.5 border-b border-light-border text-xs font-bold text-dark-primary uppercase tracking-wide">
-                Active Teacher-Subject Assignments for {activeClass.name}
+              <div className="bg-light-lbg px-4 py-2.5 border-b border-light-border text-xs font-bold text-dark-primary uppercase tracking-wide flex items-center justify-between">
+                <span>Active Teacher-Subject Assignments for {activeClass.name}</span>
+                {activeClassDuplicates.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsResolveModalOpen(true)}
+                    className="text-amber-800 hover:text-amber-950 font-bold text-[11px] underline"
+                  >
+                    Clean up duplicates
+                  </button>
+                )}
               </div>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -1014,10 +1265,48 @@ export const ClassesSetup = ({
                       const tName =
                         teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name ||
                         'Unknown Teacher';
+                      const isDuplicate = duplicateSubjectIdsSet.has(String(ass.subject_id));
+                      const scheduledCount = (slots || []).filter(
+                        (s) =>
+                          String(s.class_id) === String(ass.class_id) &&
+                          String(s.subject_id) === String(ass.subject_id) &&
+                          String(s.teacher_id) === String(ass.teacher_id)
+                      ).length;
+
                       return (
-                        <tr key={ass.id} className="hover:bg-light-bg/10">
-                          <td className="py-2.5 px-4 font-bold text-dark-primary">{subName}</td>
-                          <td className="py-2.5 px-4 font-semibold text-dark-soft">{tName}</td>
+                        <tr
+                          key={ass.id}
+                          className={`transition-all ${
+                            isDuplicate
+                              ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
+                              : 'hover:bg-light-bg/10'
+                          }`}
+                        >
+                          <td className="py-2.5 px-4 font-bold text-dark-primary">
+                            <span className="flex items-center gap-2">
+                              <span>{subName}</span>
+                              {isDuplicate && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
+                                  <i className="fas fa-exclamation-triangle mr-1 text-[8px]" />
+                                  Multiple Teachers
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 font-semibold text-dark-soft">
+                            <span className="flex items-center gap-2">
+                              <span>{tName}</span>
+                              {scheduledCount > 0 && (
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200"
+                                  title={`${scheduledCount} period slot(s) scheduled in weekly timetable for this class and teacher`}
+                                >
+                                  <i className="fas fa-calendar-check text-[8px] mr-1" />
+                                  {scheduledCount} slot{scheduledCount > 1 ? 's' : ''} scheduled
+                                </span>
+                              )}
+                            </span>
+                          </td>
                           <td className="py-2 px-4 text-right">
                             <button
                               type="button"
@@ -1041,6 +1330,14 @@ export const ClassesSetup = ({
           </div>
         )}
       </div>
+
+      <ResolveDuplicatesModal
+        isOpen={isResolveModalOpen}
+        onClose={() => setIsResolveModalOpen(false)}
+        activeClass={activeClass}
+        duplicateGroups={activeClassDuplicates}
+        onResolve={onRemoveMultipleAssignments}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig !== null}
