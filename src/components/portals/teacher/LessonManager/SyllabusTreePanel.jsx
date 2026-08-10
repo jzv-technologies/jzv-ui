@@ -45,7 +45,14 @@ const SyllabusTreePanel = ({
       });
     }
     
-    return lessons;
+    return [...lessons].sort((a, b) => {
+      const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+      const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
+      if (seqA !== null && seqB !== null) return seqA - seqB;
+      if (seqA !== null) return -1;
+      if (seqB !== null) return 1;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
   }, [selectedBookId, allLessons, progressRecords, selectedClassId, filterStatus]);
 
   const syllabusTree = useMemo(() => {

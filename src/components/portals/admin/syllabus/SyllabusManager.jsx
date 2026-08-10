@@ -545,6 +545,8 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         .from('syl_lessons')
         .select('*')
         .eq('book_id', bookId)
+        .order('sequence', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true })
         .range(0, 9999);
       if (error) throw error;
 
@@ -587,16 +589,18 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       const bookData = syllabusData.filter((d) => String(d.book_id) === String(book.id));
 
       const sortedData = [...bookData].sort((a, b) => {
-        const l1Compare = (a.level1 || '').localeCompare(b.level1 || '');
-        if (l1Compare !== 0) return l1Compare;
+        const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+        const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
 
-        const l2Compare = (a.level2 || '').localeCompare(b.level2 || '');
-        if (l2Compare !== 0) return l2Compare;
+        if (seqA !== null && seqB !== null) return seqA - seqB;
+        if (seqA !== null) return -1;
+        if (seqB !== null) return 1;
 
-        return (a.level3 || '').localeCompare(b.level3 || '');
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
       });
 
-      const sheetData = sortedData.map((d) => ({
+      const sheetData = sortedData.map((d, index) => ({
+        Sequence: d.sequence !== null && d.sequence !== undefined ? d.sequence : index + 1,
         ID: d.id || '',
         Level1: d.level1 || '',
         Level2: d.level2 || '',
@@ -673,12 +677,13 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     setLoading(true);
     setImportProgress({ current: 0, total: csvRows.length });
 
-    const { isUpdateMode, idCol, unitCol, chapterCol, lessonCol, complexityCol, pageCol } =
+    const { isUpdateMode, idCol, unitCol, chapterCol, lessonCol, sequenceCol, complexityCol, pageCol } =
       mappings;
     const idIdx = isUpdateMode && idCol ? csvHeaders.indexOf(idCol) : -1;
     const unitIdx = unitCol ? csvHeaders.indexOf(unitCol) : -1;
     const chapterIdx = chapterCol ? csvHeaders.indexOf(chapterCol) : -1;
     const lessonIdx = lessonCol ? csvHeaders.indexOf(lessonCol) : -1;
+    const seqIdx = sequenceCol ? csvHeaders.indexOf(sequenceCol) : -1;
     const complexityIdx = complexityCol ? csvHeaders.indexOf(complexityCol) : -1;
     const pageIdx = pageCol ? csvHeaders.indexOf(pageCol) : -1;
 
@@ -712,6 +717,9 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         const l2 = toProperCase(chapterIdx !== -1 ? row[chapterIdx] : null);
         const l3 = toProperCase(lessonIdx !== -1 ? row[lessonIdx] : null);
         if (!l1) continue;
+
+        let seqVal = seqIdx !== -1 ? parseInt(row[seqIdx]) : i + 1;
+        if (isNaN(seqVal)) seqVal = i + 1;
 
         const pageVal = pageIdx !== -1 ? parseInt(row[pageIdx]) || 0 : 0;
         let compVal = complexityIdx !== -1 ? row[complexityIdx] : 'Easy';
@@ -754,6 +762,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               level1: l1,
               level2: l2,
               level3: l3,
+              sequence: seqVal,
               page_count: pageVal,
               complexity: compVal,
             };
@@ -782,6 +791,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
               level1: l1,
               level2: l2,
               level3: l3,
+              sequence: seqVal,
               page_count: pageVal,
               complexity: compVal,
             };
@@ -802,6 +812,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             existingRow.level1 = l1;
             existingRow.level2 = l2;
             existingRow.level3 = l3;
+            existingRow.sequence = seqVal;
             existingRow.page_count = pageVal;
             existingRow.complexity = compVal;
             rowsUpdated++;
@@ -1497,6 +1508,61 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const activeSubject = subjects.find((s) => String(s.id) === String(activeSubjectId));
   const activeBooks = books.filter((b) => String(b.subject_id) === String(activeSubjectId));
 
+  const handleMoveSequence = async (node, direction) => {
+    if (!node || !node.id) return;
+    const bookLessons = syllabusData
+      .filter((d) => String(d.book_id) === String(node.book_id))
+      .sort((a, b) => {
+        const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+        const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
+        if (seqA !== null && seqB !== null) return seqA - seqB;
+        if (seqA !== null) return -1;
+        if (seqB !== null) return 1;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
+
+    const currentIndex = bookLessons.findIndex((d) => String(d.id) === String(node.id));
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= bookLessons.length) return;
+
+    const targetNode = bookLessons[targetIndex];
+
+    const updatedBookLessons = bookLessons.map((item, idx) => ({
+      ...item,
+      sequence: idx + 1,
+    }));
+
+    const currentSeq = updatedBookLessons[currentIndex].sequence;
+    const targetSeq = updatedBookLessons[targetIndex].sequence;
+    updatedBookLessons[currentIndex].sequence = targetSeq;
+    updatedBookLessons[targetIndex].sequence = currentSeq;
+
+    if (isSupabaseMode) {
+      setLoading(true);
+      try {
+        await Promise.all([
+          supabase.from('syl_lessons').update({ sequence: targetSeq }).eq('id', node.id),
+          supabase.from('syl_lessons').update({ sequence: currentSeq }).eq('id', targetNode.id),
+        ]);
+      } catch (err) {
+        showToast('Error updating sequence: ' + err.message, 'error');
+        setLoading(false);
+        return;
+      }
+      setLoading(false);
+    }
+
+    const newSyllabusData = syllabusData.map((d) => {
+      const updatedItem = updatedBookLessons.find((u) => String(u.id) === String(d.id));
+      return updatedItem ? updatedItem : d;
+    });
+
+    saveState({ syllabusData: newSyllabusData });
+    showToast('Sequence updated successfully!', 'success');
+  };
+
   const getNormalizedL1 = (rawL1) => {
     if (!rawL1 || !String(rawL1).trim()) return 'General / Level 1';
     const trimmed = String(rawL1).trim();
@@ -1511,6 +1577,15 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     const bookData = syllabusData.filter(
       (d) => String(d.book_id || '').trim() === String(book.id || '').trim()
     );
+    const sortedBookData = [...bookData].sort((a, b) => {
+      const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+      const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
+      if (seqA !== null && seqB !== null) return seqA - seqB;
+      if (seqA !== null) return -1;
+      if (seqB !== null) return 1;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+
     const levels = (book.hierarchy_type || 'Unit, Chapter, Lesson').split(',').map((s) => s.trim());
     const l1Name = levels[0] || 'Level 1';
     const l2Name = levels[1] || 'Level 2';
@@ -1518,7 +1593,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
     // Group by level1
     const grouped = {};
-    bookData.forEach((d) => {
+    sortedBookData.forEach((d) => {
       const l1 = getNormalizedL1(d.level1);
       if (!grouped[l1]) grouped[l1] = {};
 
@@ -1543,6 +1618,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
           grouped[l1][l2].complexity = d.complexity || 'Easy';
           grouped[l1][l2].hasPlaceholder = true;
           grouped[l1][l2].placeholderId = d.id;
+          grouped[l1][l2].placeholderNode = d;
         }
       } else {
         // If it's just a level1 leaf (e.g. just a unit without chapters)
@@ -1700,8 +1776,33 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
                                 <span className="truncate">{node.level3}</span>
+                                {node.sequence !== undefined && node.sequence !== null && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0" title="Sequence Number">
+                                    #{node.sequence}
+                                  </span>
+                                )}
                               </div>
-                              <div className="flex gap-2 items-center shrink-0 justify-end">
+                              <div className="flex gap-1.5 items-center shrink-0 justify-end">
+                                {(isAdmin || isTeacher) && (
+                                  <div className="flex items-center gap-0.5 border rounded bg-white px-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveSequence(node, 'up')}
+                                      className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                      title="Move Sequence Up"
+                                    >
+                                      <i className="fas fa-arrow-up"></i>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMoveSequence(node, 'down')}
+                                      className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                      title="Move Sequence Down"
+                                    >
+                                      <i className="fas fa-arrow-down"></i>
+                                    </button>
+                                  </div>
+                                )}
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
                                   <i className="far fa-file-lines mr-1" />
                                   {node.page_count} pages
@@ -1723,6 +1824,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       name: node.level3,
                                       pageCount: node.page_count,
                                       complexity: node.complexity,
+                                      sequence: node.sequence,
                                       hierarchy: book.hierarchy_type,
                                     })
                                   }
@@ -1871,8 +1973,33 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                     <div className="flex items-center gap-2 min-w-0 flex-1">
                                       <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
                                       <span className="truncate">{node.level3}</span>
+                                      {node.sequence !== undefined && node.sequence !== null && (
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0" title="Sequence Number">
+                                          #{node.sequence}
+                                        </span>
+                                      )}
                                     </div>
-                                    <div className="flex gap-2 items-center shrink-0 justify-end">
+                                    <div className="flex gap-1.5 items-center shrink-0 justify-end">
+                                      {(isAdmin || isTeacher) && (
+                                        <div className="flex items-center gap-0.5 border rounded bg-white px-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMoveSequence(node, 'up')}
+                                            className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                            title="Move Sequence Up"
+                                          >
+                                            <i className="fas fa-arrow-up"></i>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleMoveSequence(node, 'down')}
+                                            className="p-0.5 text-gray-600 hover:text-brand-primary text-[10px]"
+                                            title="Move Sequence Down"
+                                          >
+                                            <i className="fas fa-arrow-down"></i>
+                                          </button>
+                                        </div>
+                                      )}
                                       <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
                                         <i className="far fa-file-lines mr-1" />
                                         {node.page_count} pages
@@ -1895,6 +2022,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                             name: node.level3,
                                             pageCount: node.page_count,
                                             complexity: node.complexity,
+                                            sequence: node.sequence,
                                             hierarchy: book.hierarchy_type,
                                           })
                                         }
@@ -2590,6 +2718,9 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
       ? pComp
       : 'Easy'
   );
+  const [sequence, setSequence] = useState(
+    isEdit ? (modal.sequence !== undefined ? modal.sequence : (modal.node?.sequence !== undefined ? modal.node.sequence : '')) : ''
+  );
 
   const [bulkNodes, setBulkNodes] = useState([
     { id: 1, name: '', pageCount: 5, complexity: 'Easy' },
@@ -2644,6 +2775,7 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
         oldLevel3,
         pageCount,
         complexity,
+        sequence: sequence !== '' ? Number(sequence) : undefined,
         node: modal.node,
       });
     } else {
@@ -2785,7 +2917,18 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
                   (level === 'level2' &&
                     modal.pageCount !== null &&
                     modal.pageCount !== undefined)) && (
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
+                    <div className="w-1/3">
+                      <label className="block text-xs font-bold text-dark-soft mb-1.5">Sequence</label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Auto"
+                        value={sequence}
+                        onChange={(e) => setSequence(e.target.value)}
+                        className="w-full px-3 py-2 border rounded-xl"
+                      />
+                    </div>
                     <div className="flex-1">
                       <label className="block text-xs font-bold text-dark-soft mb-1.5">Pages</label>
                       <input

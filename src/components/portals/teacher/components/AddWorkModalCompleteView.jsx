@@ -124,7 +124,9 @@ const AddWorkModalCompleteView = ({
       const { data, error } = await supabase
         .from('syl_lessons')
         .select('*')
-        .eq('book_id', bookId);
+        .eq('book_id', bookId)
+        .order('sequence', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true });
       if (error) throw error;
       setAwBookData(data || []);
     } catch (err) {
@@ -449,11 +451,17 @@ const AddWorkModalCompleteView = ({
       let targetLevel2 = null;
       let targetLevel3 = null;
 
+      const getNextSequence = (dataList, bId) => {
+        const seqs = (dataList || []).filter((d) => String(d.book_id) === String(bId)).map((d) => Number(d.sequence) || 0);
+        return (seqs.length > 0 ? Math.max(...seqs) : 0) + 1;
+      };
+
       if (inlineAddType === 'level1') {
         targetLevel1 = inlineAddName.trim();
         const exists = awBookData.some((d) => d.level1 === targetLevel1);
         if (exists) throw new Error(`${awLabels.lvl1} "${targetLevel1}" already exists.`);
 
+        const nextSeq = getNextSequence(awBookData, awBookId);
         const { data: insRes, error } = await supabase
           .from('syl_lessons')
           .insert([
@@ -462,6 +470,7 @@ const AddWorkModalCompleteView = ({
               level1: targetLevel1,
               level2: null,
               level3: null,
+              sequence: nextSeq,
               page_count: 0,
               complexity: 'Easy',
             },
@@ -486,6 +495,7 @@ const AddWorkModalCompleteView = ({
           let updatedData = [...awBookData];
 
           if (!l2Exists) {
+            const nextSeq1 = getNextSequence(updatedData, awBookId);
             const { data: l2Res, error: l2Err } = await supabase
               .from('syl_lessons')
               .insert([
@@ -494,6 +504,7 @@ const AddWorkModalCompleteView = ({
                   level1: targetLevel1,
                   level2: targetLevel2,
                   level3: null,
+                  sequence: nextSeq1,
                   page_count: 0,
                   complexity: 'Easy',
                 },
@@ -503,6 +514,7 @@ const AddWorkModalCompleteView = ({
             updatedData.push(l2Res[0]);
           }
 
+          const nextSeq2 = getNextSequence(updatedData, awBookId);
           const { data: l3Res, error: l3Err } = await supabase
             .from('syl_lessons')
             .insert([
@@ -511,6 +523,7 @@ const AddWorkModalCompleteView = ({
                 level1: targetLevel1,
                 level2: targetLevel2,
                 level3: targetLevel3,
+                sequence: nextSeq2,
                 page_count: Number(inlineAddPageCount) || 0,
                 complexity: inlineAddComplexity || 'Easy',
               },
@@ -524,11 +537,13 @@ const AddWorkModalCompleteView = ({
           setAwLevel2(targetLevel2);
           setAwLevel3(targetLevel3);
         } else {
+          const nextSeq = getNextSequence(awBookData, awBookId);
           const recordData = {
             book_id: awBookId,
             level1: targetLevel1,
             level2: targetLevel2,
             level3: null,
+            sequence: nextSeq,
             page_count: Number(inlineAddPageCount) || 0,
             complexity: inlineAddComplexity || 'Easy',
           };
@@ -571,11 +586,13 @@ const AddWorkModalCompleteView = ({
         targetLevel2 = awLevel2 || 'General';
         targetLevel3 = inlineAddName.trim();
 
+        const nextSeq = getNextSequence(awBookData, awBookId);
         const recordData = {
           book_id: awBookId,
           level1: targetLevel1,
           level2: targetLevel2,
           level3: targetLevel3,
+          sequence: nextSeq,
           page_count: Number(inlineAddPageCount) || 0,
           complexity: inlineAddComplexity || 'Easy',
         };

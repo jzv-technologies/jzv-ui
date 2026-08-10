@@ -193,7 +193,11 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           supabase.from('class_assignments').select('*'),
           supabase.from('syl_books').select('*'),
           supabase.from('map_class_books').select('*'),
-          supabase.from('syl_lessons').select('*'),
+          supabase
+            .from('syl_lessons')
+            .select('*')
+            .order('sequence', { ascending: true, nullsFirst: false })
+            .order('id', { ascending: true }),
           supabase.from('lesson_plans').select('*'),
         ];
 
@@ -391,7 +395,15 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // -------------------------
   const currentBookLessons = useMemo(() => {
     if (!selectedBookId) return [];
-    return allLessons.filter((l) => String(l.book_id) === String(selectedBookId));
+    const filtered = allLessons.filter((l) => String(l.book_id) === String(selectedBookId));
+    return [...filtered].sort((a, b) => {
+      const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+      const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
+      if (seqA !== null && seqB !== null) return seqA - seqB;
+      if (seqA !== null) return -1;
+      if (seqB !== null) return 1;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
   }, [selectedBookId, allLessons]);
 
   const syllabusTree = useMemo(() => {

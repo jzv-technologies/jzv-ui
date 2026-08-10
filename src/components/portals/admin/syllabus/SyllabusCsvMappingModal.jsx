@@ -6,6 +6,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
   const [unitCol, setUnitCol] = useState('');
   const [chapterCol, setChapterCol] = useState('');
   const [lessonCol, setLessonCol] = useState('');
+  const [sequenceCol, setSequenceCol] = useState('');
   const [complexityCol, setComplexityCol] = useState('');
   const [pageCol, setPageCol] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -43,6 +44,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     setUnitCol(findBestMatch([l1NameStr, 'level1', 'level 1', 'unit', 'section', 'module', 'heading']));
     setChapterCol(findBestMatch([l2NameStr, 'level2', 'level 2', 'chapter', 'topic', 'subheading', 'sub heading']));
     setLessonCol(findBestMatch([l3NameStr, 'level3', 'level 3', 'lesson', 'title', 'subtopic', 'sub topic']));
+    setSequenceCol(findBestMatch(['sequence', 'seq', 'order', 's.no', 'sl.no', 'sl no', 's no', 'sno', 'position']));
     setComplexityCol(findBestMatch(['complexity', 'difficulty', 'level']));
     setPageCol(findBestMatch(['page_count', 'page count', 'pagecount', 'pages', 'page_col', 'page']));
   }, [isOpen, headers, hierarchy]);
@@ -58,6 +60,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     if (hasLevel1 && unitCol) mapped.push(unitCol);
     if (hasLevel2 && chapterCol) mapped.push(chapterCol);
     if (hasLevel3 && lessonCol) mapped.push(lessonCol);
+    if (sequenceCol) mapped.push(sequenceCol);
     if (complexityCol) mapped.push(complexityCol);
     if (pageCol) mapped.push(pageCol);
 
@@ -68,7 +71,7 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     }
 
     setErrorMsg("");
-    onImport({ isUpdateMode, idCol: isUpdateMode ? idCol : '', unitCol, chapterCol, lessonCol, complexityCol, pageCol });
+    onImport({ isUpdateMode, idCol: isUpdateMode ? idCol : '', unitCol, chapterCol, lessonCol, sequenceCol, complexityCol, pageCol });
   };
 
   return (
@@ -192,6 +195,18 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
                     </select>
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-dark-soft uppercase mb-1">Sequence / Order Column</label>
+                <select
+                  value={sequenceCol}
+                  onChange={(e) => setSequenceCol(e.target.value)}
+                  className="w-full bg-light-bg/25 border border-light-border rounded-xl px-3 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+                >
+                  <option value="">-- None (Auto-assign File Row Order) --</option>
+                  {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
               </div>
 
               {hasLevel3 && (

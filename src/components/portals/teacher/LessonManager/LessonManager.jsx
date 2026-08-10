@@ -268,7 +268,11 @@ const LessonManager = ({
           supabase.from('class_assignments').select('*'),
           supabase.from('syl_books').select('*'),
           supabase.from('map_class_books').select('*'),
-          supabase.from('syl_lessons').select('*'),
+          supabase
+            .from('syl_lessons')
+            .select('*')
+            .order('sequence', { ascending: true, nullsFirst: false })
+            .order('id', { ascending: true }),
           supabase
             .from('trk_lesson_level_progress')
             .select(

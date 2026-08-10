@@ -297,7 +297,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           .select(
             'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
           ),
-        supabase.from('syl_lessons').select('*'),
+        supabase
+          .from('syl_lessons')
+          .select('*')
+          .order('sequence', { ascending: true, nullsFirst: false })
+          .order('id', { ascending: true }),
         supabase
           .from('trk_lesson_level_progress')
           .select(
@@ -775,7 +779,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setExpandedLogIds({});
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
-        supabase.from('syl_lessons').select('*').eq('book_id', bookId),
+        supabase
+          .from('syl_lessons')
+          .select('*')
+          .eq('book_id', bookId)
+          .order('sequence', { ascending: true, nullsFirst: false })
+          .order('id', { ascending: true }),
         supabase
           .from('trk_lesson_level_progress')
           .select(
@@ -802,6 +811,15 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           return !hasL2orL3;
         }
         return false;
+      });
+
+      bookLessons.sort((a, b) => {
+        const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
+        const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
+        if (seqA !== null && seqB !== null) return seqA - seqB;
+        if (seqA !== null) return -1;
+        if (seqB !== null) return 1;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
       });
 
       const relevantLogs = mappedLogs.filter((l) =>
