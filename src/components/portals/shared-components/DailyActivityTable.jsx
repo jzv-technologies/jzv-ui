@@ -183,7 +183,17 @@ const DailyActivityTable = ({
   const classOpts = classes.map((c) => ({ id: String(c.id), label: c.name || c.class_name }));
   const subjectOpts = subjects.map((s) => ({ id: String(s.id), label: s.name }));
   const bookOpts = books.map((b) => ({ id: String(b.id), label: b.name }));
-  const teacherOpts = teachers.map((t) => ({ id: String(t.id), label: t.name }));
+  const teacherOpts = teachers.map((t) => {
+    const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+    return {
+      id: String(t.id || t.teacher_id),
+      label: t.name || t.full_name || t.employee_name,
+      is_male: t.is_male,
+      is_female: isFemale,
+      prefix: isFemale ? 'fa-female' : 'fa-male',
+      prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
+    };
+  });
   const isParent = role === 'parent';
 
   return (

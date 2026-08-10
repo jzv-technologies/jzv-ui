@@ -78,34 +78,34 @@ const AddWorkModalCompleteView = ({
     }
     setCheckingPermission(true);
     try {
-      const teacherIdStr = String(teacher.id);
+      const teacherIdNum = Number(teacher.id);
 
-      // 1. Check add_work config table
-      const { data: configData } = await supabase
-        .from('admin_configruation')
-        .select('val')
-        .eq('key', 'add_work')
+      // 1. Check active approved request in request_tracker
+      const { data: approvedReq } = await supabase
+        .from('request_tracker')
+        .select('*')
+        .eq('requester_id', teacherIdNum)
+        .eq('request_type', 'Add Work Access')
+        .eq('status', 'approved')
+        .gt('expire_at', new Date().toISOString())
+        .order('id', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      const teacherConfig =
-        configData?.val?.[teacherIdStr] || configData?.val?.[Number(teacher.id)];
-      const expireAt = teacherConfig?.expire_at;
-      const allowed = expireAt ? new Date() < new Date(expireAt) : false;
-      setIsAddWorkAllowed(allowed);
+      setIsAddWorkAllowed(!!approvedReq);
 
       // 2. Check pending exception requests
-      const { data: excData } = await supabase
-        .from('admin_configruation')
-        .select('val')
-        .eq('key', 'add_work_exceptions')
+      const { data: pendingReq } = await supabase
+        .from('request_tracker')
+        .select('*')
+        .eq('requester_id', teacherIdNum)
+        .eq('request_type', 'Add Work Access')
+        .eq('status', 'pending')
+        .order('id', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      const allRequests = Array.isArray(excData?.val) ? excData.val : [];
-      const pending = allRequests.find(
-        (r) =>
-          String(r.teacher_id) === teacherIdStr && r.date === todayStr && r.status === 'pending'
-      );
-      setExistingPendingRequest(pending || null);
+      setExistingPendingRequest(pendingReq || null);
     } catch (err) {
       console.warn('Failed to check add_work permission:', err);
       setIsAddWorkAllowed(false);
@@ -121,35 +121,23 @@ const AddWorkModalCompleteView = ({
     }
     setSubmittingException(true);
     try {
-      const newReq = {
-        id: 'exc_' + Date.now(),
-        teacher_id: String(teacher.id),
-        teacher_name: teacher.name || 'Teacher',
+      const newRecord = {
+        requester_id: Number(teacher.id),
+        requester_name: teacher.name || 'Teacher',
+        request_type: 'Add Work Access',
         notes: exceptionNotes.trim(),
-        date: todayStr,
         status: 'pending',
-        created_at: new Date().toISOString(),
       };
 
-      const { data: excData } = await supabase
-        .from('admin_configruation')
-        .select('val')
-        .eq('key', 'add_work_exceptions')
-        .maybeSingle();
-
-      const currentList = Array.isArray(excData?.val) ? excData.val : [];
-      const updatedList = [newReq, ...currentList.filter((r) => r.id !== newReq.id)];
-
-      const { error } = await supabase
-        .from('admin_configruation')
-        .upsert(
-          { key: 'add_work_exceptions', val: updatedList, updated_at: new Date().toISOString() },
-          { onConflict: 'key' }
-        );
+      const { data, error } = await supabase
+        .from('request_tracker')
+        .insert(newRecord)
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setExistingPendingRequest(newReq);
+      setExistingPendingRequest(data || newRecord);
       setShowRaiseException(false);
       setExceptionNotes('');
       showToast('Exception request submitted to Management for approval.', 'success');

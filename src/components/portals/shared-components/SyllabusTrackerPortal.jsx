@@ -84,6 +84,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [filterSubjects, setFilterSubjects] = useState([]);
   const [filterBooks, setFilterBooks] = useState([]);
   const [filterTeachers, setFilterTeachers] = useState([]);
+  const [teacherGenderFilter, setTeacherGenderFilter] = useState('all');
   const [filterTopic, setFilterTopic] = useState('');
   const [isMobileTopicSearchOpen, setIsMobileTopicSearchOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
@@ -892,6 +893,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setFilterSubjects([]);
     setFilterBooks([]);
     setFilterTeachers([]);
+    setTeacherGenderFilter('all');
     setFilterTopic('');
     setFilterStatus('');
     setTimeFilter('7_days');
@@ -911,6 +913,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       }
       if (filterTeachers.length > 0 && !filterTeachers.includes(String(entry.teacher_id))) {
         return false;
+      }
+      if (teacherGenderFilter && teacherGenderFilter !== 'all') {
+        const tObj = teachers.find((t) => String(t.id || t.teacher_id) === String(entry.teacher_id));
+        const isFemale = tObj?.is_female === true || tObj?.gender === 'female' || tObj?.is_male === false;
+        if (teacherGenderFilter === 'male' && isFemale) return false;
+        if (teacherGenderFilter === 'female' && !isFemale) return false;
       }
       if (filterTopic && !entry.lessonPath?.toLowerCase().includes(filterTopic.toLowerCase())) {
         return false;
@@ -1466,9 +1474,21 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Teacher"
-                    options={teachers.map((t) => ({ id: String(t.id), label: t.name }))}
+                    options={teachers.map((t) => {
+                      const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                      return {
+                        id: String(t.id || t.teacher_id),
+                        label: t.name || t.full_name || t.employee_name,
+                        is_male: t.is_male,
+                        is_female: isFemale,
+                        prefix: isFemale ? 'fa-female' : 'fa-male',
+                        prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
+                      };
+                    })}
                     selected={filterTeachers}
                     onChange={setFilterTeachers}
+                    genderFilter={teacherGenderFilter}
+                    onGenderChange={setTeacherGenderFilter}
                   />
                 )}
                 <select
@@ -1788,16 +1808,25 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                   <MultiSelectDropdown
                     label=""
                     placeholder="Teacher"
-                    options={teachers.map((t) => ({
-                      id: String(t.id || t.teacher_id),
-                      label: t.name || t.full_name || t.employee_name,
-                    }))}
+                    options={teachers.map((t) => {
+                      const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                      return {
+                        id: String(t.id || t.teacher_id),
+                        label: t.name || t.full_name || t.employee_name,
+                        is_male: t.is_male,
+                        is_female: isFemale,
+                        prefix: isFemale ? 'fa-female' : 'fa-male',
+                        prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
+                      };
+                    })}
                     selected={cpFilterTeachers}
                     onChange={(val) => {
                       setCpFilterTeachers(val);
                       setProgressExpandedBook(null);
                       setProgressExpandedClass(null);
                     }}
+                    genderFilter={teacherGenderFilter}
+                    onGenderChange={setTeacherGenderFilter}
                   />
                 )}
                 {role === 'teacher' && (
@@ -1911,9 +1940,21 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                       <MultiSelectDropdown
                         label=""
                         placeholder="Teacher"
-                        options={teachers.map((t) => ({ id: String(t.id), label: t.name }))}
+                        options={teachers.map((t) => {
+                          const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                          return {
+                            id: String(t.id || t.teacher_id),
+                            label: t.name || t.full_name || t.employee_name,
+                            is_male: t.is_male,
+                            is_female: isFemale,
+                            prefix: isFemale ? 'fa-female' : 'fa-male',
+                            prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
+                          };
+                        })}
                         selected={upFilterTeachers}
                         onChange={setUpFilterTeachers}
+                        genderFilter={teacherGenderFilter}
+                        onGenderChange={setTeacherGenderFilter}
                       />
                     )}
                     <MultiSelectDropdown
