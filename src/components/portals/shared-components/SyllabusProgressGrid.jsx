@@ -60,7 +60,6 @@ const SyllabusProgressGrid = ({
   logItemsMap = {},
   handleDeleteClick,
 }) => {
-  
   const [selectedLevel1, setSelectedLevel1] = React.useState('all');
   const detailsRef = React.useRef(null);
 
@@ -76,12 +75,9 @@ const SyllabusProgressGrid = ({
     }
   }, [progressExpandedBook]);
 
-
   // Middle Panel: Level-1 progress breakdown list
   const renderLevel1Panel = (classObj) => {
-    const uniqueLevel1s = [
-      ...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean)),
-    ];
+    const uniqueLevel1s = [...new Set(progressBookLessons.map((l) => l.level1).filter(Boolean))];
 
     // Compute book-level stats for the "All Units" selection card
     const totalBookLessons = progressBookLessons.length;
@@ -107,7 +103,8 @@ const SyllabusProgressGrid = ({
     });
 
     const bookProgressPct = totalBookLessons > 0 ? bookProgressSum / totalBookLessons : 0;
-    const bookBarColor = bookProgressPct >= 70 ? '#10b981' : bookProgressPct >= 30 ? '#f59e0b' : '#ef4444';
+    const bookBarColor =
+      bookProgressPct >= 70 ? '#10b981' : bookProgressPct >= 30 ? '#f59e0b' : '#ef4444';
 
     return (
       <div className="w-full lg:w-[35%] bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-left">
@@ -179,9 +176,7 @@ const SyllabusProgressGrid = ({
               let cumulativeDaysTaken = 0;
 
               lvl1Lessons.forEach((lesson) => {
-                const log = progressBookLogs.find(
-                  (l) => String(l.lesson_id) === String(lesson.id)
-                );
+                const log = progressBookLogs.find((l) => String(l.lesson_id) === String(lesson.id));
                 if (log) {
                   if (log.days_taken) {
                     cumulativeDaysTaken += Number(log.days_taken);
@@ -266,10 +261,16 @@ const SyllabusProgressGrid = ({
           <>
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2 border-b pb-3">
               <div>
-                <h3 className="text-sm font-black text-dark-primary truncate max-w-[280px]" title={bookObj?.name}>
+                <h3
+                  className="text-sm font-black text-dark-primary truncate max-w-[280px]"
+                  title={bookObj?.name}
+                >
                   {bookObj?.name}
                 </h3>
-                <p className="text-xs font-extrabold text-brand-primary mt-0.5 truncate max-w-[280px]" title={titleHeader}>
+                <p
+                  className="text-xs font-extrabold text-brand-primary mt-0.5 truncate max-w-[280px]"
+                  title={titleHeader}
+                >
                   {titleHeader}
                 </p>
               </div>
@@ -299,9 +300,10 @@ const SyllabusProgressGrid = ({
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {(() => {
-                    const filteredByLvl1 = selectedLevel1 === 'all'
-                      ? progressBookLessons
-                      : progressBookLessons.filter((l) => l.level1 === selectedLevel1);
+                    const filteredByLvl1 =
+                      selectedLevel1 === 'all'
+                        ? progressBookLessons
+                        : progressBookLessons.filter((l) => l.level1 === selectedLevel1);
 
                     const lessonsToRender = showNotStarted
                       ? filteredByLvl1.filter((node) => {
@@ -521,7 +523,6 @@ const SyllabusProgressGrid = ({
     );
   };
 
-
   const renderBooksGrid = (classObj, classBooks) => {
     // Apply Class Progress filters
     let filteredBooks = classBooks;
@@ -540,9 +541,7 @@ const SyllabusProgressGrid = ({
     }
 
     if (cpFilterBooks && cpFilterBooks.length > 0) {
-      filteredBooks = filteredBooks.filter((book) =>
-        cpFilterBooks.includes(String(book.id))
-      );
+      filteredBooks = filteredBooks.filter((book) => cpFilterBooks.includes(String(book.id)));
     }
 
     if (cpFilterTeachers && cpFilterTeachers.length > 0) {
@@ -607,19 +606,13 @@ const SyllabusProgressGrid = ({
 
     const renderBookCard = (book, classObj) => {
       const bt = allTrackers.find(
-        (t) =>
-          String(t.book_id) === String(book.id) &&
-          String(t.class_id) === String(classObj.id)
+        (t) => String(t.book_id) === String(book.id) && String(t.class_id) === String(classObj.id)
       );
       const pct = Number(bt?.completion_percentage || 0);
       const isBookSelected =
         progressExpandedBook === book.id && progressExpandedClass === classObj.id;
       const pctColor =
-        pct >= 70
-          ? 'text-emerald-600'
-          : pct >= 30
-            ? 'text-amber-600'
-            : 'text-red-500';
+        pct >= 70 ? 'text-emerald-600' : pct >= 30 ? 'text-amber-600' : 'text-red-500';
       const pctBg =
         pct >= 70
           ? 'bg-emerald-50 border-emerald-200'
@@ -649,31 +642,21 @@ const SyllabusProgressGrid = ({
         .filter(Boolean);
 
       // Compute lesson counts dynamically for revisions count
-      const bookLessons = allLessons.filter(
-        (l) => String(l.book_id) === String(book.id)
-      );
+      const bookLessons = allLessons.filter((l) => String(l.book_id) === String(book.id));
       const bookLessonIds = bookLessons.map((l) => String(l.id));
       const bookLogs = allLogs.filter(
         (log) =>
           String(log.class_id) === String(classObj.id) &&
           bookLessonIds.includes(String(log.lesson_id))
       );
-      const revisionCount = bookLogs.reduce(
-        (sum, log) => sum + (log.revision_counter || 0),
-        0
-      );
+      const revisionCount = bookLogs.reduce((sum, log) => sum + (log.revision_counter || 0), 0);
 
-      const activeBookLogs = bookLogs.filter(
-        (log) => log.current_status !== 'not_started'
-      );
+      const activeBookLogs = bookLogs.filter((log) => log.current_status !== 'not_started');
 
       let bookStartDate = null;
       activeBookLogs.forEach((log) => {
         if (log.start_date) {
-          if (
-            !bookStartDate ||
-            new Date(log.start_date) < new Date(bookStartDate)
-          ) {
+          if (!bookStartDate || new Date(log.start_date) < new Date(bookStartDate)) {
             bookStartDate = log.start_date;
           }
         }
@@ -691,19 +674,13 @@ const SyllabusProgressGrid = ({
       let bookUpdatedAt = null;
       bookLogs.forEach((log) => {
         if (log.updated_at) {
-          if (
-            !bookUpdatedAt ||
-            new Date(log.updated_at) > new Date(bookUpdatedAt)
-          ) {
+          if (!bookUpdatedAt || new Date(log.updated_at) > new Date(bookUpdatedAt)) {
             bookUpdatedAt = log.updated_at;
           }
         }
       });
 
-      const cumulativeDaysTaken = bookLogs.reduce(
-        (sum, log) => sum + (log.days_taken || 0),
-        0
-      );
+      const cumulativeDaysTaken = bookLogs.reduce((sum, log) => sum + (log.days_taken || 0), 0);
 
       const total = bt?.total_lessons || bookLessons.length;
       const completed = bt?.completed || 0;
@@ -724,19 +701,21 @@ const SyllabusProgressGrid = ({
             <div className="flex items-start justify-between mb-2">
               <div className="flex-1 min-w-0">
                 {subj && (
-                  <h3 className="font-semibold text-gray-500 mt-0.5 block truncate">
+                  <h3 className="font-semibold text-gray-500 mt-0.5 block truncate text-xs">
                     {subj.name}
                   </h3>
                 )}
-                <h4 className="text-sm font-black text-dark-primary truncate">
-                  {book.name}
-                </h4>
+                <h4 className="text-xs font-black text-dark-primary truncate">{book.name}</h4>
                 {assignedTeachers.length > 0 && (
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     {assignedTeachers.map((t) => {
                       const isFemale = t.is_male === false;
-                      const iconClass = isFemale ? 'fa-female text-purple-600' : 'fa-user-tie text-blue-600';
-                      const textClass = isFemale ? 'text-purple-700 font-bold' : 'text-blue-700 font-bold';
+                      const iconClass = isFemale
+                        ? 'fa-female text-purple-600'
+                        : 'fa-user-tie text-blue-600';
+                      const textClass = isFemale
+                        ? 'text-purple-700 font-bold'
+                        : 'text-blue-700 font-bold';
                       const tName = t.name || t.full_name || t.employee_name;
                       return (
                         <div
@@ -759,9 +738,7 @@ const SyllabusProgressGrid = ({
                 <div
                   className={`flex items-center justify-center w-12 h-12 rounded-xl border ${pctBg}`}
                 >
-                  <span className={`text-sm font-black ${pctColor}`}>
-                    {pct.toFixed(0)}%
-                  </span>
+                  <span className={`text-sm font-black ${pctColor}`}>{pct.toFixed(0)}%</span>
                 </div>
               </div>
             </div>
@@ -798,20 +775,15 @@ const SyllabusProgressGrid = ({
             <div className="border-t border-dashed pt-2 mt-1.5 text-[9px] text-gray-500 font-bold col-span-2 space-y-0.5">
               <div className="flex justify-between">
                 <span>
-                  Started:{' '}
-                  {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}
+                  Started: {bookStartDate ? new Date(bookStartDate).toLocaleDateString() : '—'}
                 </span>
                 {pct === 100 ? (
                   <span>
-                    Ended:{' '}
-                    {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
+                    Ended: {bookEndDate ? new Date(bookEndDate).toLocaleDateString() : '—'}
                   </span>
                 ) : (
                   <span>
-                    Updated:{' '}
-                    {bookUpdatedAt
-                      ? new Date(bookUpdatedAt).toLocaleDateString()
-                      : '—'}
+                    Updated: {bookUpdatedAt ? new Date(bookUpdatedAt).toLocaleDateString() : '—'}
                   </span>
                 )}
               </div>
@@ -826,7 +798,9 @@ const SyllabusProgressGrid = ({
         {/* Desktop View (lg and above) */}
         <div className="hidden lg:flex lg:flex-row gap-6 items-start w-full transition-all duration-500 ease-in-out">
           {/* Left Column: Books Grid / List */}
-          <div className={`transition-all duration-500 ease-in-out ${isExpanded ? 'w-[25%] shrink-0' : 'w-full'}`}>
+          <div
+            className={`transition-all duration-500 ease-in-out ${isExpanded ? 'w-[25%] shrink-0' : 'w-full'}`}
+          >
             <div className="space-y-6">
               {Object.keys(booksByGroup).map((groupName) => {
                 const groupedBooks = booksByGroup[groupName];
@@ -837,11 +811,13 @@ const SyllabusProgressGrid = ({
                         {groupName}
                       </h4>
                     )}
-                    <div className={`grid gap-4 transition-all duration-500 ease-in-out ${
-                      isExpanded
-                        ? 'grid-cols-1'
-                        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                    }`}>
+                    <div
+                      className={`grid gap-4 transition-all duration-500 ease-in-out ${
+                        isExpanded
+                          ? 'grid-cols-1'
+                          : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+                      }`}
+                    >
                       {groupedBooks.map((book) => renderBookCard(book, classObj))}
                     </div>
                   </div>
@@ -870,7 +846,9 @@ const SyllabusProgressGrid = ({
               {/* Selected Book Card in Compact Mode */}
               <div className="w-full">
                 {(() => {
-                  const selectedBookObj = classBooks.find((b) => String(b.id) === String(progressExpandedBook));
+                  const selectedBookObj = classBooks.find(
+                    (b) => String(b.id) === String(progressExpandedBook)
+                  );
                   return selectedBookObj ? renderBookCard(selectedBookObj, classObj) : null;
                 })()}
               </div>

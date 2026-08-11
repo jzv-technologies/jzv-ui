@@ -395,7 +395,7 @@ const AdminStudentsView = () => {
   return (
     <div className="flex flex-col min-h-[500px] space-y-6">
       {/* ── Unified Responsive Top Header ── */}
-      <div className="bg-white border border-light-border p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+      <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
           {/* Main Title & Subtitle */}
           <div>
@@ -443,65 +443,169 @@ const AdminStudentsView = () => {
 
         {/* Action Controls Bar for Student Records tab */}
         {activeTab === 'records' && (
-          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
-              {/* Search Input */}
-              <div className="relative flex-1 min-w-[200px]">
-                <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
-                <input
-                  type="text"
-                  placeholder="Search by Admission No, Student Name..."
-                  value={recordsSearchQuery}
-                  onChange={(e) => setRecordsSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:border-brand-primary transition-all"
-                />
+          <div className="space-y-3 pt-1">
+            <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+                {/* Search Input */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+                  <input
+                    type="text"
+                    placeholder="Search by Admission No, Student Name..."
+                    value={recordsSearchQuery}
+                    onChange={(e) => setRecordsSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:border-brand-primary transition-all"
+                  />
+                </div>
+
+                {/* Class Filter Dropdown */}
+                <select
+                  value={selectedClassId}
+                  onChange={(e) => setSelectedClassId(e.target.value)}
+                  className="px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
+                >
+                  <option value="all">All Classes</option>
+                  {classes
+                    .slice()
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                </select>
               </div>
 
-              {/* Class Filter Dropdown */}
-              <select
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
-                className="px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
-              >
-                <option value="all">All Classes</option>
-                {classes
-                  .slice()
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </option>
-                  ))}
-              </select>
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  onClick={() => loadStudents(classes)}
+                  disabled={loading}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Refresh database"
+                >
+                  <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
+                  Refresh
+                </button>
+
+                <button
+                  onClick={handleExportRecordsExcel}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <i className="fas fa-file-excel text-emerald-600"></i>
+                  Export Excel
+                </button>
+
+                <button
+                  onClick={openAddModal}
+                  className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <i className="fas fa-user-plus"></i>
+                  Add Student
+                </button>
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                onClick={() => loadStudents(classes)}
-                disabled={loading}
-                className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                title="Refresh database"
-              >
-                <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
-                Refresh
-              </button>
+            {/* ── Class Summary Tiles ── */}
+            <div className="pt-3 border-t border-light-border/60">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                {selectedClassId !== 'all' && (
+                  <button
+                    onClick={() => setSelectedClassId('all')}
+                    className="text-[10px] font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 transition-all active:scale-95 flex items-center gap-1"
+                  >
+                    <i className="fas fa-times text-[9px]"></i>
+                    Reset Filter
+                  </button>
+                )}
+              </div>
 
-              <button
-                onClick={handleExportRecordsExcel}
-                className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-              >
-                <i className="fas fa-file-excel text-emerald-600"></i>
-                Export Excel
-              </button>
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
+                <button
+                  type="button"
+                  onClick={() => setSelectedClassId('all')}
+                  className={`flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer shrink-0 min-w-[115px] flex-1 active:scale-95 ${
+                    selectedClassId === 'all'
+                      ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
+                      : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 w-full mb-1">
+                    <span
+                      className={`text-xs font-black truncate ${
+                        selectedClassId === 'all' ? 'text-white' : 'text-dark-deepblue'
+                      }`}
+                    >
+                      All Classes
+                    </span>
+                    <i
+                      className={`fas fa-users text-[10px] ${
+                        selectedClassId === 'all' ? 'text-white/80' : 'text-brand-primary'
+                      }`}
+                    ></i>
+                  </div>
+                  <div className="flex items-baseline justify-between w-full mt-auto">
+                    <span
+                      className={`text-[10px] font-bold ${
+                        selectedClassId === 'all' ? 'text-white/80' : 'text-dark-muted'
+                      }`}
+                    >
+                      Total
+                    </span>
+                    <span
+                      className={`text-xs font-black ${
+                        selectedClassId === 'all' ? 'text-white' : 'text-emerald-700'
+                      }`}
+                    >
+                      {students.length}
+                    </span>
+                  </div>
+                </button>
 
-              <button
-                onClick={openAddModal}
-                className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
-              >
-                <i className="fas fa-user-plus"></i>
-                Add Student
-              </button>
+                {classStats.map((cls) => (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() => setSelectedClassId(selectedClassId === cls.id ? 'all' : cls.id)}
+                    className={`flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer shrink-0 min-w-[115px] flex-1 active:scale-95 ${
+                      selectedClassId === cls.id
+                        ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
+                        : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 w-full mb-1">
+                      <span
+                        className={`text-xs font-black truncate ${
+                          selectedClassId === cls.id ? 'text-white' : 'text-dark-deepblue'
+                        }`}
+                      >
+                        {cls.name}
+                      </span>
+                      <i
+                        className={`fas fa-user-graduate text-[10px] ${
+                          selectedClassId === cls.id ? 'text-white/80' : 'text-emerald-600'
+                        }`}
+                      ></i>
+                    </div>
+                    <div className="flex items-baseline justify-between w-full mt-auto">
+                      <span
+                        className={`text-[10px] font-bold ${
+                          selectedClassId === cls.id ? 'text-white/80' : 'text-dark-muted'
+                        }`}
+                      >
+                        Students
+                      </span>
+                      <span
+                        className={`text-xs font-black ${
+                          selectedClassId === cls.id ? 'text-white' : 'text-emerald-700'
+                        }`}
+                      >
+                        {cls.count}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -580,120 +684,16 @@ const AdminStudentsView = () => {
           onRegisterControls={setFeesControls}
         />
       ) : (
-        <div className="space-y-6">
-          {/* ── Class Summary Tiles Panel ── */}
-          <div className="bg-white border border-light-border rounded-3xl p-4 sm:p-6 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between gap-2 pb-2 border-b border-light-border/60">
-              {selectedClassId !== 'all' && (
-                <button
-                  onClick={() => setSelectedClassId('all')}
-                  className="text-[11px] font-extrabold text-emerald-700 hover:text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 transition-all active:scale-95 flex items-center gap-1"
-                >
-                  <i className="fas fa-times text-[10px]"></i>
-                  Reset Filter
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedClassId('all')}
-                className={`flex flex-col p-3 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
-                  selectedClassId === 'all'
-                    ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
-                    : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 w-full mb-1">
-                  <span
-                    className={`text-xs font-black truncate ${
-                      selectedClassId === 'all' ? 'text-white' : 'text-dark-deepblue'
-                    }`}
-                  >
-                    All Classes
-                  </span>
-                  <i
-                    className={`fas fa-users text-[10px] ${
-                      selectedClassId === 'all' ? 'text-white/80' : 'text-brand-primary'
-                    }`}
-                  ></i>
-                </div>
-                <div className="flex items-baseline justify-between w-full mt-auto">
-                  <span
-                    className={`text-[10px] font-bold ${
-                      selectedClassId === 'all' ? 'text-white/80' : 'text-dark-muted'
-                    }`}
-                  >
-                    Total
-                  </span>
-                  <span
-                    className={`text-sm font-black ${
-                      selectedClassId === 'all' ? 'text-white' : 'text-emerald-700'
-                    }`}
-                  >
-                    {students.length}
-                  </span>
-                </div>
-              </button>
-
-              {classStats.map((cls) => (
-                <button
-                  key={cls.id}
-                  type="button"
-                  onClick={() => setSelectedClassId(selectedClassId === cls.id ? 'all' : cls.id)}
-                  className={`flex flex-col p-3 rounded-2xl border text-left transition-all cursor-pointer active:scale-95 ${
-                    selectedClassId === cls.id
-                      ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
-                      : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-1 w-full mb-1">
-                    <span
-                      className={`text-xs font-black truncate ${
-                        selectedClassId === cls.id ? 'text-white' : 'text-dark-deepblue'
-                      }`}
-                    >
-                      {cls.name}
-                    </span>
-                    <i
-                      className={`fas fa-[#10B981] fa-user-graduate text-[10px] ${
-                        selectedClassId === cls.id ? 'text-white/80' : 'text-emerald-600'
-                      }`}
-                    ></i>
-                  </div>
-                  <div className="flex items-baseline justify-between w-full mt-auto">
-                    <span
-                      className={`text-[10px] font-bold ${
-                        selectedClassId === cls.id ? 'text-white/80' : 'text-dark-muted'
-                      }`}
-                    >
-                      Students
-                    </span>
-                    <span
-                      className={`text-sm font-black ${
-                        selectedClassId === cls.id ? 'text-white' : 'text-emerald-700'
-                      }`}
-                    >
-                      {cls.count}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Main Student Records Grid */}
-          <div className="flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
-            <DataGrid
-              data={displayData}
-              loading={loading}
-              error={error}
-              onRetry={() => loadStudents(classes)}
-              onRowClick={openEditModal}
-              excludeColumns={['id', 'class_id']}
-            />
-          </div>
+        /* Main Student Records Grid */
+        <div className="flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+          <DataGrid
+            data={displayData}
+            loading={loading}
+            error={error}
+            onRetry={() => loadStudents(classes)}
+            onRowClick={openEditModal}
+            excludeColumns={['id', 'class_id']}
+          />
         </div>
       )}
 

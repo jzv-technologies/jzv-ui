@@ -186,11 +186,28 @@ const EmployeeRecordsView = ({
         return;
       }
 
-      const { data, error } = await supabase.from('employees').select('*');
-      if (error) {
+      let fetchedEmps = null;
+      let empErr = null;
+
+      const { data: eData, error: eErr } = await supabase.from('employees').select('*');
+      if (!eErr && eData && eData.length > 0) {
+        fetchedEmps = eData;
+      } else {
+        const { data: tData, error: tErr } = await supabase.from('teachers').select('*');
+        if (!tErr && tData && tData.length > 0) {
+          fetchedEmps = tData;
+        } else {
+          empErr = eErr || tErr;
+        }
+      }
+
+      if (fetchedEmps) {
+        setEmployees(fetchedEmps);
+        localStorage.setItem('jzv_employees_local_data', JSON.stringify(fetchedEmps));
+      } else if (empErr) {
         console.warn(
           'Supabase fetch employees error (using local storage fallback):',
-          error.message
+          empErr.message
         );
         const localData = localStorage.getItem('jzv_employees_local_data');
         if (localData) {
@@ -198,9 +215,6 @@ const EmployeeRecordsView = ({
             setEmployees(JSON.parse(localData));
           } catch (e) {}
         }
-      } else if (data) {
-        setEmployees(data);
-        localStorage.setItem('jzv_employees_local_data', JSON.stringify(data));
       }
 
       // Fetch Auth Users & Roles via secure RPC bound to authenticated user context.
@@ -599,6 +613,34 @@ const EmployeeRecordsView = ({
     return fields;
   };
 
+  const mutateSupabaseTable = async (tableName, action, payload, idVal) => {
+    if (!idVal && action !== 'insert') return { data: [], error: null };
+
+    const primaryCol = tableName === 'teachers' ? 'teacher_id' : 'id';
+    const fallbackCol = tableName === 'teachers' ? 'id' : 'emp_id';
+
+    const execute = async (col) => {
+      let q = supabase.from(tableName);
+      if (action === 'delete') {
+        q = q.delete().eq(col, idVal);
+      } else if (action === 'update') {
+        q = q.update(payload).eq(col, idVal);
+      } else if (action === 'insert') {
+        q = q.insert(payload);
+      }
+      return await q.select();
+    };
+
+    let res = await execute(primaryCol);
+    if (
+      res.error &&
+      (res.error.code === '42703' || res.error.message?.includes('does not exist'))
+    ) {
+      res = await execute(fallbackCol);
+    }
+    return res;
+  };
+
   const handleSaveEmployee = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -633,22 +675,32 @@ const EmployeeRecordsView = ({
           },
         ];
 
+        let savedData = null;
         const { data: eData, error: eErr } = await supabase
           .from('employees')
           .insert([teacherPayload])
           .select();
 
-        if (eErr) {
-          console.warn(
-            'Supabase insert employee error (using local state fallback):',
-            eErr.message
-          );
-          const localNew = { ...teacherPayload, id: Date.now() };
-          const updatedList = [localNew, ...employees];
+        if (!eErr && eData?.[0]) {
+          savedData = eData[0];
+        } else {
+          const { data: tData, error: tErr } = await supabase
+            .from('teachers')
+            .insert([teacherPayload])
+            .select();
+          if (!tErr && tData?.[0]) {
+            savedData = tData[0];
+          }
+        }
+
+        if (savedData) {
+          const updatedList = [savedData, ...employees];
           setEmployees(updatedList);
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
-        } else if (eData?.[0]) {
-          const updatedList = [eData[0], ...employees];
+        } else {
+          console.warn('Supabase insert employee error (using local state fallback)');
+          const localNew = { ...teacherPayload, id: `local-${Date.now()}` };
+          const updatedList = [localNew, ...employees];
           setEmployees(updatedList);
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
@@ -678,25 +730,25 @@ const EmployeeRecordsView = ({
         }
         teacherPayload.update_history = historyList;
 
-        const { data: eData, error: eErr } = await supabase
-          .from('employees')
-          .update(teacherPayload)
-          .eq('id', targetId)
-          .select();
+        let updatedData = null;
+        const resEmp = await mutateSupabaseTable('employees', 'update', teacherPayload, targetId);
+        if (resEmp.data && resEmp.data.length > 0) {
+          updatedData = resEmp.data[0];
+        } else {
+          const resTeach = await mutateSupabaseTable(
+            'teachers',
+            'update',
+            teacherPayload,
+            targetId
+          );
+          if (resTeach.data && resTeach.data.length > 0) {
+            updatedData = resTeach.data[0];
+          }
+        }
 
-        if (eErr) {
-          console.warn(
-            'Supabase update employee error (using local state fallback):',
-            eErr.message
-          );
+        if (updatedData) {
           const updatedList = employees.map((e) =>
-            String(e.id) === String(targetId) ? { ...e, ...teacherPayload } : e
-          );
-          setEmployees(updatedList);
-          localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
-        } else if (eData && eData.length > 0) {
-          const updatedList = employees.map((e) =>
-            String(e.id) === String(targetId) ? eData[0] : e
+            String(e.id) === String(targetId) ? updatedData : e
           );
           setEmployees(updatedList);
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
@@ -754,20 +806,63 @@ const EmployeeRecordsView = ({
 
     setSaving(true);
     try {
-      const { error } = await supabase.from('employees').delete().eq('id', emp.id);
-      if (error) {
-        console.warn('Supabase delete employee error (using local state fallback):', error.message);
-        const updatedList = employees.filter((e) => String(e.id) !== String(emp.id));
-        setEmployees(updatedList);
-        localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
-      } else {
-        const updatedList = employees.filter((e) => String(e.id) !== String(emp.id));
-        setEmployees(updatedList);
-        localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+      const isLocalId =
+        String(emp.id).startsWith('local') ||
+        (typeof emp.id === 'number' && emp.id > 1000000000000) ||
+        (typeof emp.id === 'string' && /^\d{13,}$/.test(emp.id));
+
+      if (!isLocalId) {
+        // 1. Clean up dependent FK records first so foreign key constraints don't block deletion
+        try {
+          await supabase.from('class_assignments').delete().eq('teacher_id', emp.id);
+          await supabase
+            .from('timetable_slots')
+            .update({ teacher_id: null })
+            .eq('teacher_id', emp.id);
+          await supabase.from('teacher_subjects').delete().eq('teacher_id', emp.id);
+          await supabase.from('map_teacher_subject').delete().eq('teacher_id', emp.id);
+          await supabase.from('teacher_availability').delete().eq('teacher_id', emp.id);
+        } catch (depErr) {
+          console.warn('Dependent table cleanup warning:', depErr.message);
+        }
+
+        // 2. Attempt deletion from both 'teachers' and 'employees' tables with column fallbacks
+        let dbDeleted = false;
+        let dbError = null;
+
+        const resTeach = await mutateSupabaseTable('teachers', 'delete', null, emp.id);
+        if (resTeach.data && resTeach.data.length > 0) {
+          dbDeleted = true;
+        } else if (resTeach.error) {
+          dbError = resTeach.error;
+        }
+
+        const resEmp = await mutateSupabaseTable('employees', 'delete', null, emp.id);
+        if (resEmp.data && resEmp.data.length > 0) {
+          dbDeleted = true;
+        } else if (!dbDeleted && resEmp.error) {
+          dbError = resEmp.error;
+        }
+
+        if (!dbDeleted) {
+          const msg =
+            dbError?.message ||
+            'Database row was not deleted (check permissions/RLS or database connection)';
+          console.error('Supabase delete employee error:', msg);
+          showToast('Error deleting employee: ' + msg, 'error');
+          return;
+        }
       }
 
+      // 3. Always filter out the deleted employee from local state & LocalStorage
+      const updatedList = employees.filter((e) => String(e.id) !== String(emp.id));
+      setEmployees(updatedList);
+      localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
+
       showToast(`Employee "${emp.name}" deleted successfully!`, 'success');
-      await fetchEmployees();
+      if (!isLocalId) {
+        await fetchEmployees();
+      }
     } catch (err) {
       console.error('Error deleting employee:', err);
       showToast('Error deleting employee: ' + err.message, 'error');
@@ -1329,7 +1424,7 @@ const EmployeeRecordsView = ({
   return (
     <div className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300">
       {/* ── Unified Top Header Panel ── */}
-      <div className="bg-white border border-light-border p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
+      <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
           <div>
             <h1 className="text-xl md:text-2xl font-black text-dark-primary tracking-tight flex items-center gap-3">
@@ -1532,8 +1627,12 @@ const EmployeeRecordsView = ({
                         : 'Currently showing single view for all. Click to enable Org grouping.'
                     }
                   >
-                    <i className={`fas ${salaryControls.groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}></i>
-                    <span className="truncate">{salaryControls.groupByOrg ? 'Grouping On' : 'Grouping Off'}</span>
+                    <i
+                      className={`fas ${salaryControls.groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}
+                    ></i>
+                    <span className="truncate">
+                      {salaryControls.groupByOrg ? 'Grouping On' : 'Grouping Off'}
+                    </span>
                   </button>
                 )}
 

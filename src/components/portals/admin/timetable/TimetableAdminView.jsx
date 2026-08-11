@@ -68,7 +68,13 @@ const MobileSelectDropdown = ({ options, selected, onChange, fullWidth = false }
     const r = triggerRef.current.getBoundingClientRect();
     const minW = Math.max(180, Math.floor(r.width));
     const maxLeft = Math.max(10, Math.min(r.left, window.innerWidth - minW - 10));
-    setPanelStyle({ position: 'fixed', top: r.bottom + 6, left: maxLeft, minWidth: minW, zIndex: 9999 });
+    setPanelStyle({
+      position: 'fixed',
+      top: r.bottom + 6,
+      left: maxLeft,
+      minWidth: minW,
+      zIndex: 9999,
+    });
   }, []);
 
   useEffect(() => {
@@ -77,13 +83,20 @@ const MobileSelectDropdown = ({ options, selected, onChange, fullWidth = false }
     const s = () => updatePosition();
     window.addEventListener('scroll', s, true);
     window.addEventListener('resize', s);
-    return () => { window.removeEventListener('scroll', s, true); window.removeEventListener('resize', s); };
+    return () => {
+      window.removeEventListener('scroll', s, true);
+      window.removeEventListener('resize', s);
+    };
   }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
     const h = (e) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target) && !e.target.closest('[data-dropdown-panel]'))
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target) &&
+        !e.target.closest('[data-dropdown-panel]')
+      )
         setOpen(false);
     };
     document.addEventListener('mousedown', h);
@@ -92,29 +105,34 @@ const MobileSelectDropdown = ({ options, selected, onChange, fullWidth = false }
 
   const activeOpt = options.find((o) => o.id === selected) || options[0];
 
-  const panel = open && ReactDOM.createPortal(
-    <div
-      data-dropdown-panel
-      className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden"
-      style={panelStyle}
-    >
-      {options.map((opt) => {
-        const isActive = opt.id === selected;
-        return (
-          <button
-            key={opt.id}
-            onClick={() => { onChange(opt.id); setOpen(false); }}
-            className={`w-full flex items-center gap-2.5 px-4 py-3 text-xs font-extrabold transition-all border-none outline-none text-left ${ isActive ? 'bg-brand-primary text-white' : 'text-dark-primary hover:bg-light-lbg/60' }`}
-          >
-            <i className={`fas ${opt.icon} text-[11px] w-4 text-center shrink-0`} />
-            <span className="truncate">{opt.label}</span>
-            {isActive && <i className="fas fa-check text-[10px] ml-auto shrink-0" />}
-          </button>
-        );
-      })}
-    </div>,
-    document.body
-  );
+  const panel =
+    open &&
+    ReactDOM.createPortal(
+      <div
+        data-dropdown-panel
+        className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden"
+        style={panelStyle}
+      >
+        {options.map((opt) => {
+          const isActive = opt.id === selected;
+          return (
+            <button
+              key={opt.id}
+              onClick={() => {
+                onChange(opt.id);
+                setOpen(false);
+              }}
+              className={`w-full flex items-center gap-2.5 px-4 py-3 text-xs font-extrabold transition-all border-none outline-none text-left ${isActive ? 'bg-brand-primary text-white' : 'text-dark-primary hover:bg-light-lbg/60'}`}
+            >
+              <i className={`fas ${opt.icon} text-[11px] w-4 text-center shrink-0`} />
+              <span className="truncate">{opt.label}</span>
+              {isActive && <i className="fas fa-check text-[10px] ml-auto shrink-0" />}
+            </button>
+          );
+        })}
+      </div>,
+      document.body
+    );
 
   return (
     <div className={fullWidth ? 'w-full' : 'relative'}>
@@ -126,10 +144,14 @@ const MobileSelectDropdown = ({ options, selected, onChange, fullWidth = false }
         }`}
       >
         <span className="flex items-center gap-1.5 truncate min-w-0">
-          {activeOpt && <i className={`fas ${activeOpt.icon} text-[10px] text-brand-primary shrink-0`} />}
+          {activeOpt && (
+            <i className={`fas ${activeOpt.icon} text-[10px] text-brand-primary shrink-0`} />
+          )}
           <span className="truncate">{activeOpt?.label}</span>
         </span>
-        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] text-dark-soft ml-1 shrink-0`} />
+        <i
+          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] text-dark-soft ml-1 shrink-0`}
+        />
       </button>
       {panel}
     </div>
@@ -190,9 +212,11 @@ const SingleSelectDropdown = ({ label, options, selected, onChange, fullWidth = 
     }
     const handler = (e) => {
       if (
-        triggerRef.current && !triggerRef.current.contains(e.target) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target) &&
         !e.target.closest('[data-dropdown-panel]')
-      ) setOpen(false);
+      )
+        setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -203,48 +227,57 @@ const SingleSelectDropdown = ({ label, options, selected, onChange, fullWidth = 
     opt.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const panel = open && ReactDOM.createPortal(
-    <div
-      data-dropdown-panel
-      className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden divide-y divide-light-border"
-      style={panelStyle}
-    >
-      <div className="p-2 border-b border-light-border bg-light-lbg/50">
-        <input
-          ref={searchInputRef}
-          type="text"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-white border border-light-border rounded-lg px-2.5 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
-          onClick={(e) => e.stopPropagation()}
-        />
-      </div>
-      <div className="max-h-60 overflow-y-auto">
-        {filteredOptions.length === 0 && (
-          <div className="px-3 py-4 text-xs text-dark-muted text-center font-semibold">No options</div>
-        )}
-        {filteredOptions.map((opt) => {
-          const isSelected = String(opt.value) === String(selected);
-          return (
-            <button
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 transition-all flex flex-col justify-center gap-0.5 border-none outline-none ${
-                isSelected ? 'bg-brand-lbg/30 text-brand-primary font-bold' : 'text-dark-primary hover:bg-light-lbg/60'
-              }`}
-            >
-              <span className="text-xs font-extrabold">{opt.label}</span>
-              {opt.subLabel && (
-                <span className="text-[10px] text-dark-muted font-semibold">{opt.subLabel}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-    </div>,
-    document.body
-  );
+  const panel =
+    open &&
+    ReactDOM.createPortal(
+      <div
+        data-dropdown-panel
+        className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden divide-y divide-light-border"
+        style={panelStyle}
+      >
+        <div className="p-2 border-b border-light-border bg-light-lbg/50">
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white border border-light-border rounded-lg px-2.5 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-1 focus:ring-brand-soft"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto">
+          {filteredOptions.length === 0 && (
+            <div className="px-3 py-4 text-xs text-dark-muted text-center font-semibold">
+              No options
+            </div>
+          )}
+          {filteredOptions.map((opt) => {
+            const isSelected = String(opt.value) === String(selected);
+            return (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 transition-all flex flex-col justify-center gap-0.5 border-none outline-none ${
+                  isSelected
+                    ? 'bg-brand-lbg/30 text-brand-primary font-bold'
+                    : 'text-dark-primary hover:bg-light-lbg/60'
+                }`}
+              >
+                <span className="text-xs font-extrabold">{opt.label}</span>
+                {opt.subLabel && (
+                  <span className="text-[10px] text-dark-muted font-semibold">{opt.subLabel}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>,
+      document.body
+    );
 
   return (
     <div className={fullWidth ? 'w-full' : 'relative shrink-0'}>
@@ -256,7 +289,9 @@ const SingleSelectDropdown = ({ label, options, selected, onChange, fullWidth = 
         }`}
       >
         <span className="truncate">{selectedOption ? selectedOption.label : label}</span>
-        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-1.5 text-dark-soft shrink-0`} />
+        <i
+          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-1.5 text-dark-soft shrink-0`}
+        />
       </button>
       {panel}
     </div>
@@ -1646,7 +1681,7 @@ const TimetableAdminView = ({
     const dayType = weekdayConfig[day] || 'Weekday';
     const isBreak = period.is_break;
     const isWorkingWeekend = dayType === 'Working Weekend';
-    const isWeekendApplicable = period.applicable_on_weekends;
+    const isWeekendApplicable = period.applicable_on_weekends !== false;
     const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
 
     if (isPeriodDisabled) {
@@ -1820,7 +1855,7 @@ const TimetableAdminView = ({
               if (dType === 'Holiday Weekend') return false;
               if (dType === 'Working Weekend') {
                 const currentPeriodObj = periods.find((p) => String(p.id) === String(period.id));
-                return currentPeriodObj?.applicable_on_weekends;
+                return currentPeriodObj?.applicable_on_weekends !== false;
               }
               return true;
             })}
@@ -1897,44 +1932,44 @@ const TimetableAdminView = ({
     <div className="w-full bg-light-lbg/50 border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none">
       {/* ── Header ── */}
       <div className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5">
-
         {/* ROW 1: Mine / Class Top Navigation — pill tabs on lg+, dropdown on mobile/tablet */}
-        {showMyTimetable && (() => {
-          const myTabOptions = [
-            { id: 'my',    label: 'My Timetable',   icon: 'fa-user-clock' },
-            { id: 'class', label: 'Class Timetable', icon: 'fa-th-large'  },
-          ];
-          const activeMyTab = myTabOptions.find((t) => t.id === myTab);
-          return (
-            <div className="w-full">
-              {/* Mobile/Tablet: compact dropdown */}
-              <div className="lg:hidden">
-                <MobileSelectDropdown
-                  options={myTabOptions}
-                  selected={myTab}
-                  onChange={setMyTab}
-                />
+        {showMyTimetable &&
+          (() => {
+            const myTabOptions = [
+              { id: 'my', label: 'My Timetable', icon: 'fa-user-clock' },
+              { id: 'class', label: 'Class Timetable', icon: 'fa-th-large' },
+            ];
+            const activeMyTab = myTabOptions.find((t) => t.id === myTab);
+            return (
+              <div className="w-full">
+                {/* Mobile/Tablet: compact dropdown */}
+                <div className="lg:hidden">
+                  <MobileSelectDropdown
+                    options={myTabOptions}
+                    selected={myTab}
+                    onChange={setMyTab}
+                  />
+                </div>
+                {/* Desktop: pill tabs */}
+                <div className="hidden lg:flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1 w-auto">
+                  {myTabOptions.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setMyTab(tab.id)}
+                      className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 lg:flex-initial cursor-pointer ${
+                        myTab === tab.id
+                          ? 'text-white bg-brand-primary shadow-sm'
+                          : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                      }`}
+                    >
+                      <i className={`fas ${tab.icon} text-[10px]`} />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {/* Desktop: pill tabs */}
-              <div className="hidden lg:flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1 w-auto">
-                {myTabOptions.map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setMyTab(tab.id)}
-                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 lg:flex-initial cursor-pointer ${
-                      myTab === tab.id
-                        ? 'text-white bg-brand-primary shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                    }`}
-                  >
-                    <i className={`fas ${tab.icon} text-[10px]`} />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
 
         {/* ROW 2: Sub-views + Entity Selectors + Action Icons */}
         <div className="flex flex-col gap-2.5">
@@ -1943,24 +1978,31 @@ const TimetableAdminView = ({
             {/* First row on mobile: Subview switcher + Filter/Selector sharing 50/50 width */}
             <div className="grid grid-cols-2 gap-2 w-full items-center">
               {/* Col 1: Subview Switcher Dropdown */}
-              {!lockedClassId && myTab === 'class' && showTabSwitcher && (() => {
-                const viewSwitcherOptions = [
-                  { id: 'scheduler',        label: 'Scheduler',         icon: 'fa-th-large'           },
-                  { id: 'teacher',          label: 'Teacher View',      icon: 'fa-user'               },
-                  { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school'             },
-                  { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open'          },
-                  { id: 'free_teachers',    label: 'Free Teachers',     icon: 'fa-user-clock'         },
-                  { id: 'assigned_teachers',label: 'Assigned Teachers', icon: 'fa-chalkboard-teacher' },
-                ].filter((v) => filteredViews.includes(v.id));
-                return (
-                  <MobileSelectDropdown
-                    options={viewSwitcherOptions}
-                    selected={viewType}
-                    onChange={setViewType}
-                    fullWidth={true}
-                  />
-                );
-              })()}
+              {!lockedClassId &&
+                myTab === 'class' &&
+                showTabSwitcher &&
+                (() => {
+                  const viewSwitcherOptions = [
+                    { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
+                    { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+                    { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
+                    { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
+                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+                    {
+                      id: 'assigned_teachers',
+                      label: 'Assigned Teachers',
+                      icon: 'fa-chalkboard-teacher',
+                    },
+                  ].filter((v) => filteredViews.includes(v.id));
+                  return (
+                    <MobileSelectDropdown
+                      options={viewSwitcherOptions}
+                      selected={viewType}
+                      onChange={setViewType}
+                      fullWidth={true}
+                    />
+                  );
+                })()}
 
               {/* Col 2: Selector / Filter matching the active view */}
               {!lockedClassId && myTab === 'class' && (
@@ -1985,10 +2027,7 @@ const TimetableAdminView = ({
                           return {
                             value: String(cls.id),
                             label: cls.name,
-                            subLabel:
-                              viewType === 'scheduler'
-                                ? `${pct}% completed`
-                                : null,
+                            subLabel: viewType === 'scheduler' ? `${pct}% completed` : null,
                           };
                         })}
                     />
@@ -2060,7 +2099,9 @@ const TimetableAdminView = ({
                 {!(myTab === 'my' && !myTeacher) &&
                   (myTab === 'my'
                     ? myView === 'weekly'
-                    : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
+                    : viewType === 'class' ||
+                      viewType === 'teacher' ||
+                      viewType === 'scheduler') && (
                     <button
                       onClick={() => setIsTransposed((v) => !v)}
                       title={isTransposed ? 'Original View' : 'Transpose View'}
@@ -2093,7 +2134,9 @@ const TimetableAdminView = ({
                     onClick={handleExportCSV}
                     disabled={
                       myTab === 'class' &&
-                      (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                      (viewType === 'scheduler' ||
+                        viewType === 'teacher' ||
+                        viewType === 'class') &&
                       !selectedId
                     }
                     title="Export to CSV / Excel"
@@ -2124,61 +2167,70 @@ const TimetableAdminView = ({
             {/* Left section: Sub-views & Entity Selectors */}
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Today / Weekly toggle (My Timetable) */}
-              {myTab === 'my' && myTeacher && (() => {
-                const myViewOptions = [
-                  { id: 'today',  label: 'Today',  icon: 'fa-sun'          },
-                  { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
-                ];
-                return (
-                  <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
-                    {myViewOptions.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => setMyView(v.id)}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                          myView === v.id
-                            ? 'bg-brand-primary text-white shadow-sm'
-                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                        }`}
-                      >
-                        <i className={`fas ${v.icon} text-[10px]`} />
-                        {v.label}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
+              {myTab === 'my' &&
+                myTeacher &&
+                (() => {
+                  const myViewOptions = [
+                    { id: 'today', label: 'Today', icon: 'fa-sun' },
+                    { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
+                  ];
+                  return (
+                    <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
+                      {myViewOptions.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => setMyView(v.id)}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                            myView === v.id
+                              ? 'bg-brand-primary text-white shadow-sm'
+                              : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                          }`}
+                        >
+                          <i className={`fas ${v.icon} text-[10px]`} />
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
 
               {/* View-type switcher (Class tab) */}
-              {!lockedClassId && myTab === 'class' && showTabSwitcher && (() => {
-                const viewSwitcherOptions = [
-                  { id: 'scheduler',        label: 'Scheduler',         icon: 'fa-th-large'           },
-                  { id: 'teacher',          label: 'Teacher View',      icon: 'fa-user'               },
-                  { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school'             },
-                  { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open'          },
-                  { id: 'free_teachers',    label: 'Free Teachers',     icon: 'fa-user-clock'         },
-                  { id: 'assigned_teachers',label: 'Assigned Teachers', icon: 'fa-chalkboard-teacher' },
-                ].filter((v) => filteredViews.includes(v.id));
-                return (
-                  <div className="flex bg-light-lbg p-1 rounded-2xl items-center gap-1 border border-light-border">
-                    {viewSwitcherOptions.map((v) => (
-                      <button
-                        key={v.id}
-                        onClick={() => setViewType(v.id)}
-                        title={v.label}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 whitespace-nowrap cursor-pointer ${
-                          viewType === v.id
-                            ? 'text-white bg-brand-primary shadow-sm'
-                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                        }`}
-                      >
-                        <i className={`fas ${v.icon} text-[10px]`} />
-                        {v.label}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
+              {!lockedClassId &&
+                myTab === 'class' &&
+                showTabSwitcher &&
+                (() => {
+                  const viewSwitcherOptions = [
+                    { id: 'scheduler', label: 'Scheduler', icon: 'fa-th-large' },
+                    { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+                    { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
+                    { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
+                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+                    {
+                      id: 'assigned_teachers',
+                      label: 'Assigned Teachers',
+                      icon: 'fa-chalkboard-teacher',
+                    },
+                  ].filter((v) => filteredViews.includes(v.id));
+                  return (
+                    <div className="flex bg-light-lbg p-1 rounded-2xl items-center gap-1 border border-light-border">
+                      {viewSwitcherOptions.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => setViewType(v.id)}
+                          title={v.label}
+                          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 whitespace-nowrap cursor-pointer ${
+                            viewType === v.id
+                              ? 'text-white bg-brand-primary shadow-sm'
+                              : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                          }`}
+                        >
+                          <i className={`fas ${v.icon} text-[10px]`} />
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
 
               {/* Entity Selectors (Class / Teacher) */}
               {!lockedClassId && myTab === 'class' && (
@@ -2227,15 +2279,39 @@ const TimetableAdminView = ({
               {myTab === 'class' && isOverviewView && (
                 <div className="flex items-center gap-2">
                   {(viewType === 'teacher_unassigned' || viewType === 'subject_unassigned') && (
-                    <MultiSelectDropdown label="Classes" options={classOptions} selected={selClasses} onChange={setSelClasses} />
+                    <MultiSelectDropdown
+                      label="Classes"
+                      options={classOptions}
+                      selected={selClasses}
+                      onChange={setSelClasses}
+                    />
                   )}
                   {viewType === 'free_teachers' && (
-                    <MultiSelectDropdown label="Teachers" options={teacherOptions} selected={selTeachers} onChange={setSelTeachers} genderFilter={freeTeachersGender} onGenderChange={setFreeTeachersGender} />
+                    <MultiSelectDropdown
+                      label="Teachers"
+                      options={teacherOptions}
+                      selected={selTeachers}
+                      onChange={setSelTeachers}
+                      genderFilter={freeTeachersGender}
+                      onGenderChange={setFreeTeachersGender}
+                    />
                   )}
                   {viewType === 'assigned_teachers' && (
                     <>
-                      <MultiSelectDropdown label="Teachers" options={teacherOptions} selected={selAssignedTeachers} onChange={setSelAssignedTeachers} genderFilter={assignedTeachersGender} onGenderChange={setAssignedTeachersGender} />
-                      <MultiSelectDropdown label="Classes" options={classOptions} selected={selAssignedClasses} onChange={setSelAssignedClasses} />
+                      <MultiSelectDropdown
+                        label="Teachers"
+                        options={teacherOptions}
+                        selected={selAssignedTeachers}
+                        onChange={setSelAssignedTeachers}
+                        genderFilter={assignedTeachersGender}
+                        onGenderChange={setAssignedTeachersGender}
+                      />
+                      <MultiSelectDropdown
+                        label="Classes"
+                        options={classOptions}
+                        selected={selAssignedClasses}
+                        onChange={setSelAssignedClasses}
+                      />
                     </>
                   )}
                 </div>
@@ -2447,7 +2523,7 @@ const TimetableAdminView = ({
                             visiblePeriods.map((period) => {
                               const isBreak = period.is_break;
                               const isWorkingWeekend = dayType === 'Working Weekend';
-                              const isWeekendApplicable = period.applicable_on_weekends;
+                              const isWeekendApplicable = period.applicable_on_weekends !== false;
                               const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
 
                               if (isPeriodDisabled) {

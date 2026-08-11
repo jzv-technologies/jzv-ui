@@ -132,7 +132,8 @@ const TimetableManager = () => {
         { data: dbClassifications },
         { data: dbSubjects },
         { data: dbTeachers },
-        { data: dbTeacherSubjects },
+        { data: dbTeacherSubjectsMap },
+        { data: dbTeacherSubjectsDirect },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
@@ -142,17 +143,21 @@ const TimetableManager = () => {
         supabase.from('syl_subjects').select('*'),
         supabase.from('teachers').select('*'),
         supabase.from('map_teacher_subject').select('*'),
+        supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
 
+      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
+
       const teachersWithSubjects = (dbTeachers || []).map((t) => {
         const tid = t.teacher_id || t.id;
         return {
           ...t,
           id: tid,
+          teacher_id: tid,
           subjects: (dbTeacherSubjects || [])
             .filter((ts) => String(ts.teacher_id) === String(tid))
             .map((ts) => ts.subject_id),
@@ -511,23 +516,74 @@ const TimetableManager = () => {
     });
   };
 
+  const mutateSupabaseTable = async (tableName, action, payload, idVal) => {
+    if (!idVal && action !== 'insert') return { data: [], error: null };
+
+    const primaryCol = tableName === 'teachers' ? 'teacher_id' : 'id';
+    const fallbackCol = tableName === 'teachers' ? 'id' : 'emp_id';
+
+    const execute = async (col) => {
+      let q = supabase.from(tableName);
+      if (action === 'delete') {
+        q = q.delete().eq(col, idVal);
+      } else if (action === 'update') {
+        q = q.update(payload).eq(col, idVal);
+      } else if (action === 'insert') {
+        q = q.insert(payload);
+      }
+      return await q.select();
+    };
+
+    let res = await execute(primaryCol);
+    if (res.error && (res.error.code === '42703' || res.error.message?.includes('does not exist'))) {
+      res = await execute(fallbackCol);
+    }
+    return res;
+  };
+
   const handleDeleteTeacher = async (id) => {
+    let dbDeleted = true;
+    let dbErrDetail = null;
+
+    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+      try {
+        await supabase.from('class_assignments').delete().eq('teacher_id', id);
+        await supabase.from('timetable_slots').update({ teacher_id: null }).eq('teacher_id', id);
+        await supabase.from('teacher_subjects').delete().eq('teacher_id', id);
+        await supabase.from('map_teacher_subject').delete().eq('teacher_id', id);
+
+        const resTeach = await mutateSupabaseTable('teachers', 'delete', null, id);
+        const resEmp = await mutateSupabaseTable('employees', 'delete', null, id);
+
+        const teacherDeleted =
+          (resTeach.data && resTeach.data.length > 0) ||
+          (resEmp.data && resEmp.data.length > 0);
+
+        if (!teacherDeleted) {
+          dbDeleted = false;
+          dbErrDetail = resTeach.error?.message || resEmp.error?.message || 'Database permissions / RLS blocked row deletion.';
+        }
+      } catch (err) {
+        dbDeleted = false;
+        dbErrDetail = err.message;
+      }
+
+      if (!dbDeleted) {
+        showToast('Error deleting teacher: ' + dbErrDetail, 'error');
+        return;
+      }
+    }
+
     const updatedTeachers = teachers.filter((t) => String(t.id) !== String(id));
     const updatedAssignments = assignments.filter((a) => String(a.teacher_id) !== String(id));
     const updatedSlots = slots.filter((s) => String(s.teacher_id) !== String(id));
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
-      try {
-        await supabase.from('employees').delete().eq('id', id);
-      } catch (err) {
-        console.error(err);
-      }
-    }
     saveState({
       teachers: updatedTeachers,
       assignments: updatedAssignments,
       slots: updatedSlots,
     });
+    showToast('Teacher deleted successfully!', 'success');
   };
 
   const handleToggleTeacherActive = async (id) => {

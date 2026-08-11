@@ -19,6 +19,7 @@ const TeacherTimetableViewer = ({ user }) => {
   const [periods, setPeriods] = useState([]);
   const [slots, setSlots] = useState([]);
   const [classifications, setClassifications] = useState([]);
+  const [seasonsConfig, setSeasonsConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -68,60 +69,99 @@ const TeacherTimetableViewer = ({ user }) => {
 
       const [
         { data: dbSubjects },
-        { data: dbTeacherSubjects },
+        { data: dbTeacherSubjectsMap },
+        { data: dbTeacherSubjectsDirect },
         { data: dbClasses },
         { data: dbSlots },
         { data: dbPeriods },
         { data: dbClassifications },
-        { data: currentTeacherData, error: currentTeacherErr },
+        { data: dbTeachers },
+        { data: currentTeacherData },
+        { data: settingsData },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
+        supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('syl_classifications').select('*'),
+        supabase.from('teachers').select('*'),
         supabase.rpc('get_current_teacher_details', { p_auth_id: user?.id || null }),
+        supabase
+          .from('admin_configruation')
+          .select('*')
+          .eq('key', 'timetable_seasons_config')
+          .maybeSingle(),
       ]);
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
         throw new Error('No classes or slots found in database. Loading mock data.');
       }
 
-      if (currentTeacherErr) {
-        throw currentTeacherErr;
-      }
+      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
 
       const currentTeacher = Array.isArray(currentTeacherData)
         ? currentTeacherData[0]
         : currentTeacherData || null;
 
-      const teachersWithSubjects = currentTeacher
-        ? [
-            {
-              id: currentTeacher.id,
-              teacher_id: currentTeacher.id,
-              name: currentTeacher.name,
-              is_male: currentTeacher.is_male,
-              auth_id: user?.id || null,
-              subjects: (dbTeacherSubjects || [])
-                .filter((ts) => String(ts.teacher_id) === String(currentTeacher.id))
-                .map((ts) => ts.subject_id),
-            },
-          ]
-        : [];
+      let allTeachers = Array.isArray(dbTeachers) && dbTeachers.length > 0 ? dbTeachers : [];
+      if (allTeachers.length === 0 && currentTeacher) {
+        allTeachers = [currentTeacher];
+      }
+
+      const teachersWithSubjects = allTeachers.map((t) => {
+        const tid = t.teacher_id || t.id;
+        const isCurrent =
+          currentTeacher && String(currentTeacher.id || currentTeacher.teacher_id) === String(tid);
+        return {
+          ...t,
+          id: tid,
+          teacher_id: tid,
+          name: t.name,
+          is_male: t.is_male,
+          auth_id: isCurrent ? user?.id || t.auth_id || null : t.auth_id || null,
+          subjects: (dbTeacherSubjects || [])
+            .filter((ts) => String(ts.teacher_id) === String(tid))
+            .map((ts) => ts.subject_id),
+        };
+      });
+
+      let fetchedSeasonsConfig = null;
+      if (settingsData && settingsData.val) {
+        fetchedSeasonsConfig =
+          typeof settingsData.val === 'string' ? JSON.parse(settingsData.val) : settingsData.val;
+      }
+      if (!fetchedSeasonsConfig) {
+        const localRaw = localStorage.getItem('jzv_timetable_seasons_config');
+        if (localRaw) {
+          try {
+            fetchedSeasonsConfig = JSON.parse(localRaw);
+          } catch (e) {}
+        }
+      }
+
+      setSeasonsConfig(fetchedSeasonsConfig);
+
+      const activeId = fetchedSeasonsConfig?.active_season_id || 'summer';
+      const activeSeason = fetchedSeasonsConfig?.seasons?.[activeId];
+
+      const rawPeriods = dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS;
+      const mappedPeriods = rawPeriods.map((dbP) => {
+        const seasonP = activeSeason?.periods?.find((up) => up.period_number === dbP.period_number);
+        return {
+          ...dbP,
+          icon: seasonP ? seasonP.icon : dbP.icon || null,
+          applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : true,
+        };
+      });
 
       setSubjects(dbSubjects || []);
       setTeachers(teachersWithSubjects);
       setClasses(dbClasses || []);
       setSlots(dbSlots || []);
       setClassifications(dbClassifications || []);
-
-      if (dbPeriods && dbPeriods.length > 0) {
-        setPeriods(dbPeriods);
-      } else {
-        setPeriods(DEFAULT_MOCK_PERIODS);
-      }
+      setPeriods(mappedPeriods);
     } catch (err) {
       console.warn('Falling back to local storage/mock for teacher view:', err.message);
       loadMockFallback();
@@ -153,6 +193,7 @@ const TeacherTimetableViewer = ({ user }) => {
       periods={periods}
       slots={slots}
       classifications={classifications}
+      seasonsConfig={seasonsConfig}
       onRefresh={() => fetchTimetableData(false)}
       refreshing={refreshing}
       allowedViews={['scheduler']}

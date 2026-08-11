@@ -187,6 +187,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   const [ttAssignments, setTtAssignments] = useState([]);
   const [ttSlots, setTtSlots] = useState([]);
   const [ttClassifications, setTtClassifications] = useState([]);
+  const [ttSeasonsConfig, setTtSeasonsConfig] = useState(null);
   const [ttLoading, setTtLoading] = useState(false);
 
   // UUID mapping
@@ -208,23 +209,33 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
       const [
         { data: dbSubjects },
-        { data: dbTeacherSubjects },
+        { data: dbTeacherSubjectsMap },
+        { data: dbTeacherSubjectsDirect },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
         { data: dbPeriods },
         { data: dbClassifications },
         { data: secureTeachersData, error: secureTeachersErr },
+        { data: settingsData },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
+        supabase.from('teacher_subjects').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null }),
+        supabase
+          .from('admin_configruation')
+          .select('*')
+          .eq('key', 'timetable_seasons_config')
+          .maybeSingle(),
       ]);
+
+      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
       if (secureTeachersErr) {
@@ -238,6 +249,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         const tid = t.teacher_id || t.id;
         return {
           id: tid,
+          teacher_id: tid,
           name: t.name,
           is_male: t.is_male,
           auth_id: t.auth_id || null,
@@ -247,13 +259,42 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         };
       });
 
+      let fetchedSeasonsConfig = null;
+      if (settingsData && settingsData.val) {
+        fetchedSeasonsConfig =
+          typeof settingsData.val === 'string' ? JSON.parse(settingsData.val) : settingsData.val;
+      }
+      if (!fetchedSeasonsConfig) {
+        const localRaw = localStorage.getItem('jzv_timetable_seasons_config');
+        if (localRaw) {
+          try {
+            fetchedSeasonsConfig = JSON.parse(localRaw);
+          } catch (e) {}
+        }
+      }
+
+      setTtSeasonsConfig(fetchedSeasonsConfig);
+
+      const activeId = fetchedSeasonsConfig?.active_season_id || 'summer';
+      const activeSeason = fetchedSeasonsConfig?.seasons?.[activeId];
+
+      const rawPeriods = dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS;
+      const mappedPeriods = rawPeriods.map((dbP) => {
+        const seasonP = activeSeason?.periods?.find((up) => up.period_number === dbP.period_number);
+        return {
+          ...dbP,
+          icon: seasonP ? seasonP.icon : dbP.icon || null,
+          applicable_on_weekends: seasonP ? seasonP.applicable_on_weekends : true,
+        };
+      });
+
       setTtSubjects(dbSubjects || []);
       setTtTeachers(teachersWithSubjects);
       setTtClasses(dbClasses || []);
       setTtAssignments(dbAssignments || []);
       setTtSlots(dbSlots || []);
       setTtClassifications(dbClassifications || []);
-      setTtPeriods(dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS);
+      setTtPeriods(mappedPeriods);
     } catch (err) {
       // Fallback to localStorage / mock data
       const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
@@ -1516,6 +1557,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
               periods={ttPeriods}
               slots={ttSlots}
               assignments={ttAssignments}
+              seasonsConfig={ttSeasonsConfig}
               onRefresh={fetchTimetableData}
               refreshing={ttLoading}
               // no onUpdateSlot = read-only

@@ -243,7 +243,7 @@ const SalaryDashboardMatrixView = ({
                               <span>{m.label.split(' ')[0]}</span>
                               {record ? (
                                 <span className="text-[9px] opacity-90 font-mono">
-                                  ₹{paidAmt >= 1000 ? `${(paidAmt / 1000).toFixed(0)}k` : paidAmt}
+                                  ₹{paidAmt >= 1000 ? `${(paidAmt / 1000).toFixed(2)}k` : paidAmt}
                                 </span>
                               ) : (
                                 <span className="text-[8px] opacity-60">-</span>

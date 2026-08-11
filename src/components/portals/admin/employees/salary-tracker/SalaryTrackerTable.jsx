@@ -153,7 +153,7 @@ const SalaryTrackerTable = ({ items, onOpenExtras, onOpenPayment, onOpenHistory,
                     className="px-3 py-1.5 rounded-lg text-xs font-black bg-teal-600 hover:bg-teal-800 text-white shadow-xs transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Record Payment"
                   >
-                    <i class="fa-brands fa-amazon-pay"></i>
+                    <i className="fa-brands fa-amazon-pay"></i>
                   </button>
                 </div>
               </td>
