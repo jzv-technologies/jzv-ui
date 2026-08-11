@@ -772,10 +772,30 @@ const AddWorkModalCompleteView = ({
     comments,
     isRevision
   ) => {
+    let dupQuery = supabase
+      .from('trk_daily_teacher_progress')
+      .select('id')
+      .eq('progress_id', progressId)
+      .eq('date', date);
+
+    const effectiveTeacherId = teacherId || null;
+    if (effectiveTeacherId) {
+      dupQuery = dupQuery.eq('teacher_id', effectiveTeacherId);
+    } else {
+      dupQuery = dupQuery.is('teacher_id', null);
+    }
+
+    const { data: existingLogs, error: checkErr } = await dupQuery;
+    if (checkErr) throw checkErr;
+
+    if (existingLogs && existingLogs.length > 0) {
+      throw new Error('Progress already added, you can update the previously submitted');
+    }
+
     const { error } = await supabase.from('trk_daily_teacher_progress').insert([
       {
         progress_id: progressId,
-        teacher_id: teacherId || null,
+        teacher_id: effectiveTeacherId,
         date: date,
         progress: Number(progress),
         is_revision: isRevision ? 'Y' : 'N',

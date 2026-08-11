@@ -8,6 +8,7 @@ import {
   MOCK_TEACHERS as DEFAULT_MOCK_TEACHERS,
   MOCK_CLASSES as DEFAULT_MOCK_CLASSES,
   MOCK_PERIODS as DEFAULT_MOCK_PERIODS,
+  MOCK_ASSIGNMENTS as DEFAULT_MOCK_ASSIGNMENTS,
   MOCK_SLOTS,
   MOCK_TIMETABLE_STATE,
 } from '../../../data/mockTimetable';
@@ -18,6 +19,7 @@ const TeacherTimetableViewer = ({ user }) => {
   const [classes, setClasses] = useState([]);
   const [periods, setPeriods] = useState([]);
   const [slots, setSlots] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [classifications, setClassifications] = useState([]);
   const [seasonsConfig, setSeasonsConfig] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ const TeacherTimetableViewer = ({ user }) => {
           setClasses(parsed.classes || []);
           setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
           setSlots(parsed.slots || []);
+          setAssignments(parsed.assignments || DEFAULT_MOCK_ASSIGNMENTS);
           setClassifications(parsed.classifications || []);
           return;
         }
@@ -47,6 +50,7 @@ const TeacherTimetableViewer = ({ user }) => {
     setClasses(DEFAULT_MOCK_CLASSES);
     setPeriods(DEFAULT_MOCK_PERIODS);
     setSlots(MOCK_SLOTS);
+    setAssignments(DEFAULT_MOCK_ASSIGNMENTS);
     setClassifications([]);
     localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(MOCK_TIMETABLE_STATE));
   };
@@ -78,6 +82,7 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: dbTeachers },
         { data: currentTeacherData },
         { data: settingsData },
+        { data: dbAssignments },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
@@ -93,6 +98,7 @@ const TeacherTimetableViewer = ({ user }) => {
           .select('*')
           .eq('key', 'timetable_seasons_config')
           .maybeSingle(),
+        supabase.from('class_assignments').select('*'),
       ]);
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
@@ -160,6 +166,7 @@ const TeacherTimetableViewer = ({ user }) => {
       setTeachers(teachersWithSubjects);
       setClasses(dbClasses || []);
       setSlots(dbSlots || []);
+      setAssignments(dbAssignments || []);
       setClassifications(dbClassifications || []);
       setPeriods(mappedPeriods);
     } catch (err) {
@@ -192,11 +199,12 @@ const TeacherTimetableViewer = ({ user }) => {
       subjects={subjects}
       periods={periods}
       slots={slots}
+      assignments={assignments}
       classifications={classifications}
       seasonsConfig={seasonsConfig}
       onRefresh={() => fetchTimetableData(false)}
       refreshing={refreshing}
-      allowedViews={['scheduler']}
+      allowedViews={['scheduler', 'teacher', 'free_teachers', 'assigned_teachers']}
     />
   );
 };
