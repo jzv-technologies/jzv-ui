@@ -1,24 +1,24 @@
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import HomeGrid from './layout/HomeGrid';
-import RoleSelectionDashboard from './RoleSelectionDashboard';
-import AdminPortal from './portals/AdminPortal';
-import ManagementPortal from './portals/ManagementPortal';
-import RolePortal from './portals/RolePortal';
+import RoleSelectionDashboard from './auth/RoleSelectionDashboard';
+import AdminPortal from './auth/AdminPortal';
+import ManagementPortal from './auth/ManagementPortal';
+import RolePortal from './auth/RolePortal';
 import DynamicForm from './DynamicForm';
 import { CARD_THEMES } from '../utils/cardTheme';
 import { supabase } from '../utils/supabase';
 import Translate from './Translate';
-import TeacherTimetableViewer from './portals/teacher/TeacherTimetableViewer';
-import TeacherStudentsViewer from './portals/teacher/TeacherStudentsViewer';
-import ParentTimetableViewer from './portals/parent/ParentTimetableViewer';
-import SyllabusManager from './portals/admin/syllabus/SyllabusManager';
-import ReporterTicketsView from './portals/ReporterTicketsView';
-import LessonManager from './portals/teacher/LessonManager/LessonManager';
-import EmployeeRecordsView from './portals/admin/employees/EmployeeRecordsView';
-import SyllabusTrackerPortal from './portals/shared-components/SyllabusTrackerPortal';
-import CandidatePortal from './portals/CandidatePortal';
-import TVDisplayDashboard from './portals/shared-components/TVDisplayDashboard';
+import TeacherTimetableViewer from './timetable/TeacherTimetableViewer';
+import TeacherStudentsViewer from './students/TeacherStudentsViewer';
+import ParentTimetableViewer from './timetable/ParentTimetableViewer';
+import SyllabusManager from './syllabus/SyllabusManager';
+import ReporterTicketsView from './tickets/ReporterTicketsView';
+import LessonManager from './syllabus/lesson-manager/LessonManager';
+import EmployeeRecordsView from './employees/EmployeeRecordsView';
+import SyllabusTrackerPortal from './syllabus/SyllabusTrackerPortal';
+import CandidatePortal from './auth/CandidatePortal';
+import TVDisplayDashboard from './dashboard/TVDisplayDashboard';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">

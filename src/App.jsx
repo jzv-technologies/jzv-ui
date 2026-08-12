@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import AOS from "aos";
 import "aos/dist/aos.css";
 import useGoogleTranslate from "./hooks/useGoogleTranslate";
-import LoginPortal from "./components/LoginPortal";
+import LoginPortal from "./components/auth/LoginPortal";
 import Header from "./components/layout/Header";
 import ModalContainer from "./components/layout/ModalContainer";
 import { HOME_CARD_SEQUENCE } from "./components/homepage/CardsData";

@@ -26,7 +26,7 @@ const SalaryTrackerHeader = ({
   }
 
   return (
-    <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-4">
+    <div className="bg-white border border-light-border p-4 sm:p-6 rounded-3xl shadow-sm space-y-4">
       {/* TOP ROW: Title, Download, Upload & View Mode Switcher */}
       {!hideHeaderTopRow && (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -85,9 +85,7 @@ const SalaryTrackerHeader = ({
                       : 'Currently showing single view for all. Click to enable Org grouping.'
                   }
                 >
-                  <i
-                    className={`fas ${groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}
-                  ></i>
+                  <i className={`fas ${groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}></i>
                   <span>{groupByOrg ? 'Grouping On' : 'Grouping Off'}</span>
                 </button>
               )}
@@ -215,9 +213,7 @@ const SalaryTrackerHeader = ({
                       : 'Currently showing single view for all. Click to enable Org grouping.'
                   }
                 >
-                  <i
-                    className={`fas ${groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}
-                  ></i>
+                  <i className={`fas ${groupByOrg ? 'fa-layer-group text-teal-600' : 'fa-list-ul text-gray-500'}`}></i>
                   <span>{groupByOrg ? 'Grouping On' : 'Grouping Off'}</span>
                 </button>
               )}

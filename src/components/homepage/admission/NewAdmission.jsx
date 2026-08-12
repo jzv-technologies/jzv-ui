@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { supabase } from "../../../../src/utils/supabase";
+import { supabase } from "../../../utils/supabase";
 
 export default function NewAdmission({ inModal = false }) {
   const [formData, setFormData] = useState({

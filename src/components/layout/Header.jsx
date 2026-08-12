@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Translate from '../Translate';
 import { supabase } from '../../utils/supabase';
-import AddWorkExceptionsModal from '../portals/admin/AddWorkExceptionsModal';
+import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 
 const Header = ({
   user,
