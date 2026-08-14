@@ -691,6 +691,95 @@
       ]
     },
     {
+      "table": "request_tracker",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "bigint",
+          "column": "requester_id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "requester_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "request_type",
+          "default": "'Add Work Access'::character varying",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "notes",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "status",
+          "default": "'pending'::character varying",
+          "nullable": "NO"
+        },
+        {
+          "type": "character varying",
+          "column": "approved_by",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "approved_at",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "character varying",
+          "column": "rejected_by",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "rejected_at",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "active_from",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "expire_at",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
       "table": "salary_tracker",
       "columns": [
         {
@@ -983,6 +1072,12 @@
           "column": "hierarchy_type",
           "default": "'Book > Unit > Chapter > Lesson'::character varying",
           "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "levels_available",
+          "default": "3",
+          "nullable": "YES"
         }
       ]
     },
@@ -1064,6 +1159,12 @@
           "type": "timestamp with time zone",
           "column": "created_at",
           "default": "CURRENT_TIMESTAMP",
+          "nullable": "YES"
+        },
+        {
+          "type": "integer",
+          "column": "sequence",
+          "default": null,
           "nullable": "YES"
         }
       ]
@@ -1698,7 +1799,7 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "employees",
       "using": "true",
@@ -1708,7 +1809,7 @@
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "employees",
       "using": "true",
@@ -1820,6 +1921,76 @@
       "roles": [
         "authenticated"
       ],
+      "table": "request_tracker",
+      "using": "has_role_above(8)",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "request_tracker",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "anon"
+      ],
+      "table": "request_tracker",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "request_tracker",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon"
+      ],
+      "table": "request_tracker",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "request_tracker",
+      "using": "true",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon"
+      ],
+      "table": "request_tracker",
+      "using": "true",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
       "table": "salary_tracker",
       "using": null,
       "command": "INSERT",
@@ -1919,7 +2090,7 @@
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "syl_classifications",
       "using": "true",
@@ -1929,7 +2100,7 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "syl_classifications",
       "using": "true",
@@ -2019,21 +2190,21 @@
     },
     {
       "roles": [
-        "anon",
         "authenticated"
       ],
       "table": "timetable_slots",
-      "using": "is_parent_of_class(class_id)",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "timetable_slots",
-      "using": "true",
+      "using": "is_parent_of_class(class_id)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2050,20 +2221,20 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "trk_book_level_progress",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "trk_book_level_progress",
-      "using": "true",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null

@@ -10,6 +10,7 @@ import TeacherActivityChart from './TeacherActivityChart';
 import AcademicCalendarModal from './AcademicCalendarModal';
 import {
   buildAcademicCalendarRows,
+  buildAcademicMonths,
   buildAttentionAlerts,
   buildClassDonutData,
   buildEstimateRows,
@@ -21,6 +22,8 @@ import {
   buildTrendData,
   getAcademicYearOptions,
   getCurrentAcademicYearLabel,
+  parseAcademicYearLabel,
+  getAcademicMonthYear,
 } from './overviewUtils';
 
 const VIEW_OPTIONS = [
@@ -40,6 +43,7 @@ const SyllabusOverviewDashboard = ({
   assignments = [],
   teachers = [],
   bookTrackers = [],
+  allLogs = [],
   lessonPlans = [],
   carryForwards = [],
   onOpenClassProgress,
@@ -54,11 +58,14 @@ const SyllabusOverviewDashboard = ({
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
   const [isSavingEstimates, setIsSavingEstimates] = useState(false);
   const [calendarFallbackReason, setCalendarFallbackReason] = useState('');
+  // Configurable academic year range (start/end month numbers)
+  const [academicStartMonth, setAcademicStartMonth] = useState(6);
+  const [academicEndMonth, setAcademicEndMonth] = useState(5);
 
   const fetchOverviewData = useCallback(async () => {
     setLoadingAuxData(true);
 
-    const [calendarResult, timetableResult, dailyLogsResult] = await Promise.all([
+    const [calendarResult, timetableResult, dailyLogsResult, configResult] = await Promise.all([
       supabase
         .from('academic_calendar')
         .select('*')
@@ -70,6 +77,11 @@ const SyllabusOverviewDashboard = ({
       supabase
         .from('trk_daily_teacher_progress')
         .select('id, progress_id, teacher_id, date, current_status, progress, created_at'),
+      supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'academic_year_range')
+        .maybeSingle(),
     ]);
 
     if (calendarResult.error) {
@@ -98,12 +110,23 @@ const SyllabusOverviewDashboard = ({
       setDailyLogs(dailyLogsResult.data || []);
     }
 
+    if (!configResult.error && configResult.data?.val) {
+      const cfg = configResult.data.val;
+      if (cfg.start_month) setAcademicStartMonth(Number(cfg.start_month));
+      if (cfg.end_month) setAcademicEndMonth(Number(cfg.end_month));
+    }
+
     setLoadingAuxData(false);
   }, []);
 
   useEffect(() => {
     fetchOverviewData();
   }, [fetchOverviewData]);
+
+  const academicMonths = useMemo(
+    () => buildAcademicMonths(academicStartMonth, academicEndMonth),
+    [academicStartMonth, academicEndMonth]
+  );
 
   const academicYearOptions = useMemo(
     () => getAcademicYearOptions(calendarEntries),
@@ -115,9 +138,16 @@ const SyllabusOverviewDashboard = ({
     setSelectedAcademicYear(academicYearOptions[0] || getCurrentAcademicYearLabel());
   }, [academicYearOptions, selectedAcademicYear]);
 
+  // Derive academic year start date for adherence scoping
+  const academicYearStartDate = useMemo(() => {
+    const startYear = parseAcademicYearLabel(selectedAcademicYear);
+    const startYear4 = getAcademicMonthYear(startYear, academicStartMonth);
+    return new Date(startYear4, academicStartMonth - 1, 1);
+  }, [selectedAcademicYear, academicStartMonth]);
+
   const calendarRows = useMemo(
-    () => buildAcademicCalendarRows(selectedAcademicYear, calendarEntries),
-    [selectedAcademicYear, calendarEntries]
+    () => buildAcademicCalendarRows(selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth),
+    [selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth]
   );
 
   const periodsPerWeekMap = useMemo(() => buildPeriodsPerWeekMap(timetableSlots), [timetableSlots]);
@@ -132,18 +162,33 @@ const SyllabusOverviewDashboard = ({
         classes,
         calendarRows,
         periodsPerWeekMap,
+        allLogs,
+        academicStartMonth,
       }),
-    [bookClasses, bookTrackers, books, subjects, classes, calendarRows, periodsPerWeekMap]
+    [bookClasses, bookTrackers, books, subjects, classes, calendarRows, periodsPerWeekMap, allLogs, academicStartMonth]
+  );
+
+  const teacherActivityData = useMemo(
+    () =>
+      buildTeacherActivityData({
+        teachers,
+        dailyLogs,
+        lessonPlans,
+        carryForwards,
+        assignments,
+        academicYearStartDate,
+      }),
+    [teachers, dailyLogs, lessonPlans, carryForwards, assignments, academicYearStartDate]
   );
 
   const summary = useMemo(
-    () => buildOverviewSummary({ pacingRecords, dailyLogs, carryForwards }),
-    [pacingRecords, dailyLogs, carryForwards]
+    () => buildOverviewSummary({ pacingRecords, dailyLogs, carryForwards, teacherActivityData }),
+    [pacingRecords, dailyLogs, carryForwards, teacherActivityData]
   );
 
   const heatmap = useMemo(
-    () => buildHeatmapModel({ classes, subjects, classifications, pacingRecords }),
-    [classes, subjects, classifications, pacingRecords]
+    () => buildHeatmapModel({ classes, subjects, classifications, pacingRecords, assignments }),
+    [classes, subjects, classifications, pacingRecords, assignments]
   );
 
   const trendData = useMemo(
@@ -169,21 +214,9 @@ const SyllabusOverviewDashboard = ({
     [classes, bookTrackers]
   );
 
-  const teacherActivityData = useMemo(
-    () =>
-      buildTeacherActivityData({
-        teachers,
-        dailyLogs,
-        lessonPlans,
-        carryForwards,
-        assignments,
-      }),
-    [teachers, dailyLogs, lessonPlans, carryForwards, assignments]
-  );
-
   const estimateRows = useMemo(
-    () => buildEstimateRows({ bookClasses, books, subjects, classes, periodsPerWeekMap }),
-    [bookClasses, books, subjects, classes, periodsPerWeekMap]
+    () => buildEstimateRows({ bookClasses, books, subjects, classes, periodsPerWeekMap, allLogs, academicStartMonth }),
+    [bookClasses, books, subjects, classes, periodsPerWeekMap, allLogs, academicStartMonth]
   );
 
   const handleSaveCalendar = useCallback(async (rows) => {
@@ -226,7 +259,7 @@ const SyllabusOverviewDashboard = ({
 
       const payload = rows.map((row) => ({
         id: row.mappingId,
-        estimated_periods: row.estimatedPeriods === '' ? null : Number(row.estimatedPeriods),
+        expected_end_month: row.expectedEndMonth || null,
       }));
 
       const { data, error } = await supabase.from('map_class_books').upsert(payload).select('*');
@@ -234,7 +267,7 @@ const SyllabusOverviewDashboard = ({
       setIsSavingEstimates(false);
 
       if (error) {
-        showToast(`Failed to save estimates: ${error.message}`, 'error');
+        showToast(`Failed to save completion windows: ${error.message}`, 'error');
         return false;
       }
 
@@ -243,16 +276,36 @@ const SyllabusOverviewDashboard = ({
         setBookClasses((previous) =>
           previous.map((item) => {
             const saved = savedMap.get(String(item.id));
-            return saved ? { ...item, estimated_periods: saved.estimated_periods } : item;
+            return saved ? {
+              ...item,
+              expected_end_month: saved.expected_end_month,
+            } : item;
           })
         );
       }
 
-      showToast('Book period estimates saved.', 'success');
+      showToast('Book active completion windows saved.', 'success');
       return true;
     },
     [setBookClasses]
   );
+
+  const handleSaveAcademicRange = useCallback(async (startMonth, endMonth) => {
+    const { error } = await supabase
+      .from('admin_configruation')
+      .upsert(
+        { key: 'academic_year_range', val: { start_month: startMonth, end_month: endMonth } },
+        { onConflict: 'key' }
+      );
+    if (error) {
+      showToast(`Failed to save academic year range: ${error.message}`, 'error');
+      return false;
+    }
+    setAcademicStartMonth(startMonth);
+    setAcademicEndMonth(endMonth);
+    showToast('Academic year range saved.', 'success');
+    return true;
+  }, []);
 
   const canEditSettings = role === 'admin' || role === 'management';
 
@@ -341,6 +394,10 @@ const SyllabusOverviewDashboard = ({
         onSaveEstimates={handleSaveEstimates}
         isSavingCalendar={isSavingCalendar}
         isSavingEstimates={isSavingEstimates}
+        academicStartMonth={academicStartMonth}
+        academicEndMonth={academicEndMonth}
+        onSaveAcademicRange={handleSaveAcademicRange}
+        academicMonths={academicMonths}
       />
     </div>
   );

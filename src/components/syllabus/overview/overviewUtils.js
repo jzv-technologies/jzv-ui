@@ -1,18 +1,29 @@
 export const DEFAULT_WORKING_DAYS = 22;
 export const DEFAULT_TEACHING_DAYS = 20;
 
-export const ACADEMIC_MONTHS = [
-  { month: 6, label: 'Jun' },
-  { month: 7, label: 'Jul' },
-  { month: 8, label: 'Aug' },
-  { month: 9, label: 'Sep' },
-  { month: 10, label: 'Oct' },
-  { month: 11, label: 'Nov' },
-  { month: 12, label: 'Dec' },
-  { month: 1, label: 'Jan' },
-  { month: 2, label: 'Feb' },
-  { month: 3, label: 'Mar' },
-];
+const MONTH_LABELS = {
+  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
+};
+
+/**
+ * Builds the ordered list of academic months from startMonth to endMonth.
+ * Wraps around December→January if endMonth < startMonth (e.g. Jun→May).
+ * Defaults to Jun–May (12 months) if not provided.
+ */
+export const buildAcademicMonths = (startMonth = 6, endMonth = 5) => {
+  const months = [];
+  let m = startMonth;
+  for (let i = 0; i < 12; i++) {
+    months.push({ month: m, label: MONTH_LABELS[m] });
+    if (m === endMonth) break;
+    m = m === 12 ? 1 : m + 1;
+  }
+  return months;
+};
+
+// Default academic months (June → May). Replaced at runtime by configurable range.
+export const ACADEMIC_MONTHS = buildAcademicMonths(6, 5);
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -36,11 +47,12 @@ export const getCurrentAcademicYearLabel = (today = new Date()) => {
 
 export const getAcademicMonthYear = (startYear, month) => (month >= 6 ? startYear : startYear + 1);
 
-export const buildAcademicCalendarRows = (academicYearLabel, calendarEntries = []) => {
+export const buildAcademicCalendarRows = (academicYearLabel, calendarEntries = [], startMonth = 6, endMonth = 5) => {
   const startYear = parseAcademicYearLabel(academicYearLabel);
+  const months = buildAcademicMonths(startMonth, endMonth);
   const entryMap = new Map(calendarEntries.map((entry) => [`${entry.year}-${entry.month}`, entry]));
 
-  return ACADEMIC_MONTHS.map(({ month, label }) => {
+  return months.map(({ month, label }) => {
     const year = getAcademicMonthYear(startYear, month);
     const entry = entryMap.get(`${year}-${month}`);
     return {
@@ -109,6 +121,39 @@ export const buildPeriodsPerWeekMap = (timetableSlots = []) => {
   return periodMap;
 };
 
+/**
+ * Given a month number and the calendarRows, compute how many teaching days have elapsed
+ * within the window [windowStart, windowEnd] up to today.
+ */
+const getWindowCoverage = (calendarRows, windowStartMonth, windowEndMonth, today) => {
+  // Build ordered list of months in the window (wrapping Dec→Jan if needed)
+  const windowMonths = [];
+  let m = windowStartMonth;
+  for (let i = 0; i < 12; i++) {
+    windowMonths.push(m);
+    if (m === windowEndMonth) break;
+    m = m === 12 ? 1 : m + 1;
+  }
+
+  const windowRows = calendarRows.filter((row) => windowMonths.includes(row.month));
+  const totalWindowDays = windowRows.reduce((sum, row) => sum + toNumber(row.teaching_days), 0);
+
+  const coverageRows = getCalendarCoverageRows(windowRows, today);
+  const elapsedWindowDays = coverageRows.reduce((sum, row) => sum + row.elapsedTeachingDays, 0);
+
+  const lastWindowRow = windowRows[windowRows.length - 1];
+  const windowEnd = lastWindowRow
+    ? new Date(lastWindowRow.year, lastWindowRow.month, 0, 23, 59, 59, 999)
+    : null;
+  const pastWindow = windowEnd ? today > windowEnd : false;
+
+  const firstWindowRow = windowRows[0];
+  const windowStart = firstWindowRow ? new Date(firstWindowRow.year, firstWindowRow.month - 1, 1) : null;
+  const beforeWindow = windowStart ? today < windowStart : false;
+
+  return { totalWindowDays, elapsedWindowDays, pastWindow, beforeWindow };
+};
+
 export const buildPacingRecords = ({
   bookClasses = [],
   bookTrackers = [],
@@ -117,6 +162,8 @@ export const buildPacingRecords = ({
   classes = [],
   calendarRows = [],
   periodsPerWeekMap = new Map(),
+  allLogs = [],
+  academicStartMonth = 6,
   today = new Date(),
 }) => {
   const coverageRows = getCalendarCoverageRows(calendarRows, today);
@@ -130,6 +177,19 @@ export const buildPacingRecords = ({
     bookTrackers.map((tracker) => [`${tracker.class_id}-${tracker.book_id}`, tracker])
   );
 
+  // Map earliest lesson log per class-book pair
+  const firstLessonMonthMap = new Map();
+  (allLogs || []).forEach((log) => {
+    if (!log.start_date && !log.updated_at) return;
+    const dateStr = log.start_date || log.updated_at;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return;
+    const key = `${log.class_id}-${log.book_id}`;
+    if (!firstLessonMonthMap.has(key) || date < firstLessonMonthMap.get(key).date) {
+      firstLessonMonthMap.set(key, { date, month: date.getMonth() + 1 });
+    }
+  });
+
   return bookClasses
     .map((mapping) => {
       const book = bookMap.get(String(mapping.book_id));
@@ -139,15 +199,40 @@ export const buildPacingRecords = ({
       const classRecord = classMap.get(String(mapping.class_id));
       const tracker = trackerMap.get(`${mapping.class_id}-${mapping.book_id}`);
       const periodsPerWeek = periodsPerWeekMap.get(`${mapping.class_id}-${book.subject_id}`) || 0;
-      const estimatedPeriods = toNumber(mapping.estimated_periods, 0);
       const actualProgress = clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
+
+      const firstLesson = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
+      const calculatedStartMonth = firstLesson?.month ?? academicStartMonth;
+
       const periodsAvailableToDate = periodsPerWeek * (elapsedTeachingDays / 5);
-      const expectedProgress =
-        estimatedPeriods > 0 && periodsPerWeek > 0
-          ? clamp((periodsAvailableToDate / estimatedPeriods) * 100, 0, 100)
-          : totalTeachingDays > 0
-            ? clamp((elapsedTeachingDays / totalTeachingDays) * 100, 0, 100)
+
+      // Determine expected progress — use active window if expected_end_month is set
+      let expectedProgress;
+      let isOverdue = false;
+
+      if (mapping.expected_end_month) {
+        const win = getWindowCoverage(
+          calendarRows,
+          calculatedStartMonth,
+          mapping.expected_end_month,
+          today
+        );
+
+        if (win.beforeWindow) {
+          expectedProgress = 0;
+        } else if (win.pastWindow) {
+          expectedProgress = 100;
+          if (actualProgress < 100) isOverdue = true;
+        } else {
+          expectedProgress = win.totalWindowDays > 0
+            ? clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100)
             : 0;
+        }
+      } else {
+        expectedProgress = totalTeachingDays > 0
+          ? clamp((elapsedTeachingDays / totalTeachingDays) * 100, 0, 100)
+          : 0;
+      }
 
       return {
         id: mapping.id,
@@ -159,14 +244,16 @@ export const buildPacingRecords = ({
         subjectName: subject?.name || 'Untitled Subject',
         classificationId: subject?.classification_id || null,
         actualProgress,
+        rawTrackerPct: actualProgress,
         expectedProgress,
+        isOverdue,
         periodsPerWeek,
         periodsAvailableToDate,
-        estimatedPeriods: estimatedPeriods > 0 ? estimatedPeriods : null,
-        periodsUsedApprox: estimatedPeriods > 0 ? (estimatedPeriods * actualProgress) / 100 : null,
         totalLessons: toNumber(tracker?.total_lessons, 0),
         completedLessons: toNumber(tracker?.completed, 0),
         trackerUpdatedAt: tracker?.updated_at || null,
+        calculatedStartMonth,
+        expectedEndMonth: mapping.expected_end_month || null,
       };
     })
     .filter(Boolean);
@@ -176,6 +263,7 @@ export const buildOverviewSummary = ({
   pacingRecords = [],
   dailyLogs = [],
   carryForwards = [],
+  teacherActivityData = [],
   today = new Date(),
 }) => {
   const trackedRecords = pacingRecords.filter(
@@ -194,12 +282,21 @@ export const buildOverviewSummary = ({
       trackedRecords.length
     : 0;
 
+  const overdueCount = pacingRecords.filter((r) => r.isOverdue).length;
+
   const pacingCounts = trackedRecords.reduce(
     (accumulator, record) => {
-      const delta = record.actualProgress - record.expectedProgress;
-      if (delta >= -10) accumulator.onTrack += 1;
-      else if (delta >= -25) accumulator.behind += 1;
-      else accumulator.critical += 1;
+      const pct = record.actualProgress ?? 0;
+      const expected = record.expectedProgress ?? 0;
+      const delta = pct - expected;
+
+      if ((pct === 0 && expected >= 10) || delta <= -15 || (pct < 20 && expected >= 30)) {
+        accumulator.critical += 1;
+      } else if (pct >= 70 || delta >= -5) {
+        accumulator.onTrack += 1;
+      } else {
+        accumulator.behind += 1;
+      }
       return accumulator;
     },
     { onTrack: 0, behind: 0, critical: 0 }
@@ -224,15 +321,27 @@ export const buildOverviewSummary = ({
     return createdAt >= fourteenDaysAgo && createdAt < sevenDaysAgo;
   });
 
+  // Dual-scope planning adherence
+  const activeTeachers = teacherActivityData.filter((t) => t.totalPlans > 0 || t.logs7d > 0);
+  const avgAdherenceAcadYear = activeTeachers.length
+    ? activeTeachers.reduce((sum, t) => sum + t.adherenceAcadYear, 0) / activeTeachers.length
+    : 0;
+  const avgAdherence30d = activeTeachers.length
+    ? activeTeachers.reduce((sum, t) => sum + t.adherence30d, 0) / activeTeachers.length
+    : 0;
+
   return {
     totalTracked,
     classCount,
     avgCompletion,
     avgExpected,
+    overdueCount,
     pacingCounts,
     recentLogsCount: recentLogs.length,
     recentCarryForwardsCount: recentCarryForwards.length,
     previousCarryForwardsCount: previousCarryForwards.length,
+    avgAdherenceAcadYear,
+    avgAdherence30d,
   };
 };
 
@@ -241,10 +350,15 @@ export const buildHeatmapModel = ({
   subjects = [],
   classifications = [],
   pacingRecords = [],
+  assignments = [],
 }) => {
-  const subjectIdsWithMappings = new Set(pacingRecords.map((record) => String(record.subjectId)));
+  const subjectIdsWithMappingsOrAssignments = new Set([
+    ...pacingRecords.map((record) => String(record.subjectId)),
+    ...assignments.map((assignment) => String(assignment.subject_id)),
+  ]);
+
   const subjectColumns = subjects
-    .filter((subject) => subjectIdsWithMappings.has(String(subject.id)))
+    .filter((subject) => subjectIdsWithMappingsOrAssignments.has(String(subject.id)))
     .sort((left, right) => {
       const leftClassification = String(left.classification_id || '');
       const rightClassification = String(right.classification_id || '');
@@ -257,6 +371,12 @@ export const buildHeatmapModel = ({
   const classificationMap = new Map(
     classifications.map((classification) => [String(classification.id), classification])
   );
+
+  // Pre-build set of assigned class-subject keys
+  const assignedKeys = new Set(
+    assignments.map((a) => `${a.class_id}-${a.subject_id}`)
+  );
+
   const rows = classes
     .map((classRecord) => {
       const cells = {};
@@ -268,8 +388,10 @@ export const buildHeatmapModel = ({
             String(record.subjectId) === String(subject.id)
         );
 
+        const isAssigned = assignedKeys.has(`${classRecord.id}-${subject.id}`);
+
         if (records.length === 0) {
-          cells[subject.id] = { hasData: false, pct: null };
+          cells[subject.id] = { hasData: false, isAssigned, pct: null };
           return;
         }
 
@@ -278,6 +400,7 @@ export const buildHeatmapModel = ({
 
         cells[subject.id] = {
           hasData: true,
+          isAssigned,
           pct: Math.round(avg(records, 'actualProgress')),
           expectedPct: Math.round(avg(records, 'expectedProgress')),
           estimatedPeriods: records.reduce(
@@ -301,7 +424,7 @@ export const buildHeatmapModel = ({
         cells,
       };
     })
-    .filter((row) => Object.values(row.cells).some((cell) => cell.hasData));
+    .filter((row) => Object.values(row.cells).some((cell) => cell.hasData || cell.isAssigned));
 
   const classificationGroups = [];
   let currentGroup = null;
@@ -476,6 +599,21 @@ export const buildAttentionAlerts = ({
   sevenDaysAgo.setDate(today.getDate() - 7);
 
   pacingRecords.forEach((record) => {
+    // Overdue book alert — past expected end month but not completed
+    if (record.isOverdue) {
+      alerts.push({
+        id: `overdue-${record.classId}-${record.bookId}`,
+        severity: 'critical',
+        classId: record.classId,
+        className: record.className,
+        type: 'overdue',
+        typeLabel: 'Overdue',
+        title: 'Book overdue',
+        description: `${record.className} / ${record.bookName} has passed its expected completion month at ${record.actualProgress.toFixed(0)}%.`,
+        meta: `Expected to finish by month ${record.expectedEndMonth}. ${100 - Math.round(record.actualProgress)}% remaining.`,
+      });
+    }
+
     const relatedPlans = lessonPlans.filter(
       (plan) =>
         String(plan.class_id) === String(record.classId) &&
@@ -494,6 +632,10 @@ export const buildAttentionAlerts = ({
       alerts.push({
         id: `stalled-${record.classId}-${record.bookId}`,
         severity: latestUpdatedAt ? 'high' : 'critical',
+        classId: record.classId,
+        className: record.className,
+        type: 'stalled',
+        typeLabel: 'Stalled Subject',
         title: 'Stalled subject',
         description: `${record.className} / ${record.subjectName} has not moved in the last 14 days.`,
         meta: latestUpdatedAt
@@ -503,10 +645,15 @@ export const buildAttentionAlerts = ({
     }
 
     const delta = record.actualProgress - record.expectedProgress;
-    if (delta <= -15) {
+    const isCriticalBehind = (record.actualProgress === 0 && record.expectedProgress >= 10) || delta <= -15;
+    if (isCriticalBehind || delta <= -10) {
       alerts.push({
         id: `behind-${record.classId}-${record.bookId}`,
-        severity: delta <= -25 ? 'critical' : 'high',
+        severity: isCriticalBehind ? 'critical' : 'high',
+        classId: record.classId,
+        className: record.className,
+        type: 'behind',
+        typeLabel: 'Behind Schedule',
         title: 'Behind schedule',
         description: `${record.className} / ${record.bookName} is ${Math.abs(delta).toFixed(0)} pts behind expected pacing.`,
         meta: `Actual ${record.actualProgress.toFixed(0)}% vs expected ${record.expectedProgress.toFixed(0)}%`,
@@ -517,6 +664,10 @@ export const buildAttentionAlerts = ({
       alerts.push({
         id: `estimate-${record.id}`,
         severity: 'medium',
+        classId: record.classId,
+        className: record.className,
+        type: 'missing_estimate',
+        typeLabel: 'Missing Estimate',
         title: 'Missing period estimate',
         description: `${record.className} / ${record.bookName} does not have an estimated periods value.`,
         meta: 'Configure this in the Overview settings modal.',
@@ -535,6 +686,10 @@ export const buildAttentionAlerts = ({
       alerts.push({
         id: `inactive-${teacher.id}`,
         severity: 'medium',
+        classId: null,
+        className: null,
+        type: 'inactive_teacher',
+        typeLabel: 'Inactive Teacher',
         title: 'Inactive teacher',
         description: `${teacher.name || 'Unnamed teacher'} has active assignments but no activity logs in the last 7 days.`,
         meta: 'Check timetable allocation or classroom follow-up.',
@@ -555,6 +710,10 @@ export const buildAttentionAlerts = ({
     alerts.push({
       id: `carry-${teacherId}`,
       severity: count >= 5 ? 'high' : 'medium',
+      classId: null,
+      className: null,
+      type: 'carry_forward',
+      typeLabel: 'High Carry-Forward',
       title: 'High carry-forwards',
       description: `${teacher?.name || 'Teacher'} has ${count} carry-forwards in the last 7 days.`,
       meta: 'Review lesson planning slippage and adherence.',
@@ -607,6 +766,7 @@ export const buildTeacherActivityData = ({
   lessonPlans = [],
   carryForwards = [],
   assignments = [],
+  academicYearStartDate = null, // Date object for start of academic year
   today = new Date(),
 }) => {
   const assignmentMap = new Map(
@@ -618,18 +778,33 @@ export const buildTeacherActivityData = ({
 
   const sevenDaysAgo = new Date(today);
   sevenDaysAgo.setDate(today.getDate() - 7);
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
 
   return teachers
     .map((teacher) => {
       const teacherId = String(teacher.id);
-      const totalPlans = lessonPlans.filter(
+      const allTeacherPlans = lessonPlans.filter(
         (plan) => assignmentMap.get(`${plan.class_id}-${plan.subject_id}`) === teacherId
-      ).length;
-      const completedPlans = lessonPlans.filter(
-        (plan) =>
-          assignmentMap.get(`${plan.class_id}-${plan.subject_id}`) === teacherId &&
-          plan.status === 'completed'
-      ).length;
+      );
+
+      // Academic year scope
+      const acadYearPlans = academicYearStartDate
+        ? allTeacherPlans.filter(
+            (plan) => plan.updated_at && new Date(plan.updated_at) >= academicYearStartDate
+          )
+        : allTeacherPlans;
+      const acadYearCompleted = acadYearPlans.filter((p) => p.status === 'completed').length;
+      const adherenceAcadYear =
+        acadYearPlans.length > 0 ? (acadYearCompleted / acadYearPlans.length) * 100 : 0;
+
+      // Last 30 days scope
+      const plans30d = allTeacherPlans.filter(
+        (plan) => plan.updated_at && new Date(plan.updated_at) >= thirtyDaysAgo
+      );
+      const completed30d = plans30d.filter((p) => p.status === 'completed').length;
+      const adherence30d = plans30d.length > 0 ? (completed30d / plans30d.length) * 100 : 0;
+
       const logs7d = dailyLogs.filter(
         (log) =>
           String(log.teacher_id) === teacherId &&
@@ -642,20 +817,26 @@ export const buildTeacherActivityData = ({
           entry.created_at &&
           new Date(entry.created_at) >= sevenDaysAgo
       ).length;
-      const adherence = totalPlans > 0 ? (completedPlans / totalPlans) * 100 : 0;
+
+      // Legacy adherence field kept for backward compat (uses acad year scope)
+      const adherence = adherenceAcadYear;
 
       return {
         teacherId: teacher.id,
         teacherName: teacher.name || 'Unnamed teacher',
-        totalPlans,
-        completedPlans,
+        totalPlans: allTeacherPlans.length,
+        completedPlans: acadYearCompleted,
+        plans30d: plans30d.length,
+        completed30d,
         logs7d,
         carryForwards7d,
         adherence,
+        adherenceAcadYear,
+        adherence30d,
       };
     })
     .filter((item) => item.totalPlans > 0 || item.logs7d > 0 || item.carryForwards7d > 0)
-    .sort((left, right) => right.logs7d - left.logs7d || right.adherence - left.adherence);
+    .sort((left, right) => right.logs7d - left.logs7d || right.adherenceAcadYear - left.adherenceAcadYear);
 };
 
 export const buildEstimateRows = ({
@@ -664,10 +845,32 @@ export const buildEstimateRows = ({
   subjects = [],
   classes = [],
   periodsPerWeekMap = new Map(),
+  allLogs = [],
+  academicStartMonth = 6,
+  academicEndMonth = 5,
+  academicYearLabel = getCurrentAcademicYearLabel(),
+  calendarRows = [],
+  today = new Date(),
 }) => {
+  const startYear = parseAcademicYearLabel(academicYearLabel);
+  const currentMonthNum = today.getMonth() + 1;
+
   const bookMap = new Map(books.map((book) => [String(book.id), book]));
   const subjectMap = new Map(subjects.map((subject) => [String(subject.id), subject]));
   const classMap = new Map(classes.map((classRecord) => [String(classRecord.id), classRecord]));
+
+  // Build a map of earliest lesson log per class-book pair
+  const firstLessonMonthMap = new Map();
+  (allLogs || []).forEach((log) => {
+    if (!log.start_date && !log.updated_at) return;
+    const dateStr = log.start_date || log.updated_at;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return;
+    const key = `${log.class_id}-${log.book_id}`;
+    if (!firstLessonMonthMap.has(key) || date < firstLessonMonthMap.get(key).date) {
+      firstLessonMonthMap.set(key, { date, month: date.getMonth() + 1, year: date.getFullYear() });
+    }
+  });
 
   return bookClasses
     .map((mapping) => {
@@ -676,7 +879,42 @@ export const buildEstimateRows = ({
       const subject = subjectMap.get(String(book.subject_id));
       const classRecord = classMap.get(String(mapping.class_id));
       const periodsPerWeek = periodsPerWeekMap.get(`${mapping.class_id}-${book.subject_id}`) || 0;
-      const numericEstimate = toNumber(mapping.estimated_periods, 0);
+      const firstLessonInfo = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
+
+      const hasFirstLessonEntry = !!firstLessonInfo;
+
+      // If started, start from first lesson month. If NOT started, remaining available time starts from TODAY's month!
+      const calculatedStartMonth = hasFirstLessonEntry ? firstLessonInfo.month : currentMonthNum;
+      const calculatedStartYear = hasFirstLessonEntry ? firstLessonInfo.year : getAcademicMonthYear(startYear, calculatedStartMonth);
+
+      const expectedEndMonth = mapping.expected_end_month ?? null;
+      const effectiveEndMonth = expectedEndMonth || academicEndMonth;
+
+      // Build array of month numbers in the active window
+      const windowMonths = [];
+      let m = calculatedStartMonth;
+      for (let i = 0; i < 12; i++) {
+        windowMonths.push(m);
+        if (m === effectiveEndMonth) break;
+        m = m === 12 ? 1 : m + 1;
+      }
+      const activeWindowMonths = windowMonths.length;
+
+      // Count actual teaching days in window from calendarRows
+      let activeTeachingDays = 0;
+      if (calendarRows.length > 0) {
+        activeTeachingDays = calendarRows
+          .filter((row) => windowMonths.includes(row.month))
+          .reduce((sum, row) => sum + (Number(row.teaching_days) || 0), 0);
+      } else {
+        activeTeachingDays = activeWindowMonths * DEFAULT_TEACHING_DAYS;
+      }
+
+      const activeTeachingWeeks = (activeTeachingDays / 5).toFixed(1);
+
+      const startMonthFullLabel = `${MONTH_LABELS[calculatedStartMonth]} ${calculatedStartYear}`;
+      const endMonthYear = getAcademicMonthYear(startYear, effectiveEndMonth);
+      const endMonthFullLabel = `${MONTH_LABELS[effectiveEndMonth]} ${endMonthYear}`;
 
       return {
         mappingId: mapping.id,
@@ -686,11 +924,16 @@ export const buildEstimateRows = ({
         subjectName: subject?.name || 'Untitled Subject',
         bookId: mapping.book_id,
         bookName: book.name || 'Untitled Book',
-        estimatedPeriods:
-          mapping.estimated_periods == null ? '' : String(mapping.estimated_periods),
         periodsPerWeek,
-        weeksToComplete:
-          periodsPerWeek > 0 && numericEstimate > 0 ? numericEstimate / periodsPerWeek : null,
+        calculatedStartMonth,
+        calculatedStartMonthLabel: startMonthFullLabel,
+        firstLessonDate: firstLessonInfo?.date?.toISOString().split('T')[0] ?? null,
+        hasFirstLessonEntry,
+        expectedEndMonth,
+        expectedEndMonthLabel: endMonthFullLabel,
+        activeWindowMonths,
+        activeTeachingDays,
+        activeTeachingWeeks,
       };
     })
     .filter(Boolean)
