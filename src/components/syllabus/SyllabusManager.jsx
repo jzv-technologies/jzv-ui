@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { supabase } from '../../utils/supabase';
+import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ClassificationsModal from '../timetable/ClassificationsModal';
 import ConfirmModal from '../ConfirmModal';
@@ -537,13 +537,15 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     if (!bookId || !isSupabaseMode) return;
     setLoadingBookIds((prev) => new Set(prev).add(String(bookId)));
     try {
-      const { data, error } = await supabase
-        .from('syl_lessons')
-        .select('*')
-        .eq('book_id', bookId)
-        .order('sequence', { ascending: true, nullsFirst: false })
-        .order('id', { ascending: true })
-        .range(0, 9999);
+      const { data, error } = await fetchAllPages(
+        'syl_lessons',
+        '*',
+        (q) =>
+          q
+            .eq('book_id', bookId)
+            .order('sequence', { ascending: true, nullsFirst: false })
+            .order('id', { ascending: true })
+      );
       if (error) throw error;
 
       setSyllabusData((prev) => {

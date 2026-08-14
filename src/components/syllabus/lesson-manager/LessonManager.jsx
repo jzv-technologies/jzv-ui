@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '../../../utils/supabase';
+import { supabase, fetchAllPages } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 
 import SyllabusTreePanel from './SyllabusTreePanel';
@@ -8,6 +8,7 @@ import AddWorkModalCompactView from './AddWorkModalCompactView';
 import AssignLessonsModal from './AssignLessonsModal';
 import MapBookModal from './MapBookModal';
 import ProgressPanel from './ProgressPanel';
+
 
 // Shared module-level cache for LessonManager
 let lessonManagerCache = {
@@ -67,7 +68,9 @@ const LessonManager = ({
   const [books, setBooks] = useState([]);
   const [bookClasses, setBookClasses] = useState([]);
   const [classifications, setClassifications] = useState([]);
-  const [allLessons, setAllLessons] = useState([]);
+  const [allLessons, setAllLessons] = useState(() =>
+    lessonManagerCache.userId === user?.id ? lessonManagerCache.allLessons : []
+  );
   const [progressRecords, setProgressRecords] = useState([]); // Replaces lesson_plans + lesson_tracker_log
 
   // Toggle for filtering classes
@@ -122,6 +125,7 @@ const LessonManager = ({
       lessonManagerCache.selectedLessonIds = selectedLessonIds;
       lessonManagerCache.showAllClasses = showAllClasses;
       lessonManagerCache.bookClasses = bookClasses;
+      lessonManagerCache.allLessons = allLessons;
       lessonManagerCache.progressRecords = progressRecords;
     }
   }, [
@@ -133,6 +137,7 @@ const LessonManager = ({
     selectedLessonIds,
     showAllClasses,
     bookClasses,
+    allLessons,
     progressRecords,
   ]);
 
@@ -268,16 +273,18 @@ const LessonManager = ({
           supabase.from('class_assignments').select('*'),
           supabase.from('syl_books').select('*'),
           supabase.from('map_class_books').select('*'),
-          supabase
-            .from('syl_lessons')
-            .select('*')
-            .order('sequence', { ascending: true, nullsFirst: false })
-            .order('id', { ascending: true }),
-          supabase
-            .from('trk_lesson_level_progress')
-            .select(
-              'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
-            ),
+          selectedBookId
+            ? fetchAllPages('syl_lessons', '*', (q) =>
+                q
+                  .eq('book_id', selectedBookId)
+                  .order('sequence', { ascending: true, nullsFirst: false })
+                  .order('id', { ascending: true })
+              )
+            : Promise.resolve({ data: [], error: null }),
+          fetchAllPages(
+            'trk_lesson_level_progress',
+            'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
+          ),
           supabase.from('syl_classifications').select('*'),
           supabase.from('timetable_slots').select('class_id, teacher_id, subject_id'),
         ];
@@ -542,6 +549,46 @@ const LessonManager = ({
     availableSubjects,
     availableBooks,
   ]);
+
+  // Lazy load lessons for the selected book on-demand
+  useEffect(() => {
+    if (!selectedBookId) return;
+
+    const bookLessonsLoaded = allLessons.some((l) => String(l.book_id) === String(selectedBookId));
+    if (bookLessonsLoaded) return;
+
+    let isMounted = true;
+    const fetchBookLessons = async () => {
+      try {
+        const { data, error } = await fetchAllPages(
+          'syl_lessons',
+          '*',
+          (q) =>
+            q
+              .eq('book_id', selectedBookId)
+              .order('sequence', { ascending: true, nullsFirst: false })
+              .order('id', { ascending: true })
+        );
+        if (error) throw error;
+        if (isMounted && data) {
+          setAllLessons((prev) => {
+            const existingIds = new Set(prev.map((l) => String(l.id)));
+            const newLessons = data.filter((l) => !existingIds.has(String(l.id)));
+            const updated = [...prev, ...newLessons];
+            lessonManagerCache.allLessons = updated;
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to lazy load lessons for book:', selectedBookId, err);
+      }
+    };
+
+    fetchBookLessons();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBookId, allLessons]);
 
   // UI Handlers
   const handleRefresh = async () => {

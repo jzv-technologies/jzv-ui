@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
 import MultiSelectDropdown from '../MultiSelectDropdown';
@@ -13,6 +13,7 @@ import LessonManager from './lesson-manager/LessonManager';
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
 import PlannedForToday from './PlannedForToday';
+import SyllabusOverviewDashboard from './overview/SyllabusOverviewDashboard';
 
 let syllabusTrackerPortalCache = {
   data: null,
@@ -44,7 +45,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [activeTab, setActiveTab] = useState(() => {
     if (role === 'parent') return 'two-weeks-class';
     if (role === 'teacher') return 'upcoming-lessons';
-    return 'teacher-activity';
+    return 'overview';
   });
 
   // Shared teacher filters used by Lesson Planner tab
@@ -295,22 +296,23 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         supabase.from('class_assignments').select('*'),
         supabase.from('teachers').select('*').order('name', { ascending: true }),
         supabase.from('trk_book_level_progress').select('*'),
-        supabase
-          .from('trk_lesson_level_progress')
-          .select(
-            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
-          ),
-        supabase
-          .from('syl_lessons')
-          .select('*')
-          .order('sequence', { ascending: true, nullsFirst: false })
-          .order('id', { ascending: true }),
-        supabase
-          .from('trk_lesson_level_progress')
-          .select(
-            '*, lesson:syl_lessons(*), class:classes(*), subject:syl_subjects(*), book:syl_books(*)'
-          )
-          .in('status', ['planned', 'in_progress', 'completed']),
+        fetchAllPages(
+          'trk_lesson_level_progress',
+          'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
+        ),
+        lpFilterBookId
+          ? fetchAllPages('syl_lessons', '*', (q) =>
+              q
+                .eq('book_id', lpFilterBookId)
+                .order('sequence', { ascending: true, nullsFirst: false })
+                .order('id', { ascending: true })
+            )
+          : Promise.resolve({ data: [], error: null }),
+        fetchAllPages(
+          'trk_lesson_level_progress',
+          '*, lesson:syl_lessons(*), class:classes(*), subject:syl_subjects(*), book:syl_books(*)',
+          (q) => q.in('status', ['planned', 'in_progress', 'completed'])
+        ),
         supabase.from('lesson_plan_carry_forwards').select('*'),
       ]);
 
@@ -782,18 +784,20 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     setExpandedLogIds({});
     try {
       const [{ data: lessons, error: lessErr }, { data: logs, error: logErr }] = await Promise.all([
-        supabase
-          .from('syl_lessons')
-          .select('*')
-          .eq('book_id', bookId)
-          .order('sequence', { ascending: true, nullsFirst: false })
-          .order('id', { ascending: true }),
-        supabase
-          .from('trk_lesson_level_progress')
-          .select(
-            'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id'
-          )
-          .eq('class_id', classId),
+        fetchAllPages(
+          'syl_lessons',
+          '*',
+          (q) =>
+            q
+              .eq('book_id', bookId)
+              .order('sequence', { ascending: true, nullsFirst: false })
+              .order('id', { ascending: true })
+        ),
+        fetchAllPages(
+          'trk_lesson_level_progress',
+          'id, lesson_id, class_id, status, completion_percentage, revision_counter, start_date, end_date, days_taken, updated_at, book_id',
+          (q) => q.eq('class_id', classId)
+        ),
       ]);
       if (lessErr) throw lessErr;
       if (logErr) throw logErr;
@@ -915,8 +919,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
         return false;
       }
       if (teacherGenderFilter && teacherGenderFilter !== 'all') {
-        const tObj = teachers.find((t) => String(t.id || t.teacher_id) === String(entry.teacher_id));
-        const isFemale = tObj?.is_female === true || tObj?.gender === 'female' || tObj?.is_male === false;
+        const tObj = teachers.find(
+          (t) => String(t.id || t.teacher_id) === String(entry.teacher_id)
+        );
+        const isFemale =
+          tObj?.is_female === true || tObj?.gender === 'female' || tObj?.is_male === false;
         if (teacherGenderFilter === 'male' && isFemale) return false;
         if (teacherGenderFilter === 'female' && !isFemale) return false;
       }
@@ -1283,6 +1290,44 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     lpAvailableBooks,
   ]);
 
+  // Lazy load lessons for the selected book on-demand
+  useEffect(() => {
+    if (!lpFilterBookId) return;
+
+    const bookLessonsLoaded = allLessons.some((l) => String(l.book_id) === String(lpFilterBookId));
+    if (bookLessonsLoaded) return;
+
+    let isMounted = true;
+    const fetchBookLessons = async () => {
+      try {
+        const { data, error } = await fetchAllPages(
+          'syl_lessons',
+          '*',
+          (q) =>
+            q
+              .eq('book_id', lpFilterBookId)
+              .order('sequence', { ascending: true, nullsFirst: false })
+              .order('id', { ascending: true })
+        );
+        if (error) throw error;
+        if (isMounted && data) {
+          setAllLessons((prev) => {
+            const existingIds = new Set(prev.map((l) => String(l.id)));
+            const newLessons = data.filter((l) => !existingIds.has(String(l.id)));
+            return [...prev, ...newLessons];
+          });
+        }
+      } catch (err) {
+        console.error('SyllabusTrackerPortal: Failed to lazy load lessons for book:', lpFilterBookId, err);
+      }
+    };
+
+    fetchBookLessons();
+    return () => {
+      isMounted = false;
+    };
+  }, [lpFilterBookId, allLessons]);
+
   if (loading) {
     return (
       <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
@@ -1341,6 +1386,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     ],
     admin: [
       {
+        key: 'overview',
+        label: 'Overview',
+        shortLabel: 'Overview',
+        icon: 'fa-gauge-high',
+      },
+      {
         key: 'teacher-activity',
         label: 'Teacher Activity',
         shortLabel: 'Activity',
@@ -1366,6 +1417,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       },
     ],
     management: [
+      {
+        key: 'overview',
+        label: 'Overview',
+        shortLabel: 'Overview',
+        icon: 'fa-gauge-high',
+      },
       {
         key: 'teacher-activity',
         label: 'Teacher Activity',
@@ -1475,7 +1532,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                     label=""
                     placeholder="Teacher"
                     options={teachers.map((t) => {
-                      const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                      const isFemale =
+                        t.is_female === true || t.gender === 'female' || t.is_male === false;
                       return {
                         id: String(t.id || t.teacher_id),
                         label: t.name || t.full_name || t.employee_name,
@@ -1809,7 +1867,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                     label=""
                     placeholder="Teacher"
                     options={teachers.map((t) => {
-                      const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                      const isFemale =
+                        t.is_female === true || t.gender === 'female' || t.is_male === false;
                       return {
                         id: String(t.id || t.teacher_id),
                         label: t.name || t.full_name || t.employee_name,
@@ -1941,7 +2000,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                         label=""
                         placeholder="Teacher"
                         options={teachers.map((t) => {
-                          const isFemale = t.is_female === true || t.gender === 'female' || t.is_male === false;
+                          const isFemale =
+                            t.is_female === true || t.gender === 'female' || t.is_male === false;
                           return {
                             id: String(t.id || t.teacher_id),
                             label: t.name || t.full_name || t.employee_name,
@@ -2352,6 +2412,44 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               teachers={teachers}
               lessonPlans={lessonPlans}
               carryForwards={carryForwards}
+            />
+          </div>
+        )}
+
+        {activeTab === 'overview' && (role === 'admin' || role === 'management') && (
+          <div data-overview="true">
+            <SyllabusOverviewDashboard
+              role={role}
+              classes={classes}
+              subjects={subjects}
+              books={books}
+              classifications={classifications}
+              bookClasses={bookClasses}
+              setBookClasses={setBookClasses}
+              assignments={assignments}
+              teachers={teachers}
+              bookTrackers={bookTrackers}
+              allLogs={allLogs}
+              allLessons={allLessons}
+              lessonPlans={lessonPlans}
+              carryForwards={carryForwards}
+              onOpenClassProgress={(payload) => {
+                const classId = payload?.classId;
+                const subjectId = payload?.subjectId;
+                const subject = subjects.find((item) => String(item.id) === String(subjectId));
+
+                setCpFilterClasses(classId ? [String(classId)] : []);
+                setCpFilterClassifications(
+                  subject?.classification_id ? [String(subject.classification_id)] : []
+                );
+                setCpFilterSubjects(subjectId ? [String(subjectId)] : []);
+                setCpFilterBooks([]);
+                setProgressExpandedBook(null);
+                setProgressExpandedClass(null);
+                setExpandedLogIds({});
+                setLogItemsMap({});
+                setActiveTab('class-progress');
+              }}
             />
           </div>
         )}

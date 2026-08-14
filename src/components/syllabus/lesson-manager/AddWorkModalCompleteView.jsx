@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../utils/supabase';
+import { supabase, fetchAllPages } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 import MapBookModal from './MapBookModal';
 
@@ -210,12 +210,15 @@ const AddWorkModalCompleteView = ({
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('syl_lessons')
-        .select('*')
-        .eq('book_id', bookId)
-        .order('sequence', { ascending: true, nullsFirst: false })
-        .order('id', { ascending: true });
+      const { data, error } = await fetchAllPages(
+        'syl_lessons',
+        '*',
+        (q) =>
+          q
+            .eq('book_id', bookId)
+            .order('sequence', { ascending: true, nullsFirst: false })
+            .order('id', { ascending: true })
+      );
       if (error) throw error;
       setAwBookData(data || []);
     } catch (err) {

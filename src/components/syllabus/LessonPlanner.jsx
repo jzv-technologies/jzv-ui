@@ -1,6 +1,6 @@
 // src/components/portals/teacher/LessonPlanner.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../../utils/supabase';
+import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 
 // Module-level cache to persist data across page activations / subview toggles
@@ -46,7 +46,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   const [assignments, setAssignments] = useState([]);
   const [books, setBooks] = useState([]);
   const [bookClasses, setBookClasses] = useState([]);
-  const [allLessons, setAllLessons] = useState([]);
+  const [allLessons, setAllLessons] = useState(() =>
+    lessonPlannerCache.userId === user?.id ? lessonPlannerCache.allLessons : []
+  );
   const [lessonPlans, setLessonPlans] = useState([]);
 
   // Selection
@@ -136,6 +138,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
       lessonPlannerCache.selectedSubjectId = selectedSubjectId;
       lessonPlannerCache.selectedBookId = selectedBookId;
       lessonPlannerCache.selectedLessonIds = selectedLessonIds;
+      lessonPlannerCache.allLessons = allLessons;
     }
   }, [
     user,
@@ -144,6 +147,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     selectedSubjectId,
     selectedBookId,
     selectedLessonIds,
+    allLessons,
   ]);
 
   // Reset active targets when mode changes
@@ -193,12 +197,15 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           supabase.from('class_assignments').select('*'),
           supabase.from('syl_books').select('*'),
           supabase.from('map_class_books').select('*'),
-          supabase
-            .from('syl_lessons')
-            .select('*')
-            .order('sequence', { ascending: true, nullsFirst: false })
-            .order('id', { ascending: true }),
-          supabase.from('lesson_plans').select('*'),
+          selectedBookId
+            ? fetchAllPages('syl_lessons', '*', (q) =>
+                q
+                  .eq('book_id', selectedBookId)
+                  .order('sequence', { ascending: true, nullsFirst: false })
+                  .order('id', { ascending: true })
+              )
+            : Promise.resolve({ data: [], error: null }),
+          fetchAllPages('lesson_plans', '*'),
         ];
 
         if (isAdminView) {
@@ -389,6 +396,46 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     setSelectedBookId('');
     setSelectedLessonIds(new Set());
   }, [selectedTeacherId]);
+
+  // Lazy load lessons for the selected book on-demand
+  useEffect(() => {
+    if (!selectedBookId) return;
+
+    const bookLessonsLoaded = allLessons.some((l) => String(l.book_id) === String(selectedBookId));
+    if (bookLessonsLoaded) return;
+
+    let isMounted = true;
+    const fetchBookLessons = async () => {
+      try {
+        const { data, error } = await fetchAllPages(
+          'syl_lessons',
+          '*',
+          (q) =>
+            q
+              .eq('book_id', selectedBookId)
+              .order('sequence', { ascending: true, nullsFirst: false })
+              .order('id', { ascending: true })
+        );
+        if (error) throw error;
+        if (isMounted && data) {
+          setAllLessons((prev) => {
+            const existingIds = new Set(prev.map((l) => String(l.id)));
+            const newLessons = data.filter((l) => !existingIds.has(String(l.id)));
+            const updated = [...prev, ...newLessons];
+            lessonPlannerCache.allLessons = updated;
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('LessonPlanner: Failed to lazy load lessons for book:', selectedBookId, err);
+      }
+    };
+
+    fetchBookLessons();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBookId, allLessons]);
 
   // -------------------------
   // Syllabus Tree Construction
