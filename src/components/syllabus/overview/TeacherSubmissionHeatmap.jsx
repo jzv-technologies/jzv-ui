@@ -22,6 +22,23 @@ const getAdherenceColor = (rate) => {
   return 'text-red-700 bg-red-50 border-red-200';
 };
 
+const formatSubmissionTime = (timestamp) => {
+  if (!timestamp) return null;
+  if (typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(timestamp.trim())) {
+    return null;
+  }
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return null;
+  // Check if it's exact UTC midnight (00:00:00) which produces 5:30 AM in IST
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) {
+    return null;
+  }
+  return d.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const TeacherSubmissionHeatmap = ({ heatmapData }) => {
   const [hoveredCell, setHoveredCell] = useState(null);
   const [selectedCellModal, setSelectedCellModal] = useState(null);
@@ -43,26 +60,29 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
     );
   }
 
-  const { rows, dates, weekLabels } = heatmapData;
+  const { rows, dates, weekLabels = [], weekBlocks: customWeekBlocks } = heatmapData;
 
-  // Group dates into weeks (6 days per week: Mon–Sat)
-  const weeks = [];
-  let currentWeek = [];
-  let lastWeekNum = -1;
-
-  dates.forEach((date) => {
-    const d = new Date(date);
-    const jan1 = new Date(d.getFullYear(), 0, 1);
-    const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
-
-    if (weekNum !== lastWeekNum && currentWeek.length > 0) {
-      weeks.push(currentWeek);
-      currentWeek = [];
+  // Use structured weekBlocks from data model
+  const weekBlocks = customWeekBlocks || (() => {
+    const blocks = [];
+    let currentBlock = [];
+    let lastWeekNum = -1;
+    (dates || []).forEach((date) => {
+      const d = new Date(date);
+      const jan1 = new Date(d.getFullYear(), 0, 1);
+      const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+      if (weekNum !== lastWeekNum && currentBlock.length > 0) {
+        blocks.push({ label: weekLabels[blocks.length] || `Week ${blocks.length + 1}`, days: currentBlock });
+        currentBlock = [];
+      }
+      lastWeekNum = weekNum;
+      currentBlock.push(date);
+    });
+    if (currentBlock.length > 0) {
+      blocks.push({ label: weekLabels[blocks.length] || `Week ${blocks.length + 1}`, days: currentBlock });
     }
-    lastWeekNum = weekNum;
-    currentWeek.push(date);
-  });
-  if (currentWeek.length > 0) weeks.push(currentWeek);
+    return blocks;
+  })();
 
   const dayHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -73,14 +93,14 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
         <div>
           <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
             <i className="fas fa-th text-brand-primary"></i>
-            Teacher Tracker Submissions
+            Tracker Heatmap
           </h3>
           <p className="text-[11px] font-bold text-gray-400 mt-0.5">
             Click any day cell to view period-by-period class, subject, and tracker submission logs.
           </p>
         </div>
         <span className="text-[10px] font-extrabold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-xl">
-          Last {weekLabels.length} Weeks
+          4 Past Weeks + Current Week
         </span>
       </div>
 
@@ -108,7 +128,7 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
           <span className="w-3.5 h-3.5 rounded bg-blue-500 text-white text-[8px] font-black flex items-center justify-center">
             1/0
           </span>
-          Extra / Unscheduled
+          Unplanned
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="w-3.5 h-3.5 rounded bg-gray-100 border border-gray-200 text-gray-400 text-[8px] font-black flex items-center justify-center">
@@ -126,13 +146,13 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
               <th className="text-left px-3 py-2 text-gray-500 font-bold sticky left-0 bg-white z-10 min-w-[130px]">
                 Teacher
               </th>
-              {weeks.map((weekDates, wi) => (
+              {weekBlocks.map((wb, wi) => (
                 <th
                   key={wi}
-                  colSpan={weekDates.length}
+                  colSpan={wb?.days?.length || 1}
                   className="text-center px-1 py-1.5 text-gray-500 font-extrabold border-l border-gray-200 bg-gray-50/70"
                 >
-                  {weekLabels[wi] || `Week ${wi + 1}`}
+                  {wb?.label || `Week ${wi + 1}`}
                 </th>
               ))}
               <th className="text-center px-3 py-2 text-gray-500 font-bold min-w-[140px] border-l border-gray-200">
@@ -141,19 +161,24 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
             </tr>
             <tr className="border-b border-gray-200">
               <th className="sticky left-0 bg-white z-10"></th>
-              {weeks.map((weekDates, wi) =>
-                weekDates.map((date, di) => {
+              {weekBlocks.map((wb, wi) =>
+                (wb?.days || []).map((date, di) => {
                   const d = new Date(date);
-                  const dayIdx = d.getDay() - 1; // Mon=0, Sat=5
+                  const isValid = !isNaN(d.getTime());
+                  const dayIdx = !isValid ? 0 : d.getDay() === 0 ? 5 : d.getDay() - 1; // Mon=0, Sat=5
                   return (
                     <th
                       key={`${wi}-${di}`}
                       className="text-center px-0.5 py-1 text-gray-400 font-bold text-[9px] min-w-[28px]"
-                      title={d.toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
+                      title={
+                        isValid
+                          ? d.toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                            })
+                          : ''
+                      }
                     >
                       {dayHeaders[dayIdx] || ''}
                     </th>
@@ -285,59 +310,66 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
             {/* Modal Body: UNIFIED PERIOD SCHEDULE & SUBMISSION TABLE */}
             <div className="p-5 overflow-y-auto flex-1 bg-gray-50/50">
               {(() => {
-                const allocatedSlots = selectedCellModal.cell?.allocatedSlots || [];
-                const submissionLogs = selectedCellModal.cell?.submissionLogs || [];
+                const directPeriodRows = selectedCellModal.cell?.periodRows;
+                let allRows = [];
 
-                // Match logs to allocated period slots
-                const usedLogIds = new Set();
-                const periodRows = allocatedSlots.map((slot) => {
-                  const matchingLog = submissionLogs.find((log) => {
-                    if (usedLogIds.has(log.id)) return false;
+                if (Array.isArray(directPeriodRows) && directPeriodRows.length > 0) {
+                  allRows = directPeriodRows;
+                } else {
+                  const allocatedSlots = selectedCellModal.cell?.allocatedSlots || [];
+                  const submissionLogs = selectedCellModal.cell?.submissionLogs || [];
 
-                    const classMatch =
-                      String(log.classId) === String(slot.classId) ||
-                      (log.className &&
-                        slot.className &&
-                        log.className.trim().toLowerCase() === slot.className.trim().toLowerCase());
+                  // Match logs to allocated period slots
+                  const usedLogIds = new Set();
+                  const periodRows = allocatedSlots.map((slot) => {
+                    const matchingLog = submissionLogs.find((log) => {
+                      if (usedLogIds.has(log.id)) return false;
 
-                    const subjectMatch =
-                      String(log.subjectId) === String(slot.subjectId) ||
-                      (log.subjectName &&
-                        slot.subjectName &&
-                        log.subjectName.trim().toLowerCase() === slot.subjectName.trim().toLowerCase());
+                      const classMatch =
+                        String(log.classId) === String(slot.classId) ||
+                        (log.className &&
+                          slot.className &&
+                          log.className.trim().toLowerCase() === slot.className.trim().toLowerCase());
 
-                    return classMatch && subjectMatch;
+                      const subjectMatch =
+                        String(log.subjectId) === String(slot.subjectId) ||
+                        (log.subjectName &&
+                          slot.subjectName &&
+                          log.subjectName.trim().toLowerCase() === slot.subjectName.trim().toLowerCase());
+
+                      return classMatch && subjectMatch;
+                    });
+
+                    if (matchingLog && matchingLog.id) usedLogIds.add(matchingLog.id);
+
+                    return {
+                      isScheduled: true,
+                      periodName: slot.periodName || `Period ${slot.periodNum || slot.periodId}`,
+                      periodTime: slot.periodTime,
+                      className: slot.className,
+                      subjectName: slot.subjectName,
+                      isSubmitted: Boolean(matchingLog),
+                      log: matchingLog,
+                    };
                   });
 
-                  if (matchingLog && matchingLog.id) usedLogIds.add(matchingLog.id);
+                  // Unscheduled / Extra Submissions
+                  const extraLogs = submissionLogs.filter(
+                    (log) => !usedLogIds.has(log.id)
+                  );
 
-                  return {
-                    isScheduled: true,
-                    periodName: slot.periodName || `Period ${slot.periodNum || slot.periodId}`,
-                    periodTime: slot.periodTime,
-                    className: slot.className,
-                    subjectName: slot.subjectName,
-                    isSubmitted: Boolean(matchingLog),
-                    log: matchingLog,
-                  };
-                });
+                  const extraRows = extraLogs.map((log) => ({
+                    isScheduled: false,
+                    periodName: 'Unplanned',
+                    periodTime: '',
+                    className: log.className,
+                    subjectName: log.subjectName,
+                    isSubmitted: true,
+                    log,
+                  }));
 
-                // Unscheduled / Extra Submissions
-                const extraLogs = submissionLogs.filter(
-                  (log) => !usedLogIds.has(log.id)
-                );
-
-                const extraRows = extraLogs.map((log) => ({
-                  isScheduled: false,
-                  periodName: 'Extra / Unscheduled',
-                  periodTime: '',
-                  className: log.className,
-                  subjectName: log.subjectName,
-                  isSubmitted: true,
-                  log,
-                }));
-
-                const allRows = [...periodRows, ...extraRows];
+                  allRows = [...periodRows, ...extraRows];
+                }
 
                 if (allRows.length === 0) {
                   return (
@@ -352,7 +384,7 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
                     <table className="w-full border-collapse text-left text-xs">
                       <thead className="bg-gray-50/80 border-b border-gray-200 text-[11px] font-black text-gray-600 uppercase tracking-wider">
                         <tr>
-                          <th className="px-4 py-3 min-w-[130px]">Period</th>
+                          <th className="px-4 py-3 min-w-[130px]">Period Name</th>
                           <th className="px-4 py-3 min-w-[110px]">Class</th>
                           <th className="px-4 py-3 min-w-[140px]">Subject / Book</th>
                           <th className="px-4 py-3 min-w-[180px]">Submission Status & Details</th>
@@ -383,15 +415,20 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
                               </span>
                             </td>
 
-                            {/* Subject Column */}
-                            <td className="px-4 py-3 font-extrabold text-gray-800">
-                              <div>
-                                <span>{row.subjectName}</span>
-                                {row.log?.bookName && row.log.bookName !== row.subjectName && (
-                                  <span className="block text-[10px] font-semibold text-gray-400 truncate">
-                                    Book: {row.log.bookName}
+                            {/* Subject / Book Column */}
+                            <td className="px-4 py-3">
+                              <div className="flex flex-col">
+                                <span className="font-extrabold text-dark-primary text-xs">
+                                  {row.subjectName || 'Subject'}
+                                </span>
+                                {(row.bookName || row.log?.bookName) ? (
+                                  <span className="text-[11px] font-semibold text-gray-500 flex items-center gap-1.5 mt-0.5">
+                                    <i className="fas fa-book-open text-[10px] text-brand-primary" />
+                                    <span className="truncate max-w-[200px]" title={row.bookName || row.log?.bookName}>
+                                      {row.bookName || row.log?.bookName}
+                                    </span>
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             </td>
 
@@ -404,12 +441,9 @@ const TeacherSubmissionHeatmap = ({ heatmapData }) => {
                                       <i className="fas fa-circle-check text-[10px]" />
                                       Submitted ({row.log?.progress ?? 100}%)
                                     </span>
-                                    {row.log?.createdAt && (
+                                    {formatSubmissionTime(row.log?.createdAt) && (
                                       <span className="text-[10px] font-bold text-gray-400">
-                                        {new Date(row.log.createdAt).toLocaleTimeString([], {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
+                                        {formatSubmissionTime(row.log.createdAt)}
                                       </span>
                                     )}
                                   </div>

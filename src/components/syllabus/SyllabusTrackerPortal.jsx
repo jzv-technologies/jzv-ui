@@ -12,7 +12,6 @@ import LessonManager from './lesson-manager/LessonManager';
 
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
-import PlannedForToday from './PlannedForToday';
 import SyllabusOverviewDashboard from './overview/SyllabusOverviewDashboard';
 
 let syllabusTrackerPortalCache = {
@@ -47,6 +46,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     if (role === 'teacher') return 'upcoming-lessons';
     return 'overview';
   });
+
+  // Overview Tab Header Controls State
+  const [overviewHeaderState, setOverviewHeaderState] = useState(null);
 
   // Shared teacher filters used by Lesson Planner tab
   const [lpShowAllClasses, setLpShowAllClasses] = useState(false);
@@ -528,8 +530,15 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           return;
         }
         query = query.in('progress_id', progressIds);
-      } else if (role === 'teacher' && teacher?.id) {
-        query = query.eq('teacher_id', teacher.id);
+      } else if (role === 'teacher') {
+        const currentTeacherId =
+          teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
+        if (!currentTeacherId) {
+          setDailyEntries([]);
+          setDailyLoading(false);
+          return;
+        }
+        query = query.eq('teacher_id', currentTeacherId);
       }
 
       if (startBound && endBound) {
@@ -601,6 +610,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     activeTab,
     student?.class_id,
     teacher?.id,
+    teacherRecord?.id,
+    teacher?.teacher_id,
+    teacherRecord?.teacher_id,
     timeFilter,
     dateRange.start,
     dateRange.end,
@@ -657,26 +669,52 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   useEffect(() => {
     if (role === 'teacher' && lessonPlans.length > 0) {
       const todayStr = getLocalDateStr(0);
-      const filtered = lessonPlans.filter(
-        (p) =>
-          p.status === 'planned' &&
-          (p.target_start_date === null || p.target_start_date <= todayStr) &&
-          String(p.teacher_id) === String(teacher?.id)
-      );
+      const currentTeacherId =
+        teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
+      if (!currentTeacherId) {
+        setTodaysPlans([]);
+        return;
+      }
+
+      const filtered = lessonPlans.filter((p) => {
+        if (p.status !== 'planned') return false;
+        if (p.target_start_date && p.target_start_date > todayStr) return false;
+
+        // Direct teacher match if present
+        if (p.teacher_id && String(p.teacher_id) === String(currentTeacherId)) {
+          return true;
+        }
+
+        // Assignment match (class_assignments maps class_id + subject_id to teacher_id)
+        const assignment = (assignments || []).find(
+          (a) =>
+            String(a.class_id) === String(p.class_id) &&
+            String(a.subject_id) === String(p.subject_id)
+        );
+        return assignment && String(assignment.teacher_id) === String(currentTeacherId);
+      });
       setTodaysPlans(filtered);
+    } else if (role !== 'teacher') {
+      setTodaysPlans([]);
     }
-  }, [role, lessonPlans, teacher?.id]);
+  }, [
+    role,
+    lessonPlans,
+    teacher?.id,
+    teacherRecord?.id,
+    teacher?.teacher_id,
+    teacherRecord?.teacher_id,
+    assignments,
+  ]);
 
   useEffect(() => {
     if (
-      (activeTab === 'teacher-activity' ||
-        activeTab === 'teacher-activity' ||
-        activeTab === 'two-weeks-class') &&
+      (activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') &&
       books.length > 0
     ) {
       fetchDailyEntries();
     }
-  }, [activeTab, books, fetchDailyEntries]);
+  }, [activeTab, books, fetchDailyEntries, teacher, teacherRecord]);
 
   // ─── Delete Actions ───
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
@@ -911,7 +949,15 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   };
 
   const getFilteredDailyEntries = () => {
+    const currentTeacherId =
+      teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
+
     return dailyEntries.filter((entry) => {
+      if (role === 'teacher' && currentTeacherId) {
+        if (String(entry.teacher_id) !== String(currentTeacherId)) {
+          return false;
+        }
+      }
       if (filterClasses.length > 0 && !filterClasses.includes(String(entry.class?.id))) {
         return false;
       }
@@ -1499,6 +1545,32 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               </span>
             )}
           </div>
+
+          {/* Academic Year and Settings controls for Overview */}
+          {activeTab === 'overview' && overviewHeaderState && (
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto sm:ml-0" data-name="overview-header-controls">
+              <select
+                value={overviewHeaderState.selectedAcademicYear}
+                onChange={(event) => overviewHeaderState.setSelectedAcademicYear(event.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary shadow-2xs focus:outline-none focus:border-brand-primary cursor-pointer"
+              >
+                {(overviewHeaderState.academicYearOptions || []).map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => overviewHeaderState.openSettings()}
+                className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary hover:bg-light-bg transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <i className="fas fa-gear text-brand-primary text-xs"></i>
+                <span>Settings</span>
+              </button>
+            </div>
+          )}
 
           {/* Inline Daily Activity Filters */}
           {(activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') && (
@@ -2330,11 +2402,6 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
         {activeTab === 'teacher-activity' && role === 'teacher' && (
           <div data-teacher-activity="true">
-            <PlannedForToday
-              todaysPlans={todaysPlans}
-              handleSubmitPlannedLesson={handleSubmitPlannedLesson}
-              handleCarryForward={handleCarryForward}
-            />
             <DailyActivityTable
               role="teacher"
               activeTab={activeTab}
@@ -2437,6 +2504,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
               assignments={assignments}
               teachers={teachers}
               bookTrackers={bookTrackers}
+              setBookTrackers={setBookTrackers}
               allLogs={allLogs}
               allLessons={allLessons}
               lessonPlans={lessonPlans}
@@ -2458,6 +2526,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                 setLogItemsMap({});
                 setActiveTab('class-progress');
               }}
+              onHeaderStateChange={setOverviewHeaderState}
             />
           </div>
         )}

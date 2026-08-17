@@ -98,7 +98,8 @@ const AcademicCalendarModal = ({
 
   const academicMonthOptions = useMemo(() => {
     const startYear = parseAcademicYearLabel(academicYear);
-    return currentAcademicMonths.map((m) => {
+    return currentAcademicMonths.map((mObj) => {
+      const m = typeof mObj === 'object' ? mObj.month : mObj;
       const year = getAcademicMonthYear(startYear, m);
       const label = ALL_MONTHS.find((item) => item.value === m)?.label || `Month ${m}`;
       return {
@@ -114,15 +115,20 @@ const AcademicCalendarModal = ({
 
     return estimateRows.map((row) => {
       const draft = estimateDraft[row.mappingId];
-      const expectedEndMonth =
+      const rawEndVal =
         draft && draft.expectedEndMonth !== undefined
           ? draft.expectedEndMonth
-            ? Number(draft.expectedEndMonth)
-            : null
-          : row.expectedEndMonth || null;
+          : row.expectedEndMonth;
+
+      const expectedEndMonthNum =
+        typeof rawEndVal === 'string' && rawEndVal.includes('-')
+          ? new Date(rawEndVal).getMonth() + 1
+          : rawEndVal
+            ? Number(rawEndVal)
+            : null;
 
       const calculatedStartMonth = row.calculatedStartMonth || startMonth;
-      const effectiveEndMonth = expectedEndMonth || endMonth;
+      const effectiveEndMonth = expectedEndMonthNum || endMonth;
 
       let activeWindowMonths = [];
       let cursor = calculatedStartMonth;
@@ -142,35 +148,45 @@ const AcademicCalendarModal = ({
       const activeTeachingWeeks = Number((activeTeachingDays / 5).toFixed(1));
 
       const startMonthYear = getAcademicMonthYear(startYear, calculatedStartMonth);
-      const startMonthFullLabel = `${ALL_MONTHS.find((item) => item.value === calculatedStartMonth)?.label.substring(0, 3)} ${startMonthYear}`;
+      const startMonthObj = ALL_MONTHS.find((item) => item.value === Number(calculatedStartMonth));
+      const startMonthName = startMonthObj?.label ? startMonthObj.label.slice(0, 3) : `M${calculatedStartMonth}`;
+      const startMonthFullLabel = `${startMonthName} ${startMonthYear}`;
 
       const endMonthYear = getAcademicMonthYear(startYear, effectiveEndMonth);
-      const endMonthFullLabel = `${ALL_MONTHS.find((item) => item.value === effectiveEndMonth)?.label.substring(0, 3)} ${endMonthYear}`;
+      const endMonthObj = ALL_MONTHS.find((item) => item.value === Number(effectiveEndMonth));
+      const endMonthName = endMonthObj?.label ? endMonthObj.label.slice(0, 3) : `M${effectiveEndMonth}`;
+      const endMonthFullLabel = `${endMonthName} ${endMonthYear}`;
 
       return {
         ...row,
         calculatedStartMonth,
         calculatedStartMonthLabel: startMonthFullLabel,
-        expectedEndMonth,
+        expectedEndMonth: rawEndVal || null,
+        expectedEndMonthNum,
         expectedEndMonthLabel: endMonthFullLabel,
         activeWindowMonths,
         activeTeachingDays,
         activeTeachingWeeks,
       };
     });
-  }, [estimateRows, estimateDraft, startMonth, endMonth, academicYear, calendarDraft]);
+  }, [academicYear, estimateRows, estimateDraft, startMonth, endMonth, calendarDraft]);
 
   const groupedEstimateRows = useMemo(
     () => groupEstimateRows(dynamicEstimateRows),
     [dynamicEstimateRows]
   );
 
-  if (!isOpen) return null;
-
-  const handleCalendarChange = (index, key, value) => {
+  const handleCalendarChange = (index, field, value) => {
+    const numericValue = Math.max(0, Number(value) || 0);
     setCalendarDraft((previous) =>
       previous.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, [key]: value.replace(/[^0-9]/g, '') } : row
+        rowIndex === index
+          ? {
+              ...row,
+              [field]: numericValue,
+              source: 'database',
+            }
+          : row
       )
     );
   };
@@ -181,6 +197,7 @@ const AcademicCalendarModal = ({
         ...row,
         working_days: DEFAULT_WORKING_DAYS,
         teaching_days: DEFAULT_TEACHING_DAYS,
+        source: 'default',
       }))
     );
   };
@@ -189,149 +206,158 @@ const AcademicCalendarModal = ({
     setEstimateDraft((previous) => ({
       ...previous,
       [mappingId]: {
-        ...previous[mappingId],
-        expectedEndMonth: value,
+        expectedEndMonth: value ? Number(value) : null,
       },
     }));
   };
 
   const handleSaveCalendarClick = async () => {
-    await onSaveCalendar(calendarDraft);
+    const success = await onSaveCalendar(calendarDraft);
+    if (success) setActiveSwatchIndex(null);
   };
 
   const handleSaveEstimatesClick = async () => {
-    const payload = estimateRows.map((row) => {
-      const draft = estimateDraft[row.mappingId] || {};
+    const startYear = parseAcademicYearLabel(academicYear);
+    const payload = dynamicEstimateRows.map((row) => {
+      let endMonthDate = null;
+      const endM = row.expectedEndMonthNum;
+      if (endM) {
+        const y = getAcademicMonthYear(startYear, endM);
+        const lastDay = new Date(y, endM, 0).getDate();
+        endMonthDate = `${y}-${String(endM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+
       return {
         mappingId: row.mappingId,
-        expectedEndMonth: draft.expectedEndMonth ? Number(draft.expectedEndMonth) : null,
+        trackerId: row.trackerId,
+        classId: row.classId,
+        bookId: row.bookId,
+        expectedEndMonth: endMonthDate,
       };
     });
     await onSaveEstimates(payload);
   };
 
   const handleSaveRangeClick = async () => {
+    if (!onSaveAcademicRange) return;
     setIsSavingRange(true);
-    if (onSaveAcademicRange) {
-      await onSaveAcademicRange(Number(startMonth), Number(endMonth));
-    }
+    await onSaveAcademicRange({ start_month: startMonth, end_month: endMonth });
     setIsSavingRange(false);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-[120] bg-dark-almostblack/45 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white border border-light-border rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
-        {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-sliders text-brand-primary"></i>
-              Overview Settings
-            </h3>
-            <p className="text-sm text-gray-500 font-semibold mt-1">
-              Configure academic year boundaries, calendar teaching days, and target book completion pacing.
-            </p>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-dark-almostblack/45 backdrop-blur-xs">
+      <div className="w-full max-w-5xl rounded-3xl border border-light-border bg-white shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="flex items-center justify-between border-b border-light-border px-6 py-4 bg-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black">
+              <i className="fas fa-sliders" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-dark-primary">Overview Settings</h3>
+              <p className="text-xs font-bold text-gray-400">
+                Configure academic year calendar, teaching days, and target pacing.
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-2xl border border-light-border text-gray-500 hover:text-dark-primary hover:bg-light-bg transition-colors"
+            className="w-9 h-9 rounded-xl border border-light-border text-gray-400 hover:text-dark-primary hover:bg-light-bg flex items-center justify-center transition-colors"
           >
-            <i className="fas fa-xmark"></i>
+            <i className="fas fa-xmark text-base" />
           </button>
         </div>
 
-        {/* Navigation Tabs Header */}
-        <div className="px-6 border-b border-gray-200 bg-gray-50/70 flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 px-6 pt-3 pb-1 border-b border-gray-100 bg-gray-50/50 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('calendar')}
-            className={`px-4 py-2.5 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t border-x ${
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
               activeTab === 'calendar'
-                ? 'bg-white text-brand-primary border-gray-200 border-b-transparent shadow-xs -mb-px'
-                : 'text-gray-500 hover:text-dark-primary border-transparent'
+                ? 'bg-white text-brand-primary shadow-xs border border-gray-200/80'
+                : 'text-gray-500 hover:text-dark-primary hover:bg-white/60'
             }`}
           >
-            <i className="fas fa-calendar-days text-xs" />
-            Academic Calendar Days
+            <i className="fas fa-calendar-days text-[11px]" />
+            Academic Calendar & Year Range
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('target_completion')}
-            className={`px-4 py-2.5 rounded-t-2xl text-xs font-black transition-all flex items-center gap-2 border-t border-x ${
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
               activeTab === 'target_completion'
-                ? 'bg-white text-brand-primary border-gray-200 border-b-transparent shadow-xs -mb-px'
-                : 'text-gray-500 hover:text-dark-primary border-transparent'
+                ? 'bg-white text-brand-primary shadow-xs border border-gray-200/80'
+                : 'text-gray-500 hover:text-dark-primary hover:bg-white/60'
             }`}
           >
-            <i className="fas fa-flag-checkered text-xs text-amber-500" />
+            <i className="fas fa-flag-checkered text-[11px] text-amber-500" />
             Book Target Completion
+            <span className="ml-1 px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black">
+              {estimateRows.length}
+            </span>
           </button>
         </div>
 
-        {/* Modal Tab Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-          {/* TAB 1: ACADEMIC CALENDAR DAYS */}
+        <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {activeTab === 'calendar' && (
             <>
-              {/* Configurable Academic Year Range */}
-              <section className="rounded-2xl border border-light-border p-4 sm:p-5 bg-gradient-to-r from-brand-primary/5 via-white to-gray-50">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <h4 className="text-sm font-black text-dark-primary flex items-center gap-2">
-                      <i className="fas fa-calendar-range text-brand-primary"></i> Academic Year Session Range
-                    </h4>
-                    <p className="text-[11px] font-bold text-gray-400 mt-1">
-                      Set start and end month boundaries for the academic session.
-                    </p>
-                  </div>
+              <section className="rounded-2xl border border-light-border p-4 bg-gray-50/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-black text-dark-primary flex items-center gap-2">
+                    <i className="fas fa-calendar-alt text-brand-primary" /> Academic Year Range
+                  </h4>
+                  <p className="text-[11px] font-bold text-gray-400 mt-0.5">
+                    Define the starting and ending months for your institution's academic cycle.
+                  </p>
+                </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-extrabold text-gray-500">Start:</span>
-                      <select
-                        value={startMonth}
-                        onChange={(e) => setStartMonth(Number(e.target.value))}
-                        disabled={!canEdit}
-                        className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
-                      >
-                        {ALL_MONTHS.map((m) => (
-                          <option key={m.value} value={m.value}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-extrabold text-gray-500">End:</span>
-                      <select
-                        value={endMonth}
-                        onChange={(e) => setEndMonth(Number(e.target.value))}
-                        disabled={!canEdit}
-                        className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
-                      >
-                        {ALL_MONTHS.map((m) => (
-                          <option key={m.value} value={m.value}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveRangeClick}
-                      disabled={!canEdit || isSavingRange}
-                      className="px-4 py-1.5 rounded-xl bg-brand-primary text-white text-xs font-black shadow-2xs hover:bg-brand-primary/90 transition-all disabled:opacity-50"
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold text-gray-500">Start:</span>
+                    <select
+                      value={startMonth}
+                      onChange={(e) => setStartMonth(Number(e.target.value))}
+                      disabled={!canEdit}
+                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
                     >
-                      {isSavingRange ? 'Saving...' : 'Save Year Range'}
-                    </button>
+                      {ALL_MONTHS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold text-gray-500">End:</span>
+                    <select
+                      value={endMonth}
+                      onChange={(e) => setEndMonth(Number(e.target.value))}
+                      disabled={!canEdit}
+                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
+                    >
+                      {ALL_MONTHS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveRangeClick}
+                    disabled={!canEdit || isSavingRange}
+                    className="px-4 py-1.5 rounded-xl bg-brand-primary text-white text-xs font-black shadow-2xs hover:bg-brand-primary/90 transition-all disabled:opacity-50"
+                  >
+                    {isSavingRange ? 'Saving...' : 'Save Year Range'}
+                  </button>
                 </div>
               </section>
 
-              {/* Monthly Calendar Swatches Grid */}
               <section className="rounded-2xl border border-light-border p-4 sm:p-5 bg-light-bg/30 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -364,7 +390,6 @@ const AcademicCalendarModal = ({
                   </div>
                 </div>
 
-                {/* Anticipated Days Card */}
                 <div className="flex flex-wrap items-center gap-4 bg-white p-3.5 rounded-2xl border border-light-border shadow-2xs">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
@@ -397,7 +422,6 @@ const AcademicCalendarModal = ({
                   </div>
                 </div>
 
-                {/* Month Swatches */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                   {calendarDraft.map((row, index) => {
                     const isEditing = activeSwatchIndex === index;
@@ -488,7 +512,6 @@ const AcademicCalendarModal = ({
             </>
           )}
 
-          {/* TAB 2: BOOK TARGET COMPLETION */}
           {activeTab === 'target_completion' && (
             <section className="rounded-2xl border border-light-border p-4 sm:p-5 bg-gradient-to-b from-white to-gray-50/60 shadow-xs">
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-gray-200/80 pb-3">
@@ -497,7 +520,7 @@ const AcademicCalendarModal = ({
                     <i className="fas fa-flag-checkered text-amber-500"></i> Book Target Completion
                   </h4>
                   <p className="text-[11px] font-bold text-gray-400 mt-1">
-                    Start month is automatically determined from the first lesson log date or June session start. Select the target completion month for expected pacing calculations.
+                    Start month is automatically determined from first lesson log or session start. Select target completion month for pacing calculations.
                   </p>
                 </div>
 
@@ -508,114 +531,119 @@ const AcademicCalendarModal = ({
                 </div>
               </div>
 
-              <div className="space-y-5 max-h-[520px] overflow-y-auto pr-1">
+              <div className="space-y-4 max-h-[540px] overflow-y-auto pr-1">
                 {groupedEstimateRows.map(([className, subjectsForClass]) => (
                   <div
                     key={className}
-                    className="rounded-2xl border border-gray-200/90 bg-white p-4 shadow-2xs hover:shadow-xs transition-all"
+                    className="rounded-2xl border border-gray-200/90 bg-white p-3.5 shadow-2xs hover:shadow-xs transition-all"
                   >
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-                      <div className="w-7 h-7 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-xs">
-                        <i className="fas fa-graduation-cap" />
+                    <div className="flex items-center gap-2 mb-2.5 pb-1.5 border-b border-gray-100">
+                      <div className="w-6 h-6 rounded-lg bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-xs">
+                        <i className="fas fa-graduation-cap text-[11px]" />
                       </div>
-                      <h5 className="text-sm font-black text-dark-primary">{className}</h5>
+                      <h5 className="text-xs font-black text-dark-primary">{className}</h5>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {Object.entries(subjectsForClass).map(([subjectName, rows]) => (
                         <div
                           key={subjectName}
-                          className="rounded-xl bg-gray-50/70 border border-gray-200/60 p-3.5"
+                          className="rounded-xl bg-gray-50/70 border border-gray-200/60 p-2.5"
                         >
-                          <h6 className="text-[11px] font-black uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-brand-primary" />
+                          <h6 className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-brand-primary" />
                             {subjectName}
                           </h6>
 
-                          <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                             {rows.map((row) => {
                               const draft = estimateDraft[row.mappingId] || {};
                               const endM =
                                 draft.expectedEndMonth !== undefined
                                   ? draft.expectedEndMonth
-                                  : row.expectedEndMonth || '';
+                                  : row.expectedEndMonthNum || '';
+
+                              const finalMonthLabel =
+                                academicMonthOptions[academicMonthOptions.length - 1]?.label ||
+                                'End of Year';
+
+                              const effectiveEndMonthLabel = endM
+                                ? academicMonthOptions.find((m) => m.value === Number(endM))?.label ||
+                                  row.expectedEndMonthLabel
+                                : finalMonthLabel;
 
                               return (
                                 <div
                                   key={row.mappingId}
-                                  className="p-3.5 rounded-xl border border-gray-200 bg-white shadow-2xs hover:border-brand-primary/40 transition-all flex flex-col gap-3"
+                                  className="p-3 rounded-xl border border-gray-200 bg-white shadow-2xs hover:border-brand-primary/40 hover:shadow-xs transition-all flex flex-col justify-between gap-2"
                                 >
-                                  {/* Top Row: Book Name & Start/End Badges */}
-                                  <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div className="flex items-center gap-2.5 min-w-[200px]">
-                                      <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 font-black text-xs">
-                                        <i className="fas fa-book" />
-                                      </div>
-                                      <div>
-                                        <p className="text-xs font-black text-dark-primary">
+                                  <div>
+                                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 text-[10px] font-black">
+                                          <i className="fas fa-book" />
+                                        </div>
+                                        <p
+                                          className="text-xs font-black text-dark-primary truncate"
+                                          title={row.bookName}
+                                        >
                                           {row.bookName}
                                         </p>
-                                        <span className="text-[10px] font-bold text-gray-400">
-                                          Timetable: {row.periodsPerWeek || 0} periods/week
-                                        </span>
                                       </div>
+                                      <span className="text-[9px] font-extrabold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded shrink-0">
+                                        {row.periodsPerWeek || 0} p/w
+                                      </span>
                                     </div>
 
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {/* Auto-Calculated Start Month Badge */}
-                                      {row.hasFirstLessonEntry ? (
-                                        <span
-                                          className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-black flex items-center gap-1.5"
-                                          title={`First lesson log date: ${row.firstLessonDate}`}
-                                        >
-                                          <i className="fas fa-play text-[9px]" />
-                                          Start: {row.calculatedStartMonthLabel}
-                                        </span>
-                                      ) : (
-                                        <span
-                                          className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-black flex items-center gap-1.5"
-                                          title="Remaining time calculated from current month."
-                                        >
-                                          <i className="fas fa-clock text-[9px]" />
-                                          Start: {row.calculatedStartMonthLabel}
-                                        </span>
-                                      )}
-
-                                      {/* Active Duration & Teaching Days Tag */}
-                                      <span className="px-2.5 py-1 rounded-xl bg-brand-primary/10 text-brand-primary font-black text-[11px] border border-brand-primary/20">
-                                        {row.activeTeachingDays} Teaching Days (~{row.activeTeachingWeeks} Wks)
+                                    <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                                      <span
+                                        className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold flex items-center gap-1 ${
+                                          row.hasFirstLessonEntry
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        }`}
+                                        title={
+                                          row.hasFirstLessonEntry
+                                            ? `First lesson log: ${row.firstLessonDate}`
+                                            : 'Auto-calculated from session start'
+                                        }
+                                      >
+                                        <i
+                                          className={`fas ${
+                                            row.hasFirstLessonEntry ? 'fa-play' : 'fa-clock'
+                                          } text-[8px]`}
+                                        />
+                                        {row.calculatedStartMonthLabel}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded-md bg-brand-primary/10 text-brand-primary font-extrabold text-[10px]">
+                                        {row.activeTeachingDays}d (~{row.activeTeachingWeeks}w)
                                       </span>
                                     </div>
                                   </div>
 
-                                  {/* Bottom Row: End Month Selector Control */}
-                                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
-                                    <div className="flex items-center gap-2">
-                                      <label className="text-xs font-black text-gray-700 flex items-center gap-1">
-                                        <i className="fas fa-flag-checkered text-amber-500" />
-                                        Target Completion Month:
-                                      </label>
-                                      <select
-                                        value={endM}
-                                        onChange={(e) =>
-                                          handleEstimateEndMonthChange(row.mappingId, e.target.value)
-                                        }
-                                        disabled={!canEdit}
-                                        className="px-3 py-1.5 rounded-xl border border-gray-300 bg-gray-50 text-xs font-black text-dark-primary outline-none focus:ring-1 focus:ring-brand-primary focus:bg-white cursor-pointer"
-                                      >
-                                        <option value="">
-                                          Full Session ({academicMonthOptions[academicMonthOptions.length - 1]?.label || 'End of Year'})
+                                  <div className="pt-2 border-t border-gray-100 space-y-1">
+                                    <label className="block text-[10px] font-black text-gray-600">
+                                      Target Completion:
+                                    </label>
+                                    <select
+                                      value={endM}
+                                      onChange={(e) =>
+                                        handleEstimateEndMonthChange(row.mappingId, e.target.value)
+                                      }
+                                      disabled={!canEdit}
+                                      className="w-full px-2 py-1 rounded-lg border border-gray-300 bg-gray-50 text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-primary focus:bg-white cursor-pointer"
+                                    >
+                                      <option value="">
+                                        Full Session ({finalMonthLabel})
+                                      </option>
+                                      {academicMonthOptions.map((m) => (
+                                        <option key={m.value} value={m.value}>
+                                          {m.label}
                                         </option>
-                                        {academicMonthOptions.map((m) => (
-                                          <option key={m.value} value={m.value}>
-                                            {m.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
-
-                                    <div className="text-[10px] font-bold text-gray-400">
-                                      Pacing Range: {row.calculatedStartMonthLabel} → {endM ? (academicMonthOptions.find(m => m.value === Number(endM))?.label || row.expectedEndMonthLabel) : row.expectedEndMonthLabel}
+                                      ))}
+                                    </select>
+                                    <div className="text-[9px] font-semibold text-gray-400 truncate">
+                                      {row.calculatedStartMonthLabel} → {effectiveEndMonthLabel}
                                     </div>
                                   </div>
                                 </div>

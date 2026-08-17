@@ -242,10 +242,10 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
 
       // Collect cell for each active class
       const classCells = activeClasses.map((clsRow) => {
-        const cell = clsRow.cells[subj.id];
+        const cell = clsRow?.cells ? clsRow.cells[subj.id] : null;
         return {
-          classId: clsRow.classId,
-          className: clsRow.className,
+          classId: clsRow?.classId,
+          className: clsRow?.className || '',
           cell,
           status: getStatusInfo(cell),
         };
@@ -282,7 +282,7 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
             </div>
             <div>
               <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
-                Class × Subject Progress
+                Subject Heatmap
               </h3>
               <p className="text-[11px] font-bold text-gray-400">
                 {isTransposed ? 'Subject rows × Class columns' : 'Class rows × Subject columns'}

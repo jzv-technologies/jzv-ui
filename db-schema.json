@@ -1,6 +1,53 @@
 {
   "schema": [
     {
+      "table": "academic_calendar",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "year",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "month",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "working_days",
+          "default": "22",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "teaching_days",
+          "default": "20",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
       "table": "admin_configruation",
       "columns": [
         {
@@ -545,6 +592,77 @@
       ]
     },
     {
+      "table": "heatmap_teacher_tracker",
+      "columns": [
+        {
+          "type": "date",
+          "column": "date",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "day",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "teacher_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "teacher_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "class_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "class_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "subject_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "subject_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "bigint",
+          "column": "book_id",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "unplanned",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "has_progress",
+          "default": null,
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
       "table": "lesson_plan_carry_forwards",
       "columns": [
         {
@@ -610,6 +728,24 @@
           "type": "timestamp with time zone",
           "column": "created_at",
           "default": "now()",
+          "nullable": "YES"
+        },
+        {
+          "type": "smallint",
+          "column": "prior_year_completion",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "smallint",
+          "column": "expected_start_month",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "smallint",
+          "column": "expected_end_month",
+          "default": null,
           "nullable": "YES"
         }
       ]
@@ -1201,6 +1337,12 @@
           "column": "requires_teacher",
           "default": "true",
           "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "track_progress",
+          "default": "true",
+          "nullable": "YES"
         }
       ]
     },
@@ -1681,11 +1823,31 @@
       "roles": [
         "authenticated"
       ],
+      "table": "academic_calendar",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
       "table": "admin_configruation",
       "using": "has_role_above(16)",
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "admin_configruation",
+      "using": "true",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "true"
     },
     {
       "roles": [
@@ -1929,16 +2091,6 @@
     },
     {
       "roles": [
-        "authenticated"
-      ],
-      "table": "request_tracker",
-      "using": null,
-      "command": "INSERT",
-      "permissive": "PERMISSIVE",
-      "with_check": "true"
-    },
-    {
-      "roles": [
         "anon"
       ],
       "table": "request_tracker",
@@ -1952,10 +2104,10 @@
         "authenticated"
       ],
       "table": "request_tracker",
-      "using": "true",
-      "command": "SELECT",
+      "using": null,
+      "command": "INSERT",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "true"
     },
     {
       "roles": [
@@ -1970,6 +2122,16 @@
     {
       "roles": [
         "authenticated"
+      ],
+      "table": "request_tracker",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "anon"
       ],
       "table": "request_tracker",
       "using": "true",
@@ -1979,7 +2141,7 @@
     },
     {
       "roles": [
-        "anon"
+        "authenticated"
       ],
       "table": "request_tracker",
       "using": "true",
@@ -2090,7 +2252,7 @@
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "syl_classifications",
       "using": "true",
@@ -2100,7 +2262,7 @@
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "syl_classifications",
       "using": "true",
@@ -2190,16 +2352,6 @@
     },
     {
       "roles": [
-        "authenticated"
-      ],
-      "table": "timetable_slots",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
         "anon",
         "authenticated"
       ],
@@ -2213,11 +2365,11 @@
       "roles": [
         "authenticated"
       ],
-      "table": "trk_book_level_progress",
+      "table": "timetable_slots",
       "using": "true",
-      "command": "ALL",
+      "command": "SELECT",
       "permissive": "PERMISSIVE",
-      "with_check": "true"
+      "with_check": null
     },
     {
       "roles": [
@@ -2225,9 +2377,9 @@
       ],
       "table": "trk_book_level_progress",
       "using": "true",
-      "command": "SELECT",
+      "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "true"
     },
     {
       "roles": [
@@ -2243,6 +2395,16 @@
       "roles": [
         "authenticated"
       ],
+      "table": "trk_book_level_progress",
+      "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
       "table": "trk_daily_teacher_progress",
       "using": "true",
       "command": "ALL",
@@ -2251,20 +2413,20 @@
     },
     {
       "roles": [
-        "authenticated"
+        "public"
       ],
       "table": "trk_daily_teacher_progress",
-      "using": "has_role_above(8)",
+      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
-        "public"
+        "authenticated"
       ],
       "table": "trk_daily_teacher_progress",
-      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "using": "has_role_above(8)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2435,8 +2597,8 @@
     },
     {
       "name": "get_class_timetable",
-      "returns": "json",
-      "arguments": "p_class_id bigint"
+      "returns": "jsonb",
+      "arguments": "p_class_id text"
     },
     {
       "name": "get_current_teacher_details",
@@ -2477,6 +2639,11 @@
       "name": "get_teachers_with_auth_secure",
       "returns": "TABLE(teacher_id bigint, name character varying, is_male boolean, auth_id uuid, is_active boolean)",
       "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
+    },
+    {
+      "name": "get_timetable_progress",
+      "returns": "TABLE(date date, day text, teacher_id bigint, teacher_name text, class_id bigint, class_name text, subject_id bigint, subject_name text, book_id bigint, unplanned boolean, has_progress boolean)",
+      "arguments": "p_start_date date, p_end_date date"
     },
     {
       "name": "get_trigger_context",

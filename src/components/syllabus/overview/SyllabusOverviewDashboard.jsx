@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../../../utils/supabase';
+import { supabase, fetchAllPages } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 import ClassSubjectHeatmap from './ClassSubjectHeatmap';
 import ProgressTrendChart from './ProgressTrendChart';
@@ -37,15 +37,19 @@ const SyllabusOverviewDashboard = ({
   assignments = [],
   teachers = [],
   bookTrackers = [],
+  setBookTrackers,
   allLogs = [],
   lessonPlans = [],
   carryForwards = [],
   onOpenClassProgress,
+  onHeaderStateChange,
 }) => {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(getCurrentAcademicYearLabel());
+  const [activeSubTab, setActiveSubTab] = useState('class-dashboard');
   const [calendarEntries, setCalendarEntries] = useState([]);
   const [timetableSlots, setTimetableSlots] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
+  const [teacherHeatmapRows, setTeacherHeatmapRows] = useState([]);
   const [loadingAuxData, setLoadingAuxData] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
@@ -60,11 +64,11 @@ const SyllabusOverviewDashboard = ({
   const fetchOverviewData = useCallback(async () => {
     setLoadingAuxData(true);
 
-    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult] =
+    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult, heatmapResult] =
       await Promise.all([
         supabase
-          .from('syl_academic_calendar')
-          .select('year, month, working_days, teaching_days, source')
+          .from('academic_calendar')
+          .select('id, year, month, working_days, teaching_days')
           .order('year', { ascending: true })
           .order('month', { ascending: true }),
         supabase
@@ -82,6 +86,7 @@ const SyllabusOverviewDashboard = ({
           .from('timetable_periods')
           .select('*')
           .order('period_number', { ascending: true }),
+        fetchAllPages('heatmap_teacher_tracker', '*'),
       ]);
 
     if (calendarResult.error) {
@@ -110,14 +115,25 @@ const SyllabusOverviewDashboard = ({
       setDailyLogs(dailyLogsResult.data || []);
     }
 
+    if (heatmapResult.error) {
+      console.warn('Failed to load heatmap_teacher_tracker:', heatmapResult.error.message);
+      setTeacherHeatmapRows([]);
+    } else {
+      setTeacherHeatmapRows(heatmapResult.data || []);
+    }
+
     if (!periodsResult.error && periodsResult.data) {
       setPeriods(periodsResult.data);
     }
 
     if (!configResult.error && configResult.data?.val) {
       const cfg = configResult.data.val;
-      if (cfg.start_month) setAcademicStartMonth(Number(cfg.start_month));
-      if (cfg.end_month) setAcademicEndMonth(Number(cfg.end_month));
+      const rawStart = typeof cfg.start_month === 'object' ? cfg.start_month?.start_month : cfg.start_month;
+      const rawEnd = typeof cfg.end_month === 'object' ? cfg.end_month?.end_month : cfg.end_month;
+      const sm = Number(rawStart);
+      const em = Number(rawEnd);
+      if (Number.isFinite(sm) && sm >= 1 && sm <= 12) setAcademicStartMonth(sm);
+      if (Number.isFinite(em) && em >= 1 && em <= 12) setAcademicEndMonth(em);
     }
 
     setLoadingAuxData(false);
@@ -145,8 +161,9 @@ const SyllabusOverviewDashboard = ({
   // Derive academic year start date for adherence scoping
   const academicYearStartDate = useMemo(() => {
     const startYear = parseAcademicYearLabel(selectedAcademicYear);
-    const startYear4 = getAcademicMonthYear(startYear, academicStartMonth);
-    return new Date(startYear4, academicStartMonth - 1, 1);
+    const startMonthNum = Number(academicStartMonth) || 6;
+    const startYear4 = getAcademicMonthYear(startYear, startMonthNum);
+    return new Date(startYear4, startMonthNum - 1, 1);
   }, [selectedAcademicYear, academicStartMonth]);
 
   const calendarRows = useMemo(
@@ -174,6 +191,7 @@ const SyllabusOverviewDashboard = ({
         periodsPerWeekMap,
         allLogs,
         academicStartMonth,
+        academicEndMonth,
       }),
     [
       bookClasses,
@@ -185,6 +203,7 @@ const SyllabusOverviewDashboard = ({
       periodsPerWeekMap,
       allLogs,
       academicStartMonth,
+      academicEndMonth,
     ]
   );
 
@@ -205,6 +224,7 @@ const SyllabusOverviewDashboard = ({
     () =>
       buildTeacherSubmissionHeatmap({
         teachers,
+        teacherHeatmapRows,
         dailyLogs,
         allLogs,
         timetableSlots,
@@ -213,9 +233,20 @@ const SyllabusOverviewDashboard = ({
         subjects,
         books,
         periods,
-        weeks: 4,
+        weeks: 5,
       }),
-    [teachers, dailyLogs, allLogs, timetableSlots, assignments, classes, subjects, books, periods]
+    [
+      teachers,
+      teacherHeatmapRows,
+      dailyLogs,
+      allLogs,
+      timetableSlots,
+      assignments,
+      classes,
+      subjects,
+      books,
+      periods,
+    ]
   );
 
   const heatmap = useMemo(
@@ -233,10 +264,23 @@ const SyllabusOverviewDashboard = ({
         bookTrackers,
         allLogs,
         pacingRecords,
+        calendarRows,
         academicStartMonth,
+        academicEndMonth,
         weeks: 4,
       }),
-    [classes, books, subjects, bookClasses, bookTrackers, allLogs, pacingRecords, academicStartMonth]
+    [
+      classes,
+      books,
+      subjects,
+      bookClasses,
+      bookTrackers,
+      allLogs,
+      pacingRecords,
+      calendarRows,
+      academicStartMonth,
+      academicEndMonth,
+    ]
   );
 
   const alerts = useMemo(
@@ -261,14 +305,28 @@ const SyllabusOverviewDashboard = ({
     () =>
       buildEstimateRows({
         bookClasses,
+        bookTrackers,
         books,
         subjects,
         classes,
         periodsPerWeekMap,
         allLogs,
+        calendarRows,
         academicStartMonth,
+        academicEndMonth,
       }),
-    [bookClasses, books, subjects, classes, periodsPerWeekMap, allLogs, academicStartMonth]
+    [
+      bookClasses,
+      bookTrackers,
+      books,
+      subjects,
+      classes,
+      periodsPerWeekMap,
+      allLogs,
+      calendarRows,
+      academicStartMonth,
+      academicEndMonth,
+    ]
   );
 
   const handleSaveCalendar = useCallback(async (rows) => {
@@ -310,24 +368,29 @@ const SyllabusOverviewDashboard = ({
       setIsSavingEstimates(true);
 
       const payload = rows.map((row) => ({
-        id: row.mappingId,
+        class_id: row.classId,
+        book_id: row.bookId,
         expected_end_month: row.expectedEndMonth || null,
+        updated_at: new Date().toISOString(),
       }));
 
-      const { data, error } = await supabase.from('map_class_books').upsert(payload).select('*');
+      const { data, error } = await supabase
+        .from('trk_book_level_progress')
+        .upsert(payload, { onConflict: 'class_id,book_id' })
+        .select('*');
 
       setIsSavingEstimates(false);
 
       if (error) {
-        showToast(`Failed to save completion windows: ${error.message}`, 'error');
+        showToast(`Failed to save completion targets: ${error.message}`, 'error');
         return false;
       }
 
-      if (typeof setBookClasses === 'function') {
-        const savedMap = new Map((data || payload).map((entry) => [String(entry.id), entry]));
-        setBookClasses((previous) =>
-          previous.map((item) => {
-            const saved = savedMap.get(String(item.id));
+      if (typeof setBookTrackers === 'function') {
+        const savedMap = new Map((data || payload).map((entry) => [`${entry.class_id}-${entry.book_id}`, entry]));
+        setBookTrackers((previous) =>
+          (previous || []).map((item) => {
+            const saved = savedMap.get(`${item.class_id}-${item.book_id}`);
             return saved
               ? {
                   ...item,
@@ -338,104 +401,153 @@ const SyllabusOverviewDashboard = ({
         );
       }
 
-      showToast('Book active completion windows saved.', 'success');
+      showToast('Book target completion dates saved.', 'success');
       return true;
     },
-    [setBookClasses]
+    [setBookTrackers]
   );
 
-  const handleSaveAcademicRange = useCallback(async (startMonth, endMonth) => {
+  const handleSaveAcademicRange = useCallback(async (start, end) => {
+    let startNum = typeof start === 'object' ? Number(start?.start_month) : Number(start);
+    let endNum = typeof start === 'object' ? Number(start?.end_month) : Number(end);
+    if (!Number.isFinite(startNum) || startNum < 1 || startNum > 12) startNum = 6;
+    if (!Number.isFinite(endNum) || endNum < 1 || endNum > 12) endNum = 5;
+
     const { error } = await supabase
       .from('admin_configruation')
       .upsert(
-        { key: 'academic_year_range', val: { start_month: startMonth, end_month: endMonth } },
+        { key: 'academic_year_range', val: { start_month: startNum, end_month: endNum } },
         { onConflict: 'key' }
       );
     if (error) {
       showToast(`Failed to save academic year range: ${error.message}`, 'error');
       return false;
     }
-    setAcademicStartMonth(startMonth);
-    setAcademicEndMonth(endMonth);
+    setAcademicStartMonth(startNum);
+    setAcademicEndMonth(endNum);
     showToast('Academic year range saved.', 'success');
     return true;
   }, []);
 
+  useEffect(() => {
+    if (typeof onHeaderStateChange === 'function') {
+      onHeaderStateChange({
+        selectedAcademicYear,
+        setSelectedAcademicYear,
+        academicYearOptions,
+        openSettings: () => setIsSettingsOpen(true),
+      });
+    }
+  }, [
+    selectedAcademicYear,
+    setSelectedAcademicYear,
+    academicYearOptions,
+    setIsSettingsOpen,
+    onHeaderStateChange,
+  ]);
+
   const canEditSettings = role === 'admin' || role === 'management';
+
+  const subTabs = [
+    {
+      key: 'class-dashboard',
+      label: 'Class Dashboard',
+      shortLabel: 'Class Dashboard',
+      icon: 'fa-chart-pie',
+    },
+    {
+      key: 'subject-heatmap',
+      label: 'Subject Heatmap',
+      shortLabel: 'Subject Heatmap',
+      icon: 'fa-table-cells',
+    },
+    {
+      key: 'tracker-heatmap',
+      label: 'Tracker Heatmap',
+      shortLabel: 'Tracker Heatmap',
+      icon: 'fa-clipboard-user',
+    },
+    {
+      key: 'weekly-progress-trend',
+      label: 'Weekly Book Progress Trend',
+      shortLabel: 'Weekly Trend',
+      icon: 'fa-chart-line',
+    },
+    {
+      key: 'attention-required',
+      label: 'Attention Required',
+      shortLabel: 'Attention',
+      icon: 'fa-triangle-exclamation',
+      badge: alerts?.length > 0 ? alerts.length : null,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header Bar */}
-      <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-lg font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-gauge-high text-brand-primary"></i>
-              Executive Overview
-            </h2>
-            <p className="text-sm text-gray-500 font-semibold mt-1">
-              Real-time syllabus completion, submission regularity, book pacing, and active attention flags.
-            </p>
-            {calendarFallbackReason && (
-              <p className="mt-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 inline-flex items-center gap-2">
-                <i className="fas fa-triangle-exclamation"></i>
-                {calendarFallbackReason}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <select
-              value={selectedAcademicYear}
-              onChange={(event) => setSelectedAcademicYear(event.target.value)}
-              className="px-3 py-2 rounded-xl border border-light-border bg-white text-sm font-bold text-dark-primary"
-            >
-              {academicYearOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="px-3 py-2 rounded-xl border border-light-border bg-white text-sm font-bold text-dark-primary hover:bg-light-bg transition-colors inline-flex items-center gap-2"
-            >
-              <i className="fas fa-gear text-brand-primary"></i>
-              Settings
-            </button>
-          </div>
+      {/* Calendar Fallback Warning */}
+      {calendarFallbackReason && (
+        <div className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 inline-flex items-center gap-2">
+          <i className="fas fa-triangle-exclamation text-amber-600"></i>
+          {calendarFallbackReason}
         </div>
+      )}
+
+      {/* Sub-Views Tabs Bar */}
+      <div className="bg-white border border-light-border p-1.5 sm:p-2 rounded-2xl shadow-sm flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
+        {subTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveSubTab(tab.key)}
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer ${
+              activeSubTab === tab.key
+                ? 'bg-brand-primary text-white shadow-sm'
+                : 'text-dark-soft hover:text-dark-primary hover:bg-light-bg'
+            }`}
+          >
+            <i className={`fas ${tab.icon} text-xs`}></i>
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.shortLabel}</span>
+            {tab.badge && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                  activeSubTab === tab.key
+                    ? 'bg-white text-brand-primary'
+                    : 'bg-rose-500 text-white'
+                }`}
+              >
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* 1. Class x Subject Progress (Full Width) */}
+      {/* Active Sub-View Content */}
       <div className="w-full">
-        <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
-      </div>
+        {activeSubTab === 'class-dashboard' && (
+          <ClassDonutCharts classDonutData={classDonutData} />
+        )}
 
-      {/* 2. Teacher Tracker Submissions (Full Width) */}
-      <div className="w-full">
-        <TeacherSubmissionHeatmap heatmapData={teacherSubmissionHeatmapData} />
-      </div>
+        {activeSubTab === 'subject-heatmap' && (
+          <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
+        )}
 
-      {/* 3. Class Completion Mix (4 States: Completed, In Progress, Planned, Not Planned) */}
-      <div className="w-full">
-        <ClassDonutCharts classDonutData={classDonutData} />
-      </div>
+        {activeSubTab === 'tracker-heatmap' && (
+          <TeacherSubmissionHeatmap heatmapData={teacherSubmissionHeatmapData} />
+        )}
 
-      {/* 4. Weekly Book Progress Trend (Grouped Bar Chart - Full Width) */}
-      <div className="w-full">
-        <ProgressTrendChart
-          classes={classes}
-          bookWeeklyData={bookWeeklyTrendData}
-          loading={loadingAuxData}
-        />
-      </div>
+        {activeSubTab === 'weekly-progress-trend' && (
+          <ProgressTrendChart
+            classes={classes}
+            bookWeeklyData={bookWeeklyTrendData}
+            loading={loadingAuxData}
+          />
+        )}
 
-      {/* 5. Attention Required Panel (Full Width) */}
-      <div className="w-full">
-        <AttentionRequiredPanel alerts={alerts} />
+        {activeSubTab === 'attention-required' && (
+          <AttentionRequiredPanel alerts={alerts} />
+        )}
       </div>
 
       {/* Settings Modal */}
@@ -461,4 +573,52 @@ const SyllabusOverviewDashboard = ({
   );
 };
 
-export default SyllabusOverviewDashboard;
+class DashboardErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('SyllabusOverviewDashboard caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-3xl border border-red-200 bg-red-50/70 p-6 text-center space-y-3 shadow-sm my-4">
+          <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto text-lg font-black">
+            <i className="fas fa-triangle-exclamation" />
+          </div>
+          <h4 className="text-base font-black text-red-900">
+            Overview Dashboard Encountered an Error
+          </h4>
+          <p className="text-xs font-semibold text-red-700 max-w-xl mx-auto">
+            {this.state.error?.message || 'An unexpected rendering error occurred.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-sm transition-all"
+          >
+            Retry Dashboard
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const SafeSyllabusOverviewDashboard = (props) => (
+  <DashboardErrorBoundary>
+    <SyllabusOverviewDashboard {...props} />
+  </DashboardErrorBoundary>
+);
+
+export default SafeSyllabusOverviewDashboard;

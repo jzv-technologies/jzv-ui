@@ -92,13 +92,15 @@ const ProgressTrendChart = ({
 
   const chartData = useMemo(() => {
     return filteredBooks.map((book) => {
+      const bName = book.bookName || 'Book';
+      const sName = book.subjectName || 'Subject';
       const entry = {
         bookId: book.bookId,
-        name: book.bookName.length > 20 ? `${book.bookName.slice(0, 18)}…` : book.bookName,
-        fullName: `${book.subjectName} · ${book.bookName}`,
-        subject: book.subjectName,
-        totalLessons: book.totalLessons,
-        currentProgress: book.currentProgress,
+        name: bName.length > 20 ? `${bName.slice(0, 18)}…` : bName,
+        fullName: `${sName} · ${bName}`,
+        subject: sName,
+        totalLessons: book.totalLessons || 0,
+        currentProgress: book.currentProgress || 0,
         expected: book.expectedProgress || 0,
       };
 
@@ -247,8 +249,8 @@ const ProgressTrendChart = ({
               />
               <Tooltip
                 formatter={(value, name) => [
-                  name === 'Expected Pace'
-                    ? `${value}% expected`
+                  name === 'Expected %'
+                    ? `${value}% Expected`
                     : metricType === 'percentage'
                       ? `${value}% cumulative completion`
                       : `${value} lessons completed this week`,
@@ -282,18 +284,25 @@ const ProgressTrendChart = ({
                 </Bar>
               ))}
 
-              {/* Expected Completion Line */}
+              {/* Expected % Line Chart */}
               {metricType === 'percentage' && (
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="expected"
-                  name="Expected Pace"
-                  stroke="#111827"
+                  name="Expected %"
+                  stroke="#f59e0b"
                   strokeWidth={2.5}
-                  strokeDasharray="5 5"
-                  dot={{ r: 4, fill: '#111827' }}
-                  activeDot={{ r: 6 }}
-                />
+                  dot={{ r: 4.5, fill: '#f59e0b', stroke: '#ffffff', strokeWidth: 2 }}
+                  activeDot={{ r: 6.5, fill: '#d97706', stroke: '#ffffff', strokeWidth: 2 }}
+                >
+                  <LabelList
+                    dataKey="expected"
+                    position="top"
+                    formatter={(val) => (val > 0 ? `${val}%` : '')}
+                    style={{ fontSize: 9, fontWeight: 800, fill: '#b45309' }}
+                    offset={8}
+                  />
+                </Line>
               )}
             </ComposedChart>
           </ResponsiveContainer>

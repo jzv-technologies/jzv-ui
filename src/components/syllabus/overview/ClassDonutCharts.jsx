@@ -23,7 +23,7 @@ const ClassDonutCharts = ({ classDonutData = [] }) => {
         <div>
           <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
             <i className="fas fa-chart-pie text-brand-primary"></i>
-            Class Completion Mix
+            Class Dashboard
           </h3>
           <p className="text-[11px] font-bold text-gray-400 mt-1">
             Status breakdown across all subjects for each class: Completed, In Progress, Planned, and Not Planned.

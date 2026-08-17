@@ -12,11 +12,16 @@ const MONTH_LABELS = {
  * Defaults to Jun–May (12 months) if not provided.
  */
 export const buildAcademicMonths = (startMonth = 6, endMonth = 5) => {
+  const s = typeof startMonth === 'object' ? Number(startMonth?.start_month || startMonth?.month || 6) : Number(startMonth);
+  const e = typeof endMonth === 'object' ? Number(endMonth?.end_month || endMonth?.month || 5) : Number(endMonth);
+  const cleanStart = Number.isFinite(s) && s >= 1 && s <= 12 ? s : 6;
+  const cleanEnd = Number.isFinite(e) && e >= 1 && e <= 12 ? e : 5;
+
   const months = [];
-  let m = startMonth;
+  let m = cleanStart;
   for (let i = 0; i < 12; i++) {
-    months.push({ month: m, label: MONTH_LABELS[m] });
-    if (m === endMonth) break;
+    months.push({ month: m, label: MONTH_LABELS[m] || `M${m}` });
+    if (m === cleanEnd) break;
     m = m === 12 ? 1 : m + 1;
   }
   return months;
@@ -41,11 +46,17 @@ export const parseAcademicYearLabel = (label) => {
 };
 
 export const getCurrentAcademicYearLabel = (today = new Date()) => {
-  const startYear = today.getMonth() + 1 >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+  const safeDate = (today instanceof Date && !isNaN(today.getTime())) ? today : new Date();
+  const startYear = safeDate.getMonth() + 1 >= 6 ? safeDate.getFullYear() : safeDate.getFullYear() - 1;
   return formatAcademicYearLabel(startYear);
 };
 
-export const getAcademicMonthYear = (startYear, month) => (month >= 6 ? startYear : startYear + 1);
+export const getAcademicMonthYear = (startYear, month) => {
+  const m = typeof month === 'object' ? Number(month?.month || month?.start_month || 6) : Number(month);
+  const cleanMonth = Number.isFinite(m) ? m : 6;
+  const y = Number(startYear) || new Date().getFullYear();
+  return cleanMonth >= 6 ? y : y + 1;
+};
 
 export const buildAcademicCalendarRows = (academicYearLabel, calendarEntries = [], startMonth = 6, endMonth = 5) => {
   const startYear = parseAcademicYearLabel(academicYearLabel);
@@ -164,6 +175,7 @@ export const buildPacingRecords = ({
   periodsPerWeekMap = new Map(),
   allLogs = [],
   academicStartMonth = 6,
+  academicEndMonth = 5,
   today = new Date(),
 }) => {
   const coverageRows = getCalendarCoverageRows(calendarRows, today);
@@ -199,22 +211,50 @@ export const buildPacingRecords = ({
       const classRecord = classMap.get(String(mapping.class_id));
       const tracker = trackerMap.get(`${mapping.class_id}-${mapping.book_id}`);
       const periodsPerWeek = periodsPerWeekMap.get(`${mapping.class_id}-${book.subject_id}`) || 0;
-      const actualProgress = clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
+
+      const totalLessons = toNumber(
+        tracker?.total_lessons ||
+          book.total_leaf_lessons ||
+          book.total_lessons,
+        0
+      );
+      const completedLessons = toNumber(tracker?.completed, 0);
+      const inProgressLessons = toNumber(tracker?.in_progress, 0);
+      const pendingLessons = Math.max(0, totalLessons - completedLessons);
+
+      const actualProgress = totalLessons > 0
+        ? clamp(Number(((completedLessons / totalLessons) * 100).toFixed(1)), 0, 100)
+        : clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
 
       const firstLesson = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
-      const calculatedStartMonth = firstLesson?.month ?? academicStartMonth;
+      const rawStart = tracker?.expected_start_month;
+      const rawEnd = tracker?.expected_end_month;
+
+      const calculatedStartMonth =
+        typeof rawStart === 'string' && rawStart.includes('-')
+          ? new Date(rawStart).getMonth() + 1
+          : typeof rawStart === 'number'
+            ? rawStart
+            : firstLesson?.month ?? academicStartMonth;
+
+      const targetEndMonth =
+        typeof rawEnd === 'string' && rawEnd.includes('-')
+          ? new Date(rawEnd).getMonth() + 1
+          : typeof rawEnd === 'number'
+            ? rawEnd
+            : academicEndMonth;
 
       const periodsAvailableToDate = periodsPerWeek * (elapsedTeachingDays / 5);
 
-      // Determine expected progress — use active window if expected_end_month is set
-      let expectedProgress;
+      // Determine expected progress based on teaching days within [calculatedStartMonth, targetEndMonth]
+      let expectedProgress = 0;
       let isOverdue = false;
 
-      if (mapping.expected_end_month) {
+      if (rawEnd || rawStart) {
         const win = getWindowCoverage(
           calendarRows,
           calculatedStartMonth,
-          mapping.expected_end_month,
+          targetEndMonth,
           today
         );
 
@@ -234,26 +274,38 @@ export const buildPacingRecords = ({
           : 0;
       }
 
+      // Expected completed lessons based on pace
+      const expectedLessons = totalLessons > 0
+        ? Math.round((expectedProgress / 100) * totalLessons)
+        : 0;
+      const lessonDelta = completedLessons - expectedLessons;
+
       return {
         id: mapping.id,
+        trackerId: tracker?.id || null,
         classId: mapping.class_id,
         className: classRecord?.name || `Class ${mapping.class_id}`,
         bookId: mapping.book_id,
-        bookName: book.name || 'Untitled Book',
+        bookName: book.title || book.name || 'Untitled Book',
         subjectId: book.subject_id,
         subjectName: subject?.name || 'Untitled Subject',
         classificationId: subject?.classification_id || null,
         actualProgress,
         rawTrackerPct: actualProgress,
-        expectedProgress,
+        expectedProgress: Number(expectedProgress.toFixed(1)),
         isOverdue,
         periodsPerWeek,
         periodsAvailableToDate,
-        totalLessons: toNumber(tracker?.total_lessons, 0),
-        completedLessons: toNumber(tracker?.completed, 0),
+        totalLessons,
+        completedLessons,
+        inProgressLessons,
+        pendingLessons,
+        expectedLessons,
+        lessonDelta,
         trackerUpdatedAt: tracker?.updated_at || null,
         calculatedStartMonth,
-        expectedEndMonth: mapping.expected_end_month || null,
+        expectedStartMonth: rawStart || null,
+        expectedEndMonth: rawEnd || null,
       };
     })
     .filter(Boolean);
@@ -871,6 +923,7 @@ export const buildTeacherActivityData = ({
 
 export const buildEstimateRows = ({
   bookClasses = [],
+  bookTrackers = [],
   books = [],
   subjects = [],
   classes = [],
@@ -888,6 +941,9 @@ export const buildEstimateRows = ({
   const bookMap = new Map(books.map((book) => [String(book.id), book]));
   const subjectMap = new Map(subjects.map((subject) => [String(subject.id), subject]));
   const classMap = new Map(classes.map((classRecord) => [String(classRecord.id), classRecord]));
+  const trackerMap = new Map(
+    (bookTrackers || []).map((tracker) => [`${tracker.class_id}-${tracker.book_id}`, tracker])
+  );
 
   // Build a map of earliest lesson log per class-book pair
   const firstLessonMonthMap = new Map();
@@ -908,17 +964,37 @@ export const buildEstimateRows = ({
       if (!book) return null;
       const subject = subjectMap.get(String(book.subject_id));
       const classRecord = classMap.get(String(mapping.class_id));
+      const tracker = trackerMap.get(`${mapping.class_id}-${mapping.book_id}`);
       const periodsPerWeek = periodsPerWeekMap.get(`${mapping.class_id}-${book.subject_id}`) || 0;
       const firstLessonInfo = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
 
       const hasFirstLessonEntry = !!firstLessonInfo;
 
-      // If started, start from first lesson month. If NOT started, remaining available time starts from TODAY's month!
-      const calculatedStartMonth = hasFirstLessonEntry ? firstLessonInfo.month : currentMonthNum;
-      const calculatedStartYear = hasFirstLessonEntry ? firstLessonInfo.year : getAcademicMonthYear(startYear, calculatedStartMonth);
+      const rawStart = tracker?.expected_start_month;
+      const rawEnd = tracker?.expected_end_month;
 
-      const expectedEndMonth = mapping.expected_end_month ?? null;
-      const effectiveEndMonth = expectedEndMonth || academicEndMonth;
+      // If started, start from first lesson month. If NOT started, remaining available time starts from TODAY's month!
+      const calculatedStartMonth =
+        typeof rawStart === 'string' && rawStart.includes('-')
+          ? new Date(rawStart).getMonth() + 1
+          : typeof rawStart === 'number'
+            ? rawStart
+            : hasFirstLessonEntry
+              ? firstLessonInfo.month
+              : currentMonthNum;
+
+      const calculatedStartYear = hasFirstLessonEntry
+        ? firstLessonInfo.year
+        : getAcademicMonthYear(startYear, calculatedStartMonth);
+
+      const expectedEndMonthNum =
+        typeof rawEnd === 'string' && rawEnd.includes('-')
+          ? new Date(rawEnd).getMonth() + 1
+          : typeof rawEnd === 'number'
+            ? rawEnd
+            : null;
+
+      const effectiveEndMonth = expectedEndMonthNum || academicEndMonth;
 
       // Build array of month numbers in the active window
       const windowMonths = [];
@@ -948,18 +1024,21 @@ export const buildEstimateRows = ({
 
       return {
         mappingId: mapping.id,
+        trackerId: tracker?.id || null,
         classId: mapping.class_id,
         className: classRecord?.name || `Class ${mapping.class_id}`,
         subjectId: book.subject_id,
         subjectName: subject?.name || 'Untitled Subject',
         bookId: mapping.book_id,
-        bookName: book.name || 'Untitled Book',
+        bookName: book.title || book.name || 'Untitled Book',
         periodsPerWeek,
         calculatedStartMonth,
         calculatedStartMonthLabel: startMonthFullLabel,
         firstLessonDate: firstLessonInfo?.date?.toISOString().split('T')[0] ?? null,
         hasFirstLessonEntry,
-        expectedEndMonth,
+        expectedStartMonth: rawStart || null,
+        expectedEndMonth: rawEnd || null,
+        expectedEndMonthNum,
         expectedEndMonthLabel: endMonthFullLabel,
         activeWindowMonths,
         activeTeachingDays,
@@ -976,14 +1055,28 @@ export const buildEstimateRows = ({
     });
 };
 
+export const toLocalDateStr = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+    d = new Date(d);
+  }
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 /**
  * Builds a teacher submission heatmap model.
  * Each teacher gets a row with day-level cells for the last N weeks.
- * Cell value = number of tracker submissions that day.
- * Allocated periods per day derived from timetable_slots.
+ * Supports direct database view rows (heatmap_teacher_tracker)
+ * with allocated = count(unplanned == false) and submissions = count(has_progress == true).
  */
 export const buildTeacherSubmissionHeatmap = ({
   teachers = [],
+  teacherHeatmapRows = [],
   dailyLogs = [],
   allLogs = [],
   timetableSlots = [],
@@ -992,19 +1085,206 @@ export const buildTeacherSubmissionHeatmap = ({
   subjects = [],
   books = [],
   periods = [],
-  weeks = 4,
+  weeks = 5,
   today = new Date(),
 }) => {
   const SCHOOL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+  const periodMap = new Map(
+    (periods || []).map((p) => [
+      String(p.id || p.period_id || p.period_number),
+      p.name || p.period_name || `Period ${p.period_number || p.id}`,
+    ])
+  );
+
+  const getDayName = (date) => {
+    const d = new Date(date);
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return names[d.getDay()];
+  };
+
+  // Determine anchor date: use latest date present in data if later than today, or today
+  let anchorDate = new Date(today);
+  if (Array.isArray(teacherHeatmapRows) && teacherHeatmapRows.length > 0) {
+    let maxDbDate = null;
+    teacherHeatmapRows.forEach((r) => {
+      if (!r.date) return;
+      const d = new Date(r.date);
+      if (!isNaN(d.getTime())) {
+        if (!maxDbDate || d > maxDbDate) maxDbDate = d;
+      }
+    });
+    if (maxDbDate && maxDbDate > anchorDate) {
+      anchorDate = maxDbDate;
+    }
+  }
+
+  // Find Monday of anchor week
+  const currentDay = anchorDate.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+  const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  const currentMonday = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + diffToMonday);
+
+  // Generate N structured calendar weeks (Monday to Saturday)
+  const weekBlocks = [];
+  const allDates = [];
+  const weekLabels = [];
+
+  for (let w = weeks - 1; w >= 0; w--) {
+    const wMonday = new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() - w * 7);
+    const days = [];
+    for (let d = 0; d < 6; d++) {
+      const dayDate = new Date(wMonday.getFullYear(), wMonday.getMonth(), wMonday.getDate() + d);
+      days.push(dayDate);
+      allDates.push(dayDate);
+    }
+    const wSaturday = days[5];
+    const fmt = (dt) => `${dt.getDate()}/${dt.getMonth() + 1}`;
+    const label = `${fmt(wMonday)}–${fmt(wSaturday)}`;
+    weekLabels.push(label);
+    weekBlocks.push({
+      label,
+      days,
+    });
+  }
+
+  // 1. DIRECT DATABASE VIEW PATH (heatmap_teacher_tracker)
+  if (Array.isArray(teacherHeatmapRows) && teacherHeatmapRows.length > 0) {
+    const teacherMap = new Map();
+    teachers.forEach((t) => {
+      const tid = String(t.teacher_id || t.id);
+      teacherMap.set(tid, t.name || 'Unnamed');
+    });
+
+    const bookMap = new Map(
+      books.map((b) => [String(b.id), b.title || b.name || ''])
+    );
+
+    const teacherDateMap = new Map();
+    teacherHeatmapRows.forEach((r) => {
+      const tid = String(r.teacher_id);
+      if (!teacherMap.has(tid) && r.teacher_name) {
+        teacherMap.set(tid, r.teacher_name);
+      }
+      const dateStr = toLocalDateStr(r.date);
+      if (!dateStr) return;
+
+      const key = `${tid}-${dateStr}`;
+      if (!teacherDateMap.has(key)) teacherDateMap.set(key, []);
+      teacherDateMap.get(key).push(r);
+    });
+
+    const rows = Array.from(teacherMap.entries())
+      .map(([teacherId, teacherName]) => {
+        let totalAllocatedPeriods = 0;
+
+        const cells = allDates.map((date) => {
+          const dateStr = toLocalDateStr(date);
+          const dayName = getDayName(date);
+          const dayRows = teacherDateMap.get(`${teacherId}-${dateStr}`) || [];
+
+          // Allocated: unplanned === false
+          const allocatedRows = dayRows.filter(
+            (r) => r.unplanned === false || r.unplanned === 0 || r.unplanned === 'false'
+          );
+          const allocated = allocatedRows.length;
+          totalAllocatedPeriods += allocated;
+
+          // Submissions: has_progress === true
+          const submissionRows = dayRows.filter((r) => Boolean(r.has_progress));
+          const submissions = submissionRows.length;
+
+          let status = 'none';
+          if (allocated === 0) {
+            status = submissions > 0 ? 'extra' : 'none';
+          } else if (submissions >= allocated) {
+            status = 'good';
+          } else if (submissions > 0) {
+            status = 'partial';
+          } else {
+            status = 'missing';
+          }
+
+          // Build period rows for the detail modal
+          const periodRows = dayRows.map((r, idx) => {
+            const bookName =
+              r.book_name ||
+              r.book_title ||
+              (r.book_id ? bookMap.get(String(r.book_id)) : '') ||
+              '';
+
+            let resolvedPeriodName = '';
+            if (r.unplanned === true || r.unplanned === 1 || r.unplanned === 'true') {
+              resolvedPeriodName = 'Unplanned';
+            } else if (r.period_name && !/^\d+$/.test(String(r.period_name).trim())) {
+              resolvedPeriodName = r.period_name;
+            } else if (r.period_id && periodMap.has(String(r.period_id))) {
+              resolvedPeriodName = periodMap.get(String(r.period_id));
+            } else if (r.period_name) {
+              resolvedPeriodName = r.period_name;
+            } else if (r.period_id) {
+              resolvedPeriodName = `Period ${r.period_id}`;
+            } else {
+              resolvedPeriodName = `Period ${idx + 1}`;
+            }
+
+            return {
+              isScheduled: !(r.unplanned === true || r.unplanned === 1 || r.unplanned === 'true'),
+              periodName: resolvedPeriodName,
+              periodTime: r.period_time || '',
+              className: r.class_name || (r.class_id ? `Class ${r.class_id}` : 'Class'),
+              subjectName: r.subject_name || (r.subject_id ? `Subject ${r.subject_id}` : 'Subject'),
+              bookName,
+              isSubmitted: Boolean(r.has_progress),
+              log: r.has_progress
+                ? {
+                    id: r.id || `${teacherId}-${dateStr}-${idx}`,
+                    bookName,
+                    progress: r.progress ?? 100,
+                    lessonTitle: r.lesson_title || r.lesson_name || '',
+                    createdAt: r.created_at || null,
+                  }
+                : null,
+            };
+          });
+
+          return {
+            date: dateStr,
+            dayName,
+            submissions,
+            allocated,
+            periodRows,
+            status,
+          };
+        });
+
+        const totalSubmissions = cells.reduce((sum, c) => sum + c.submissions, 0);
+        const totalExpected = cells.reduce((sum, c) => sum + c.allocated, 0);
+        const adherenceRate = totalExpected > 0 ? (totalSubmissions / totalExpected) * 100 : 0;
+
+        return {
+          teacherId,
+          teacherName,
+          cells,
+          totalSubmissions,
+          totalExpected,
+          totalAllocatedPeriods,
+          adherenceRate,
+        };
+      })
+      .filter((row) => row.totalAllocatedPeriods > 0 || row.totalSubmissions > 0)
+      .sort((a, b) => b.adherenceRate - a.adherenceRate);
+
+    return { rows, dates: allDates, weekBlocks, weekLabels, schoolDays: SCHOOL_DAYS };
+  }
+
+  // 2. FALLBACK PATH (In-memory join of timetable_slots + dailyLogs)
   const classMap = new Map(classes.map((c) => [String(c.id), c]));
   const subjectMap = new Map(subjects.map((s) => [String(s.id), s]));
-  const bookMap = new Map(books.map((b) => [String(b.id), b]));
-  const periodMap = new Map(periods.map((p) => [String(p.id || p.period_id), p]));
+  const fallbackBookMap = new Map(books.map((b) => [String(b.id), b]));
+  const periodDetailsMap = new Map(periods.map((p) => [String(p.id || p.period_id), p]));
 
-  // Build a map: teacherId → day-of-week → array of allocated slots
   const teacherDaySlots = new Map();
-  const assignedTeacherSlots = new Map(); // slotKey → teacherId
+  const assignedTeacherSlots = new Map();
 
   assignments.forEach((a) => {
     const key = `${a.class_id}-${a.subject_id}`;
@@ -1027,7 +1307,7 @@ export const buildTeacherSubmissionHeatmap = ({
 
     const cls = classMap.get(String(slot.class_id));
     const subj = subjectMap.get(String(slot.subject_id));
-    const periodInfo = periodMap.get(String(slot.period_id));
+    const periodInfo = periodDetailsMap.get(String(slot.period_id));
     const periodNum = periodInfo?.period_number || slot.period_id || index + 1;
     const periodName = periodInfo?.name || `Period ${periodNum}`;
     const periodTime =
@@ -1049,37 +1329,6 @@ export const buildTeacherSubmissionHeatmap = ({
     });
   });
 
-  // Build date range: last N weeks (Mon–Sat)
-  const endDate = new Date(today);
-  endDate.setHours(23, 59, 59, 999);
-  const startDate = new Date(today);
-  startDate.setDate(today.getDate() - weeks * 7);
-  startDate.setHours(0, 0, 0, 0);
-
-  // Generate ordered list of dates
-  const dates = [];
-  const cursor = new Date(startDate);
-  while (cursor <= endDate) {
-    const dayOfWeek = cursor.getDay();
-    // Skip Sunday (0)
-    if (dayOfWeek !== 0) {
-      dates.push(new Date(cursor));
-    }
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  // Build week labels
-  const weekLabels = [];
-  for (let w = 0; w < weeks; w++) {
-    const wStart = new Date(today);
-    wStart.setDate(today.getDate() - (weeks - w) * 7);
-    const wEnd = new Date(wStart);
-    wEnd.setDate(wStart.getDate() + 6);
-    const fmt = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
-    weekLabels.push(`${fmt(wStart)}–${fmt(wEnd)}`);
-  }
-
-  // Index daily logs by teacherId + dateStr -> array of log objects
   const logEntriesMap = new Map();
   const combinedLogs = [...dailyLogs];
 
@@ -1108,9 +1357,8 @@ export const buildTeacherSubmissionHeatmap = ({
     const lessonTitle = lp.lesson?.title || '';
     const lessonNum = lp.lesson?.lesson_number;
 
-    // If subjectId is missing, resolve it from book
     if (!subjectId && bookId) {
-      const b = bookMap.get(String(bookId));
+      const b = fallbackBookMap.get(String(bookId));
       if (b?.subject_id) subjectId = b.subject_id;
     }
 
@@ -1130,9 +1378,8 @@ export const buildTeacherSubmissionHeatmap = ({
 
     const cls = classMap.get(String(classId));
     const subj = subjectMap.get(String(subjectId));
-    const book = bookMap.get(String(bookId));
+    const book = fallbackBookMap.get(String(bookId));
 
-    // Avoid duplicate log IDs for same day
     const existing = logEntriesMap.get(key);
     if (log.id && existing.some((e) => e.id === log.id)) return;
 
@@ -1157,11 +1404,6 @@ export const buildTeacherSubmissionHeatmap = ({
     });
   });
 
-  const getDayName = (date) => {
-    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return names[date.getDay()];
-  };
-
   const rows = teachers
     .map((teacher) => {
       const teacherId = String(teacher.teacher_id || teacher.id);
@@ -1171,8 +1413,8 @@ export const buildTeacherSubmissionHeatmap = ({
         0
       );
 
-      const cells = dates.map((date) => {
-        const dateStr = date.toISOString().slice(0, 10);
+      const cells = allDates.map((date) => {
+        const dateStr = toLocalDateStr(date);
         const dayName = getDayName(date);
         const allocatedSlots = (daySlotsMap.get(dayName) || []).slice().sort(
           (a, b) => (Number(a.periodNum) || 0) - (Number(b.periodNum) || 0)
@@ -1218,13 +1460,9 @@ export const buildTeacherSubmissionHeatmap = ({
     .filter((row) => row.totalAllocatedPeriods > 0 || row.totalSubmissions > 0)
     .sort((a, b) => b.adherenceRate - a.adherenceRate);
 
-  return { rows, dates, weekLabels, schoolDays: SCHOOL_DAYS };
+  return { rows, dates: allDates, weekBlocks, weekLabels, schoolDays: SCHOOL_DAYS };
 };
 
-/**
- * Builds weekly progress trends grouped by book for each class.
- * Returns a map of classId -> array of book progress records across the last N weeks.
- */
 export const buildBookWeeklyTrendData = ({
   classes = [],
   books = [],
@@ -1232,6 +1470,7 @@ export const buildBookWeeklyTrendData = ({
   bookClasses = [],
   bookTrackers = [],
   pacingRecords = [],
+  calendarRows = [],
   allLogs = [],
   weeks = 4,
   academicStartMonth = 6,
@@ -1353,11 +1592,24 @@ export const buildBookWeeklyTrendData = ({
           (Math.min(100, (lessonsUpToWeek / Math.max(totalLessons, 1)) * 100)).toFixed(1)
         );
 
-        // Calculate expected completion % as of this academic week based on calendar pacing
-        const targetWeeks = pacingRec?.activeTeachingWeeks || 36;
-        const expectedWeekPct = Number(
-          Math.min(100, Math.max(0, (w.academicWeekNum / Math.max(targetWeeks, 1)) * 100)).toFixed(1)
-        );
+        // Calculate expected completion % for this specific book as of this academic week
+        let expectedWeekPct = 0;
+        if (calendarRows && calendarRows.length > 0) {
+          const startM = pacingRec?.calculatedStartMonth ?? academicStartMonth;
+          const endM = pacingRec?.expectedEndMonth ?? academicEndMonth;
+          const win = getWindowCoverage(calendarRows, startM, endM, w.endDate);
+          if (win.beforeWindow) {
+            expectedWeekPct = 0;
+          } else if (win.pastWindow) {
+            expectedWeekPct = 100;
+          } else {
+            expectedWeekPct = win.totalWindowDays > 0
+              ? Number(clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100).toFixed(1))
+              : 0;
+          }
+        } else if (pacingRec && typeof pacingRec.expectedProgress === 'number') {
+          expectedWeekPct = Number(pacingRec.expectedProgress.toFixed(1));
+        }
 
         const weekKey = `w${w.weekIndex}`;
         const weekPctKey = `w${w.weekIndex}Pct`;
@@ -1368,12 +1620,16 @@ export const buildBookWeeklyTrendData = ({
       });
 
       record.currentProgress = pacingRec
-        ? pacingRec.actualProgress
+        ? Number((pacingRec.actualProgress || 0).toFixed(1))
         : Number((Math.min(100, (cumulativeCompleted / Math.max(totalLessons, 1)) * 100)).toFixed(1));
 
-      // Latest expected progress as of the current week window
-      const latestExpected = record[`w${weekWindows.length}Expected`] || (pacingRec ? Number((pacingRec.expectedProgress || 0).toFixed(1)) : 0);
-      record.expectedProgress = latestExpected;
+      // Book-specific expected progress from pacing records (taking into account target end month and teaching days)
+      const bookExpectedProgress =
+        pacingRec && typeof pacingRec.expectedProgress === 'number'
+          ? Number(pacingRec.expectedProgress.toFixed(1))
+          : record[`w${weekWindows.length}Expected`] || 0;
+
+      record.expectedProgress = bookExpectedProgress;
 
       classRecords.push(record);
     });
