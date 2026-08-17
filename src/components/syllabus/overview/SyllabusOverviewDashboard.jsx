@@ -74,16 +74,14 @@ const SyllabusOverviewDashboard = ({
         supabase
           .from('timetable_slots')
           .select('id, class_id, subject_id, teacher_id, day, period_id'),
-        supabase
-          .from('trk_daily_teacher_progress')
-          .select('*'),
+        fetchAllPages('trk_daily_teacher_progress', '*'),
         supabase
           .from('admin_configruation')
           .select('val')
           .eq('key', 'academic_year_range')
           .maybeSingle(),
         supabase
-          .from('timetable_periods')
+          .from('periods')
           .select('*')
           .order('period_number', { ascending: true }),
         fetchAllPages('heatmap_teacher_tracker', '*'),
@@ -122,8 +120,18 @@ const SyllabusOverviewDashboard = ({
       setTeacherHeatmapRows(heatmapResult.data || []);
     }
 
-    if (!periodsResult.error && periodsResult.data) {
+    if (!periodsResult.error && periodsResult.data && periodsResult.data.length > 0) {
       setPeriods(periodsResult.data);
+    } else {
+      const raw = localStorage.getItem('jzv_timetable_local_data');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.periods && Array.isArray(parsed.periods)) {
+            setPeriods(parsed.periods);
+          }
+        } catch (e) {}
+      }
     }
 
     if (!configResult.error && configResult.data?.val) {
