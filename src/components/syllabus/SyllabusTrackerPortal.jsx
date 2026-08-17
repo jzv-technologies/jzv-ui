@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
@@ -36,6 +36,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   const [lessonPlans, setLessonPlans] = useState([]);
   const [carryForwards, setCarryForwards] = useState([]);
   const [teacher, setTeacher] = useState(teacherRecord || null);
+  const lastDailyFetchTimeRef = useRef(0);
+  const teacherInitDoneRef = useRef('');
 
   // Favorites (Teacher only)
   const [favorites, setFavorites] = useState([]);
@@ -433,6 +435,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   useEffect(() => {
     const initTeacher = async () => {
       if (role !== 'teacher' || !user?.id) return;
+      const teacherKey = `${user.id}-${teacherRecord?.id || ''}`;
+      if (teacherInitDoneRef.current === teacherKey && teacher) return;
+
       try {
         let teacherData = teacherRecord;
         if (!teacherData) {
@@ -443,6 +448,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
           teacherData = Array.isArray(data) ? data[0] : data;
         }
         if (teacherData) {
+          teacherInitDoneRef.current = teacherKey;
           setTeacher(teacherData);
           setUpFilterTeachers([String(teacherData.id)]);
 
@@ -458,7 +464,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
       }
     };
     initTeacher();
-  }, [role, user?.id, teacherRecord]);
+  }, [role, user?.id, teacherRecord?.id]);
 
   useEffect(() => {
     loadData();
@@ -477,7 +483,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
   }, [student?.class_id, role]);
 
   // ─── Fetch Daily Entries ───
-  const fetchDailyEntries = useCallback(async () => {
+  const fetchDailyEntries = useCallback(async (options = {}) => {
+    const force = options?.force === true;
+    const now = Date.now();
+    if (!force && now - lastDailyFetchTimeRef.current < 3000) {
+      return;
+    }
+    lastDailyFetchTimeRef.current = now;
+
     setDailyLoading(true);
     try {
       let items = [];
@@ -707,14 +720,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
     assignments,
   ]);
 
+  // ─── Fetch Daily Entries on Tab Selection ───
   useEffect(() => {
-    if (
-      (activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') &&
-      books.length > 0
-    ) {
+    if (activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') {
       fetchDailyEntries();
     }
-  }, [activeTab, books, fetchDailyEntries, teacher, teacherRecord]);
+  }, [activeTab, fetchDailyEntries]);
 
   // ─── Delete Actions ───
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
@@ -904,14 +915,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
 
   const handleTabChange = async (tabKey) => {
     setActiveTab(tabKey);
-    if (role === 'teacher') {
-      if (tabKey === 'teacher-activity') {
-        await fetchDailyEntries();
-      } else if (tabKey === 'class-progress') {
-        await fetchTeacherProgressData();
-        setProgressExpandedBook(null);
-        setProgressExpandedClass(null);
-      }
+    if (tabKey === 'teacher-activity' || tabKey === 'two-weeks-class') {
+      await fetchDailyEntries();
+    } else if (role === 'teacher' && tabKey === 'class-progress') {
+      await fetchTeacherProgressData();
+      setProgressExpandedBook(null);
+      setProgressExpandedClass(null);
     }
   };
 
@@ -1740,6 +1749,17 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
                       {filteredDailyEntries.length}/{dailyEntries.length} entries
                     </span>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => fetchDailyEntries()}
+                    disabled={dailyLoading}
+                    title="Refresh Activity Logs"
+                    className="px-2.5 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0 disabled:opacity-50"
+                  >
+                    <i className={`fas fa-rotate-right text-brand-primary text-xs ${dailyLoading ? 'animate-spin' : ''}`} />
+                    <span className="hidden sm:inline">Refresh</span>
+                  </button>
 
                   {role === 'teacher' && (
                     <button

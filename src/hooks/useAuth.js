@@ -47,7 +47,14 @@ export const useAuth = () => {
   };
 
   const fetchTeacherRecord = async (userId, userEmail) => {
-    if (teacherRecordRef.current && teacherRecordRef.current.emp_id) return teacherRecordRef.current;
+    if (
+      teacherRecordRef.current &&
+      (teacherRecordRef.current.id ||
+        teacherRecordRef.current.emp_id ||
+        teacherRecordRef.current.teacher_id)
+    ) {
+      return teacherRecordRef.current;
+    }
     if (fetchingTeacherRef.current) return null;
     fetchingTeacherRef.current = true;
     try {
@@ -110,9 +117,7 @@ export const useAuth = () => {
             }
             return t;
           }
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) {}
       }
     } finally {
       fetchingTeacherRef.current = false;
