@@ -128,22 +128,27 @@ const OverviewKPICards = ({ summary }) => {
         subValue="lessons logged"
       />
 
-      {/* 6. Carry-Forwards */}
+      {/* 6. Active Teachers Submitting */}
       <KPICard
-        icon="fa-arrow-rotate-right"
-        iconBg={summary.recentCarryForwardsCount > 5 ? 'bg-red-500' : 'bg-gray-500'}
-        label="Carry-Forwards (7d)"
+        icon="fa-chalkboard-user"
+        iconBg="bg-teal-600"
+        label="Active Teachers (7d)"
         value={
-          <span className="flex items-center gap-1.5">
-            {summary.recentCarryForwardsCount}
-            {cfTrend === 'up' && <i className="fas fa-arrow-up text-[10px] text-red-500"></i>}
-            {cfTrend === 'down' && (
-              <i className="fas fa-arrow-down text-[10px] text-emerald-500"></i>
-            )}
+          <span>
+            {summary.activeTeachers7d || 0}
+            <span className="text-xs text-gray-400 font-bold ml-1">/ {summary.totalTeachers || 0}</span>
           </span>
         }
-        subValue={`prev week: ${summary.previousCarryForwardsCount}`}
-      />
+        subValue="submitting trackers"
+      >
+        <MiniProgressRing
+          percentage={
+            summary.totalTeachers > 0
+              ? ((summary.activeTeachers7d || 0) / summary.totalTeachers) * 100
+              : 0
+          }
+        />
+      </KPICard>
     </div>
   );
 };

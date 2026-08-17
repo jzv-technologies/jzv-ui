@@ -2,14 +2,15 @@ import React from 'react';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { CARD_THEMES } from '../../utils/cardTheme';
 
-const getStatusBadge = (status, isRev = false) => {
+const getStatusBadge = (status, isRev = false, progress = 0) => {
+  const isCompleted = status === 'completed' || Number(progress) >= 100;
   if (isRev)
     return (
       <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold">
         Revision
       </span>
     );
-  if (status === 'completed')
+  if (isCompleted)
     return (
       <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">
         Completed
@@ -99,7 +100,7 @@ const DailyActivityTable = ({
                         {entry.book?.name || 'Syllabus Book'}
                       </h4>
                     </div>
-                    {getStatusBadge(status, entry.isRevision)}
+                    {getStatusBadge(status, entry.isRevision, pct)}
                   </div>
 
                   <div className="space-y-2 mb-4 text-left">
@@ -263,7 +264,7 @@ const DailyActivityTable = ({
                         {entry.lessonPath}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {getStatusBadge(entry.current_status, entry.isRevision)}
+                        {getStatusBadge(entry.current_status, entry.isRevision, entry.progress)}
                       </td>
                       <td className="px-4 py-3 text-blue-600 font-extrabold whitespace-nowrap">
                         {entry.teacher?.name || '—'}
@@ -305,7 +306,7 @@ const DailyActivityTable = ({
                         {entry.lessonPath}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {getStatusBadge(entry.current_status, entry.isRevision)}
+                        {getStatusBadge(entry.current_status, entry.isRevision, entry.progress)}
                       </td>
                       <td className="px-4 py-3 font-bold text-gray-700 whitespace-nowrap">
                         {entry.isRevision

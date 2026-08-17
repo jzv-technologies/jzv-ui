@@ -79,7 +79,7 @@ const AttentionRequiredPanel = ({ alerts = [] }) => {
   }, [filteredAlerts]);
 
   return (
-    <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 sm:p-5 h-full flex flex-col justify-between">
+    <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 sm:p-5 h-full flex flex-col justify-start gap-3">
       <div>
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">

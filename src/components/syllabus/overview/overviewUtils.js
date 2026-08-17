@@ -330,6 +330,8 @@ export const buildOverviewSummary = ({
     ? activeTeachers.reduce((sum, t) => sum + t.adherence30d, 0) / activeTeachers.length
     : 0;
 
+  const activeTeachers7d = teacherActivityData.filter((t) => (t.logs7d || 0) > 0).length;
+
   return {
     totalTracked,
     classCount,
@@ -338,6 +340,8 @@ export const buildOverviewSummary = ({
     overdueCount,
     pacingCounts,
     recentLogsCount: recentLogs.length,
+    activeTeachers7d,
+    totalTeachers: teacherActivityData.length,
     recentCarryForwardsCount: recentCarryForwards.length,
     previousCarryForwardsCount: previousCarryForwards.length,
     avgAdherenceAcadYear,
@@ -727,7 +731,11 @@ export const buildAttentionAlerts = ({
     .slice(0, 12);
 };
 
-export const buildClassDonutData = ({ classes = [], bookTrackers = [] }) => {
+export const buildClassDonutData = ({
+  classes = [],
+  bookTrackers = [],
+  lessonPlans = [],
+}) => {
   const classMap = new Map(classes.map((item) => [String(item.id), item]));
 
   return Array.from(
@@ -741,22 +749,44 @@ export const buildClassDonutData = ({ classes = [], bookTrackers = [] }) => {
             className: classRecord?.name || `Class ${tracker.class_id}`,
             completed: 0,
             inProgress: 0,
-            notStarted: 0,
+            planned: 0,
+            notPlanned: 0,
+            totalLessons: 0,
           });
         }
 
         const bucket = map.get(key);
-        bucket.completed += toNumber(tracker.completed, 0);
-        bucket.inProgress += toNumber(tracker.in_progress, 0);
-        bucket.notStarted += toNumber(tracker.not_started, 0);
+        const comp = toNumber(tracker.completed, 0);
+        const inProg = toNumber(tracker.in_progress, 0);
+        const notStart = toNumber(tracker.not_started, 0);
+        const total = comp + inProg + notStart;
+
+        bucket.completed += comp;
+        bucket.inProgress += inProg;
+        bucket.totalLessons += total;
         return map;
       }, new Map())
       .values()
   )
-    .map((item) => ({
-      ...item,
-      total: item.completed + item.inProgress + item.notStarted,
-    }))
+    .map((item) => {
+      const classIdStr = String(item.classId);
+      const classPlans = (lessonPlans || []).filter((p) => String(p.class_id) === classIdStr);
+      const pendingPlansCount = classPlans.filter(
+        (p) => p.status !== 'completed' && p.status !== 'in_progress' && p.status !== 'active'
+      ).length;
+
+      const remainingUnstarted = Math.max(0, item.totalLessons - item.completed - item.inProgress);
+      const planned = Math.min(pendingPlansCount, remainingUnstarted);
+      const notPlanned = Math.max(0, remainingUnstarted - planned);
+      const total = Math.max(item.totalLessons, item.completed + item.inProgress + planned + notPlanned, 1);
+
+      return {
+        ...item,
+        planned,
+        notPlanned,
+        total,
+      };
+    })
     .sort((left, right) => left.className.localeCompare(right.className));
 };
 
@@ -944,4 +974,417 @@ export const buildEstimateRows = ({
       }
       return left.bookName.localeCompare(right.bookName);
     });
+};
+
+/**
+ * Builds a teacher submission heatmap model.
+ * Each teacher gets a row with day-level cells for the last N weeks.
+ * Cell value = number of tracker submissions that day.
+ * Allocated periods per day derived from timetable_slots.
+ */
+export const buildTeacherSubmissionHeatmap = ({
+  teachers = [],
+  dailyLogs = [],
+  allLogs = [],
+  timetableSlots = [],
+  assignments = [],
+  classes = [],
+  subjects = [],
+  books = [],
+  periods = [],
+  weeks = 4,
+  today = new Date(),
+}) => {
+  const SCHOOL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const classMap = new Map(classes.map((c) => [String(c.id), c]));
+  const subjectMap = new Map(subjects.map((s) => [String(s.id), s]));
+  const bookMap = new Map(books.map((b) => [String(b.id), b]));
+  const periodMap = new Map(periods.map((p) => [String(p.id || p.period_id), p]));
+
+  // Build a map: teacherId → day-of-week → array of allocated slots
+  const teacherDaySlots = new Map();
+  const assignedTeacherSlots = new Map(); // slotKey → teacherId
+
+  assignments.forEach((a) => {
+    const key = `${a.class_id}-${a.subject_id}`;
+    assignedTeacherSlots.set(key, String(a.teacher_id));
+  });
+
+  timetableSlots.forEach((slot, index) => {
+    const key = `${slot.class_id}-${slot.subject_id}`;
+    const teacherId = slot.teacher_id
+      ? String(slot.teacher_id)
+      : assignedTeacherSlots.get(key) || null;
+    if (!teacherId) return;
+
+    if (!teacherDaySlots.has(teacherId)) {
+      teacherDaySlots.set(teacherId, new Map());
+    }
+    const dayMap = teacherDaySlots.get(teacherId);
+    const day = slot.day;
+    if (!dayMap.has(day)) dayMap.set(day, []);
+
+    const cls = classMap.get(String(slot.class_id));
+    const subj = subjectMap.get(String(slot.subject_id));
+    const periodInfo = periodMap.get(String(slot.period_id));
+    const periodNum = periodInfo?.period_number || slot.period_id || index + 1;
+    const periodName = periodInfo?.name || `Period ${periodNum}`;
+    const periodTime =
+      periodInfo?.start_time && periodInfo?.end_time
+        ? `${periodInfo.start_time} – ${periodInfo.end_time}`
+        : '';
+
+    dayMap.get(day).push({
+      slotId: slot.id,
+      classId: slot.class_id,
+      className: cls?.name || `Class ${slot.class_id}`,
+      subjectId: slot.subject_id,
+      subjectName: subj?.name || `Subject ${slot.subject_id}`,
+      periodId: slot.period_id,
+      periodNum,
+      periodName,
+      periodTime,
+      day: slot.day,
+    });
+  });
+
+  // Build date range: last N weeks (Mon–Sat)
+  const endDate = new Date(today);
+  endDate.setHours(23, 59, 59, 999);
+  const startDate = new Date(today);
+  startDate.setDate(today.getDate() - weeks * 7);
+  startDate.setHours(0, 0, 0, 0);
+
+  // Generate ordered list of dates
+  const dates = [];
+  const cursor = new Date(startDate);
+  while (cursor <= endDate) {
+    const dayOfWeek = cursor.getDay();
+    // Skip Sunday (0)
+    if (dayOfWeek !== 0) {
+      dates.push(new Date(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Build week labels
+  const weekLabels = [];
+  for (let w = 0; w < weeks; w++) {
+    const wStart = new Date(today);
+    wStart.setDate(today.getDate() - (weeks - w) * 7);
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wStart.getDate() + 6);
+    const fmt = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
+    weekLabels.push(`${fmt(wStart)}–${fmt(wEnd)}`);
+  }
+
+  // Index daily logs by teacherId + dateStr -> array of log objects
+  const logEntriesMap = new Map();
+  const combinedLogs = [...dailyLogs];
+
+  if (allLogs && allLogs.length > 0) {
+    allLogs.forEach((l) => {
+      combinedLogs.push({
+        id: l.id,
+        progress_id: l.id,
+        teacher_id: l.teacher_id,
+        class_id: l.class_id,
+        subject_id: l.subject_id,
+        book_id: l.book_id,
+        current_status: l.current_status || l.status || 'completed',
+        progress: l.completion_percentage ?? 100,
+        date: l.end_date || l.start_date || l.updated_at || l.date,
+        created_at: l.updated_at || l.start_date || l.end_date,
+      });
+    });
+  }
+
+  combinedLogs.forEach((log) => {
+    const lp = log.lesson_progress || {};
+    let bookId = log.book_id || lp.book_id;
+    let classId = log.class_id || lp.class_id;
+    let subjectId = log.subject_id || lp.subject_id;
+    const lessonTitle = lp.lesson?.title || '';
+    const lessonNum = lp.lesson?.lesson_number;
+
+    // If subjectId is missing, resolve it from book
+    if (!subjectId && bookId) {
+      const b = bookMap.get(String(bookId));
+      if (b?.subject_id) subjectId = b.subject_id;
+    }
+
+    let tid = log.teacher_id ? String(log.teacher_id) : null;
+    if (!tid && classId && subjectId) {
+      tid = assignedTeacherSlots.get(`${classId}-${subjectId}`) || null;
+    }
+    if (!tid) return;
+
+    const dateVal = log.date || log.created_at || log.updated_at || log.end_date || log.start_date;
+    if (!dateVal) return;
+    const dateStr = String(dateVal).slice(0, 10);
+    if (!dateStr) return;
+
+    const key = `${tid}-${dateStr}`;
+    if (!logEntriesMap.has(key)) logEntriesMap.set(key, []);
+
+    const cls = classMap.get(String(classId));
+    const subj = subjectMap.get(String(subjectId));
+    const book = bookMap.get(String(bookId));
+
+    // Avoid duplicate log IDs for same day
+    const existing = logEntriesMap.get(key);
+    if (log.id && existing.some((e) => e.id === log.id)) return;
+
+    const progressVal = Number(log.progress ?? log.completion_percentage ?? 100);
+    const currentStatus =
+      progressVal >= 100 ? 'completed' : log.current_status || log.status || 'in_progress';
+
+    existing.push({
+      id: log.id,
+      progressId: log.progress_id,
+      classId: classId ? String(classId) : '',
+      className: cls?.name || (classId ? `Class ${classId}` : 'Class'),
+      subjectId: subjectId ? String(subjectId) : '',
+      subjectName: subj?.name || book?.title || 'Subject',
+      bookId: bookId ? String(bookId) : '',
+      bookName: book?.title || book?.name || '',
+      lessonTitle: lessonTitle || (lessonNum ? `Lesson ${lessonNum}` : ''),
+      currentStatus,
+      progress: progressVal,
+      date: dateVal,
+      createdAt: log.created_at || dateVal,
+    });
+  });
+
+  const getDayName = (date) => {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return names[date.getDay()];
+  };
+
+  const rows = teachers
+    .map((teacher) => {
+      const teacherId = String(teacher.teacher_id || teacher.id);
+      const daySlotsMap = teacherDaySlots.get(teacherId) || new Map();
+      const totalAllocatedPeriods = SCHOOL_DAYS.reduce(
+        (sum, day) => sum + (daySlotsMap.get(day)?.length || 0),
+        0
+      );
+
+      const cells = dates.map((date) => {
+        const dateStr = date.toISOString().slice(0, 10);
+        const dayName = getDayName(date);
+        const allocatedSlots = (daySlotsMap.get(dayName) || []).slice().sort(
+          (a, b) => (Number(a.periodNum) || 0) - (Number(b.periodNum) || 0)
+        );
+        const submissionLogs = logEntriesMap.get(`${teacherId}-${dateStr}`) || [];
+        const submissions = submissionLogs.length;
+        const allocated = allocatedSlots.length;
+
+        return {
+          date: dateStr,
+          dayName,
+          submissions,
+          allocated,
+          allocatedSlots,
+          submissionLogs,
+          status:
+            allocated === 0
+              ? submissions > 0
+                ? 'extra'
+                : 'none'
+              : submissions >= allocated
+                ? 'good'
+                : submissions > 0
+                  ? 'partial'
+                  : 'missing',
+        };
+      });
+
+      const totalSubmissions = cells.reduce((sum, c) => sum + c.submissions, 0);
+      const totalExpected = cells.reduce((sum, c) => sum + c.allocated, 0);
+      const adherenceRate = totalExpected > 0 ? (totalSubmissions / totalExpected) * 100 : 0;
+
+      return {
+        teacherId,
+        teacherName: teacher.name || 'Unnamed',
+        cells,
+        totalSubmissions,
+        totalExpected,
+        totalAllocatedPeriods,
+        adherenceRate,
+      };
+    })
+    .filter((row) => row.totalAllocatedPeriods > 0 || row.totalSubmissions > 0)
+    .sort((a, b) => b.adherenceRate - a.adherenceRate);
+
+  return { rows, dates, weekLabels, schoolDays: SCHOOL_DAYS };
+};
+
+/**
+ * Builds weekly progress trends grouped by book for each class.
+ * Returns a map of classId -> array of book progress records across the last N weeks.
+ */
+export const buildBookWeeklyTrendData = ({
+  classes = [],
+  books = [],
+  subjects = [],
+  bookClasses = [],
+  bookTrackers = [],
+  pacingRecords = [],
+  allLogs = [],
+  weeks = 4,
+  academicStartMonth = 6,
+  academicEndMonth = 5,
+  today = new Date(),
+}) => {
+  const subjectMap = new Map(subjects.map((s) => [String(s.id), s]));
+  const bookMap = new Map(books.map((b) => [String(b.id), b]));
+
+  const calculateAcademicWeekNumber = (date, startMonth) => {
+    const d = new Date(date);
+    const year = d.getMonth() + 1 >= startMonth ? d.getFullYear() : d.getFullYear() - 1;
+    const acadStart = new Date(year, startMonth - 1, 1);
+    const diffDays = Math.max(0, Math.floor((d - acadStart) / (1000 * 60 * 60 * 24)));
+    return Math.floor(diffDays / 7) + 1;
+  };
+
+  // Generate 4 weekly date windows (Mon–Sun) ending with the most recent week
+  const weekWindows = [];
+  for (let w = weeks - 1; w >= 0; w--) {
+    const wStart = new Date(today);
+    wStart.setDate(today.getDate() - w * 7 - ((today.getDay() + 6) % 7));
+    wStart.setHours(0, 0, 0, 0);
+
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wStart.getDate() + 6);
+    wEnd.setHours(23, 59, 59, 999);
+
+    const weekIndex = weeks - w;
+    const academicWeekNum = calculateAcademicWeekNumber(wEnd, academicStartMonth);
+    const shortLabel = `Acad Wk ${academicWeekNum}`;
+    const dateRangeLabel = `${wStart.getDate()}/${wStart.getMonth() + 1}–${wEnd.getDate()}/${wEnd.getMonth() + 1}`;
+    const fullLabel = `${shortLabel} (${dateRangeLabel})`;
+
+    weekWindows.push({
+      weekIndex,
+      academicWeekNum,
+      shortLabel,
+      dateRangeLabel,
+      fullLabel,
+      startDate: wStart,
+      endDate: wEnd,
+    });
+  }
+
+  // Group mapped books by class
+  const classBookMap = new Map();
+
+  pacingRecords.forEach((rec) => {
+    const cid = String(rec.classId);
+    if (!classBookMap.has(cid)) classBookMap.set(cid, new Set());
+    if (rec.bookId) classBookMap.get(cid).add(String(rec.bookId));
+  });
+
+  bookClasses.forEach((bc) => {
+    const cid = String(bc.class_id);
+    if (!classBookMap.has(cid)) classBookMap.set(cid, new Set());
+    if (bc.book_id) classBookMap.get(cid).add(String(bc.book_id));
+  });
+
+  const resultByClass = {};
+
+  classes.forEach((cls) => {
+    const cid = String(cls.id);
+    const bookIdSet = classBookMap.get(cid) || new Set();
+    const classRecords = [];
+
+    bookIdSet.forEach((bid) => {
+      const book = bookMap.get(bid);
+      if (!book) return;
+      const subject = subjectMap.get(String(book.subject_id));
+
+      const tracker = (bookTrackers || []).find(
+        (t) => String(t.class_id) === cid && String(t.book_id) === bid
+      );
+      const pacingRec = (pacingRecords || []).find(
+        (p) => String(p.classId) === cid && String(p.bookId) === bid
+      );
+
+      const totalLessons = toNumber(
+        tracker?.total_lessons ||
+          pacingRec?.totalLessons ||
+          book.total_leaf_lessons ||
+          book.total_lessons,
+        20
+      );
+
+      const bookLogs = (allLogs || []).filter(
+        (log) => String(log.class_id) === cid && String(log.book_id) === bid
+      );
+
+      const record = {
+        bookId: bid,
+        bookName: book.title || book.name || `Book ${bid}`,
+        subjectName: subject?.name || 'Subject',
+        totalLessons,
+      };
+
+      let cumulativeCompleted = 0;
+
+      weekWindows.forEach((w) => {
+        // All completed lessons logged up to the end of this academic week (date <= w.endDate)
+        const lessonsUpToWeek = bookLogs.filter((log) => {
+          const dt = log.date || log.created_at || log.start_date || log.updated_at;
+          if (!dt) return false;
+          const logDate = new Date(dt);
+          return logDate <= w.endDate;
+        }).length;
+
+        // Lessons logged strictly within this week
+        const lessonsThisWeek = bookLogs.filter((log) => {
+          const dt = log.date || log.created_at || log.start_date || log.updated_at;
+          if (!dt) return false;
+          const logDate = new Date(dt);
+          return logDate >= w.startDate && logDate <= w.endDate;
+        }).length;
+
+        const cumulativePct = Number(
+          (Math.min(100, (lessonsUpToWeek / Math.max(totalLessons, 1)) * 100)).toFixed(1)
+        );
+
+        // Calculate expected completion % as of this academic week based on calendar pacing
+        const targetWeeks = pacingRec?.activeTeachingWeeks || 36;
+        const expectedWeekPct = Number(
+          Math.min(100, Math.max(0, (w.academicWeekNum / Math.max(targetWeeks, 1)) * 100)).toFixed(1)
+        );
+
+        const weekKey = `w${w.weekIndex}`;
+        const weekPctKey = `w${w.weekIndex}Pct`;
+        record[weekKey] = lessonsThisWeek;
+        record[weekPctKey] = cumulativePct;
+        record[`w${w.weekIndex}Cumulative`] = cumulativePct;
+        record[`w${w.weekIndex}Expected`] = expectedWeekPct;
+      });
+
+      record.currentProgress = pacingRec
+        ? pacingRec.actualProgress
+        : Number((Math.min(100, (cumulativeCompleted / Math.max(totalLessons, 1)) * 100)).toFixed(1));
+
+      // Latest expected progress as of the current week window
+      const latestExpected = record[`w${weekWindows.length}Expected`] || (pacingRec ? Number((pacingRec.expectedProgress || 0).toFixed(1)) : 0);
+      record.expectedProgress = latestExpected;
+
+      classRecords.push(record);
+    });
+
+    resultByClass[cid] = classRecords.sort(
+      (a, b) => a.subjectName.localeCompare(b.subjectName) || a.bookName.localeCompare(b.bookName)
+    );
+  });
+
+  return {
+    byClass: resultByClass,
+    weekWindows,
+  };
 };

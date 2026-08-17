@@ -1,15 +1,137 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+
+// Reusable Multi-Select Dropdown Component
+const MultiSelectDropdown = ({
+  label,
+  options = [], // [{ id, name }]
+  selectedIds = [], // array of selected IDs
+  onChange,
+  icon = 'fa-filter',
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const allSelected = options.length > 0 && selectedIds.length === options.length;
+  const isNoneSelected = selectedIds.length === 0;
+
+  const handleToggleAll = () => {
+    if (allSelected) {
+      onChange([]);
+    } else {
+      onChange(options.map((o) => String(o.id)));
+    }
+  };
+
+  const handleToggleItem = (id) => {
+    const idStr = String(id);
+    if (selectedIds.includes(idStr)) {
+      onChange(selectedIds.filter((item) => item !== idStr));
+    } else {
+      onChange([...selectedIds, idStr]);
+    }
+  };
+
+  const buttonText = isNoneSelected
+    ? `0 ${label}s`
+    : allSelected
+      ? `All ${label}s (${options.length})`
+      : `${selectedIds.length} / ${options.length} ${label}s`;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary flex items-center gap-2 hover:bg-gray-50 focus:ring-1 focus:ring-brand-primary"
+      >
+        <i className={`fas ${icon} text-gray-400 text-xs`} />
+        <span>{buttonText}</span>
+        <i className="fas fa-chevron-down text-[10px] text-gray-400 ml-1" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-light-border p-2 z-40 animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b border-gray-100 mb-1">
+            <span className="text-[11px] font-black text-gray-700">{label} Filter</span>
+            <button
+              type="button"
+              onClick={handleToggleAll}
+              className="text-[10px] font-black text-brand-primary hover:underline"
+            >
+              {allSelected ? 'Clear All' : 'Select All'}
+            </button>
+          </div>
+
+          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+            {options.map((opt) => {
+              const optId = String(opt.id);
+              const isChecked = selectedIds.includes(optId);
+
+              return (
+                <label
+                  key={opt.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-gray-50 cursor-pointer text-xs font-bold text-dark-primary select-none transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => handleToggleItem(opt.id)}
+                    className="w-3.5 h-3.5 rounded text-brand-primary focus:ring-0 cursor-pointer"
+                  />
+                  <span className="truncate">{opt.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
   const subjectColumns = heatmap?.subjectColumns || [];
   const classificationGroups = heatmap?.classificationGroups || [];
   const matrixData = heatmap?.rows || [];
 
-  // View state: 'cards' (default clean card grid) or 'matrix' (compact table grid)
-  const [viewMode, setViewMode] = useState('cards');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hideEmptyColumns, setHideEmptyColumns] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'on_track' | 'behind' | 'critical' | 'overdue' | 'unmapped'
+  // Default view: 'matrix' & Transposed (Subjects = Rows, Classes = Columns)
+  const [viewMode, setViewMode] = useState('matrix'); // 'matrix' | 'cards'
+  const [isTransposed, setIsTransposed] = useState(true); // true = Subjects x Classes, false = Classes x Subjects
+  const [hideUnmapped, setHideUnmapped] = useState(false); // DEFAULT: SHOW ALL (false)
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'on_track' | 'behind' | 'critical' | 'overdue'
+
+  // Multi-Select States: Default to ALL selected
+  const [selectedClassIds, setSelectedClassIds] = useState(() => {
+    return matrixData.map((r) => String(r.classId));
+  });
+
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState(() => {
+    return subjectColumns.map((s) => String(s.id));
+  });
+
+  // Keep selected classes in sync if matrixData updates
+  useEffect(() => {
+    if (matrixData.length > 0 && selectedClassIds.length === 0) {
+      setSelectedClassIds(matrixData.map((r) => String(r.classId)));
+    }
+  }, [matrixData]);
+
+  // Keep selected subjects in sync if subjectColumns updates
+  useEffect(() => {
+    if (subjectColumns.length > 0 && selectedSubjectIds.length === 0) {
+      setSelectedSubjectIds(subjectColumns.map((s) => String(s.id)));
+    }
+  }, [subjectColumns]);
 
   // Helper for cell color styling
   const getStatusInfo = (cell) => {
@@ -19,10 +141,10 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
       return {
         type: 'unmapped',
         label: 'Unmapped',
-        badgeBg: 'bg-gray-100 text-gray-600 border-gray-200',
-        barBg: 'bg-gray-300',
-        pillBg: 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-200',
-        textColor: 'text-gray-500',
+        badgeBg: 'bg-amber-50 text-amber-700 border-amber-200',
+        barBg: 'bg-amber-400',
+        pillBg: 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300',
+        textColor: 'text-amber-700',
       };
     }
 
@@ -73,346 +195,225 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
     };
   };
 
-  // Filter matrix rows by search query
-  const filteredRows = useMemo(() => {
-    return matrixData.filter((row) => {
-      const matchSearch =
-        !searchQuery ||
-        (row.className || '').toLowerCase().includes(searchQuery.toLowerCase());
-      return matchSearch;
-    });
-  }, [matrixData, searchQuery]);
+  // 1. Filtered classes based on multi-select
+  const classOptions = useMemo(() => {
+    return matrixData.map((r) => ({ id: String(r.classId), name: r.className }));
+  }, [matrixData]);
 
-  // Dynamically determine visible subject columns for Matrix view (includes mapped OR assigned)
-  const visibleSubjectColumns = useMemo(() => {
-    if (!hideEmptyColumns) return subjectColumns;
-    return subjectColumns.filter((subj) => {
-      return filteredRows.some((row) => row.cells[subj.id]?.hasData || row.cells[subj.id]?.isAssigned);
-    });
-  }, [subjectColumns, filteredRows, hideEmptyColumns]);
+  const activeClasses = useMemo(() => {
+    return matrixData.filter((r) => selectedClassIds.includes(String(r.classId)));
+  }, [matrixData, selectedClassIds]);
 
-  // Dynamically recompute classification groups based on visible subject columns (fixes colSpan alignment)
-  const visibleClassificationGroups = useMemo(() => {
+  // 2. Subjects available in the selected classes
+  const availableSubjectOptions = useMemo(() => {
+    const subjectIdSet = new Set();
+    activeClasses.forEach((clsRow) => {
+      Object.keys(clsRow.cells || {}).forEach((subjId) => {
+        if (clsRow.cells[subjId]?.hasData || clsRow.cells[subjId]?.isAssigned) {
+          subjectIdSet.add(String(subjId));
+        }
+      });
+    });
+
+    return subjectColumns
+      .filter((s) => subjectIdSet.size === 0 || subjectIdSet.has(String(s.id)))
+      .map((s) => ({ id: String(s.id), name: s.name, classification_id: s.classification_id }));
+  }, [activeClasses, subjectColumns]);
+
+  // 3. Active filtered subjects
+  const activeSubjects = useMemo(() => {
+    return availableSubjectOptions.filter((s) => selectedSubjectIds.includes(String(s.id)));
+  }, [availableSubjectOptions, selectedSubjectIds]);
+
+  // 4. Transposed Subject Rows grouped by Classification
+  const groupedTransposedSubjects = useMemo(() => {
     const classificationMap = new Map();
-    visibleSubjectColumns.forEach((subject) => {
-      const classId = String(subject.classification_id || 'none');
-      if (!classificationMap.has(classId)) {
-        const foundGroup = classificationGroups.find((g) => g.classificationId === classId);
-        classificationMap.set(classId, {
-          classificationId: classId,
-          name: foundGroup?.name || '',
-          count: 0,
+
+    activeSubjects.forEach((subj) => {
+      const classIdStr = String(subj.classification_id || 'general');
+      if (!classificationMap.has(classIdStr)) {
+        const groupInfo = classificationGroups.find((g) => String(g.classificationId) === classIdStr);
+        classificationMap.set(classIdStr, {
+          classificationId: classIdStr,
+          name: groupInfo?.name || 'General',
+          subjects: [],
         });
       }
-      classificationMap.get(classId).count += 1;
-    });
-    return Array.from(classificationMap.values());
-  }, [visibleSubjectColumns, classificationGroups]);
 
-  // Process rows with mapped or assigned subjects & stats for Card view
-  const cardData = useMemo(() => {
-    return filteredRows.map((row) => {
-      const displayableSubjects = subjectColumns
-        .map((subj) => ({
-          subject: subj,
-          cell: row.cells[subj.id],
-          status: getStatusInfo(row.cells[subj.id]),
-        }))
-        .filter((item) => item.cell && (item.cell.hasData || item.cell.isAssigned));
-
-      const mappedSubjects = displayableSubjects.filter((item) => item.cell?.hasData);
-      const unmappedAssigned = displayableSubjects.filter((item) => !item.cell?.hasData && item.cell?.isAssigned);
-
-      // Apply status filter if set
-      const matchingSubjects = displayableSubjects.filter((item) => {
-        if (statusFilter === 'all') return true;
-        return item.status?.type === statusFilter;
+      // Collect cell for each active class
+      const classCells = activeClasses.map((clsRow) => {
+        const cell = clsRow.cells[subj.id];
+        return {
+          classId: clsRow.classId,
+          className: clsRow.className,
+          cell,
+          status: getStatusInfo(cell),
+        };
       });
 
-      const avgPct =
-        mappedSubjects.length > 0
-          ? Math.round(
-              mappedSubjects.reduce((sum, item) => sum + (item.cell.pct || 0), 0) /
-                mappedSubjects.length
-            )
-          : 0;
+      // Filter by hideUnmapped and statusFilter if applicable
+      const hasAnyData = classCells.some((c) => c.cell?.hasData || (!hideUnmapped && c.cell?.isAssigned));
+      if (!hasAnyData && hideUnmapped) return;
 
-      const overallStatus = getStatusInfo({ hasData: true, pct: avgPct, expectedPct: 50 });
+      const matchesStatus =
+        statusFilter === 'all' || classCells.some((c) => c.status?.type === statusFilter);
+      if (!matchesStatus) return;
 
-      return {
-        ...row,
-        displayableSubjects,
-        mappedSubjects,
-        unmappedAssigned,
-        matchingSubjects,
-        avgPct,
-        overallStatus,
-      };
+      classificationMap.get(classIdStr).subjects.push({
+        subjectId: subj.id,
+        subjectName: subj.name,
+        classificationName: classificationMap.get(classIdStr).name,
+        classCells,
+      });
     });
-  }, [filteredRows, subjectColumns, statusFilter]);
 
-  if (subjectColumns.length === 0 || matrixData.length === 0) {
-    return (
-      <div className="bg-white border border-dashed rounded-2xl p-8 text-center text-gray-500 font-semibold text-sm">
-        No subject data available for the heatmap.
-      </div>
-    );
-  }
+    return Array.from(classificationMap.values()).filter((group) => group.subjects.length > 0);
+  }, [activeSubjects, activeClasses, classificationGroups, hideUnmapped, statusFilter]);
 
   return (
-    <div className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
-      {/* Header & Controls */}
-      <div className="p-4 border-b border-light-border flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-chart-pie text-brand-primary"></i> Class × Subject Progress
-            </h3>
-            <p className="text-[10px] font-bold text-gray-400 mt-0.5">
-              {viewMode === 'cards'
-                ? 'Showing assigned & mapped subjects per class (click any subject to view details)'
-                : 'Full matrix view of class progress across subjects'}
-            </p>
+    <div className="bg-white border border-light-border rounded-2xl shadow-sm overflow-hidden flex flex-col w-full">
+      {/* Top Header & Filter Toolbar */}
+      <div className="p-4 sm:p-5 border-b border-light-border bg-white flex flex-col gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          {/* Title and Badge */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-sm">
+              <i className="fas fa-layer-group" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
+                Class × Subject Progress
+              </h3>
+              <p className="text-[11px] font-bold text-gray-400">
+                {isTransposed ? 'Subject rows × Class columns' : 'Class rows × Subject columns'}
+              </p>
+            </div>
           </div>
 
-          {/* View Switcher & Legend */}
-          <div className="flex items-center gap-2">
-            <div className="bg-gray-100 p-0.5 rounded-xl flex items-center border border-gray-200 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setViewMode('cards')}
-                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                  viewMode === 'cards'
-                    ? 'bg-white text-brand-primary shadow-xs'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <i className="fas fa-th-large text-[11px]" />
-                Cards
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('matrix')}
-                className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
-                  viewMode === 'matrix'
-                    ? 'bg-white text-brand-primary shadow-xs'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                <i className="fas fa-table-cells text-[11px]" />
-                Matrix
-              </button>
-            </div>
+          {/* Action Toolbar: Filters, Transpose Toggle, View Mode */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Multi-Select Class Filter */}
+            <MultiSelectDropdown
+              label="Class"
+              icon="fa-graduation-cap"
+              options={classOptions}
+              selectedIds={selectedClassIds}
+              onChange={setSelectedClassIds}
+            />
+
+            {/* Multi-Select Subject Filter (dynamically filtered by classes) */}
+            <MultiSelectDropdown
+              label="Subject"
+              icon="fa-book"
+              options={availableSubjectOptions}
+              selectedIds={selectedSubjectIds}
+              onChange={setSelectedSubjectIds}
+            />
+
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-primary"
+            >
+              <option value="all">All Statuses</option>
+              <option value="on_track">🟢 On Track</option>
+              <option value="behind">🟡 Behind</option>
+              <option value="critical">🔴 Critical</option>
+              <option value="overdue">🟣 Overdue</option>
+            </select>
+
+            {/* Transpose Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsTransposed(!isTransposed)}
+              className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary flex items-center gap-1.5 hover:bg-gray-50 transition-colors"
+              title="Transpose rows and columns"
+            >
+              <i className="fas fa-arrow-right-arrow-left text-brand-primary text-xs" />
+              <span>{isTransposed ? 'Transposed' : 'Original'}</span>
+            </button>
+
+            {/* Hide Unmapped / Show All Toggle */}
+            <button
+              type="button"
+              onClick={() => setHideUnmapped(!hideUnmapped)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                hideUnmapped
+                  ? 'bg-brand-primary/10 text-brand-primary border-brand-primary/20'
+                  : 'bg-white text-gray-500 border-light-border hover:bg-gray-50'
+              }`}
+              title="Toggle display of unmapped columns/cells"
+            >
+              {hideUnmapped ? 'Mapped Only' : 'Show All'}
+            </button>
           </div>
         </div>
 
-        {/* Filters & Search Row */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
-          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[200px]">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[160px] max-w-[240px]">
-              <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
-              <input
-                type="text"
-                placeholder="Filter by class..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 outline-none focus:ring-1 focus:ring-brand-primary focus:bg-white"
-              />
-            </div>
-
-            {/* Matrix View Toggle for Empty Columns */}
-            {viewMode === 'matrix' && (
-              <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 bg-gray-50 border px-2.5 py-1 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={hideEmptyColumns}
-                  onChange={(e) => setHideEmptyColumns(e.target.checked)}
-                  className="rounded text-brand-primary focus:ring-brand-primary cursor-pointer"
-                />
-                <span>Hide Unmapped Columns</span>
-              </label>
-            )}
-
-            {/* Status Filter for Cards View */}
-            {viewMode === 'cards' && (
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="border border-gray-200 px-2.5 py-1 rounded-xl text-xs font-bold text-gray-600 bg-gray-50 outline-none cursor-pointer hover:bg-gray-100"
-              >
-                <option value="all">All Statuses</option>
-                <option value="on_track">On Track (≥90%)</option>
-                <option value="behind">Behind (70-89%)</option>
-                <option value="critical">Critical (&lt;50%)</option>
-                <option value="overdue">Overdue</option>
-                <option value="unmapped">Unmapped (Assigned)</option>
-              </select>
-            )}
-          </div>
-
-          {/* Color Legend */}
-          <div className="flex items-center gap-2 text-[10px] font-extrabold shrink-0 flex-wrap">
-            <span className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" /> ≥90%
+        {/* Legend */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100 text-[10px] font-bold text-gray-500">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> On Track
             </span>
-            <span className="flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-700 px-2 py-0.5 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-amber-500" /> 70-89%
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Behind
             </span>
-            <span className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 px-2 py-0.5 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-red-500" /> &lt;50%
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Critical
             </span>
-            <span className="flex items-center gap-1 bg-purple-50 border border-purple-200 text-purple-700 px-2 py-0.5 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-purple-600" /> Overdue
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-600" /> Overdue
             </span>
-            <span className="flex items-center gap-1 bg-gray-100 border border-gray-200 text-gray-600 px-2 py-0.5 rounded-md">
-              <span className="w-2 h-2 rounded-full bg-gray-400" /> Unmapped
+            <span className="flex items-center gap-1">
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">Unmapped</span> Allocated, No Book
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[9px] font-bold border border-gray-200">N/A</span> Not Allocated
             </span>
           </div>
+
+          <span className="text-[10px] text-gray-400 font-semibold">
+            Showing {activeClasses.length} Classes · {activeSubjects.length} Subjects
+          </span>
         </div>
       </div>
 
-      {/* VIEW MODE 1: CARDS VIEW (Clean & Compact) */}
-      {viewMode === 'cards' && (
-        <div className="p-4 bg-gray-50/50 flex-1 overflow-y-auto max-h-[580px]">
-          {cardData.length === 0 ? (
-            <div className="text-center py-10 bg-white border border-dashed rounded-2xl text-gray-400 text-xs font-semibold">
-              No matching classes found.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {cardData.map((cls) => {
-                const displaySubjects =
-                  statusFilter === 'all' ? cls.displayableSubjects : cls.matchingSubjects;
-
-                return (
-                  <div
-                    key={cls.classId}
-                    className="bg-white border border-gray-200/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:border-brand-soft/40 transition-all flex flex-col justify-between"
+      {/* MATRIX TABLE VIEW WITH STICKY STATIC HEADER */}
+      <div className="overflow-auto max-h-[600px] w-full">
+        <table className="w-full border-collapse text-xs">
+          {/* STATIC HEADER */}
+          <thead className="sticky top-0 z-20 bg-gray-50 shadow-xs border-b border-gray-200">
+            {isTransposed ? (
+              /* TRANSPOSED HEADER: Column 1 = Classification, Column 2 = Subject, Columns 3+ = Classes */
+              <tr>
+                <th className="sticky left-0 top-0 z-30 bg-gray-50 px-3 py-3 text-left text-[11px] font-black text-gray-600 uppercase tracking-wider border-r border-gray-200 min-w-[130px]">
+                  Classification
+                </th>
+                <th className="sticky left-[130px] top-0 z-30 bg-gray-50 px-3 py-3 text-left text-[11px] font-black text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[150px] shadow-2xs">
+                  Subject
+                </th>
+                {activeClasses.map((clsRow) => (
+                  <th
+                    key={clsRow.classId}
+                    className="px-2 py-3 text-[11px] font-black text-gray-800 text-center border-r border-gray-200 bg-gray-50 min-w-[85px]"
                   >
-                    {/* Card Header */}
-                    <div>
-                      <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black text-xs">
-                            {cls.className.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-black text-gray-800 leading-tight">
-                              {cls.className}
-                            </h4>
-                            <span className="text-[10px] font-bold text-gray-400">
-                              {cls.mappedSubjects.length} Mapped
-                              {cls.unmappedAssigned.length > 0 && ` · ${cls.unmappedAssigned.length} Unmapped`}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Class Overall Progress Badge */}
-                        <div
-                          className={`px-2.5 py-1 rounded-xl border text-[11px] font-black flex items-center gap-1.5 ${cls.overallStatus?.badgeBg}`}
-                        >
-                          <i className="fas fa-chart-line text-[10px]" />
-                          <span>{cls.avgPct}% Overall</span>
-                        </div>
-                      </div>
-
-                      {/* Overall Progress Bar */}
-                      <div className="mt-2.5 mb-3">
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${
-                              cls.overallStatus?.barBg || 'bg-brand-primary'
-                            }`}
-                            style={{ width: `${Math.min(100, cls.avgPct)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Mapped & Assigned Subjects List */}
-                      {displaySubjects.length === 0 ? (
-                        <div className="py-4 text-center bg-gray-50 border border-dashed rounded-xl text-[11px] font-semibold text-gray-400">
-                          {cls.displayableSubjects.length === 0
-                            ? 'No subjects assigned or mapped for this class yet.'
-                            : 'No subjects match selected status filter.'}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {displaySubjects.map(({ subject, cell, status }) => (
-                            <button
-                              key={subject.id}
-                              type="button"
-                              onClick={() => {
-                                if (onCellClick) {
-                                  onCellClick({ classId: cls.classId, subjectId: subject.id });
-                                }
-                              }}
-                              className={`p-2.5 rounded-xl border text-left transition-all group flex items-center justify-between cursor-pointer active:scale-98 ${
-                                status?.pillBg || 'bg-gray-50 border-gray-200'
-                              }`}
-                              title={
-                                cell?.hasData
-                                  ? `Click to view detailed progress for ${cls.className} / ${subject.name}\nActual: ${cell.pct}%\nExpected: ${cell.expectedPct}%`
-                                  : `Assigned to ${cls.className} / ${subject.name}, but no book mapped yet.`
-                              }
-                            >
-                              <div className="min-w-0 flex-1 pr-2">
-                                <span className="block text-xs font-bold truncate group-hover:text-black">
-                                  {subject.name}
-                                </span>
-                                <div className="w-full bg-white/60 rounded-full h-1 mt-1 overflow-hidden">
-                                  <div
-                                    className={`h-full ${status?.barBg}`}
-                                    style={{ width: cell?.hasData ? `${Math.min(100, cell.pct)}%` : '0%' }}
-                                  />
-                                </div>
-                              </div>
-
-                              <span className="text-[10px] font-black shrink-0 px-2 py-0.5 rounded-lg bg-white/80 shadow-2xs">
-                                {cell?.hasData ? `${cell.pct}%` : 'Unmapped'}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* VIEW MODE 2: MATRIX VIEW (Compact & Scrollable) */}
-      {viewMode === 'matrix' && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              {/* Classification header row with recomputed colSpans */}
-              {visibleClassificationGroups.some((g) => g.name) && (
-                <tr className="border-b border-gray-100">
-                  <th className="sticky left-0 z-10 bg-gray-50 px-3 py-1.5 border-r"></th>
-                  {visibleClassificationGroups.map((g, i) => (
-                    <th
-                      key={i}
-                      colSpan={g.count}
-                      className="px-1 py-1.5 text-[9px] font-black text-gray-500 uppercase tracking-wider text-center border-r border-gray-100 bg-gray-50"
-                    >
-                      {g.name}
-                    </th>
-                  ))}
-                </tr>
-              )}
-              {/* Subject header row */}
-              <tr className="border-b border-gray-200">
-                <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider border-r min-w-[110px]">
+                    <span className="block truncate" title={clsRow.className}>
+                      {clsRow.className}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            ) : (
+              /* UNTRANSPOSED HEADER: Rows = Classes, Columns = Subjects */
+              <tr>
+                <th className="sticky left-0 top-0 z-30 bg-gray-50 px-4 py-3 text-left text-[11px] font-black text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[140px]">
                   Class
                 </th>
-                {visibleSubjectColumns.map((subj) => (
+                {activeSubjects.map((subj) => (
                   <th
                     key={subj.id}
-                    className="px-1 py-2 text-[10px] font-extrabold text-gray-600 text-center border-r border-gray-100 bg-gray-50 min-w-[70px] max-w-[90px]"
+                    className="px-2 py-3 text-[11px] font-black text-gray-800 text-center border-r border-gray-200 bg-gray-50 min-w-[85px]"
                   >
                     <span className="block truncate" title={subj.name}>
                       {subj.name}
@@ -420,59 +421,149 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                   </th>
                 ))}
               </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map((row) => (
-                <tr key={row.classId} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2 font-black text-xs text-dark-primary border-r whitespace-nowrap">
-                    {row.className}
-                  </td>
-                  {visibleSubjectColumns.map((subj) => {
-                    const cell = row.cells[subj.id];
-                    const status = getStatusInfo(cell);
+            )}
+          </thead>
 
-                    return (
-                      <td key={subj.id} className="p-0.5 border-r border-gray-50">
-                        {cell?.hasData ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onCellClick) {
-                                onCellClick({ classId: row.classId, subjectId: subj.id });
-                              }
-                            }}
-                            className={`w-full h-8 rounded-lg border text-[11px] font-black transition-all cursor-pointer flex items-center justify-center active:scale-95 ${status?.pillBg}`}
-                            title={`${row.className} / ${subj.name}\nActual: ${cell.pct}%\nExpected: ${cell.expectedPct}%\nEstimated periods: ${cell.estimatedPeriods || 'n/a'}`}
-                          >
-                            {cell.pct}%
-                          </button>
-                        ) : cell?.isAssigned ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onCellClick) {
-                                onCellClick({ classId: row.classId, subjectId: subj.id });
-                              }
-                            }}
-                            className="w-full h-8 rounded-lg border text-[10px] font-bold text-gray-500 bg-gray-100 border-gray-200 hover:bg-gray-200 transition-all flex items-center justify-center cursor-pointer"
-                            title={`Assigned to ${row.className} / ${subj.name}, but no book mapped yet.`}
-                          >
-                            Unmapped
-                          </button>
-                        ) : (
-                          <div className="w-full h-8 rounded-lg bg-gray-50/40 border border-dashed border-gray-100 flex items-center justify-center text-gray-300 text-[10px] select-none">
-                            —
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
+          {/* TABLE BODY */}
+          <tbody className="divide-y divide-gray-100">
+            {isTransposed ? (
+              /* TRANSPOSED BODY: Classification (Col 1) | Subject (Col 2) | Class Cells (Cols 3+) */
+              groupedTransposedSubjects.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={activeClasses.length + 2}
+                    className="text-center py-16 text-gray-400 font-bold text-xs"
+                  >
+                    No matching subjects or classes found for the selected filters.
+                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              ) : (
+                groupedTransposedSubjects.map((group) =>
+                  group.subjects.map((subjRow, sIdx) => (
+                    <tr
+                      key={subjRow.subjectId}
+                      className="hover:bg-gray-50/60 transition-colors border-b border-gray-100"
+                    >
+                      {/* Column 1: Classification */}
+                      <td className="sticky left-0 z-10 bg-white px-3 py-2.5 font-bold text-xs text-gray-500 border-r border-gray-100 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-extrabold border border-gray-200">
+                          {group.name}
+                        </span>
+                      </td>
+
+                      {/* Column 2: Subject */}
+                      <td className="sticky left-[130px] z-10 bg-white px-3 py-2.5 font-black text-xs text-dark-primary border-r border-gray-100 whitespace-nowrap shadow-2xs">
+                        {subjRow.subjectName}
+                      </td>
+
+                      {/* Columns 3+: Class Cells */}
+                      {subjRow.classCells.map(({ classId, className, cell, status }) => (
+                        <td key={classId} className="p-1 border-r border-gray-100 text-center">
+                          {cell?.hasData ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onCellClick) {
+                                  onCellClick({ classId, subjectId: subjRow.subjectId });
+                                }
+                              }}
+                              className={`w-full h-8 rounded-xl border text-xs font-black transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-2xs hover:shadow-sm ${status?.pillBg}`}
+                              title={`${className} · ${subjRow.subjectName}\nActual Progress: ${cell.pct}%\nExpected Pace: ${cell.expectedPct}%`}
+                            >
+                              {cell.pct}%
+                            </button>
+                          ) : cell?.isAssigned ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onCellClick) {
+                                  onCellClick({ classId, subjectId: subjRow.subjectId });
+                                }
+                              }}
+                              className="w-full h-8 rounded-xl border text-[10px] font-black text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100 transition-all flex items-center justify-center cursor-pointer"
+                              title={`Assigned to ${className} / ${subjRow.subjectName}, but no book mapped yet.`}
+                            >
+                              Unmapped
+                            </button>
+                          ) : (
+                            <div className="w-full h-8 rounded-xl bg-gray-50/40 border border-dashed border-gray-200 flex items-center justify-center text-gray-400 font-bold text-[10px] select-none" title="Not allocated for this class">
+                              N/A
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )
+              )
+            ) : (
+              /* UNTRANSPOSED BODY: Class Rows -> Subject Cells */
+              activeClasses.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={activeSubjects.length + 1}
+                    className="text-center py-16 text-gray-400 font-bold text-xs"
+                  >
+                    No classes match the selected filter.
+                  </td>
+                </tr>
+              ) : (
+                activeClasses.map((clsRow) => (
+                  <tr
+                    key={clsRow.classId}
+                    className="hover:bg-gray-50/60 transition-colors border-b border-gray-100"
+                  >
+                    <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-black text-xs text-dark-primary border-r border-gray-100 whitespace-nowrap shadow-2xs">
+                      {clsRow.className}
+                    </td>
+
+                    {activeSubjects.map((subj) => {
+                      const cell = clsRow.cells[subj.id];
+                      const status = getStatusInfo(cell);
+
+                      return (
+                        <td key={subj.id} className="p-1 border-r border-gray-100 text-center">
+                          {cell?.hasData ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onCellClick) {
+                                  onCellClick({ classId: clsRow.classId, subjectId: subj.id });
+                                }
+                              }}
+                              className={`w-full h-8 rounded-xl border text-xs font-black transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-2xs hover:shadow-sm ${status?.pillBg}`}
+                              title={`${clsRow.className} · ${subj.name}\nActual Progress: ${cell.pct}%\nExpected Pace: ${cell.expectedPct}%`}
+                            >
+                              {cell.pct}%
+                            </button>
+                          ) : cell?.isAssigned ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (onCellClick) {
+                                  onCellClick({ classId: clsRow.classId, subjectId: subj.id });
+                                }
+                              }}
+                              className="w-full h-8 rounded-xl border text-[10px] font-black text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100 transition-all flex items-center justify-center cursor-pointer"
+                              title={`Assigned to ${clsRow.className} / ${subj.name}, but no book mapped yet.`}
+                            >
+                              Unmapped
+                            </button>
+                          ) : (
+                            <div className="w-full h-8 rounded-xl bg-gray-50/40 border border-dashed border-gray-200 flex items-center justify-center text-gray-400 font-bold text-[10px] select-none" title="Not allocated for this class">
+                              N/A
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

@@ -567,8 +567,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             ? rawProgress
             : progressObj?.completion_percentage || 0;
 
+        const computedStatus =
+          finalProgress >= 100
+            ? 'completed'
+            : item.current_status || (progressObj ? progressObj.status : 'in_progress');
+
         return {
           ...item,
+          current_status: computedStatus,
           progress: finalProgress,
           lt_log_id: item.progress_id,
           log,
@@ -2411,7 +2417,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord }) => {
             <SyllabusTeacherAdherence
               teachers={teachers}
               lessonPlans={lessonPlans}
-              carryForwards={carryForwards}
+              assignments={assignments}
+              books={books}
+              subjects={subjects}
             />
           </div>
         )}

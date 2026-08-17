@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
-import OverviewKPICards from './OverviewKPICards';
 import ClassSubjectHeatmap from './ClassSubjectHeatmap';
 import ProgressTrendChart from './ProgressTrendChart';
 import AttentionRequiredPanel from './AttentionRequiredPanel';
 import ClassDonutCharts from './ClassDonutCharts';
-import TeacherActivityChart from './TeacherActivityChart';
+import TeacherSubmissionHeatmap from './TeacherSubmissionHeatmap';
 import AcademicCalendarModal from './AcademicCalendarModal';
 import {
   buildAcademicCalendarRows,
   buildAcademicMonths,
   buildAttentionAlerts,
+  buildBookWeeklyTrendData,
   buildClassDonutData,
   buildEstimateRows,
   buildHeatmapModel,
@@ -19,18 +19,12 @@ import {
   buildPacingRecords,
   buildPeriodsPerWeekMap,
   buildTeacherActivityData,
-  buildTrendData,
+  buildTeacherSubmissionHeatmap,
   getAcademicYearOptions,
   getCurrentAcademicYearLabel,
   parseAcademicYearLabel,
   getAcademicMonthYear,
 } from './overviewUtils';
-
-const VIEW_OPTIONS = [
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'weeks', label: 'x-Weeks' },
-  { key: 'months', label: 'x-Months' },
-];
 
 const SyllabusOverviewDashboard = ({
   role,
@@ -48,7 +42,6 @@ const SyllabusOverviewDashboard = ({
   carryForwards = [],
   onOpenClassProgress,
 }) => {
-  const [viewMode, setViewMode] = useState('monthly');
   const [selectedAcademicYear, setSelectedAcademicYear] = useState(getCurrentAcademicYearLabel());
   const [calendarEntries, setCalendarEntries] = useState([]);
   const [timetableSlots, setTimetableSlots] = useState([]);
@@ -62,27 +55,34 @@ const SyllabusOverviewDashboard = ({
   const [academicStartMonth, setAcademicStartMonth] = useState(6);
   const [academicEndMonth, setAcademicEndMonth] = useState(5);
 
+  const [periods, setPeriods] = useState([]);
+
   const fetchOverviewData = useCallback(async () => {
     setLoadingAuxData(true);
 
-    const [calendarResult, timetableResult, dailyLogsResult, configResult] = await Promise.all([
-      supabase
-        .from('academic_calendar')
-        .select('*')
-        .order('year', { ascending: true })
-        .order('month', { ascending: true }),
-      supabase
-        .from('timetable_slots')
-        .select('id, class_id, subject_id, teacher_id, day, period_id'),
-      supabase
-        .from('trk_daily_teacher_progress')
-        .select('id, progress_id, teacher_id, date, current_status, progress, created_at'),
-      supabase
-        .from('admin_configruation')
-        .select('val')
-        .eq('key', 'academic_year_range')
-        .maybeSingle(),
-    ]);
+    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult] =
+      await Promise.all([
+        supabase
+          .from('syl_academic_calendar')
+          .select('year, month, working_days, teaching_days, source')
+          .order('year', { ascending: true })
+          .order('month', { ascending: true }),
+        supabase
+          .from('timetable_slots')
+          .select('id, class_id, subject_id, teacher_id, day, period_id'),
+        supabase
+          .from('trk_daily_teacher_progress')
+          .select('*'),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'academic_year_range')
+          .maybeSingle(),
+        supabase
+          .from('timetable_periods')
+          .select('*')
+          .order('period_number', { ascending: true }),
+      ]);
 
     if (calendarResult.error) {
       console.warn('Academic calendar unavailable:', calendarResult.error.message);
@@ -108,6 +108,10 @@ const SyllabusOverviewDashboard = ({
       setDailyLogs([]);
     } else {
       setDailyLogs(dailyLogsResult.data || []);
+    }
+
+    if (!periodsResult.error && periodsResult.data) {
+      setPeriods(periodsResult.data);
     }
 
     if (!configResult.error && configResult.data?.val) {
@@ -146,7 +150,13 @@ const SyllabusOverviewDashboard = ({
   }, [selectedAcademicYear, academicStartMonth]);
 
   const calendarRows = useMemo(
-    () => buildAcademicCalendarRows(selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth),
+    () =>
+      buildAcademicCalendarRows(
+        selectedAcademicYear,
+        calendarEntries,
+        academicStartMonth,
+        academicEndMonth
+      ),
     [selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth]
   );
 
@@ -165,7 +175,17 @@ const SyllabusOverviewDashboard = ({
         allLogs,
         academicStartMonth,
       }),
-    [bookClasses, bookTrackers, books, subjects, classes, calendarRows, periodsPerWeekMap, allLogs, academicStartMonth]
+    [
+      bookClasses,
+      bookTrackers,
+      books,
+      subjects,
+      classes,
+      calendarRows,
+      periodsPerWeekMap,
+      allLogs,
+      academicStartMonth,
+    ]
   );
 
   const teacherActivityData = useMemo(
@@ -181,9 +201,21 @@ const SyllabusOverviewDashboard = ({
     [teachers, dailyLogs, lessonPlans, carryForwards, assignments, academicYearStartDate]
   );
 
-  const summary = useMemo(
-    () => buildOverviewSummary({ pacingRecords, dailyLogs, carryForwards, teacherActivityData }),
-    [pacingRecords, dailyLogs, carryForwards, teacherActivityData]
+  const teacherSubmissionHeatmapData = useMemo(
+    () =>
+      buildTeacherSubmissionHeatmap({
+        teachers,
+        dailyLogs,
+        allLogs,
+        timetableSlots,
+        assignments,
+        classes,
+        subjects,
+        books,
+        periods,
+        weeks: 4,
+      }),
+    [teachers, dailyLogs, allLogs, timetableSlots, assignments, classes, subjects, books, periods]
   );
 
   const heatmap = useMemo(
@@ -191,9 +223,20 @@ const SyllabusOverviewDashboard = ({
     [classes, subjects, classifications, pacingRecords, assignments]
   );
 
-  const trendData = useMemo(
-    () => buildTrendData({ viewMode, calendarRows, lessonPlans, classifications, pacingRecords }),
-    [viewMode, calendarRows, lessonPlans, classifications, pacingRecords]
+  const bookWeeklyTrendData = useMemo(
+    () =>
+      buildBookWeeklyTrendData({
+        classes,
+        books,
+        subjects,
+        bookClasses,
+        bookTrackers,
+        allLogs,
+        pacingRecords,
+        academicStartMonth,
+        weeks: 4,
+      }),
+    [classes, books, subjects, bookClasses, bookTrackers, allLogs, pacingRecords, academicStartMonth]
   );
 
   const alerts = useMemo(
@@ -210,12 +253,21 @@ const SyllabusOverviewDashboard = ({
   );
 
   const classDonutData = useMemo(
-    () => buildClassDonutData({ classes, bookTrackers }),
-    [classes, bookTrackers]
+    () => buildClassDonutData({ classes, bookTrackers, lessonPlans }),
+    [classes, bookTrackers, lessonPlans]
   );
 
   const estimateRows = useMemo(
-    () => buildEstimateRows({ bookClasses, books, subjects, classes, periodsPerWeekMap, allLogs, academicStartMonth }),
+    () =>
+      buildEstimateRows({
+        bookClasses,
+        books,
+        subjects,
+        classes,
+        periodsPerWeekMap,
+        allLogs,
+        academicStartMonth,
+      }),
     [bookClasses, books, subjects, classes, periodsPerWeekMap, allLogs, academicStartMonth]
   );
 
@@ -276,10 +328,12 @@ const SyllabusOverviewDashboard = ({
         setBookClasses((previous) =>
           previous.map((item) => {
             const saved = savedMap.get(String(item.id));
-            return saved ? {
-              ...item,
-              expected_end_month: saved.expected_end_month,
-            } : item;
+            return saved
+              ? {
+                  ...item,
+                  expected_end_month: saved.expected_end_month,
+                }
+              : item;
           })
         );
       }
@@ -310,7 +364,8 @@ const SyllabusOverviewDashboard = ({
   const canEditSettings = role === 'admin' || role === 'management';
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      {/* Header Bar */}
       <div className="bg-white border border-light-border rounded-2xl shadow-sm p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -319,7 +374,7 @@ const SyllabusOverviewDashboard = ({
               Executive Overview
             </h2>
             <p className="text-sm text-gray-500 font-semibold mt-1">
-              Completion, pacing, activity, and attention signals across the syllabus program.
+              Real-time syllabus completion, submission regularity, book pacing, and active attention flags.
             </p>
             {calendarFallbackReason && (
               <p className="mt-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 inline-flex items-center gap-2">
@@ -342,19 +397,6 @@ const SyllabusOverviewDashboard = ({
               ))}
             </select>
 
-            <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1">
-              {VIEW_OPTIONS.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setViewMode(option.key)}
-                  className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${viewMode === option.key ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-500 hover:text-dark-primary'}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
@@ -367,20 +409,36 @@ const SyllabusOverviewDashboard = ({
         </div>
       </div>
 
-      <OverviewKPICards summary={summary} />
-
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.85fr)] gap-4 items-start">
+      {/* 1. Class x Subject Progress (Full Width) */}
+      <div className="w-full">
         <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
+      </div>
+
+      {/* 2. Teacher Tracker Submissions (Full Width) */}
+      <div className="w-full">
+        <TeacherSubmissionHeatmap heatmapData={teacherSubmissionHeatmapData} />
+      </div>
+
+      {/* 3. Class Completion Mix (4 States: Completed, In Progress, Planned, Not Planned) */}
+      <div className="w-full">
+        <ClassDonutCharts classDonutData={classDonutData} />
+      </div>
+
+      {/* 4. Weekly Book Progress Trend (Grouped Bar Chart - Full Width) */}
+      <div className="w-full">
+        <ProgressTrendChart
+          classes={classes}
+          bookWeeklyData={bookWeeklyTrendData}
+          loading={loadingAuxData}
+        />
+      </div>
+
+      {/* 5. Attention Required Panel (Full Width) */}
+      <div className="w-full">
         <AttentionRequiredPanel alerts={alerts} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.95fr)] gap-4 items-start">
-        <ProgressTrendChart trendData={trendData} viewMode={viewMode} loading={loadingAuxData} />
-        <TeacherActivityChart teacherActivityData={teacherActivityData} />
-      </div>
-
-      <ClassDonutCharts classDonutData={classDonutData} />
-
+      {/* Settings Modal */}
       <AcademicCalendarModal
         isOpen={isSettingsOpen}
         canEdit={canEditSettings}
