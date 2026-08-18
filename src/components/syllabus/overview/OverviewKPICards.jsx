@@ -108,6 +108,12 @@ const OverviewKPICards = ({ summary }) => {
             <span className="text-amber-600" title="Behind">{summary.pacingCounts?.behind || 0}</span>
             <span className="text-gray-300">·</span>
             <span className="text-red-500" title="Critical">{summary.pacingCounts?.critical || 0}</span>
+            {summary.pacingCounts?.suspicious > 0 && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span className="text-indigo-600 font-extrabold" title="Suspicious (Too Fast)">{summary.pacingCounts?.suspicious}</span>
+              </>
+            )}
             {summary.overdueCount > 0 && (
               <>
                 <span className="text-gray-300">·</span>
@@ -116,7 +122,13 @@ const OverviewKPICards = ({ summary }) => {
             )}
           </span>
         }
-        subValue={summary.overdueCount > 0 ? `${summary.overdueCount} Overdue Books` : 'On-Track · Behind · Critical'}
+        subValue={
+          summary.pacingCounts?.suspicious > 0
+            ? `${summary.pacingCounts.suspicious} Suspicious Pace (&ge;125%)`
+            : summary.overdueCount > 0
+              ? `${summary.overdueCount} Overdue Books`
+              : 'On-Track · Behind · Critical'
+        }
       />
 
       {/* 5. Teacher Activity */}

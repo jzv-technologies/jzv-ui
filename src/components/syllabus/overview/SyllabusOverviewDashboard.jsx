@@ -64,28 +64,31 @@ const SyllabusOverviewDashboard = ({
   const fetchOverviewData = useCallback(async () => {
     setLoadingAuxData(true);
 
-    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult, heatmapResult] =
-      await Promise.all([
-        supabase
-          .from('academic_calendar')
-          .select('id, year, month, working_days, teaching_days')
-          .order('year', { ascending: true })
-          .order('month', { ascending: true }),
-        supabase
-          .from('timetable_slots')
-          .select('id, class_id, subject_id, teacher_id, day, period_id'),
-        fetchAllPages('trk_daily_teacher_progress', '*'),
-        supabase
-          .from('admin_configruation')
-          .select('val')
-          .eq('key', 'academic_year_range')
-          .maybeSingle(),
-        supabase
-          .from('periods')
-          .select('*')
-          .order('period_number', { ascending: true }),
-        fetchAllPages('heatmap_teacher_tracker', '*'),
-      ]);
+    const [
+      calendarResult,
+      timetableResult,
+      dailyLogsResult,
+      configResult,
+      periodsResult,
+      heatmapResult,
+    ] = await Promise.all([
+      supabase
+        .from('academic_calendar')
+        .select('id, year, month, working_days, teaching_days, ay')
+        .order('year', { ascending: true })
+        .order('month', { ascending: true }),
+      supabase
+        .from('timetable_slots')
+        .select('id, class_id, subject_id, teacher_id, day, period_id'),
+      fetchAllPages('trk_daily_teacher_progress', '*'),
+      supabase
+        .from('admin_configruation')
+        .select('val')
+        .eq('key', 'academic_year_range')
+        .maybeSingle(),
+      supabase.from('periods').select('*').order('period_number', { ascending: true }),
+      fetchAllPages('heatmap_teacher_tracker', '*'),
+    ]);
 
     if (calendarResult.error) {
       console.warn('Academic calendar unavailable:', calendarResult.error.message);
@@ -136,7 +139,8 @@ const SyllabusOverviewDashboard = ({
 
     if (!configResult.error && configResult.data?.val) {
       const cfg = configResult.data.val;
-      const rawStart = typeof cfg.start_month === 'object' ? cfg.start_month?.start_month : cfg.start_month;
+      const rawStart =
+        typeof cfg.start_month === 'object' ? cfg.start_month?.start_month : cfg.start_month;
       const rawEnd = typeof cfg.end_month === 'object' ? cfg.end_month?.end_month : cfg.end_month;
       const sm = Number(rawStart);
       const em = Number(rawEnd);
@@ -258,8 +262,8 @@ const SyllabusOverviewDashboard = ({
   );
 
   const heatmap = useMemo(
-    () => buildHeatmapModel({ classes, subjects, classifications, pacingRecords, assignments }),
-    [classes, subjects, classifications, pacingRecords, assignments]
+    () => buildHeatmapModel({ classes, subjects, classifications, pacingRecords, assignments, books }),
+    [classes, subjects, classifications, pacingRecords, assignments, books]
   );
 
   const bookWeeklyTrendData = useMemo(
@@ -345,6 +349,7 @@ const SyllabusOverviewDashboard = ({
       month: row.month,
       working_days: Number(row.working_days) || 0,
       teaching_days: Number(row.teaching_days) || 0,
+      ay: row.ay || selectedAcademicYear || '2026-27',
       updated_at: new Date().toISOString(),
     }));
 
@@ -378,7 +383,9 @@ const SyllabusOverviewDashboard = ({
       const payload = rows.map((row) => ({
         class_id: row.classId,
         book_id: row.bookId,
-        expected_end_month: row.expectedEndMonth || null,
+        expected_end_date: row.expectedEndDate || row.expectedEndMonth || null,
+        ...(row.expectedStartDate ? { expected_start_date: row.expectedStartDate } : {}),
+        ...(row.expectedPercentage !== undefined ? { expected_percentage: row.expectedPercentage } : {}),
         updated_at: new Date().toISOString(),
       }));
 
@@ -395,14 +402,18 @@ const SyllabusOverviewDashboard = ({
       }
 
       if (typeof setBookTrackers === 'function') {
-        const savedMap = new Map((data || payload).map((entry) => [`${entry.class_id}-${entry.book_id}`, entry]));
+        const savedMap = new Map(
+          (data || payload).map((entry) => [`${entry.class_id}-${entry.book_id}`, entry])
+        );
         setBookTrackers((previous) =>
           (previous || []).map((item) => {
             const saved = savedMap.get(`${item.class_id}-${item.book_id}`);
             return saved
               ? {
                   ...item,
-                  expected_end_month: saved.expected_end_month,
+                  expected_end_date: saved.expected_end_date ?? saved.expected_end_month,
+                  expected_start_date: saved.expected_start_date ?? saved.expected_start_month,
+                  expected_percentage: saved.expected_percentage ?? item.expected_percentage,
                 }
               : item;
           })
@@ -533,9 +544,7 @@ const SyllabusOverviewDashboard = ({
 
       {/* Active Sub-View Content */}
       <div className="w-full">
-        {activeSubTab === 'class-dashboard' && (
-          <ClassDonutCharts classDonutData={classDonutData} />
-        )}
+        {activeSubTab === 'class-dashboard' && <ClassDonutCharts classDonutData={classDonutData} />}
 
         {activeSubTab === 'subject-heatmap' && (
           <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
@@ -553,9 +562,7 @@ const SyllabusOverviewDashboard = ({
           />
         )}
 
-        {activeSubTab === 'attention-required' && (
-          <AttentionRequiredPanel alerts={alerts} />
-        )}
+        {activeSubTab === 'attention-required' && <AttentionRequiredPanel alerts={alerts} />}
       </div>
 
       {/* Settings Modal */}

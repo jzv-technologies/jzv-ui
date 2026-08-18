@@ -118,7 +118,7 @@ const AcademicCalendarModal = ({
       const rawEndVal =
         draft && draft.expectedEndMonth !== undefined
           ? draft.expectedEndMonth
-          : row.expectedEndMonth;
+          : (row.expectedEndDate || row.expectedEndMonth);
 
       const expectedEndMonthNum =
         typeof rawEndVal === 'string' && rawEndVal.includes('-')
@@ -232,6 +232,7 @@ const AcademicCalendarModal = ({
         trackerId: row.trackerId,
         classId: row.classId,
         bookId: row.bookId,
+        expectedEndDate: endMonthDate,
         expectedEndMonth: endMonthDate,
       };
     });

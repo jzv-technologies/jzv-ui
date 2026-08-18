@@ -164,6 +164,18 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
     const pct = cell.pct ?? 0;
     const expected = cell.expectedPct ?? 0;
     const delta = pct - expected;
+    const ratio = expected > 0 ? pct / expected : (pct >= 100 ? 1.25 : 0);
+
+    if (ratio >= 1.25 || pct >= 125) {
+      return {
+        type: 'suspicious',
+        label: 'Suspicious (Too Fast)',
+        badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        barBg: 'bg-indigo-600',
+        pillBg: 'bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border-indigo-300 font-bold',
+        textColor: 'text-indigo-800',
+      };
+    }
 
     if (pct >= 90 || delta >= -5) {
       return {
@@ -217,7 +229,12 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
 
     return subjectColumns
       .filter((s) => subjectIdSet.size === 0 || subjectIdSet.has(String(s.id)))
-      .map((s) => ({ id: String(s.id), name: s.name, classification_id: s.classification_id }));
+      .map((s) => ({
+        id: String(s.id),
+        realSubjectId: s.subjectId || s.id,
+        name: s.name,
+        classification_id: s.classification_id,
+      }));
   }, [activeClasses, subjectColumns]);
 
   // 3. Active filtered subjects
@@ -260,7 +277,8 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
       if (!matchesStatus) return;
 
       classificationMap.get(classIdStr).subjects.push({
-        subjectId: subj.id,
+        columnId: subj.id,
+        subjectId: subj.realSubjectId || subj.id,
         subjectName: subj.name,
         classificationName: classificationMap.get(classIdStr).name,
         classCells,
@@ -321,6 +339,7 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
               <option value="behind">🟡 Behind</option>
               <option value="critical">🔴 Critical</option>
               <option value="overdue">🟣 Overdue</option>
+              <option value="suspicious">🔵 Suspicious (Too Fast)</option>
             </select>
 
             {/* Transpose Toggle Button */}
@@ -364,6 +383,9 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-full bg-purple-600" /> Overdue
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" /> Suspicious (&ge;1.25x pace)
             </span>
             <span className="flex items-center gap-1">
               <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold border border-amber-300">Unmapped</span> Allocated, No Book

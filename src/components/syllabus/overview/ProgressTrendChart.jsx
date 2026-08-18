@@ -16,39 +16,59 @@ import {
 const WEEK_COLORS = ['#93c5fd', '#60a5fa', '#3b82f6', '#1d4ed8'];
 
 const MILD_BACKGROUNDS = [
-  '#f8fafc', // Soft slate
-  '#f0fdf4', // Soft emerald
-  '#eff6ff', // Soft blue
-  '#fffbeb', // Soft amber
-  '#f5f3ff', // Soft purple
-  '#fff1f2', // Soft rose
-  '#ecfeff', // Soft cyan
-  '#faf5ff', // Soft violet
+  '#e0f2fe', // Soft Sky Blue
+  '#dcfce7', // Soft Mint Emerald
+  '#fef9c3', // Soft Warm Yellow
+  '#f3e8ff', // Soft Purple
+  '#ffe4e6', // Soft Rose
+  '#ccfbf1', // Soft Teal
+  '#fae8ff', // Soft Fuchsia
+  '#f1f5f9', // Soft Slate
 ];
 
-const CustomBackgroundBands = ({ offset, data = [] }) => {
+const CustomBackgroundBands = (props) => {
+  const { offset, data = [] } = props || {};
   if (!offset || !data || data.length === 0) return null;
-  const { left, top, width, height } = offset;
+  const { left = 0, top = 0, width = 0, height = 0 } = offset;
+  if (width <= 0 || height <= 0) return null;
+
   const count = data.length;
   const bandWidth = width / count;
 
   return (
     <g className="custom-book-background-bands">
-      {data.map((item, idx) => (
-        <rect
-          key={item.bookId || idx}
-          x={left + idx * bandWidth + 3}
-          y={top}
-          width={Math.max(0, bandWidth - 6)}
-          height={height}
-          fill={MILD_BACKGROUNDS[idx % MILD_BACKGROUNDS.length]}
-          rx={12}
-          ry={12}
-          stroke="#e2e8f0"
-          strokeWidth={1}
-          opacity={0.85}
-        />
-      ))}
+      {data.map((item, idx) => {
+        const bandX = left + idx * bandWidth;
+        const bgFill = MILD_BACKGROUNDS[idx % MILD_BACKGROUNDS.length];
+        return (
+          <g key={item.bookId || idx}>
+            {/* Distinct background band for each book column */}
+            <rect
+              x={bandX + 1}
+              y={top}
+              width={Math.max(0, bandWidth - 2)}
+              height={height}
+              fill={bgFill}
+              stroke="#94a3b8"
+              strokeWidth={1}
+              opacity={0.8}
+            />
+
+            {/* Vertical separator line between book sections */}
+            {idx > 0 && (
+              <line
+                x1={bandX}
+                y1={top}
+                x2={bandX}
+                y2={top + height}
+                stroke="#475569"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+              />
+            )}
+          </g>
+        );
+      })}
     </g>
   );
 };

@@ -132,6 +132,13 @@ export const buildPeriodsPerWeekMap = (timetableSlots = []) => {
   return periodMap;
 };
 
+export const getEndOfWeekDate = (date = new Date()) => {
+  const d = date instanceof Date && !isNaN(date.getTime()) ? new Date(date) : new Date();
+  const day = d.getDay();
+  const diffToSaturday = (6 - day + 7) % 7;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToSaturday, 23, 59, 59, 999);
+};
+
 /**
  * Given a month number and the calendarRows, compute how many teaching days have elapsed
  * within the window [windowStart, windowEnd] up to today.
@@ -178,6 +185,12 @@ export const buildPacingRecords = ({
   academicEndMonth = 5,
   today = new Date(),
 }) => {
+  const endOfWeekDate = getEndOfWeekDate(today);
+  const lastCalendarRow = [...calendarRows]
+    .sort((left, right) => (left.year * 12 + left.month) - (right.year * 12 + right.month))
+    .pop();
+  const lastCalendarMonth = lastCalendarRow?.month ?? academicEndMonth;
+
   const coverageRows = getCalendarCoverageRows(calendarRows, today);
   const totalTeachingDays = coverageRows.reduce((sum, row) => sum + toNumber(row.teaching_days), 0);
   const elapsedTeachingDays = coverageRows.reduce((sum, row) => sum + row.elapsedTeachingDays, 0);
@@ -227,50 +240,44 @@ export const buildPacingRecords = ({
         : clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
 
       const firstLesson = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
-      const rawStart = tracker?.expected_start_month;
-      const rawEnd = tracker?.expected_end_month;
+      const rawStart = tracker?.expected_start_date;
+      const rawEnd = tracker?.expected_end_date;
 
       const calculatedStartMonth =
         typeof rawStart === 'string' && rawStart.includes('-')
           ? new Date(rawStart).getMonth() + 1
           : typeof rawStart === 'number'
             ? rawStart
-            : firstLesson?.month ?? academicStartMonth;
+            : today.getMonth() + 1;
 
       const targetEndMonth =
         typeof rawEnd === 'string' && rawEnd.includes('-')
           ? new Date(rawEnd).getMonth() + 1
           : typeof rawEnd === 'number'
             ? rawEnd
-            : academicEndMonth;
+            : lastCalendarMonth;
 
       const periodsAvailableToDate = periodsPerWeek * (elapsedTeachingDays / 5);
 
-      // Determine expected progress based on teaching days within [calculatedStartMonth, targetEndMonth]
+      // Determine expected progress based on teaching days within [calculatedStartMonth, targetEndMonth] up to end of current week
       let expectedProgress = 0;
       let isOverdue = false;
 
-      if (rawEnd || rawStart) {
-        const win = getWindowCoverage(
-          calendarRows,
-          calculatedStartMonth,
-          targetEndMonth,
-          today
-        );
+      const win = getWindowCoverage(
+        calendarRows,
+        calculatedStartMonth,
+        targetEndMonth,
+        endOfWeekDate
+      );
 
-        if (win.beforeWindow) {
-          expectedProgress = 0;
-        } else if (win.pastWindow) {
-          expectedProgress = 100;
-          if (actualProgress < 100) isOverdue = true;
-        } else {
-          expectedProgress = win.totalWindowDays > 0
-            ? clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100)
-            : 0;
-        }
+      if (win.beforeWindow) {
+        expectedProgress = 0;
+      } else if (win.pastWindow) {
+        expectedProgress = 100;
+        if (actualProgress < 100) isOverdue = true;
       } else {
-        expectedProgress = totalTeachingDays > 0
-          ? clamp((elapsedTeachingDays / totalTeachingDays) * 100, 0, 100)
+        expectedProgress = win.totalWindowDays > 0
+          ? clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100)
           : 0;
       }
 
@@ -279,6 +286,10 @@ export const buildPacingRecords = ({
         ? Math.round((expectedProgress / 100) * totalLessons)
         : 0;
       const lessonDelta = completedLessons - expectedLessons;
+
+      const lessonBasedExpectedProgress = totalLessons > 0
+        ? clamp(Math.round((expectedLessons / totalLessons) * 100), 0, 100)
+        : Math.round(expectedProgress);
 
       return {
         id: mapping.id,
@@ -292,7 +303,7 @@ export const buildPacingRecords = ({
         classificationId: subject?.classification_id || null,
         actualProgress,
         rawTrackerPct: actualProgress,
-        expectedProgress: Number(expectedProgress.toFixed(1)),
+        expectedProgress: lessonBasedExpectedProgress,
         isOverdue,
         periodsPerWeek,
         periodsAvailableToDate,
@@ -304,8 +315,11 @@ export const buildPacingRecords = ({
         lessonDelta,
         trackerUpdatedAt: tracker?.updated_at || null,
         calculatedStartMonth,
+        expectedStartDate: rawStart || null,
+        expectedEndDate: rawEnd || null,
         expectedStartMonth: rawStart || null,
         expectedEndMonth: rawEnd || null,
+        expectedPercentage: tracker?.expected_percentage ?? lessonBasedExpectedProgress,
       };
     })
     .filter(Boolean);
@@ -341,8 +355,11 @@ export const buildOverviewSummary = ({
       const pct = record.actualProgress ?? 0;
       const expected = record.expectedProgress ?? 0;
       const delta = pct - expected;
+      const ratio = expected > 0 ? pct / expected : (pct >= 100 ? 1.25 : 0);
 
-      if ((pct === 0 && expected >= 10) || delta <= -15 || (pct < 20 && expected >= 30)) {
+      if (ratio >= 1.25 || pct >= 125) {
+        accumulator.suspicious += 1;
+      } else if ((pct === 0 && expected >= 10) || delta <= -15 || (pct < 20 && expected >= 30)) {
         accumulator.critical += 1;
       } else if (pct >= 70 || delta >= -5) {
         accumulator.onTrack += 1;
@@ -351,7 +368,7 @@ export const buildOverviewSummary = ({
       }
       return accumulator;
     },
-    { onTrack: 0, behind: 0, critical: 0 }
+    { onTrack: 0, behind: 0, critical: 0, suspicious: 0 }
   );
 
   const sevenDaysAgo = new Date(today);
@@ -407,26 +424,83 @@ export const buildHeatmapModel = ({
   classifications = [],
   pacingRecords = [],
   assignments = [],
+  books = [],
 }) => {
-  const subjectIdsWithMappingsOrAssignments = new Set([
-    ...pacingRecords.map((record) => String(record.subjectId)),
-    ...assignments.map((assignment) => String(assignment.subject_id)),
-  ]);
-
-  const subjectColumns = subjects
-    .filter((subject) => subjectIdsWithMappingsOrAssignments.has(String(subject.id)))
-    .sort((left, right) => {
-      const leftClassification = String(left.classification_id || '');
-      const rightClassification = String(right.classification_id || '');
-      if (leftClassification !== rightClassification) {
-        return leftClassification.localeCompare(rightClassification);
-      }
-      return String(left.name || '').localeCompare(String(right.name || ''));
-    });
-
+  const subjectMap = new Map(subjects.map((s) => [String(s.id), s]));
   const classificationMap = new Map(
-    classifications.map((classification) => [String(classification.id), classification])
+    classifications.map((c) => [String(c.id), c])
   );
+  const bookMap = new Map((books || []).map((b) => [String(b.id), b]));
+
+  // Build unique columns per (subject_id, book_id) combination
+  const columnKeyMap = new Map();
+
+  pacingRecords.forEach((record) => {
+    const sId = String(record.subjectId);
+    const bId = record.bookId ? String(record.bookId) : 'none';
+    const key = `${sId}-${bId}`;
+
+    if (!columnKeyMap.has(key)) {
+      const subject = subjectMap.get(sId);
+      if (!subject) return;
+
+      const bTitle = record.bookName || bookMap.get(bId)?.title || bookMap.get(bId)?.name || '';
+
+      // Check if subject has more than 1 distinct book mapped across pacingRecords
+      const totalSubjectBooks = new Set(
+        pacingRecords
+          .filter((pr) => String(pr.subjectId) === sId && pr.bookId)
+          .map((pr) => String(pr.bookId))
+      ).size;
+
+      const displayName =
+        totalSubjectBooks > 1 && bTitle
+          ? `${subject.name} (${bTitle})`
+          : subject.name;
+
+      columnKeyMap.set(key, {
+        id: key,
+        subjectId: Number(sId),
+        bookId: record.bookId ? Number(record.bookId) : null,
+        name: displayName,
+        rawSubjectName: subject.name,
+        bookTitle: bTitle,
+        classification_id: subject.classification_id,
+      });
+    }
+  });
+
+  // Also include assigned subjects that don't have pacing records yet
+  assignments.forEach((assignment) => {
+    const sId = String(assignment.subject_id);
+    const hasPacingRecord = pacingRecords.some((pr) => String(pr.subjectId) === sId);
+    if (!hasPacingRecord) {
+      const key = `${sId}-none`;
+      if (!columnKeyMap.has(key)) {
+        const subject = subjectMap.get(sId);
+        if (subject) {
+          columnKeyMap.set(key, {
+            id: key,
+            subjectId: Number(sId),
+            bookId: null,
+            name: subject.name,
+            rawSubjectName: subject.name,
+            bookTitle: '',
+            classification_id: subject.classification_id,
+          });
+        }
+      }
+    }
+  });
+
+  const subjectColumns = Array.from(columnKeyMap.values()).sort((left, right) => {
+    const leftClassification = String(left.classification_id || '');
+    const rightClassification = String(right.classification_id || '');
+    if (leftClassification !== rightClassification) {
+      return leftClassification.localeCompare(rightClassification);
+    }
+    return String(left.name || '').localeCompare(String(right.name || ''));
+  });
 
   // Pre-build set of assigned class-subject keys
   const assignedKeys = new Set(
@@ -437,40 +511,33 @@ export const buildHeatmapModel = ({
     .map((classRecord) => {
       const cells = {};
 
-      subjectColumns.forEach((subject) => {
-        const records = pacingRecords.filter(
-          (record) =>
-            String(record.classId) === String(classRecord.id) &&
-            String(record.subjectId) === String(subject.id)
-        );
+      subjectColumns.forEach((col) => {
+        const records = pacingRecords.filter((record) => {
+          const matchClass = String(record.classId) === String(classRecord.id);
+          const matchSubject = String(record.subjectId) === String(col.subjectId);
+          const matchBook = col.bookId ? String(record.bookId) === String(col.bookId) : true;
+          return matchClass && matchSubject && matchBook;
+        });
 
-        const isAssigned = assignedKeys.has(`${classRecord.id}-${subject.id}`);
+        const isAssigned = assignedKeys.has(`${classRecord.id}-${col.subjectId}`);
 
         if (records.length === 0) {
-          cells[subject.id] = { hasData: false, isAssigned, pct: null };
+          cells[col.id] = { hasData: false, isAssigned, pct: null };
           return;
         }
 
-        const avg = (items, field) =>
-          items.reduce((sum, item) => sum + toNumber(item[field]), 0) / items.length;
+        const rec = records[0];
 
-        cells[subject.id] = {
+        cells[col.id] = {
           hasData: true,
           isAssigned,
-          pct: Math.round(avg(records, 'actualProgress')),
-          expectedPct: Math.round(avg(records, 'expectedProgress')),
-          estimatedPeriods: records.reduce(
-            (sum, item) => sum + toNumber(item.estimatedPeriods, 0),
-            0
-          ),
-          periodsAvailableToDate: records.reduce(
-            (sum, item) => sum + toNumber(item.periodsAvailableToDate),
-            0
-          ),
-          periodsUsedApprox: records.reduce(
-            (sum, item) => sum + toNumber(item.periodsUsedApprox),
-            0
-          ),
+          pct: Math.round(rec.actualProgress ?? 0),
+          expectedPct: Math.round(rec.expectedPercentage ?? rec.expectedProgress ?? 0),
+          isOverdue: rec.isOverdue,
+          bookId: rec.bookId,
+          bookName: rec.bookName,
+          totalLessons: rec.totalLessons,
+          completedLessons: rec.completedLessons,
         };
       });
 
@@ -485,8 +552,8 @@ export const buildHeatmapModel = ({
   const classificationGroups = [];
   let currentGroup = null;
 
-  subjectColumns.forEach((subject) => {
-    const classificationId = String(subject.classification_id || 'none');
+  subjectColumns.forEach((col) => {
+    const classificationId = String(col.classification_id || 'none');
     if (!currentGroup || currentGroup.classificationId !== classificationId) {
       if (currentGroup) classificationGroups.push(currentGroup);
       currentGroup = {
@@ -711,8 +778,8 @@ export const buildAttentionAlerts = ({
         type: 'behind',
         typeLabel: 'Behind Schedule',
         title: 'Behind schedule',
-        description: `${record.className} / ${record.bookName} is ${Math.abs(delta).toFixed(0)} pts behind expected pacing.`,
-        meta: `Actual ${record.actualProgress.toFixed(0)}% vs expected ${record.expectedProgress.toFixed(0)}%`,
+        description: `${record.className} / ${record.bookName} is ${Math.round(Math.abs(delta))} pts behind expected pacing.`,
+        meta: `Actual ${Math.round(record.actualProgress)}% vs expected ${Math.round(record.expectedPercentage ?? record.expectedProgress)}%`,
       });
     }
 
@@ -970,8 +1037,8 @@ export const buildEstimateRows = ({
 
       const hasFirstLessonEntry = !!firstLessonInfo;
 
-      const rawStart = tracker?.expected_start_month;
-      const rawEnd = tracker?.expected_end_month;
+      const rawStart = tracker?.expected_start_date;
+      const rawEnd = tracker?.expected_end_date;
 
       // If started, start from first lesson month. If NOT started, remaining available time starts from TODAY's month!
       const calculatedStartMonth =
