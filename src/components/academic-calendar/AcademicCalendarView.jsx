@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import AcademicCalendarEventModal, { CALENDAR_EVENT_TYPES } from './AcademicCalendarEventModal';
+import ConfirmModal from '../ConfirmModal';
 
 const formatDate = (value) =>
   new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
@@ -34,6 +35,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
   const [calendarMonths, setCalendarMonths] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // Academic month state
   const today = new Date();
@@ -135,6 +137,8 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       }
       if (
         [
+          'planned_holiday',
+          'emergency_holiday',
           'festival_holiday',
           'annual_holiday',
           'public_holiday',
@@ -147,7 +151,13 @@ const AcademicCalendarView = ({ canEdit = false }) => {
         return 'student_holiday';
       }
       if (type === 'examinations') return 'examination';
-      if (type === 'exam_preparation' || type === 'teacher_preparation') return 'exam_preparation';
+      if (
+        type === 'exam_preparation' ||
+        type === 'teacher_preparation' ||
+        type === 'event_preparation'
+      ) {
+        return 'exam_preparation';
+      }
       return 'other';
     };
 
@@ -224,6 +234,8 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       }
       if (
         [
+          'planned_holiday',
+          'emergency_holiday',
           'festival_holiday',
           'annual_holiday',
           'public_holiday',
@@ -236,7 +248,13 @@ const AcademicCalendarView = ({ canEdit = false }) => {
         return 'student_holiday';
       }
       if (type === 'examinations') return 'examination';
-      if (type === 'exam_preparation' || type === 'teacher_preparation') return 'exam_preparation';
+      if (
+        type === 'exam_preparation' ||
+        type === 'teacher_preparation' ||
+        type === 'event_preparation'
+      ) {
+        return 'exam_preparation';
+      }
       return 'other';
     };
 
@@ -289,17 +307,31 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     setSaving(false);
   };
 
-  const deleteEvent = async (event) => {
-    if (!window.confirm(`Delete ${event.event_name}?`)) return;
-    const { error: deleteError } = await supabase
-      .from('academic_events')
-      .delete()
-      .eq('id', event.id);
-    if (deleteError) showToast(`Failed to delete event: ${deleteError.message}`, 'error');
-    else {
-      showToast('Calendar event deleted.', 'success');
-      await loadEvents();
-    }
+  const deleteEvent = (eventOrId) => {
+    const eventId = typeof eventOrId === 'object' ? eventOrId.id : eventOrId;
+    const eventName = typeof eventOrId === 'object' ? eventOrId.event_name : 'this event';
+    setConfirmConfig({
+      title: 'Delete Calendar Event',
+      message: `Are you sure you want to delete "${eventName}"?\nThis action cannot be undone.`,
+      type: 'danger',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        setSaving(true);
+        const { error: deleteError } = await supabase
+          .from('academic_events')
+          .delete()
+          .eq('id', eventId);
+        if (deleteError) {
+          showToast(`Failed to delete event: ${deleteError.message}`, 'error');
+        } else {
+          showToast('Calendar event deleted.', 'success');
+          setEditingEvent(null);
+          await loadEvents();
+        }
+        setSaving(false);
+      },
+    });
   };
 
   // ----- Date click handler for quick event creation -----
@@ -332,19 +364,55 @@ const AcademicCalendarView = ({ canEdit = false }) => {
         <div className="grid grid-cols-7 gap-0.5">
           {cells.map((date, index) => {
             const isWeekend = isDateWeekend(date, weeklyOffDays);
-            const dayEvents = date
-              ? visibleEvents.filter(
-                  (event) =>
-                    new Date(`${event.start_date}T00:00:00`) <= date &&
-                    new Date(`${event.end_date || event.start_date}T00:00:00`) >= date
-                )
+            const rawDayEvents = date
+              ? visibleEvents.filter((event) => {
+                  const start = new Date(`${event.start_date}T00:00:00`);
+                  const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
+                  return start <= date && end >= date;
+                })
               : [];
+
+            const hasBothHolidaysOff = rawDayEvents.some(
+              (e) => !e.is_student_holiday && !e.is_teacher_holiday
+            );
+            const hasStudentHolidayOff = rawDayEvents.some(
+              (e) => !e.is_student_holiday || e.is_teaching_day
+            );
+            const isStudentHolidayOnDate =
+              !hasBothHolidaysOff &&
+              rawDayEvents.length > 0 &&
+              !hasStudentHolidayOff &&
+              rawDayEvents.some(
+                (e) => Boolean(e.is_student_holiday) || e.event_type === 'student_holiday'
+              );
+            const isTeacherDutyOnDate =
+              !hasBothHolidaysOff &&
+              rawDayEvents.some(
+                (e) =>
+                  !e.is_teaching_day &&
+                  (Boolean(e.is_student_holiday) || e.event_type === 'student_holiday') &&
+                  !e.is_teacher_holiday
+              );
+
+            // Weekend rule: do not display the event on weekend if it is a holiday or if all 3 toggles are OFF
+            const dayEvents = rawDayEvents.filter((event) => {
+              if (!isWeekend) return true;
+              const isHoliday = event.is_student_holiday || event.is_teacher_holiday;
+              const isAllThreeOff =
+                !event.is_teaching_day &&
+                !event.is_student_holiday &&
+                !event.is_teacher_holiday;
+              if (isHoliday || isAllThreeOff) {
+                return false;
+              }
+              return true;
+            });
 
             return (
               <div
                 key={index}
                 onClick={() => handleDateClick(date)}
-                className={`min-h-[72px] sm:min-h-[88px] border p-1.5 transition-colors ${
+                className={`min-h-[72px] sm:min-h-[88px] border p-1.5 transition-colors flex flex-col justify-between ${
                   date
                     ? isWeekend
                       ? 'bg-red-200/50 hover:bg-red-200/80 border-red-300 rounded-xl cursor-pointer'
@@ -352,14 +420,32 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                     : 'bg-white rounded-xl'
                 }`}
               >
-                <span
-                  className={`text-[10px] font-black ${
-                    isWeekend ? 'text-red-600' : 'text-gray-500'
-                  }`}
-                >
-                  {date?.getDate() || ''}
-                </span>
-                <div className="space-y-0.5 mt-0.5">
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`text-[10px] font-black ${
+                      isWeekend ? 'text-red-600' : 'text-gray-500'
+                    }`}
+                  >
+                    {date?.getDate() || ''}
+                  </span>
+                  {date && (
+                    <div className="flex items-center gap-1 text-[10px]">
+                      {isStudentHolidayOnDate && (
+                        <i
+                          className="fa-solid fa-users-slash text-red-500"
+                          title="Student Holiday"
+                        />
+                      )}
+                      {isTeacherDutyOnDate && (
+                        <i
+                          className="fa-solid fa-person-chalkboard text-emerald-600"
+                          title="Non-Teaching Day / Teachers on duty"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-0.5 mt-0.5 flex-1">
                   {dayEvents.slice(0, 3).map((event) => (
                     <div
                       key={event.id}
@@ -692,9 +778,21 @@ const AcademicCalendarView = ({ canEdit = false }) => {
           academicYear={getAcademicYearLabel(baseYear)}
           onClose={() => setEditingEvent(null)}
           onSave={saveEvent}
+          onDelete={deleteEvent}
           saving={saving}
         />
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmConfig !== null}
+        title={confirmConfig?.title}
+        message={confirmConfig?.message}
+        type={confirmConfig?.type}
+        confirmText={confirmConfig?.confirmText}
+        onConfirm={confirmConfig?.onConfirm}
+        onCancel={() => setConfirmConfig(null)}
+      />
     </div>
   );
 };

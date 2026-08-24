@@ -1,110 +1,74 @@
 import React, { useEffect, useState } from 'react';
 
+// Exactly 12 unique colors – balanced spectrum
+export const CALENDAR_COLOR_NAMES = {
+  ORANGE: '#ff7f00',
+  BROWN: '#923402ff',
+  MAGENTA: '#e829bbff',
+  PURPLE: '#811c9cff',
+  RED: '#e31a1c',
+  INDIGO: '#390090ff',
+  BLUE: '#134bd8ff',
+  TEAL: '#168999ff',
+  YELLOW: '#eae440ff',
+  OLIVE_GOLD: '#aaaa06ff',
+  LIME_GREEN: '#73f700ff',
+  FOREST_GREEN: '#0a7502ff',
+};
+
+export const CALENDAR_COLORS = Object.values(CALENDAR_COLOR_NAMES);
+
 export const CALENDAR_EVENT_CONFIGS = {
-  festival_holiday: {
-    label: 'Festival Holiday',
+  planned_holiday: {
+    label: 'Planned Holiday',
     is_student_holiday: true,
     is_teacher_holiday: true,
     is_teaching_day: false,
-    color_code: '#e31a1c',
+    color_code: CALENDAR_COLOR_NAMES.RED,
   },
-  annual_holiday: {
-    label: 'Annual Holiday',
+  emergency_holiday: {
+    label: 'Emergency Holiday',
     is_student_holiday: true,
     is_teacher_holiday: true,
     is_teaching_day: false,
-    color_code: '#e31a1c',
+    color_code: CALENDAR_COLOR_NAMES.ORANGE,
   },
-  public_holiday: {
-    label: 'Public Holiday',
-    is_student_holiday: true,
-    is_teacher_holiday: true,
-    is_teaching_day: false,
-    color_code: '#e31a1c',
-  },
-  jamia_declared_holiday: {
-    label: 'Jamia Declared Holiday',
-    is_student_holiday: true,
-    is_teacher_holiday: true,
-    is_teaching_day: false,
-    color_code: '#ff7f00',
-  },
-  annual_day: {
-    label: 'Annual Day',
+  event_day: {
+    label: 'Event Day',
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
-    color_code: '#00b0c4ff',
-  },
-  sports_day: {
-    label: 'Sports Day',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#00b0c4ff',
-  },
-  republic_day: {
-    label: 'Republic Day',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#00b0c4ff',
-  },
-  independence_day: {
-    label: 'Independence Day',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#00b0c4ff',
-  },
-  exam_holiday: {
-    label: 'Exam Holiday',
-    is_student_holiday: true,
-    is_teacher_holiday: true,
-    is_teaching_day: false,
-    color_code: '#811c9cff',
-  },
-  examinations: {
-    label: 'Examinations',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#390090ff',
-  },
-  exam_preparation: {
-    label: 'Exam Preperation',
-    is_student_holiday: true,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#0c2faeff',
-  },
-  exam_correction: {
-    label: 'Exam Correction',
-    is_student_holiday: true,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#0c2faeff',
-  },
-  parents_meeting: {
-    label: 'Parents Meeting',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#aaaa06ff',
-  },
-  admission_preparation: {
-    label: 'Admission Preperation',
-    is_student_holiday: false,
-    is_teacher_holiday: false,
-    is_teaching_day: false,
-    color_code: '#0c2faeff',
+    color_code: CALENDAR_COLOR_NAMES.TEAL,
   },
   event_preparation: {
     label: 'Event Preparation',
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
-    color_code: '#eae440ff',
+    color_code: CALENDAR_COLOR_NAMES.YELLOW,
+  },
+
+  examinations: {
+    label: 'Examinations',
+    is_student_holiday: false,
+    is_teacher_holiday: false,
+    is_teaching_day: false,
+    color_code: CALENDAR_COLOR_NAMES.FOREST_GREEN,
+  },
+  teacher_preparation: {
+    label: 'Teacher Preperation',
+    is_student_holiday: true,
+    is_teacher_holiday: false,
+    is_teaching_day: false,
+    color_code: CALENDAR_COLOR_NAMES.BLUE,
+  },
+
+  parents_meeting: {
+    label: 'Parents Meeting',
+    is_student_holiday: false,
+    is_teacher_holiday: false,
+    is_teaching_day: false,
+    color_code: CALENDAR_COLOR_NAMES.OLIVE_GOLD,
   },
 };
 
@@ -112,22 +76,6 @@ export const CALENDAR_EVENT_TYPES = Object.entries(CALENDAR_EVENT_CONFIGS).map((
   value,
   label: cfg.label,
 }));
-
-// Exactly 12 unique colors – balanced spectrum
-export const CALENDAR_COLORS = [
-  '#ff7f00',
-  '#923402ff',
-  '#e829bbff',
-  '#811c9cff',
-  '#e31a1c',
-  '#390090ff',
-  '#0c2faeff',
-  '#00b0c4ff',
-  '#eae440ff',
-  '#aaaa06ff',
-  '#73f700ff',
-  '#0a7502ff',
-];
 
 // ----- Toggle Switch Component -----
 const ToggleSwitch = ({ value, onChange }) => (
@@ -154,7 +102,18 @@ const ToggleSwitch = ({ value, onChange }) => (
 
 // ----- Date Range Picker Component (Single Calendar) -----
 const DateRangePicker = ({ startDate, endDate, onSelectRange, onClose }) => {
+  const pickerRef = React.useRef(null);
   const [viewDate, setViewDate] = useState(() => (startDate ? new Date(startDate) : new Date()));
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
 
   const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
   const getFirstDay = (year, month) => new Date(year, month, 1).getDay();
@@ -192,13 +151,16 @@ const DateRangePicker = ({ startDate, endDate, onSelectRange, onClose }) => {
     }
   };
 
-  const handleDoubleClick = (day) => {
-    if (!startDate) return;
+  const handleDoubleClick = (day, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     const selected = new Date(year, month, day);
-    if (selected < startDate) {
-      onSelectRange(selected, startDate);
-    } else {
+    if (startDate && !endDate && selected >= startDate) {
       onSelectRange(startDate, selected);
+    } else {
+      onSelectRange(selected, selected);
     }
     onClose();
   };
@@ -217,32 +179,45 @@ const DateRangePicker = ({ startDate, endDate, onSelectRange, onClose }) => {
 
   const formatDate = (date) => {
     if (!date) return '';
-    return date.toLocaleDateString();
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
   return (
-    <div className="absolute z-50 mt-2 p-4 bg-white rounded-2xl shadow-2xl border border-light-border w-72">
+    <div
+      ref={pickerRef}
+      className="absolute left-0 top-full mt-2 p-4 bg-white rounded-2xl shadow-2xl border border-light-border w-80 max-w-[95vw] z-[150]"
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <button
           type="button"
           onClick={prevMonth}
-          className="w-7 h-7 rounded-lg border border-light-border text-gray-500 hover:text-dark-primary flex items-center justify-center text-xs"
+          className="w-7 h-7 rounded-lg border border-light-border text-gray-500 hover:text-dark-primary flex items-center justify-center text-xs cursor-pointer"
         >
           <i className="fas fa-chevron-left" />
         </button>
         <span className="text-xs font-black text-dark-primary">
           {monthName} {year}
         </span>
-        <button
-          type="button"
-          onClick={nextMonth}
-          className="w-7 h-7 rounded-lg border border-light-border text-gray-500 hover:text-dark-primary flex items-center justify-center text-xs"
-        >
-          <i className="fas fa-chevron-right" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={nextMonth}
+            className="w-7 h-7 rounded-lg border border-light-border text-gray-500 hover:text-dark-primary flex items-center justify-center text-xs cursor-pointer"
+          >
+            <i className="fas fa-chevron-right" />
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg border border-light-border text-gray-400 hover:text-dark-primary flex items-center justify-center text-xs ml-1 cursor-pointer"
+            title="Close date picker"
+          >
+            <i className="fas fa-xmark" />
+          </button>
+        </div>
       </div>
 
       {/* Weekday headers */}
@@ -266,10 +241,10 @@ const DateRangePicker = ({ startDate, endDate, onSelectRange, onClose }) => {
               key={idx}
               type="button"
               onClick={() => handleDateClick(day)}
-              onDoubleClick={() => handleDoubleClick(day)}
+              onDoubleClick={(e) => handleDoubleClick(day, e)}
               className={`
                 h-9 w-full rounded-lg text-xs font-bold transition-colors relative cursor-pointer
-                ${start || end ? 'bg-brand-primary text-white font-black' : ''}
+                ${start || end ? 'bg-brand-primary text-white font-black shadow-xs' : ''}
                 ${inRange ? 'bg-brand-primary/15 text-brand-primary font-bold' : ''}
                 ${!start && !end && !inRange ? 'text-gray-700 hover:bg-gray-100' : ''}
               `}
@@ -281,44 +256,135 @@ const DateRangePicker = ({ startDate, endDate, onSelectRange, onClose }) => {
       </div>
 
       {/* Selected range display & actions */}
-      <div className="mt-3 pt-3 border-t border-light-border flex items-center justify-between text-xs">
-        <span className="font-bold text-gray-500">
-          {startDate ? formatDate(startDate) : 'Start'}
-          {endDate && ` – ${formatDate(endDate)}`}
-        </span>
-        <button
-          type="button"
-          onClick={() => onSelectRange(null, null)}
-          className="text-xs font-bold text-red-500 hover:text-red-700 cursor-pointer"
-        >
-          Clear
-        </button>
+      <div className="mt-3 pt-3 border-t border-light-border flex items-center justify-between gap-2">
+        <div className="text-[11px] font-bold text-dark-primary truncate">
+          {startDate ? formatDate(startDate) : 'Select Start'}
+          {endDate && ` → ${formatDate(endDate)}`}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => onSelectRange(null, null)}
+            className="px-2 py-1 rounded-lg text-xs font-bold text-red-500 hover:bg-red-50 cursor-pointer"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded-xl bg-brand-primary text-white text-xs font-black hover:bg-brand-primary/90 cursor-pointer shadow-xs"
+          >
+            Done
+          </button>
+        </div>
       </div>
-
-      <button
-        type="button"
-        onClick={onClose}
-        className="mt-2 w-full py-1.5 rounded-lg bg-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-200 cursor-pointer"
-      >
-        Done
-      </button>
     </div>
   );
 };
 
+export const getMatchingEventType = (event) => {
+  if (!event) return '';
+  const rawType = event.event_type;
+
+  // 1. Direct match in CALENDAR_EVENT_CONFIGS
+  if (rawType && CALENDAR_EVENT_CONFIGS[rawType]) {
+    return rawType;
+  }
+
+  // 2. Specific matching based on event name and toggles
+  const name = (event.event_name || event.title || '').toLowerCase();
+  if (name.includes('parent') || name.includes('ptm') || name.includes('meeting')) {
+    return 'parents_meeting';
+  }
+  if (name.includes('teacher prep') || name.includes('lesson plan')) {
+    return 'teacher_preparation';
+  }
+  if (name.includes('event prep') || name.includes('annual prep') || name.includes('sports prep')) {
+    return 'event_preparation';
+  }
+  if (name.includes('exam') || name.includes('test') || name.includes('assessment')) {
+    if (rawType === 'examination' || rawType === 'examinations') return 'examinations';
+    if (event.is_student_holiday) {
+      if (!event.is_teacher_holiday) return 'teacher_preparation';
+      return 'planned_holiday';
+    }
+    return 'examinations';
+  }
+  if (
+    name.includes('emergency') ||
+    name.includes('rain') ||
+    name.includes('bandh') ||
+    name.includes('strike')
+  ) {
+    return 'emergency_holiday';
+  }
+
+  // 3. Fallback based on raw event_type from DB
+  if (rawType === 'examination' || rawType === 'examinations') {
+    return 'examinations';
+  }
+  if (rawType === 'teacher_preparation' || rawType === 'exam_preparation') {
+    return 'teacher_preparation';
+  }
+  if (rawType === 'event_preparation') {
+    return 'event_preparation';
+  }
+  if (rawType === 'parents_meeting') {
+    return 'parents_meeting';
+  }
+  if (rawType === 'event_day') {
+    return 'event_day';
+  }
+  if (
+    [
+      'planned_holiday',
+      'festival_holiday',
+      'annual_holiday',
+      'public_holiday',
+      'jamia_declared_holiday',
+      'holiday',
+      'exam_holiday',
+      'exam_correction',
+    ].includes(rawType)
+  ) {
+    return 'planned_holiday';
+  }
+  if (rawType === 'emergency_holiday') {
+    return 'emergency_holiday';
+  }
+  if (rawType === 'student_holiday') {
+    if (!event.is_teacher_holiday && event.is_student_holiday) {
+      return 'teacher_preparation';
+    }
+    return 'planned_holiday';
+  }
+  if (rawType === 'other') {
+    return 'event_day';
+  }
+
+  return '';
+};
+
 // ----- Main Modal -----
 const DEFAULT_EVENT = {
-  event_type: 'festival_holiday',
+  event_type: '',
   event_name: '',
   start_date: '',
   end_date: '',
   is_teaching_day: false,
-  is_student_holiday: true,
-  is_teacher_holiday: true,
-  color_code: '#e31a1c',
+  is_student_holiday: false,
+  is_teacher_holiday: false,
+  color_code: CALENDAR_COLOR_NAMES.RED,
 };
 
-const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, saving = false }) => {
+const AcademicCalendarEventModal = ({
+  event,
+  academicYear,
+  onClose,
+  onSave,
+  onDelete,
+  saving = false,
+}) => {
   const [draft, setDraft] = useState(DEFAULT_EVENT);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -328,8 +394,12 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
   useEffect(() => {
     const start = event?.start_date ? new Date(`${event.start_date}T00:00:00`) : null;
     const end = event?.end_date ? new Date(`${event.end_date}T00:00:00`) : start;
-    const isTeaching = Boolean(event?.is_teaching_day);
-    const initialType = event?.event_type || 'festival_holiday';
+    const isExisting = Boolean(event?.id);
+    const initialType = isExisting
+      ? getMatchingEventType(event)
+      : event?.event_type && CALENDAR_EVENT_CONFIGS[event.event_type]
+        ? event.event_type
+        : '';
     const cfg = CALENDAR_EVENT_CONFIGS[initialType];
 
     setStartDateObj(start);
@@ -341,18 +411,16 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
       event_name: event?.event_name || event?.title || '',
       start_date: event?.start_date || '',
       end_date: event?.end_date || event?.start_date || '',
-      is_teaching_day: event ? isTeaching : (cfg?.is_teaching_day ?? false),
-      is_student_holiday: event
-        ? isTeaching
-          ? false
-          : Boolean(event.is_student_holiday)
-        : (cfg?.is_student_holiday ?? true),
-      is_teacher_holiday: event
-        ? isTeaching
-          ? false
-          : Boolean(event?.is_teacher_holiday)
-        : (cfg?.is_teacher_holiday ?? true),
-      color_code: event?.color_code || cfg?.color_code || '#e31a1c',
+      is_teaching_day: isExisting
+        ? Boolean(event.is_teaching_day)
+        : (cfg?.is_teaching_day ?? false),
+      is_student_holiday: isExisting
+        ? Boolean(event.is_student_holiday)
+        : (cfg?.is_student_holiday ?? false),
+      is_teacher_holiday: isExisting
+        ? Boolean(event.is_teacher_holiday)
+        : (cfg?.is_teacher_holiday ?? false),
+      color_code: event?.color_code || cfg?.color_code || CALENDAR_COLOR_NAMES.RED,
     });
   }, [event, academicYear]);
 
@@ -397,7 +465,7 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!draft.event_name.trim() || !draft.start_date) return;
+    if (!draft.event_type || !draft.event_name.trim() || !draft.start_date) return;
     onSave({
       ...draft,
       event_name: draft.event_name.trim(),
@@ -487,8 +555,8 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
       }}
       className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-dark-almostblack/45 backdrop-blur-xs"
     >
-      <div className="w-full max-w-lg rounded-3xl border border-light-border bg-white shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-light-border">
+      <div className="w-full max-w-lg rounded-3xl border border-light-border bg-white shadow-2xl relative">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-light-border rounded-t-3xl">
           <div>
             <h3 className="text-base font-black text-dark-primary">
               {event?.id ? 'Edit Calendar Event' : 'Add Calendar Event'}
@@ -521,12 +589,16 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
 
           {/* Event type */}
           <label className="text-xs font-bold text-dark-soft block">
-            Event type
+            Event type <span className="text-red-500">*</span>
             <select
+              required
               value={draft.event_type}
               onChange={(e) => handleEventTypeChange(e.target.value)}
               className="mt-1 w-full px-3 py-2 rounded-xl border border-light-border text-xs font-semibold outline-none focus:border-brand-primary cursor-pointer"
             >
+              <option value="" disabled>
+                -- Select Event Type --
+              </option>
               {CALENDAR_EVENT_TYPES.map((type) => (
                 <option key={type.value} value={type.value}>
                   {type.label}
@@ -608,21 +680,36 @@ const AcademicCalendarEventModal = ({ event, academicYear, onClose, onSave, savi
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-light-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-light-border text-xs font-bold text-dark-soft hover:bg-light-bg cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-black hover:bg-brand-primary/90 disabled:opacity-50 cursor-pointer shadow-sm"
-            >
-              {saving ? 'Saving...' : 'Save Event'}
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-light-border">
+            <div>
+              {event?.id && onDelete && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => onDelete(event)}
+                  className="px-3 py-2 rounded-xl text-red-600 hover:bg-red-50 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition disabled:opacity-50"
+                >
+                  <i className="fas fa-trash-alt text-xs" />
+                  <span>Delete Event</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl border border-light-border text-xs font-bold text-dark-soft hover:bg-light-bg cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-black hover:bg-brand-primary/90 disabled:opacity-50 cursor-pointer shadow-sm"
+              >
+                {saving ? 'Saving...' : 'Save Event'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
