@@ -19,6 +19,7 @@ import EmployeeRecordsView from './employees/EmployeeRecordsView';
 import SyllabusTrackerPortal from './syllabus/SyllabusTrackerPortal';
 import CandidatePortal from './auth/CandidatePortal';
 import TVDisplayDashboard from './dashboard/TVDisplayDashboard';
+import AcademicCalendarView from './academic-calendar/AcademicCalendarView';
 
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
@@ -177,6 +178,16 @@ export const AppRoutes = ({
                 role="parent"
                 tiles={getPortalTiles('parent', [
                   {
+                    id: 'academic-calendar',
+                    title: 'Academic Calendar',
+                    description:
+                      'View holidays, examinations, preparation days, and teaching days.',
+                    icon: 'fa-calendar-days',
+                    buttonColor: 'bg-teal-600 text-white',
+                    shadow: 'shadow-teal-200',
+                    onClick: () => setParentSubView('academic-calendar'),
+                  },
+                  {
                     id: 'view-timetable',
                     title: 'Class Schedule',
                     titleKey: 'role_portal.class_schedule.title',
@@ -225,6 +236,11 @@ export const AppRoutes = ({
                     <SyllabusTrackerPortal role="parent" student={user?.student} />
                   </div>
                 )}
+                {parentSubView === 'academic-calendar' && (
+                  <div data-academic-calendar="true">
+                    <AcademicCalendarView canEdit={false} />
+                  </div>
+                )}
               </RolePortal>
             ) : (
               <Navigate to="/" replace />
@@ -245,6 +261,16 @@ export const AppRoutes = ({
                 userRoles={userRoles}
                 role="teacher"
                 tiles={getPortalTiles('teacher', [
+                  {
+                    id: 'academic-calendar',
+                    title: 'Academic Calendar',
+                    description:
+                      'View holidays, examinations, preparation days, and teaching days.',
+                    icon: 'fa-calendar-days',
+                    buttonColor: 'bg-teal-600 text-white',
+                    shadow: 'shadow-teal-200',
+                    onClick: () => setTeacherSubView('academic-calendar'),
+                  },
                   {
                     id: 'dashboard',
                     title: 'Dashboard',
@@ -368,6 +394,11 @@ export const AppRoutes = ({
                 {teacherSubView === 'tickets' && (
                   <div data-tickets="true">
                     <ReporterTicketsView user={user} fullName={fullName} />
+                  </div>
+                )}
+                {teacherSubView === 'academic-calendar' && (
+                  <div data-academic-calendar="true">
+                    <AcademicCalendarView canEdit={false} />
                   </div>
                 )}
               </RolePortal>

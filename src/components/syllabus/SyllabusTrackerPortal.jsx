@@ -563,20 +563,27 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
           const nestedProgress = Array.isArray(item.lesson_progress)
             ? item.lesson_progress[0]
             : item.lesson_progress;
+          const fallbackLog = allLogs.find((l) => String(l.id) === String(item.progress_id));
           const progressObj =
-            nestedProgress || (typeof item.progress === 'object' ? item.progress : null);
+            nestedProgress || (typeof item.progress === 'object' ? item.progress : null) || fallbackLog;
           const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
-          const lesson = progressObj ? progressObj.lesson : null;
+          const lesson =
+            (progressObj && progressObj.lesson) ||
+            allLessons.find((l) => String(l.id) === String(progressObj?.lesson_id)) ||
+            null;
           const book =
             progressObj?.book ||
-            books.find((b) => String(b.id) === String(progressObj?.book_id || lesson?.book_id));
+            books.find((b) => String(b.id) === String(progressObj?.book_id || lesson?.book_id)) ||
+            null;
           const subject =
             progressObj?.subject ||
             subjects.find((s) => String(s.id) === String(progressObj?.subject_id)) ||
-            (book ? subjects.find((s) => String(s.id) === String(book.subject_id)) : null);
+            (book ? subjects.find((s) => String(s.id) === String(book.subject_id)) : null) ||
+            null;
           const cls =
             progressObj?.class ||
-            classes.find((c) => String(c.id) === String(progressObj?.class_id));
+            classes.find((c) => String(c.id) === String(progressObj?.class_id)) ||
+            null;
 
           const rawProgress =
             typeof item.progress === 'number'
@@ -633,6 +640,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       books,
       subjects,
       classes,
+      allLogs,
+      allLessons,
     ]
   );
 
@@ -1165,26 +1174,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       if (selectedClassIds.size > 0 && !selectedClassIds.has(String(mapping.class_id))) {
         return false;
       }
-      if (role !== 'teacher') return true;
-      const mappedBook = books.find((book) => String(book.id) === String(mapping.book_id));
-      return assignments.some(
-        (assignment) =>
-          String(assignment.class_id) === String(mapping.class_id) &&
-          String(assignment.subject_id) === String(mappedBook?.subject_id)
-      );
+      return true;
     });
   };
 
   const getFilteredSubjectOpts = () => {
-    const mappedBookIds = new Set(
-      getProgressBookMappings().map((mapping) => String(mapping.book_id))
-    );
-    let filtered = subjects.filter((subject) =>
-      books.some(
-        (book) =>
-          String(book.subject_id) === String(subject.id) && mappedBookIds.has(String(book.id))
-      )
-    );
+    let filtered = subjects;
     if (cpFilterClassifications.length > 0) {
       filtered = filtered.filter((s) =>
         cpFilterClassifications.includes(String(s.classification_id))
@@ -1194,31 +1189,20 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   };
 
   const getFilteredClassificationOpts = () => {
-    const availableSubjectIds = new Set(
-      getFilteredSubjectOpts().map((subject) => String(subject.id))
-    );
-    const classificationIds = new Set(
-      subjects
-        .filter((subject) => availableSubjectIds.has(String(subject.id)))
-        .map((subject) => String(subject.classification_id))
-    );
-    return classifications
-      .filter((classification) => classificationIds.has(String(classification.id)))
-      .map((classification) => ({ id: String(classification.id), label: classification.name }));
+    return classifications.map((cl) => ({ id: String(cl.id), label: cl.name }));
   };
 
   const getFilteredBookOpts = () => {
-    const mappedBookIds = new Set(
-      getProgressBookMappings().map((mapping) => String(mapping.book_id))
-    );
-    let filtered = books.filter((book) => mappedBookIds.has(String(book.id)));
+    let filtered = books;
     if (cpFilterSubjects.length > 0) {
       filtered = filtered.filter((b) => cpFilterSubjects.includes(String(b.subject_id)));
     } else if (cpFilterClassifications.length > 0) {
-      const allowedSubjectIds = subjects
-        .filter((s) => cpFilterClassifications.includes(String(s.classification_id)))
-        .map((s) => String(s.id));
-      filtered = filtered.filter((b) => allowedSubjectIds.includes(String(b.subject_id)));
+      const allowedSubjectIds = new Set(
+        subjects
+          .filter((s) => cpFilterClassifications.includes(String(s.classification_id)))
+          .map((s) => String(s.id))
+      );
+      filtered = filtered.filter((b) => allowedSubjectIds.has(String(b.subject_id)));
     }
     return filtered.map((b) => ({ id: String(b.id), label: b.name }));
   };
@@ -1281,7 +1265,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
     return filtered.map((b) => ({ id: String(b.id), label: b.name }));
   };
 
-  const getClassesToRender = ({ ignoreSelectedClasses = false } = {}) => {
+  const getClassesToRender = () => {
     let baseClasses = classes;
     if (role === 'parent' && student?.class_id) {
       baseClasses = classes.filter((c) => String(c.id) === String(student.class_id));
@@ -1292,17 +1276,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
           : classes.filter((c) => assignments.some((a) => String(a.class_id) === String(c.id)));
     }
 
-    return baseClasses.filter((c) => {
-      if (!ignoreSelectedClasses && cpFilterClasses.length > 0) {
-        return cpFilterClasses.includes(String(c.id));
-      }
-      if (role === 'parent' || role === 'teacher') return true;
-      return bookClasses.some(
-        (bc) =>
-          String(bc.class_id) === String(c.id) &&
-          books.some((fb) => String(fb.id) === String(bc.book_id))
-      );
-    });
+    if (cpFilterClasses.length > 0) {
+      return baseClasses.filter((c) => cpFilterClasses.includes(String(c.id)));
+    }
+    return baseClasses;
   };
 
   const lpTeacherId = teacher?.id ? String(teacher.id) : '';
@@ -1934,16 +1911,13 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                   <MultiSelectDropdown
                     label=""
                     placeholder="Class"
-                    options={getClassesToRender({ ignoreSelectedClasses: true }).map((c) => ({
+                    options={classes.map((c) => ({
                       id: String(c.id),
                       label: c.name || c.class_name,
                     }))}
                     selected={cpFilterClasses}
                     onChange={(val) => {
                       setCpFilterClasses(val);
-                      setCpFilterClassifications([]);
-                      setCpFilterSubjects([]);
-                      setCpFilterBooks([]);
                       setProgressExpandedBook(null);
                       setProgressExpandedClass(null);
                     }}

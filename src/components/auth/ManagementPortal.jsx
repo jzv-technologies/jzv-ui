@@ -16,6 +16,7 @@ import SalaryTrackerView from '../employees/SalaryTrackerView';
 import AdminStudentsView from '../students/AdminStudentsView';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import { CARD_THEMES } from '../../utils/cardTheme';
+import AcademicCalendarView from '../academic-calendar/AcademicCalendarView';
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -564,6 +565,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   }, [subView]);
 
   const baseManagementTiles = [
+    {
+      id: 'academic-calendar',
+      title: 'Academic Calendar',
+      description: 'Manage holidays, examinations, preparation days, and teaching days.',
+      icon: 'fa-calendar-days',
+      buttonColor: 'bg-teal-600 text-white',
+      shadow: 'shadow-teal-200',
+      onClick: () => onSetSubView('academic-calendar'),
+    },
     {
       id: 'dashboard',
       title: 'Dashboard',
@@ -1542,6 +1552,11 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'dashboard' && (
         <div data-dashboard="true">
           <SyllabusTrackerPortal role="management" dashboardOnly />
+        </div>
+      )}
+      {subView === 'academic-calendar' && (
+        <div data-academic-calendar="true">
+          <AcademicCalendarView canEdit />
         </div>
       )}
       {subView === 'syllabus-manager' && (
