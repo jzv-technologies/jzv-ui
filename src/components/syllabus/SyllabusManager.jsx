@@ -537,14 +537,11 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     if (!bookId || !isSupabaseMode) return;
     setLoadingBookIds((prev) => new Set(prev).add(String(bookId)));
     try {
-      const { data, error } = await fetchAllPages(
-        'syl_lessons',
-        '*',
-        (q) =>
-          q
-            .eq('book_id', bookId)
-            .order('sequence', { ascending: true, nullsFirst: false })
-            .order('id', { ascending: true })
+      const { data, error } = await fetchAllPages('syl_lessons', '*', (q) =>
+        q
+          .eq('book_id', bookId)
+          .order('sequence', { ascending: true, nullsFirst: false })
+          .order('id', { ascending: true })
       );
       if (error) throw error;
 
@@ -909,6 +906,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                 name: data.name,
                 hierarchy_type: data.hierarchyType,
                 levels_available: data.levelsAvailable,
+                subject_id: data.subjectId,
               })
               .eq('id', data.node.id);
 
@@ -938,6 +936,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     name: data.name,
                     hierarchy_type: data.hierarchyType,
                     levels_available: data.levelsAvailable,
+                    subject_id: data.subjectId,
                   }
                 : b
             ),
@@ -1718,7 +1717,8 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
             const l2Keys = Object.keys(l2Groups).filter((k) => k !== '_direct_lessons' && k);
 
             if (levelsAvailable === 1) {
-              const directNode = (l2Groups['_direct_lessons'] && l2Groups['_direct_lessons'][0]) || {
+              const directNode = (l2Groups['_direct_lessons'] &&
+                l2Groups['_direct_lessons'][0]) || {
                 level1: l1,
                 page_count: 0,
                 complexity: 'Easy',
@@ -2611,6 +2611,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       level: 'book',
                                       node: book,
                                       name: book.name,
+                                      subjectId: book.subject_id,
                                     })
                                   }
                                   className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
@@ -2654,6 +2655,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         <SyllabusFormModal
           modal={modal}
           classifications={classifications}
+          subjects={subjects}
           onClose={() => setModal(null)}
           onSave={handleSaveNode}
         />
@@ -2902,11 +2904,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   );
 };
 
-const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
+const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }) => {
   const {
     type,
     level,
     name: pName,
+    subjectId: pSubjectId,
     hierarchy,
     bookId,
     oldLevel1,
@@ -2920,6 +2923,9 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
   const [name, setName] = useState(isEdit ? pName || modal.node?.name || '' : '');
   const [classificationId, setClassificationId] = useState(
     isEdit && level === 'subject' ? modal.node?.classification_id || '' : ''
+  );
+  const [subjectId, setSubjectId] = useState(
+    isEdit && level === 'book' ? pSubjectId || modal.node?.subject_id || '' : modal.parentId || ''
   );
   const [requiresTeacher, setRequiresTeacher] = useState(
     isEdit && level === 'subject' ? modal.node?.requires_teacher !== false : true
@@ -3051,6 +3057,7 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
         requires_teacher: level === 'subject' ? requiresTeacher : undefined,
         hierarchyType: finalHierarchyType,
         levelsAvailable: currentLevelsAvailable,
+        subjectId: level === 'book' ? subjectId : undefined,
         oldLevelsAvailable,
         defaultL2Name,
         defaultL3Name,
@@ -3075,6 +3082,7 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
           requires_teacher: level === 'subject' ? requiresTeacher : undefined,
           hierarchyType: finalHierarchyType,
           levelsAvailable: currentLevelsAvailable,
+          subjectId: level === 'book' ? subjectId : undefined,
           parentId: modal.parentId,
         });
       } else if (level === 'node') {
@@ -3186,6 +3194,25 @@ const SyllabusFormModal = ({ modal, classifications, onClose, onSave }) => {
               )}
               {level === 'book' && (
                 <div className="space-y-3 bg-light-bg/20 p-3.5 rounded-2xl border border-light-border">
+                  <div>
+                    <label className="block text-[11px] font-bold text-dark-soft mb-1">
+                      Subject
+                    </label>
+                    <select
+                      value={subjectId}
+                      onChange={(e) => setSubjectId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 border rounded-xl text-xs font-semibold"
+                    >
+                      <option value="">Select Subject</option>
+                      {(subjects || []).map((subject) => (
+                        <option key={subject.id} value={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="text-xs font-bold text-dark-primary flex items-center justify-between">
                     <span>Book Hierarchy Levels</span>
                     <span className="text-[10px] bg-brand-lbg text-brand-primary font-extrabold px-2 py-0.5 rounded-full">

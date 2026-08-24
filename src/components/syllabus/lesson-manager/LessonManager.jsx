@@ -9,7 +9,6 @@ import AssignLessonsModal from './AssignLessonsModal';
 import MapBookModal from './MapBookModal';
 import ProgressPanel from './ProgressPanel';
 
-
 // Shared module-level cache for LessonManager
 let lessonManagerCache = {
   userId: null,
@@ -496,12 +495,48 @@ const LessonManager = ({
   ]);
 
   const availableClassifications = useMemo(() => {
-    if (!selectedClassId || classSubjects.length === 0) return [];
+    if (!selectedClassId && !showAllClasses) return [];
+
+    const scopedClassIds = selectedClassId
+      ? new Set([String(selectedClassId)])
+      : new Set(availableClasses.map((classItem) => String(classItem.id)));
+    const scopedSubjectIds = new Set();
+
+    assignments.forEach((assignment) => {
+      if (scopedClassIds.has(String(assignment.class_id))) {
+        scopedSubjectIds.add(String(assignment.subject_id));
+      }
+    });
+    timetableSlots.forEach((slot) => {
+      if (scopedClassIds.has(String(slot.class_id)) && slot.subject_id) {
+        scopedSubjectIds.add(String(slot.subject_id));
+      }
+    });
+    bookClasses.forEach((mapping) => {
+      if (scopedClassIds.has(String(mapping.class_id))) {
+        const book = books.find((item) => String(item.id) === String(mapping.book_id));
+        if (book) scopedSubjectIds.add(String(book.subject_id));
+      }
+    });
+
     const classSubjectClassificationIds = new Set(
-      classSubjects.map((s) => String(s.classification_id)).filter(Boolean)
+      subjects
+        .filter((subject) => scopedSubjectIds.has(String(subject.id)))
+        .map((subject) => String(subject.classification_id))
+        .filter(Boolean)
     );
     return classifications.filter((c) => classSubjectClassificationIds.has(String(c.id)));
-  }, [selectedClassId, classSubjects, classifications]);
+  }, [
+    selectedClassId,
+    showAllClasses,
+    availableClasses,
+    assignments,
+    timetableSlots,
+    bookClasses,
+    books,
+    subjects,
+    classifications,
+  ]);
 
   const availableSubjects = useMemo(() => {
     if (!selectedClassificationId) return classSubjects;
@@ -560,14 +595,11 @@ const LessonManager = ({
     let isMounted = true;
     const fetchBookLessons = async () => {
       try {
-        const { data, error } = await fetchAllPages(
-          'syl_lessons',
-          '*',
-          (q) =>
-            q
-              .eq('book_id', selectedBookId)
-              .order('sequence', { ascending: true, nullsFirst: false })
-              .order('id', { ascending: true })
+        const { data, error } = await fetchAllPages('syl_lessons', '*', (q) =>
+          q
+            .eq('book_id', selectedBookId)
+            .order('sequence', { ascending: true, nullsFirst: false })
+            .order('id', { ascending: true })
         );
         if (error) throw error;
         if (isMounted && data) {

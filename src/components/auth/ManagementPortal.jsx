@@ -239,9 +239,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
       if (secureTeachersErr) {
-        const { data: fallbackTeachers } = await supabase
-          .from('teachers')
-          .select('*');
+        const { data: fallbackTeachers } = await supabase.from('teachers').select('*');
         teacherRows = Array.isArray(fallbackTeachers) ? fallbackTeachers : [];
       }
 
@@ -566,6 +564,15 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   }, [subView]);
 
   const baseManagementTiles = [
+    {
+      id: 'dashboard',
+      title: 'Dashboard',
+      description: 'View syllabus progress, activity, and attention-required insights.',
+      icon: 'fa-gauge-high',
+      buttonColor: 'bg-indigo-600 text-white',
+      shadow: 'shadow-indigo-200',
+      onClick: () => onSetSubView('dashboard'),
+    },
     {
       id: 'employee-records',
       title: 'Employee Management',
@@ -1530,6 +1537,11 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'lesson-planner-tracker' && (
         <div data-lesson-planner-tracker="true">
           <SyllabusTrackerPortal role="management" />
+        </div>
+      )}
+      {subView === 'dashboard' && (
+        <div data-dashboard="true">
+          <SyllabusTrackerPortal role="management" dashboardOnly />
         </div>
       )}
       {subView === 'syllabus-manager' && (

@@ -224,7 +224,6 @@ const DailyActivityTable = ({
                   <th className="px-4 py-3 min-w-[60px] text-center">Action</th>
                 </tr>
                 {/* Filter inputs row (only for non-teachers) */}
-
               </>
             )}
           </thead>
@@ -232,7 +231,7 @@ const DailyActivityTable = ({
             {filteredDailyEntries.length === 0 ? (
               <tr>
                 <td
-                  colSpan={isParent ? 5 : (role === 'teacher' ? 8 : 9)}
+                  colSpan={isParent ? 5 : role === 'teacher' ? 8 : 9}
                   className="text-center py-6 text-gray-400 font-semibold"
                 >
                   No entries match your search filters.
@@ -321,8 +320,10 @@ const DailyActivityTable = ({
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {(() => {
-                          const canDelete = isCreatedToday ? isCreatedToday(entry.created_at) : true;
-                          return canDelete && handleDeleteClick ? (
+                          const canDelete = isCreatedToday
+                            ? isCreatedToday(entry.created_at)
+                            : true;
+                          return role === 'management' && canDelete && handleDeleteClick ? (
                             <button
                               onClick={() => handleDeleteClick(entry)}
                               className="p-1 text-red-primary hover:bg-red-50 rounded transition-colors cursor-pointer"

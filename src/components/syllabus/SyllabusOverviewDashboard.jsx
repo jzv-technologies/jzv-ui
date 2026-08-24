@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase, fetchAllPages } from '../../../utils/supabase';
-import { showToast } from '../../../utils/toast';
-import ClassSubjectHeatmap from './ClassSubjectHeatmap';
-import ProgressTrendChart from './ProgressTrendChart';
-import AttentionRequiredPanel from './AttentionRequiredPanel';
-import ClassDonutCharts from './ClassDonutCharts';
-import TeacherSubmissionHeatmap from './TeacherSubmissionHeatmap';
-import AcademicCalendarModal from './AcademicCalendarModal';
+import { supabase, fetchAllPages } from '../../utils/supabase';
+import { showToast } from '../../utils/toast';
+import ClassSubjectHeatmap from './dashboard/ClassSubjectHeatmap';
+import ProgressTrendChart from './dashboard/ProgressTrendChart';
+import AttentionRequiredPanel from './dashboard/AttentionRequiredPanel';
+import ClassDonutCharts from './dashboard/ClassDonutCharts';
+import TeacherSubmissionHeatmap from './dashboard/TeacherSubmissionHeatmap';
+import AcademicCalendarModal from './dashboard/AcademicCalendarModal';
 import {
   buildAcademicCalendarRows,
   buildAcademicMonths,
@@ -24,7 +24,7 @@ import {
   getCurrentAcademicYearLabel,
   parseAcademicYearLabel,
   getAcademicMonthYear,
-} from './overviewUtils';
+} from './dashboard/overviewUtils';
 
 const SyllabusOverviewDashboard = ({
   role,
@@ -262,7 +262,8 @@ const SyllabusOverviewDashboard = ({
   );
 
   const heatmap = useMemo(
-    () => buildHeatmapModel({ classes, subjects, classifications, pacingRecords, assignments, books }),
+    () =>
+      buildHeatmapModel({ classes, subjects, classifications, pacingRecords, assignments, books }),
     [classes, subjects, classifications, pacingRecords, assignments, books]
   );
 
@@ -385,7 +386,9 @@ const SyllabusOverviewDashboard = ({
         book_id: row.bookId,
         expected_end_date: row.expectedEndDate || row.expectedEndMonth || null,
         ...(row.expectedStartDate ? { expected_start_date: row.expectedStartDate } : {}),
-        ...(row.expectedPercentage !== undefined ? { expected_percentage: row.expectedPercentage } : {}),
+        ...(row.expectedPercentage !== undefined
+          ? { expected_percentage: row.expectedPercentage }
+          : {}),
         updated_at: new Date().toISOString(),
       }));
 
@@ -540,6 +543,17 @@ const SyllabusOverviewDashboard = ({
             )}
           </button>
         ))}
+        {role === 'management' && (
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            title="Academic Calendar and Book Targets"
+            aria-label="Academic Calendar and Book Targets"
+            className="ml-auto shrink-0 w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:bg-light-bg transition-colors inline-flex items-center justify-center"
+          >
+            <i className="fas fa-gear text-sm"></i>
+          </button>
+        )}
       </div>
 
       {/* Active Sub-View Content */}

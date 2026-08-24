@@ -107,7 +107,10 @@ const SyllabusProgressGrid = ({
       bookProgressPct >= 70 ? '#10b981' : bookProgressPct >= 30 ? '#f59e0b' : '#ef4444';
 
     return (
-      <div className="w-full lg:w-[35%] bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-left">
+      <div
+        className="w-full lg:w-[35%] bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-left"
+        data-level1-progress-panel="true"
+      >
         <div>
           <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
             <i className="fas fa-list-ul text-brand-primary"></i>
@@ -251,7 +254,10 @@ const SyllabusProgressGrid = ({
     const titleHeader = selectedLevel1 === 'all' ? 'All Level 1 Units' : selectedLevel1;
 
     return (
-      <div className="flex-1 bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-right overflow-hidden w-full">
+      <div
+        className="flex-1 bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-right overflow-hidden w-full"
+        data-lesson-progress-panel="true"
+      >
         {progressLoading ? (
           <div className="flex flex-col items-center justify-center p-12 gap-2 w-full">
             <div className="w-8 h-8 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
@@ -483,7 +489,7 @@ const SyllabusProgressGrid = ({
                                             </p>
                                           )}
                                         </div>
-                                        {role !== 'parent' && handleDeleteClick && (
+                                        {role === 'management' && handleDeleteClick && (
                                           <button
                                             onClick={() =>
                                               handleDeleteClick(item, log, node, bookObj)
@@ -647,7 +653,7 @@ const SyllabusProgressGrid = ({
       const bookLogs = allLogs.filter(
         (log) =>
           String(log.class_id) === String(classObj.id) &&
-          bookLessonIds.includes(String(log.lesson_id))
+          (String(log.book_id) === String(book.id) || bookLessonIds.includes(String(log.lesson_id)))
       );
       const revisionCount = bookLogs.reduce((sum, log) => sum + (log.revision_counter || 0), 0);
 
@@ -895,7 +901,14 @@ const SyllabusProgressGrid = ({
 
   return (
     <div className="space-y-6">
-      {classesToRender.length === 0 ? (
+      {classesToRender.length === 0 ||
+      !classesToRender.some((classItem) =>
+        bookClasses.some(
+          (bookClass) =>
+            String(bookClass.class_id) === String(classItem.id) &&
+            books.some((book) => String(book.id) === String(bookClass.book_id))
+        )
+      ) ? (
         <div className="p-12 text-center bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
           No matching classes/books progress found.
         </div>

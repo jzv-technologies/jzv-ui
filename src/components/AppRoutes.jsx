@@ -246,6 +246,16 @@ export const AppRoutes = ({
                 role="teacher"
                 tiles={getPortalTiles('teacher', [
                   {
+                    id: 'dashboard',
+                    title: 'Dashboard',
+                    description:
+                      'View syllabus progress, activity, and attention-required insights.',
+                    icon: 'fa-gauge-high',
+                    buttonColor: 'bg-indigo-600 text-white',
+                    shadow: 'shadow-indigo-200',
+                    onClick: () => setTeacherSubView('dashboard'),
+                  },
+                  {
                     id: 'view-timetable',
                     title: 'View Timetable',
                     titleKey: 'role_portal.view_timetable.title',
@@ -342,6 +352,16 @@ export const AppRoutes = ({
                       role="teacher"
                       user={user}
                       teacherRecord={teacherRecord}
+                    />
+                  </div>
+                )}
+                {teacherSubView === 'dashboard' && (
+                  <div data-dashboard="true">
+                    <SyllabusTrackerPortal
+                      role="teacher"
+                      user={user}
+                      teacherRecord={teacherRecord}
+                      dashboardOnly
                     />
                   </div>
                 )}
