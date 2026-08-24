@@ -30,6 +30,101 @@ const getGregorianFromAcademic = (academicIndex, baseYear) => {
 
 const getAcademicYearLabel = (baseYear) => `${baseYear}-${String(baseYear + 1).slice(-2)}`;
 
+// --- Helper: Compute day-by-day month summary with zero double-counting ---
+export const computeMonthSummary = (year, month, events = [], weeklyOffDays = ['Sunday']) => {
+  const daysInMonth = new Date(year, month, 0).getDate(); // month is 1-based (1..12)
+  let totalDays = daysInMonth;
+  let weekendDays = 0;
+  let holidays = 0;
+  let examDays = 0;
+  let workingDays = 0;
+  let teachingDays = 0;
+
+  const dayMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month - 1, d);
+    const dayName = dayMap[dateObj.getDay()];
+    const isWeekend = weeklyOffDays.includes(dayName);
+
+    // Find all events overlapping this day
+    const dayEvents = events.filter((event) => {
+      const start = new Date(`${event.start_date}T00:00:00`);
+      const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
+      return start <= dateObj && end >= dateObj;
+    });
+
+    if (isWeekend) {
+      weekendDays++;
+    }
+
+    // Check if any event explicitly requires students and teachers (both holidays OFF)
+    const hasEventNeedingEveryone = dayEvents.some(
+      (e) => !e.is_student_holiday && !e.is_teacher_holiday
+    );
+
+    // Holiday determination:
+    // If an event requires everyone -> treated as NO holiday.
+    // Otherwise, if any event marks student or teacher holiday -> Holiday.
+    const isHoliday =
+      !hasEventNeedingEveryone &&
+      dayEvents.some((e) => e.is_student_holiday || e.is_teacher_holiday);
+
+    // Exam determination:
+    const isExam = dayEvents.some(
+      (e) =>
+        e.event_type === 'examination' ||
+        e.event_type === 'examinations' ||
+        (e.event_name || '').toLowerCase().includes('exam')
+    );
+
+    if (isHoliday) {
+      holidays++;
+    }
+    if (isExam) {
+      examDays++;
+    }
+
+    // Working Day determination:
+    // A weekday that is not a holiday
+    if (!isWeekend && !isHoliday) {
+      workingDays++;
+    }
+
+    // Teaching Day determination:
+    // Must be a weekday and not a holiday:
+    // - If dayEvents is empty: default weekday is a teaching day.
+    // - If dayEvents exists:
+    //     - If any event has is_teaching_day === true -> Teaching day
+    //     - If all events on that day have is_teaching_day === false -> Non-teaching day
+    //     - Otherwise -> Teaching day
+    if (!isWeekend && !isHoliday) {
+      if (dayEvents.length === 0) {
+        teachingDays++;
+      } else {
+        const hasExplicitTeaching = dayEvents.some((e) => e.is_teaching_day);
+        const hasExplicitNonTeaching = dayEvents.some((e) => !e.is_teaching_day);
+        if (hasExplicitTeaching) {
+          teachingDays++;
+        } else if (!hasExplicitNonTeaching) {
+          teachingDays++;
+        }
+      }
+    }
+  }
+
+  return {
+    year,
+    month,
+    total_days: totalDays,
+    weekend_days: weekendDays,
+    holidays,
+    exam_days: examDays,
+    working_days: workingDays,
+    teaching_days: teachingDays,
+  };
+};
+
 const AcademicCalendarView = ({ canEdit = false }) => {
   const [events, setEvents] = useState([]);
   const [calendarMonths, setCalendarMonths] = useState([]);
@@ -106,9 +201,14 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     return `${monthName} ${year} (AY ${ayLabel})`;
   };
 
-  const monthSummary = calendarMonths.find(
-    (row) => row.year === currentYearMonth.year && row.month === currentYearMonth.month
-  );
+  const monthSummary = useMemo(() => {
+    return computeMonthSummary(
+      currentYearMonth.year,
+      currentYearMonth.month,
+      events,
+      weeklyOffDays
+    );
+  }, [currentYearMonth, events, weeklyOffDays]);
 
   const getCalendarCells = (year, monthIndex) => {
     const firstDay = new Date(year, monthIndex, 1).getDay();
@@ -484,6 +584,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
               (typeFilter === 'all' || event.event_type === typeFilter)
             );
           });
+          const summaryForMonth = computeMonthSummary(gYear, gMonth + 1, events, weeklyOffDays);
           const cells = getCalendarCells(gYear, gMonth);
 
           return (
@@ -491,9 +592,14 @@ const AcademicCalendarView = ({ canEdit = false }) => {
               key={idx}
               className="bg-white rounded-2xl border border-light-border shadow-sm hover:shadow-md transition p-3"
             >
-              <h2 className="text-sm font-black text-dark-primary mb-2">
-                {new Date(gYear, gMonth, 1).toLocaleDateString(undefined, { month: 'long' })}
-              </h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-black text-dark-primary">
+                  {new Date(gYear, gMonth, 1).toLocaleDateString(undefined, { month: 'long' })}
+                </h2>
+                <span className="text-[10px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded-full">
+                  {summaryForMonth.teaching_days} teaching days
+                </span>
+              </div>
               <div className="grid grid-cols-7 gap-0.5 text-center">
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
                   <span key={i} className="text-[8px] font-black text-gray-300">
@@ -502,22 +608,45 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                 ))}
                 {cells.map((date, i) => {
                   const isWeekend = isDateWeekend(date, weeklyOffDays);
-                  const hasEvent =
-                    date &&
-                    monthEvents.some(
-                      (event) =>
-                        new Date(`${event.start_date}T00:00:00`) <= date &&
-                        new Date(`${event.end_date || event.start_date}T00:00:00`) >= date
-                    );
+                  const dayEvents = date
+                    ? monthEvents.filter((event) => {
+                        const start = new Date(`${event.start_date}T00:00:00`);
+                        const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
+                        return start <= date && end >= date;
+                      })
+                    : [];
+
+                  const visibleDayEvents = dayEvents.filter((event) => {
+                    if (!isWeekend) return true;
+                    const isHoliday = event.is_student_holiday || event.is_teacher_holiday;
+                    const isAllThreeOff =
+                      !event.is_teaching_day &&
+                      !event.is_student_holiday &&
+                      !event.is_teacher_holiday;
+                    if (isHoliday || isAllThreeOff) return false;
+                    return true;
+                  });
+
+                  const activeEvent = visibleDayEvents[0];
+                  const color = activeEvent?.color_code;
+
                   return (
                     <span
                       key={i}
-                      className={`min-h-6 rounded-sm flex items-center justify-center text-[9px] font-semibold ${
-                        hasEvent
-                          ? 'bg-brand-primary/15 text-brand-primary'
+                      style={color ? { backgroundColor: color, color: '#ffffff' } : {}}
+                      title={
+                        activeEvent
+                          ? `${date?.toLocaleDateString()}: ${activeEvent.event_name}`
+                          : ''
+                      }
+                      className={`min-h-6 rounded-md flex items-center justify-center text-[9px] font-bold transition-all ${
+                        activeEvent
+                          ? 'shadow-2xs font-extrabold'
                           : isWeekend
-                            ? 'text-gray-300'
-                            : 'text-gray-600'
+                            ? 'text-red-500 bg-red-100/60 font-black'
+                            : date
+                              ? 'text-gray-700 hover:bg-gray-100'
+                              : 'text-transparent'
                       }`}
                     >
                       {date?.getDate() || ''}
