@@ -71,8 +71,11 @@ export const buildAcademicCalendarRows = (academicYearLabel, calendarEntries = [
       year,
       month,
       monthLabel: label,
+      total_days: toNumber(entry?.total_days, new Date(year, month, 0).getDate()),
       working_days: toNumber(entry?.working_days, DEFAULT_WORKING_DAYS),
       teaching_days: toNumber(entry?.teaching_days, DEFAULT_TEACHING_DAYS),
+      activity_days: toNumber(entry?.activity_days, 0),
+      holidays: toNumber(entry?.holidays ?? entry?.student_holidays, 0),
       source: entry ? 'database' : 'default',
     };
   });

@@ -415,9 +415,9 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                 <th className="sticky left-[130px] top-0 z-30 bg-gray-50 px-3 py-3 text-left text-[11px] font-black text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[150px] shadow-2xs">
                   Subject
                 </th>
-                {activeClasses.map((clsRow) => (
+                {activeClasses.map((clsRow, cIdx) => (
                   <th
-                    key={clsRow.classId}
+                    key={`th-cls-${clsRow.classId}-${cIdx}`}
                     className="px-2 py-3 text-[11px] font-black text-gray-800 text-center border-r border-gray-200 bg-gray-50 min-w-[85px]"
                   >
                     <span className="block truncate" title={clsRow.className}>
@@ -432,9 +432,9 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                 <th className="sticky left-0 top-0 z-30 bg-gray-50 px-4 py-3 text-left text-[11px] font-black text-gray-700 uppercase tracking-wider border-r border-gray-200 min-w-[140px]">
                   Class
                 </th>
-                {activeSubjects.map((subj) => (
+                {activeSubjects.map((subj, sIdx) => (
                   <th
-                    key={subj.id}
+                    key={`th-subj-${subj.id}-${sIdx}`}
                     className="px-2 py-3 text-[11px] font-black text-gray-800 text-center border-r border-gray-200 bg-gray-50 min-w-[85px]"
                   >
                     <span className="block truncate" title={subj.name}>
@@ -460,10 +460,10 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                   </td>
                 </tr>
               ) : (
-                groupedTransposedSubjects.map((group) =>
+                groupedTransposedSubjects.map((group, gIdx) =>
                   group.subjects.map((subjRow, sIdx) => (
                     <tr
-                      key={subjRow.subjectId}
+                      key={`tr-subj-${group.classificationId || gIdx}-${subjRow.columnId || subjRow.subjectId}-${sIdx}`}
                       className="hover:bg-gray-50/60 transition-colors border-b border-gray-100"
                     >
                       {/* Column 1: Classification */}
@@ -479,8 +479,8 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                       </td>
 
                       {/* Columns 3+: Class Cells */}
-                      {subjRow.classCells.map(({ classId, className, cell, status }) => (
-                        <td key={classId} className="p-1 border-r border-gray-100 text-center">
+                      {subjRow.classCells.map(({ classId, className, cell, status }, cIdx) => (
+                        <td key={`td-cell-${classId}-${subjRow.columnId || subjRow.subjectId}-${cIdx}`} className="p-1 border-r border-gray-100 text-center">
                           {cell?.hasData ? (
                             <button
                               type="button"
@@ -530,21 +530,21 @@ const ClassSubjectHeatmap = ({ heatmap, onCellClick }) => {
                   </td>
                 </tr>
               ) : (
-                activeClasses.map((clsRow) => (
+                activeClasses.map((clsRow, cIdx) => (
                   <tr
-                    key={clsRow.classId}
+                    key={`tr-cls-${clsRow.classId}-${cIdx}`}
                     className="hover:bg-gray-50/60 transition-colors border-b border-gray-100"
                   >
                     <td className="sticky left-0 z-10 bg-white px-4 py-2.5 font-black text-xs text-dark-primary border-r border-gray-100 whitespace-nowrap shadow-2xs">
                       {clsRow.className}
                     </td>
 
-                    {activeSubjects.map((subj) => {
+                    {activeSubjects.map((subj, sIdx) => {
                       const cell = clsRow.cells[subj.id];
                       const status = getStatusInfo(cell);
 
                       return (
-                        <td key={subj.id} className="p-1 border-r border-gray-100 text-center">
+                        <td key={`td-subj-cell-${clsRow.classId}-${subj.id}-${sIdx}`} className="p-1 border-r border-gray-100 text-center">
                           {cell?.hasData ? (
                             <button
                               type="button"

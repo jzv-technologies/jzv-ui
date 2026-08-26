@@ -91,6 +91,16 @@ const AcademicCalendarModal = ({
     [calendarDraft]
   );
 
+  const totalAnticipatedActivityDays = useMemo(
+    () => calendarDraft.reduce((sum, row) => sum + (Number(row.activity_days) || 0), 0),
+    [calendarDraft]
+  );
+
+  const totalAnticipatedHolidays = useMemo(
+    () => calendarDraft.reduce((sum, row) => sum + (Number(row.holidays) || 0), 0),
+    [calendarDraft]
+  );
+
   const currentAcademicMonths = useMemo(
     () => buildAcademicMonths(startMonth, endMonth),
     [startMonth, endMonth]
@@ -366,14 +376,14 @@ const AcademicCalendarModal = ({
                       <i className="fas fa-calendar-days text-brand-primary"></i> Monthly Working & Teaching Days
                     </h4>
                     <p className="text-[11px] font-bold text-gray-400 mt-1">
-                      Click any month swatch to adjust working and teaching days for pacing calculations.
+                      Working and teaching days are managed in the Academic Calendar and automatically synchronized here.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={academicYear}
                       onChange={(event) => onAcademicYearChange(event.target.value)}
-                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary"
+                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary cursor-pointer outline-none"
                     >
                       {academicYearOptions.map((option) => (
                         <option key={option} value={option}>
@@ -381,133 +391,108 @@ const AcademicCalendarModal = ({
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      onClick={handleResetDefaults}
-                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-black text-gray-600 hover:bg-light-bg"
-                    >
-                      Reset Defaults
-                    </button>
+                    <span className="px-2.5 py-1 rounded-xl bg-gray-100 text-gray-600 text-[10px] font-extrabold border border-gray-200/80 flex items-center gap-1.5">
+                      <i className="fas fa-lock text-[9px] text-gray-400" /> Read-Only
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4 bg-white p-3.5 rounded-2xl border border-light-border shadow-2xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-2xl border border-light-border shadow-2xs">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-sm shrink-0">
                       <i className="fas fa-briefcase" />
                     </div>
                     <div>
                       <span className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wide">
-                        Anticipated Working Days ({academicYear})
+                        Working Days
                       </span>
-                      <span className="text-base font-black text-dark-primary">
+                      <span className="text-sm sm:text-base font-black text-emerald-700">
                         {totalAnticipatedWorkingDays} Days
                       </span>
                     </div>
                   </div>
 
-                  <div className="h-7 w-px bg-gray-200 hidden sm:block" />
-
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-sm">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0">
                       <i className="fas fa-chalkboard-user" />
                     </div>
                     <div>
                       <span className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wide">
-                        Anticipated Teaching Days ({academicYear})
+                        Teaching Days
                       </span>
-                      <span className="text-base font-black text-brand-primary">
+                      <span className="text-sm sm:text-base font-black text-indigo-700">
                         {totalAnticipatedTeachingDays} Days
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-black text-sm shrink-0">
+                      <i className="fas fa-palette" />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wide">
+                        Activity Days
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-violet-700">
+                        {totalAnticipatedActivityDays} Days
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-black text-sm shrink-0">
+                      <i className="fas fa-umbrella-beach" />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wide">
+                        Holidays
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-rose-700">
+                        {totalAnticipatedHolidays} Days
                       </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {calendarDraft.map((row, index) => {
-                    const isEditing = activeSwatchIndex === index;
-                    const isCustom = row.source === 'database';
+                  {calendarDraft.map((row) => (
+                    <div
+                      key={`${row.year}-${row.month}`}
+                      className="p-3 rounded-2xl border border-gray-200/90 bg-white shadow-2xs flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          <span className="text-xs font-black text-dark-primary">
+                            {row.monthLabel} {row.year}
+                          </span>
+                          <span
+                            className="w-2 h-2 rounded-full bg-emerald-500"
+                            title="Synced with Academic Calendar"
+                          />
+                        </div>
 
-                    return (
-                      <div
-                        key={`${row.year}-${row.month}`}
-                        onClick={() => canEdit && setActiveSwatchIndex(isEditing ? null : index)}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                          isEditing
-                            ? 'bg-brand-primary/5 border-brand-primary ring-2 ring-brand-primary/20 shadow-md'
-                            : isCustom
-                              ? 'bg-emerald-50/50 border-emerald-300 hover:border-emerald-500 hover:shadow-sm'
-                              : 'bg-white border-gray-200 hover:border-brand-soft hover:shadow-xs'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-1 mb-1">
-                            <span className="text-xs font-black text-dark-primary">
-                              {row.monthLabel} {row.year}
-                            </span>
-                            {isCustom ? (
-                              <span className="w-2 h-2 rounded-full bg-emerald-500" title="Custom DB Days" />
-                            ) : (
-                              <span className="w-2 h-2 rounded-full bg-gray-300" title="Default Days" />
-                            )}
+                        <div className="space-y-1 mt-2">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-gray-400 font-bold">Working:</span>
+                            <span className="font-extrabold text-emerald-700">{row.working_days || 0}d</span>
                           </div>
-
-                          {!isEditing ? (
-                            <div className="space-y-0.5 mt-2">
-                              <div className="flex justify-between text-[11px]">
-                                <span className="text-gray-400 font-bold">Working:</span>
-                                <span className="font-extrabold text-gray-700">{row.working_days}d</span>
-                              </div>
-                              <div className="flex justify-between text-[11px]">
-                                <span className="text-gray-400 font-bold">Teaching:</span>
-                                <span className="font-extrabold text-brand-primary">{row.teaching_days}d</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-2 mt-2" onClick={(e) => e.stopPropagation()}>
-                              <div>
-                                <label className="block text-[9px] font-bold text-gray-500 uppercase">
-                                  Working Days
-                                </label>
-                                <input
-                                  type="text"
-                                  value={row.working_days}
-                                  onChange={(e) =>
-                                    handleCalendarChange(index, 'working_days', e.target.value)
-                                  }
-                                  className="w-full px-2 py-1 bg-white border border-gray-300 rounded-lg text-xs font-bold text-dark-primary outline-none focus:border-brand-primary"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[9px] font-bold text-gray-500 uppercase">
-                                  Teaching Days
-                                </label>
-                                <input
-                                  type="text"
-                                  value={row.teaching_days}
-                                  onChange={(e) =>
-                                    handleCalendarChange(index, 'teaching_days', e.target.value)
-                                  }
-                                  className="w-full px-2 py-1 bg-white border border-gray-300 rounded-lg text-xs font-bold text-dark-primary outline-none focus:border-brand-primary"
-                                />
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-gray-400 font-bold">Teaching:</span>
+                            <span className="font-extrabold text-indigo-700">{row.teaching_days || 0}d</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-gray-400 font-bold">Activity:</span>
+                            <span className="font-extrabold text-violet-700">{row.activity_days || 0}d</span>
+                          </div>
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-gray-400 font-bold">Holidays:</span>
+                            <span className="font-extrabold text-rose-700">{row.holidays || 0}d</span>
+                          </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-4 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleSaveCalendarClick}
-                    disabled={!canEdit || isSavingCalendar}
-                    className="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-black disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs hover:bg-brand-primary/90"
-                  >
-                    {isSavingCalendar ? 'Saving Calendar...' : 'Save Calendar Days'}
-                  </button>
+                    </div>
+                  ))}
                 </div>
               </section>
             </>
