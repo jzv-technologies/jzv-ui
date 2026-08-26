@@ -3,15 +3,14 @@ import React, { useEffect, useState } from 'react';
 // Exactly 12 unique colors – balanced spectrum
 export const CALENDAR_COLOR_NAMES = {
   ORANGE: '#ff7f00',
-  BROWN: '#923402ff',
-  MAGENTA: '#e829bbff',
+  PINK: '#e829bbff',
   PURPLE: '#811c9cff',
   RED: '#e31a1c',
   INDIGO: '#390090ff',
-  BLUE: '#134bd8ff',
-  TEAL: '#168999ff',
-  YELLOW: '#eae440ff',
-  OLIVE_GOLD: '#aaaa06ff',
+  BLUE: '#132ad8ff',
+  TEAL: '#037787ff',
+  OLIVE: '#cec700e4',
+  OLIVE_GOLD: '#7e7b0de4',
   LIME_GREEN: '#73f700ff',
   FOREST_GREEN: '#0a7502ff',
 };
@@ -24,6 +23,7 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: true,
     is_teacher_holiday: true,
     is_teaching_day: false,
+    ignore_attendence: true,
     color_code: CALENDAR_COLOR_NAMES.RED,
   },
   emergency_holiday: {
@@ -31,6 +31,7 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: true,
     is_teacher_holiday: true,
     is_teaching_day: false,
+    ignore_attendence: true,
     color_code: CALENDAR_COLOR_NAMES.ORANGE,
   },
   event_day: {
@@ -38,14 +39,16 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
-    color_code: CALENDAR_COLOR_NAMES.TEAL,
+    ignore_attendence: false,
+    color_code: CALENDAR_COLOR_NAMES.OLIVE_GOLD,
   },
   event_preparation: {
     label: 'Event Preparation',
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
-    color_code: CALENDAR_COLOR_NAMES.YELLOW,
+    ignore_attendence: false,
+    color_code: CALENDAR_COLOR_NAMES.OLIVE,
   },
 
   examinations: {
@@ -53,6 +56,7 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
+    ignore_attendence: false,
     color_code: CALENDAR_COLOR_NAMES.FOREST_GREEN,
   },
   teacher_preparation: {
@@ -60,6 +64,15 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: true,
     is_teacher_holiday: false,
     is_teaching_day: false,
+    ignore_attendence: true,
+    color_code: CALENDAR_COLOR_NAMES.PURPLE,
+  },
+  student_preparation: {
+    label: 'Student Preperation',
+    is_student_holiday: false,
+    is_teacher_holiday: false,
+    is_teaching_day: false,
+    ignore_attendence: false,
     color_code: CALENDAR_COLOR_NAMES.BLUE,
   },
 
@@ -68,7 +81,8 @@ export const CALENDAR_EVENT_CONFIGS = {
     is_student_holiday: false,
     is_teacher_holiday: false,
     is_teaching_day: false,
-    color_code: CALENDAR_COLOR_NAMES.OLIVE_GOLD,
+    ignore_attendence: false,
+    color_code: CALENDAR_COLOR_NAMES.LIME_GREEN,
   },
 };
 
@@ -291,35 +305,7 @@ export const getMatchingEventType = (event) => {
     return rawType;
   }
 
-  // 2. Specific matching based on event name and toggles
-  const name = (event.event_name || event.title || '').toLowerCase();
-  if (name.includes('parent') || name.includes('ptm') || name.includes('meeting')) {
-    return 'parents_meeting';
-  }
-  if (name.includes('teacher prep') || name.includes('lesson plan')) {
-    return 'teacher_preparation';
-  }
-  if (name.includes('event prep') || name.includes('annual prep') || name.includes('sports prep')) {
-    return 'event_preparation';
-  }
-  if (name.includes('exam') || name.includes('test') || name.includes('assessment')) {
-    if (rawType === 'examination' || rawType === 'examinations') return 'examinations';
-    if (event.is_student_holiday) {
-      if (!event.is_teacher_holiday) return 'teacher_preparation';
-      return 'planned_holiday';
-    }
-    return 'examinations';
-  }
-  if (
-    name.includes('emergency') ||
-    name.includes('rain') ||
-    name.includes('bandh') ||
-    name.includes('strike')
-  ) {
-    return 'emergency_holiday';
-  }
-
-  // 3. Fallback based on raw event_type from DB
+  // 2. Direct mapping based strictly on rawType from DB (never event_name)
   if (rawType === 'examination' || rawType === 'examinations') {
     return 'examinations';
   }
@@ -358,11 +344,17 @@ export const getMatchingEventType = (event) => {
     }
     return 'planned_holiday';
   }
+  if (rawType === 'teacher_holiday') {
+    return 'planned_holiday';
+  }
+  if (rawType === 'teaching_day') {
+    return 'event_day';
+  }
   if (rawType === 'other') {
     return 'event_day';
   }
 
-  return '';
+  return 'event_day';
 };
 
 // ----- Main Modal -----
@@ -374,6 +366,7 @@ const DEFAULT_EVENT = {
   is_teaching_day: false,
   is_student_holiday: false,
   is_teacher_holiday: false,
+  ignore_attendence: false,
   color_code: CALENDAR_COLOR_NAMES.RED,
 };
 
@@ -420,6 +413,9 @@ const AcademicCalendarEventModal = ({
       is_teacher_holiday: isExisting
         ? Boolean(event.is_teacher_holiday)
         : (cfg?.is_teacher_holiday ?? false),
+      ignore_attendence: isExisting
+        ? Boolean(event.ignore_attendence)
+        : (cfg?.ignore_attendence ?? false),
       color_code: event?.color_code || cfg?.color_code || CALENDAR_COLOR_NAMES.RED,
     });
   }, [event, academicYear]);
@@ -436,6 +432,7 @@ const AcademicCalendarEventModal = ({
             is_student_holiday: cfg.is_student_holiday,
             is_teacher_holiday: cfg.is_teacher_holiday,
             is_teaching_day: cfg.is_teaching_day,
+            ignore_attendence: cfg.ignore_attendence ?? false,
             color_code: cfg.color_code,
           }
         : {}),
@@ -491,6 +488,7 @@ const AcademicCalendarEventModal = ({
           is_teaching_day: true,
           is_student_holiday: false,
           is_teacher_holiday: false,
+          ignore_attendence: false,
         };
       }
       return {
@@ -532,6 +530,13 @@ const AcademicCalendarEventModal = ({
         is_teacher_holiday: false,
       };
     });
+  };
+
+  const toggleIgnoreAttendence = () => {
+    setDraft((prev) => ({
+      ...prev,
+      ignore_attendence: !prev.ignore_attendence,
+    }));
   };
 
   useEffect(() => {
@@ -649,6 +654,26 @@ const AcademicCalendarEventModal = ({
                 <span className="text-sm font-semibold text-gray-700">Holiday for Teachers</span>
                 <ToggleSwitch value={draft.is_teacher_holiday} onChange={toggleTeacherHoliday} />
               </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold text-gray-700 block">
+                    Ignore Attendance
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium">
+                    Counts as holiday when teaching is off
+                  </span>
+                </div>
+                <ToggleSwitch value={draft.ignore_attendence} onChange={toggleIgnoreAttendence} />
+              </div>
+
+              {!draft.is_student_holiday &&
+                !draft.is_teacher_holiday &&
+                !draft.ignore_attendence && (
+                  <div className="flex items-center gap-2 text-[11px] font-bold text-blue-700 bg-blue-50/80 px-3 py-2 rounded-xl border border-blue-100/80 mt-1">
+                    <i className="fas fa-clipboard-check text-blue-600" />
+                    <span>Attendance Required for Students & Teachers</span>
+                  </div>
+                )}
             </div>
           </div>
 

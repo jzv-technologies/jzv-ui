@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
-import AcademicCalendarEventModal, { CALENDAR_EVENT_TYPES } from './AcademicCalendarEventModal';
+import AcademicCalendarEventModal, {
+  CALENDAR_EVENT_CONFIGS,
+  CALENDAR_EVENT_TYPES,
+} from './AcademicCalendarEventModal';
 import ConfirmModal from '../ConfirmModal';
 
 const formatDate = (value) =>
@@ -13,12 +16,21 @@ const formatDate = (value) =>
 
 const WEEK_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+const DEFAULT_DAY_SCHEDULE = {
+  Sunday: 'weekly_off',
+  Monday: 'teaching',
+  Tuesday: 'teaching',
+  Wednesday: 'teaching',
+  Thursday: 'teaching',
+  Friday: 'teaching',
+  Saturday: 'activity',
+};
+
 // --- Helper: Check if a date is a weekend based on weekly_off_days ---
-const isDateWeekend = (date, weeklyOffDays) => {
+const isDateWeekend = (date, weeklyOffDays = ['Sunday']) => {
   if (!date) return false;
-  const dayMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayName = dayMap[date.getDay()];
-  return weeklyOffDays.includes(dayName);
+  const dayName = WEEK_DAYS[date.getDay()];
+  return (weeklyOffDays || []).includes(dayName);
 };
 
 // --- Helper: Convert academic month index (0=June, 11=May) to Gregorian ---
@@ -30,22 +42,31 @@ const getGregorianFromAcademic = (academicIndex, baseYear) => {
 
 const getAcademicYearLabel = (baseYear) => `${baseYear}-${String(baseYear + 1).slice(-2)}`;
 
-// --- Helper: Compute day-by-day month summary with zero double-counting ---
-export const computeMonthSummary = (year, month, events = [], weeklyOffDays = ['Sunday']) => {
+// --- Helper: Compute day-by-day month summary with strict event_type rules ---
+export const computeMonthSummary = (
+  year,
+  month,
+  events = [],
+  weeklyOffDays = ['Sunday'],
+  defaultTeachingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+  activityDays = ['Saturday']
+) => {
   const daysInMonth = new Date(year, month, 0).getDate(); // month is 1-based (1..12)
   let totalDays = daysInMonth;
   let weekendDays = 0;
-  let holidays = 0;
+  let studentHolidays = 0;
+  let teacherHolidays = 0;
   let examDays = 0;
   let workingDays = 0;
   let teachingDays = 0;
-
-  const dayMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  let activityDaysCount = 0;
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateObj = new Date(year, month - 1, d);
-    const dayName = dayMap[dateObj.getDay()];
-    const isWeekend = weeklyOffDays.includes(dayName);
+    const dayName = WEEK_DAYS[dateObj.getDay()];
+    const isWeekend = (weeklyOffDays || []).includes(dayName);
+    const isDefaultTeachingDay = (defaultTeachingDays || []).includes(dayName);
+    const isDefaultActivityDay = (activityDays || []).includes(dayName);
 
     // Find all events overlapping this day
     const dayEvents = events.filter((event) => {
@@ -58,58 +79,70 @@ export const computeMonthSummary = (year, month, events = [], weeklyOffDays = ['
       weekendDays++;
     }
 
-    // Check if any event explicitly requires students and teachers (both holidays OFF)
-    const hasEventNeedingEveryone = dayEvents.some(
-      (e) => !e.is_student_holiday && !e.is_teacher_holiday
-    );
-
-    // Holiday determination:
-    // If an event requires everyone -> treated as NO holiday.
-    // Otherwise, if any event marks student or teacher holiday -> Holiday.
-    const isHoliday =
-      !hasEventNeedingEveryone &&
-      dayEvents.some((e) => e.is_student_holiday || e.is_teacher_holiday);
-
-    // Exam determination:
-    const isExam = dayEvents.some(
+    // Student Holiday determination:
+    const isStudentHoliday = dayEvents.some(
       (e) =>
-        e.event_type === 'examination' ||
-        e.event_type === 'examinations' ||
-        (e.event_name || '').toLowerCase().includes('exam')
+        Boolean(e.is_student_holiday) ||
+        ['planned_holiday', 'emergency_holiday', 'teacher_preparation', 'student_holiday'].includes(
+          e.event_type
+        ) ||
+        (Boolean(e.ignore_attendence) && !e.is_teaching_day)
     );
 
-    if (isHoliday) {
-      holidays++;
+    // Teacher Holiday determination:
+    const isTeacherHoliday = dayEvents.some(
+      (e) =>
+        Boolean(e.is_teacher_holiday) ||
+        ['planned_holiday', 'emergency_holiday', 'teacher_holiday'].includes(e.event_type)
+    );
+
+    // Teaching Day determination:
+    const hasExplicitTeaching = dayEvents.some((e) => e.is_teaching_day === true);
+    const hasExplicitNonTeaching = dayEvents.some((e) => e.is_teaching_day === false);
+
+    // Exam determination strictly by event_type (never event_name):
+    const isExam = dayEvents.some(
+      (e) => e.event_type === 'examinations' || e.event_type === 'examination'
+    );
+
+    if (!isWeekend) {
+      if (isStudentHoliday) {
+        studentHolidays++;
+      }
+      if (isTeacherHoliday) {
+        teacherHolidays++;
+      }
     }
-    if (isExam) {
-      examDays++;
+
+    if (!isWeekend || hasExplicitTeaching) {
+      if (isExam) {
+        examDays++;
+      }
     }
 
     // Working Day determination:
-    // A weekday that is not a holiday
-    if (!isWeekend && !isHoliday) {
+    // working_days = total_days - weekend_days - teacher_holidays
+    if (!isWeekend && !isTeacherHoliday) {
       workingDays++;
     }
 
-    // Teaching Day determination:
-    // Must be a weekday and not a holiday:
-    // - If dayEvents is empty: default weekday is a teaching day.
-    // - If dayEvents exists:
-    //     - If any event has is_teaching_day === true -> Teaching day
-    //     - If all events on that day have is_teaching_day === false -> Non-teaching day
-    //     - Otherwise -> Teaching day
-    if (!isWeekend && !isHoliday) {
-      if (dayEvents.length === 0) {
+    if (hasExplicitTeaching) {
+      teachingDays++;
+    } else if (!isWeekend && !isStudentHoliday) {
+      if (isDefaultTeachingDay && !hasExplicitNonTeaching) {
         teachingDays++;
-      } else {
-        const hasExplicitTeaching = dayEvents.some((e) => e.is_teaching_day);
-        const hasExplicitNonTeaching = dayEvents.some((e) => !e.is_teaching_day);
-        if (hasExplicitTeaching) {
-          teachingDays++;
-        } else if (!hasExplicitNonTeaching) {
-          teachingDays++;
-        }
       }
+    }
+
+    // Activity Day determination:
+    if (
+      !isWeekend &&
+      !isStudentHoliday &&
+      isDefaultActivityDay &&
+      !hasExplicitTeaching &&
+      !hasExplicitNonTeaching
+    ) {
+      activityDaysCount++;
     }
   }
 
@@ -118,10 +151,13 @@ export const computeMonthSummary = (year, month, events = [], weeklyOffDays = ['
     month,
     total_days: totalDays,
     weekend_days: weekendDays,
-    holidays,
+    student_holidays: studentHolidays,
+    teacher_holidays: teacherHolidays,
+    holidays: studentHolidays,
     exam_days: examDays,
     working_days: workingDays,
     teaching_days: teachingDays,
+    activity_days: activityDaysCount,
   };
 };
 
@@ -142,11 +178,31 @@ const AcademicCalendarView = ({ canEdit = false }) => {
   const [academicIndex, setAcademicIndex] = useState(initialAcademicIndex);
   const [baseYear, setBaseYear] = useState(initialBaseYear);
   const [typeFilter, setTypeFilter] = useState('all');
-  const [viewMode, setViewMode] = useState('month');
+  const [viewMode, setViewMode] = useState('month'); // 'month' | 'year' | 'events'
   const [editingEvent, setEditingEvent] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [weeklyOffDays, setWeeklyOffDays] = useState(['Saturday', 'Sunday']);
-  const [defaultTeachingDays, setDefaultTeachingDays] = useState(20);
+
+  // Unified Day Schedule state (matrix configuration)
+  const [daySchedule, setDaySchedule] = useState(DEFAULT_DAY_SCHEDULE);
+  const [showRulesModal, setShowRulesModal] = useState(false);
+
+  // Touch gesture references for mobile calendar swiping
+  const touchStartXRef = useRef(null);
+  const touchStartYRef = useRef(null);
+
+  // Derived classifications from unified daySchedule
+  const weeklyOffDays = useMemo(
+    () => WEEK_DAYS.filter((d) => daySchedule[d] === 'weekly_off'),
+    [daySchedule]
+  );
+  const defaultTeachingDays = useMemo(
+    () => WEEK_DAYS.filter((d) => daySchedule[d] === 'teaching'),
+    [daySchedule]
+  );
+  const activityDays = useMemo(
+    () => WEEK_DAYS.filter((d) => daySchedule[d] === 'activity'),
+    [daySchedule]
+  );
 
   // ----- Data loading -----
   const loadEvents = async () => {
@@ -164,9 +220,12 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     else {
       setEvents(data || []);
       setCalendarMonths(months || []);
-      if (months?.[0]?.weekly_off_days) setWeeklyOffDays(months[0].weekly_off_days);
-      if (months?.[0]?.default_teaching_days != null) {
-        setDefaultTeachingDays(months[0].default_teaching_days);
+
+      const firstMonth = months?.[0];
+      if (firstMonth) {
+        if (firstMonth.day_schedule && typeof firstMonth.day_schedule === 'object') {
+          setDaySchedule({ ...DEFAULT_DAY_SCHEDULE, ...firstMonth.day_schedule });
+        }
       }
     }
     setLoading(false);
@@ -194,11 +253,8 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     setBaseYear(newBaseYear);
   };
 
-  const monthLabel = () => {
-    const { year, month } = currentGregorian;
-    const monthName = new Date(year, month, 1).toLocaleDateString(undefined, { month: 'long' });
-    const ayLabel = getAcademicYearLabel(baseYear);
-    return `${monthName} ${year} (AY ${ayLabel})`;
+  const navigateYear = (delta) => {
+    setBaseYear((prev) => prev + delta);
   };
 
   const monthSummary = useMemo(() => {
@@ -206,9 +262,53 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       currentYearMonth.year,
       currentYearMonth.month,
       events,
-      weeklyOffDays
+      weeklyOffDays,
+      defaultTeachingDays,
+      activityDays
     );
-  }, [currentYearMonth, events, weeklyOffDays]);
+  }, [currentYearMonth, events, weeklyOffDays, defaultTeachingDays, activityDays]);
+
+  const yearSummary = useMemo(() => {
+    let totalDays = 0;
+    let workingDays = 0;
+    let teachingDays = 0;
+    let activityDaysTotal = 0;
+    let weekendDays = 0;
+    let studentHolidays = 0;
+    let teacherHolidays = 0;
+    let examDays = 0;
+
+    for (let idx = 0; idx < 12; idx++) {
+      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear);
+      const mSummary = computeMonthSummary(
+        gYear,
+        gMonth + 1,
+        events,
+        weeklyOffDays,
+        defaultTeachingDays,
+        activityDays
+      );
+      totalDays += mSummary.total_days;
+      workingDays += mSummary.working_days;
+      teachingDays += mSummary.teaching_days;
+      activityDaysTotal += mSummary.activity_days;
+      weekendDays += mSummary.weekend_days;
+      studentHolidays += mSummary.student_holidays;
+      teacherHolidays += mSummary.teacher_holidays;
+      examDays += mSummary.exam_days;
+    }
+
+    return {
+      total_days: totalDays,
+      working_days: workingDays,
+      teaching_days: teachingDays,
+      activity_days: activityDaysTotal,
+      weekend_days: weekendDays,
+      student_holidays: studentHolidays,
+      teacher_holidays: teacherHolidays,
+      exam_days: examDays,
+    };
+  }, [baseYear, events, weeklyOffDays, defaultTeachingDays, activityDays]);
 
   const getCalendarCells = (year, monthIndex) => {
     const firstDay = new Date(year, monthIndex, 1).getDay();
@@ -218,48 +318,11 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     );
   };
 
+  // Events for single month
   const visibleEvents = useMemo(() => {
     const { year, month } = currentGregorian;
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0);
-    const normalizeEventType = (type) => {
-      if (
-        [
-          'student_holiday',
-          'teacher_holiday',
-          'examination',
-          'exam_preparation',
-          'teaching_day',
-          'other',
-        ].includes(type)
-      ) {
-        return type;
-      }
-      if (
-        [
-          'planned_holiday',
-          'emergency_holiday',
-          'festival_holiday',
-          'annual_holiday',
-          'public_holiday',
-          'jamia_declared_holiday',
-          'holiday',
-          'exam_holiday',
-          'exam_correction',
-        ].includes(type)
-      ) {
-        return 'student_holiday';
-      }
-      if (type === 'examinations') return 'examination';
-      if (
-        type === 'exam_preparation' ||
-        type === 'teacher_preparation' ||
-        type === 'event_preparation'
-      ) {
-        return 'exam_preparation';
-      }
-      return 'other';
-    };
 
     return events.filter((event) => {
       const startsBeforeEnd = new Date(`${event.start_date}T00:00:00`) <= monthEnd;
@@ -268,11 +331,91 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       const matchesType =
         typeFilter === 'all' ||
         event.event_type === typeFilter ||
-        normalizeEventType(typeFilter) === event.event_type;
+        (typeFilter === 'examinations' && event.event_type === 'examination') ||
+        (typeFilter === 'planned_holiday' && event.event_type === 'student_holiday') ||
+        (typeFilter === 'teacher_preparation' && event.event_type === 'exam_preparation');
 
       return matchesType && startsBeforeEnd && endsAfterStart;
     });
   }, [events, currentGregorian, typeFilter]);
+
+  // Events for entire academic year (June 1st to May 31st)
+  const ayStartDate = useMemo(() => new Date(baseYear, 5, 1), [baseYear]);
+  const ayEndDate = useMemo(() => new Date(baseYear + 1, 4, 31, 23, 59, 59), [baseYear]);
+
+  const yearlyEvents = useMemo(() => {
+    return events
+      .filter((event) => {
+        const start = new Date(`${event.start_date}T00:00:00`);
+        const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
+        const isInAY = start <= ayEndDate && end >= ayStartDate;
+        const matchesType =
+          typeFilter === 'all' ||
+          event.event_type === typeFilter ||
+          (typeFilter === 'examinations' && event.event_type === 'examination') ||
+          (typeFilter === 'planned_holiday' && event.event_type === 'student_holiday') ||
+          (typeFilter === 'teacher_preparation' && event.event_type === 'exam_preparation');
+
+        return isInAY && matchesType;
+      })
+      .sort((a, b) => new Date(`${a.start_date}T00:00:00`) - new Date(`${b.start_date}T00:00:00`));
+  }, [events, ayStartDate, ayEndDate, typeFilter]);
+
+  // Group yearly events by month for clean presentation
+  const yearlyEventsGroupedByMonth = useMemo(() => {
+    const groups = [];
+    for (let idx = 0; idx < 12; idx++) {
+      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear);
+      const monthStart = new Date(gYear, gMonth, 1);
+      const monthEnd = new Date(gYear, gMonth + 1, 0, 23, 59, 59);
+
+      const monthEventsList = yearlyEvents.filter((event) => {
+        const start = new Date(`${event.start_date}T00:00:00`);
+        const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
+        return start <= monthEnd && end >= monthStart;
+      });
+
+      if (monthEventsList.length > 0) {
+        groups.push({
+          academicIndex: idx,
+          monthName: new Date(gYear, gMonth, 1).toLocaleDateString(undefined, {
+            month: 'long',
+            year: 'numeric',
+          }),
+          events: monthEventsList,
+        });
+      }
+    }
+    return groups;
+  }, [yearlyEvents, baseYear]);
+
+  // ----- Mobile Touch Swiping -----
+  const handleTouchStart = (e) => {
+    if (e.touches && e.touches.length === 1) {
+      touchStartXRef.current = e.touches[0].clientX;
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    if (e.changedTouches && e.changedTouches.length === 1) {
+      const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+      const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+      const minSwipeDistance = 45;
+
+      // Check if horizontal swipe is dominant
+      if (Math.abs(deltaX) > minSwipeDistance && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+        if (deltaX < 0) {
+          navigateMonth(1);
+        } else {
+          navigateMonth(-1);
+        }
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
 
   // ----- CRUD operations -----
   const saveEvent = async (draft) => {
@@ -294,12 +437,14 @@ const AcademicCalendarView = ({ canEdit = false }) => {
           ay: `${year}-${String(year + 1).slice(-2)}`,
           total_days: totalDays,
           working_days: 0,
-          teaching_days: defaultTeachingDays,
+          teaching_days: 0,
+          activity_days: 0,
           weekend_days: 0,
+          student_holidays: 0,
+          teacher_holidays: 0,
           holidays: 0,
           exam_days: 0,
-          weekly_off_days: weeklyOffDays,
-          default_teaching_days: defaultTeachingDays,
+          day_schedule: daySchedule,
         })
         .select()
         .single();
@@ -319,54 +464,16 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       return;
     }
 
-    const normalizeEventType = (type) => {
-      if (
-        [
-          'student_holiday',
-          'teacher_holiday',
-          'examination',
-          'exam_preparation',
-          'teaching_day',
-          'other',
-        ].includes(type)
-      ) {
-        return type;
-      }
-      if (
-        [
-          'planned_holiday',
-          'emergency_holiday',
-          'festival_holiday',
-          'annual_holiday',
-          'public_holiday',
-          'jamia_declared_holiday',
-          'holiday',
-          'exam_holiday',
-          'exam_correction',
-        ].includes(type)
-      ) {
-        return 'student_holiday';
-      }
-      if (type === 'examinations') return 'examination';
-      if (
-        type === 'exam_preparation' ||
-        type === 'teacher_preparation' ||
-        type === 'event_preparation'
-      ) {
-        return 'exam_preparation';
-      }
-      return 'other';
-    };
-
     const payload = {
       ac_id: calendarRow.id,
       start_date: draft.start_date,
       end_date: draft.end_date || draft.start_date,
-      event_type: normalizeEventType(draft.event_type),
+      event_type: draft.event_type,
       event_name: (draft.event_name || '').trim(),
       is_teaching_day: Boolean(draft.is_teaching_day),
       is_student_holiday: Boolean(draft.is_student_holiday),
       is_teacher_holiday: Boolean(draft.is_teacher_holiday),
+      ignore_attendence: Boolean(draft.ignore_attendence),
       color_code: draft.color_code || '#2563eb',
       updated_at: new Date().toISOString(),
     };
@@ -392,8 +499,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     const { error: rulesError } = await supabase
       .from('academic_calendar')
       .update({
-        weekly_off_days: weeklyOffDays,
-        default_teaching_days: Number(defaultTeachingDays) || 0,
+        day_schedule: daySchedule,
       })
       .in(
         'id',
@@ -401,7 +507,8 @@ const AcademicCalendarView = ({ canEdit = false }) => {
       );
     if (rulesError) showToast(`Failed to save calendar rules: ${rulesError.message}`, 'error');
     else {
-      showToast('Calendar rules saved.', 'success');
+      showToast('Calendar rules updated successfully.', 'success');
+      setShowRulesModal(false);
       await loadEvents();
     }
     setSaving(false);
@@ -444,13 +551,61 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     setEditingEvent({ start_date: dateStr, end_date: dateStr });
   };
 
+  // Apply matrix preset
+  const applyPreset = (type) => {
+    if (type === 'standard') {
+      setDaySchedule({
+        Sunday: 'weekly_off',
+        Monday: 'teaching',
+        Tuesday: 'teaching',
+        Wednesday: 'teaching',
+        Thursday: 'teaching',
+        Friday: 'teaching',
+        Saturday: 'activity',
+      });
+    } else if (type === '6day') {
+      setDaySchedule({
+        Sunday: 'weekly_off',
+        Monday: 'teaching',
+        Tuesday: 'teaching',
+        Wednesday: 'teaching',
+        Thursday: 'teaching',
+        Friday: 'teaching',
+        Saturday: 'teaching',
+      });
+    } else if (type === '5day') {
+      setDaySchedule({
+        Sunday: 'weekly_off',
+        Monday: 'teaching',
+        Tuesday: 'teaching',
+        Wednesday: 'teaching',
+        Thursday: 'teaching',
+        Friday: 'teaching',
+        Saturday: 'weekly_off',
+      });
+    }
+  };
+
+  // Calculate duration in days
+  const getEventDuration = (start, end) => {
+    if (!start) return 1;
+    const s = new Date(`${start}T00:00:00`);
+    const e = new Date(`${end || start}T00:00:00`);
+    const diff = Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+    return diff > 0 ? diff : 1;
+  };
+
   // ----- Renderers -----
   const renderMonthGrid = () => {
     const { year, month } = currentGregorian;
     const cells = getCalendarCells(year, month);
 
     return (
-      <div className="bg-white rounded-2xl border border-light-border shadow-sm overflow-hidden">
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="bg-white rounded-2xl border border-light-border shadow-xs overflow-hidden select-none"
+      >
         <div className="grid grid-cols-7 bg-gray-50/80 border-b border-light-border">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
             <div
@@ -464,6 +619,10 @@ const AcademicCalendarView = ({ canEdit = false }) => {
         <div className="grid grid-cols-7 gap-0.5">
           {cells.map((date, index) => {
             const isWeekend = isDateWeekend(date, weeklyOffDays);
+            const dayName = date ? WEEK_DAYS[date.getDay()] : null;
+            const isDefaultTeaching = dayName ? defaultTeachingDays.includes(dayName) : false;
+            const isDefaultActivity = dayName ? activityDays.includes(dayName) : false;
+
             const rawDayEvents = date
               ? visibleEvents.filter((event) => {
                   const start = new Date(`${event.start_date}T00:00:00`);
@@ -472,58 +631,78 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                 })
               : [];
 
-            const hasBothHolidaysOff = rawDayEvents.some(
-              (e) => !e.is_student_holiday && !e.is_teacher_holiday
+            const isStudentHolidayOnDate = rawDayEvents.some(
+              (e) =>
+                Boolean(e.is_student_holiday) ||
+                [
+                  'student_holiday',
+                  'planned_holiday',
+                  'emergency_holiday',
+                  'teacher_preparation',
+                ].includes(e.event_type) ||
+                (Boolean(e.ignore_attendence) && !e.is_teaching_day)
             );
-            const hasStudentHolidayOff = rawDayEvents.some(
-              (e) => !e.is_student_holiday || e.is_teaching_day
+            const isTeacherDutyOnDate = rawDayEvents.some(
+              (e) =>
+                !e.is_teaching_day &&
+                (Boolean(e.is_student_holiday) ||
+                  ['student_holiday', 'teacher_preparation'].includes(e.event_type)) &&
+                !e.is_teacher_holiday &&
+                !['planned_holiday', 'emergency_holiday'].includes(e.event_type)
             );
-            const isStudentHolidayOnDate =
-              !hasBothHolidaysOff &&
-              rawDayEvents.length > 0 &&
-              !hasStudentHolidayOff &&
-              rawDayEvents.some(
-                (e) => Boolean(e.is_student_holiday) || e.event_type === 'student_holiday'
-              );
-            const isTeacherDutyOnDate =
-              !hasBothHolidaysOff &&
-              rawDayEvents.some(
-                (e) =>
-                  !e.is_teaching_day &&
-                  (Boolean(e.is_student_holiday) || e.event_type === 'student_holiday') &&
-                  !e.is_teacher_holiday
-              );
 
             // Weekend rule: do not display the event on weekend if it is a holiday or if all 3 toggles are OFF
             const dayEvents = rawDayEvents.filter((event) => {
               if (!isWeekend) return true;
-              const isHoliday = event.is_student_holiday || event.is_teacher_holiday;
+              const isHoliday =
+                event.is_student_holiday || event.is_teacher_holiday || event.ignore_attendence;
               const isAllThreeOff =
                 !event.is_teaching_day &&
                 !event.is_student_holiday &&
-                !event.is_teacher_holiday;
+                !event.is_teacher_holiday &&
+                !event.ignore_attendence;
               if (isHoliday || isAllThreeOff) {
                 return false;
               }
               return true;
             });
 
+            const hasEvents = dayEvents.length > 0;
+
+            // Background determination with Activity Day support
+            let cellBgClass = 'bg-white rounded-xl';
+            if (date) {
+              if (isWeekend) {
+                cellBgClass =
+                  'bg-red-50/70 hover:bg-red-100/70 border-red-200/80 text-red-600 rounded-xl cursor-pointer';
+              } else if (isDefaultTeaching && !hasEvents) {
+                cellBgClass =
+                  'bg-emerald-50/50 hover:bg-emerald-100/60 border-emerald-200/70 rounded-xl cursor-pointer';
+              } else if (isDefaultActivity && !hasEvents) {
+                cellBgClass =
+                  'bg-violet-50/60 hover:bg-violet-100/60 border-violet-200/70 rounded-xl cursor-pointer';
+              } else {
+                cellBgClass =
+                  'bg-white hover:bg-gray-50/90 border-blue-200/60 rounded-xl cursor-pointer';
+              }
+            }
+
             return (
               <div
                 key={index}
                 onClick={() => handleDateClick(date)}
-                className={`min-h-[72px] sm:min-h-[88px] border p-1.5 transition-colors flex flex-col justify-between ${
-                  date
-                    ? isWeekend
-                      ? 'bg-red-200/50 hover:bg-red-200/80 border-red-300 rounded-xl cursor-pointer'
-                      : 'bg-white hover:bg-gray-50/80 border-blue-300 rounded-xl cursor-pointer'
-                    : 'bg-white rounded-xl'
-                }`}
+                className={`min-h-[72px] sm:min-h-[88px] border p-1.5 transition-colors flex flex-col justify-between ${cellBgClass}`}
               >
                 <div className="flex items-center justify-between">
                   <span
                     className={`text-[10px] font-black ${
-                      isWeekend ? 'text-red-600' : 'text-gray-500'
+                      isWeekend
+                        ? 'text-red-600'
+                        : isDefaultTeaching && !hasEvents
+                          ? 'text-emerald-700 font-black'
+                          : isDefaultActivity && !hasEvents
+                            ? 'text-violet-700 font-black'
+                            : 'text-gray-500'
                     }`}
                   >
                     {date?.getDate() || ''}
@@ -541,6 +720,14 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                           className="fa-solid fa-person-chalkboard text-emerald-600"
                           title="Non-Teaching Day / Teachers on duty"
                         />
+                      )}
+                      {isDefaultActivity && !hasEvents && !isWeekend && (
+                        <span
+                          className="text-[8px] font-extrabold text-violet-600 bg-violet-100/80 px-1 rounded-sm"
+                          title="Activity Day"
+                        >
+                          Activity
+                        </span>
                       )}
                     </div>
                   )}
@@ -584,21 +771,43 @@ const AcademicCalendarView = ({ canEdit = false }) => {
               (typeFilter === 'all' || event.event_type === typeFilter)
             );
           });
-          const summaryForMonth = computeMonthSummary(gYear, gMonth + 1, events, weeklyOffDays);
+          const summaryForMonth = computeMonthSummary(
+            gYear,
+            gMonth + 1,
+            events,
+            weeklyOffDays,
+            defaultTeachingDays,
+            activityDays
+          );
           const cells = getCalendarCells(gYear, gMonth);
 
           return (
             <div
               key={idx}
-              className="bg-white rounded-2xl border border-light-border shadow-sm hover:shadow-md transition p-3"
+              onClick={() => {
+                setAcademicIndex(idx);
+                setViewMode('month');
+              }}
+              className="bg-white rounded-2xl border border-light-border shadow-xs hover:shadow-md hover:border-brand-primary/40 transition-all p-3 cursor-pointer group"
+              title={`Click to open ${new Date(gYear, gMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`}
             >
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-black text-dark-primary">
-                  {new Date(gYear, gMonth, 1).toLocaleDateString(undefined, { month: 'long' })}
+                <h2 className="text-sm font-black text-dark-primary group-hover:text-brand-primary transition-colors flex items-center gap-1.5">
+                  <span>
+                    {new Date(gYear, gMonth, 1).toLocaleDateString(undefined, { month: 'long' })}
+                  </span>
+                  <i className="fas fa-arrow-up-right-from-square text-[10px] text-gray-300 group-hover:text-brand-primary transition-colors" />
                 </h2>
-                <span className="text-[10px] font-bold text-brand-primary bg-blue-50 px-2 py-0.5 rounded-full">
-                  {summaryForMonth.teaching_days} teaching days
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    {summaryForMonth.teaching_days} teaching
+                  </span>
+                  {summaryForMonth.activity_days > 0 && (
+                    <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded-full">
+                      {summaryForMonth.activity_days} act
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-7 gap-0.5 text-center">
                 {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
@@ -608,6 +817,10 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                 ))}
                 {cells.map((date, i) => {
                   const isWeekend = isDateWeekend(date, weeklyOffDays);
+                  const dayName = date ? WEEK_DAYS[date.getDay()] : null;
+                  const isDefaultTeaching = dayName ? defaultTeachingDays.includes(dayName) : false;
+                  const isDefaultActivity = dayName ? activityDays.includes(dayName) : false;
+
                   const dayEvents = date
                     ? monthEvents.filter((event) => {
                         const start = new Date(`${event.start_date}T00:00:00`);
@@ -618,17 +831,34 @@ const AcademicCalendarView = ({ canEdit = false }) => {
 
                   const visibleDayEvents = dayEvents.filter((event) => {
                     if (!isWeekend) return true;
-                    const isHoliday = event.is_student_holiday || event.is_teacher_holiday;
+                    const isHoliday =
+                      event.is_student_holiday ||
+                      event.is_teacher_holiday ||
+                      event.ignore_attendence;
                     const isAllThreeOff =
                       !event.is_teaching_day &&
                       !event.is_student_holiday &&
-                      !event.is_teacher_holiday;
+                      !event.is_teacher_holiday &&
+                      !event.ignore_attendence;
                     if (isHoliday || isAllThreeOff) return false;
                     return true;
                   });
 
                   const activeEvent = visibleDayEvents[0];
                   const color = activeEvent?.color_code;
+
+                  let dateClasses = 'text-gray-700 hover:bg-gray-100';
+                  if (activeEvent) {
+                    dateClasses = 'shadow-2xs font-extrabold';
+                  } else if (isWeekend) {
+                    dateClasses = 'text-red-500 bg-red-100/60 font-black';
+                  } else if (isDefaultTeaching && !dayEvents.length) {
+                    dateClasses =
+                      'text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100/60 font-bold';
+                  } else if (isDefaultActivity && !dayEvents.length) {
+                    dateClasses =
+                      'text-violet-700 bg-violet-50/70 hover:bg-violet-100/60 font-bold';
+                  }
 
                   return (
                     <span
@@ -637,16 +867,12 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                       title={
                         activeEvent
                           ? `${date?.toLocaleDateString()}: ${activeEvent.event_name}`
-                          : ''
+                          : isDefaultActivity && !dayEvents.length
+                            ? `${date?.toLocaleDateString()}: Activity Day`
+                            : ''
                       }
                       className={`min-h-6 rounded-md flex items-center justify-center text-[9px] font-bold transition-all ${
-                        activeEvent
-                          ? 'shadow-2xs font-extrabold'
-                          : isWeekend
-                            ? 'text-red-500 bg-red-100/60 font-black'
-                            : date
-                              ? 'text-gray-700 hover:bg-gray-100'
-                              : 'text-transparent'
+                        date ? dateClasses : 'text-transparent'
                       }`}
                     >
                       {date?.getDate() || ''}
@@ -661,45 +887,217 @@ const AcademicCalendarView = ({ canEdit = false }) => {
     );
   };
 
+  // ----- Events Only View (Entire Academic Year List) -----
+  const renderEventsOnlyView = () => {
+    return (
+      <div className="space-y-6">
+        {/* Header Summary Banner */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-light-border shadow-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-9 h-9 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black">
+              <i className="fas fa-list-check" />
+            </span>
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-dark-primary">
+                All Academic Events (AY {getAcademicYearLabel(baseYear)})
+              </h2>
+              <p className="text-xs font-semibold text-gray-400">
+                {yearlyEvents.length} {yearlyEvents.length === 1 ? 'event' : 'events'} found across
+                the entire academic year.
+              </p>
+            </div>
+          </div>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditingEvent({})}
+              className="px-3.5 py-2 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer self-start sm:self-auto"
+            >
+              <i className="fas fa-plus text-xs" /> Add New Event
+            </button>
+          )}
+        </div>
+
+        {/* Grouped Month Timeline */}
+        {yearlyEventsGroupedByMonth.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-light-border p-12 text-center space-y-3 shadow-xs">
+            <div className="w-12 h-12 rounded-2xl bg-gray-50 text-gray-400 mx-auto flex items-center justify-center text-xl">
+              <i className="fas fa-calendar-xmark" />
+            </div>
+            <h3 className="text-sm font-black text-dark-primary">
+              No events found for AY {getAcademicYearLabel(baseYear)}
+            </h3>
+            <p className="text-xs font-semibold text-gray-400 max-w-sm mx-auto">
+              There are no scheduled events matching the selected filter in this academic year.
+            </p>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setEditingEvent({})}
+                className="mt-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-brand-primary/90 transition"
+              >
+                <i className="fas fa-plus text-xs" /> Create First Event
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {yearlyEventsGroupedByMonth.map((group) => (
+              <div key={group.monthName} className="space-y-3">
+                {/* Month Group Header */}
+                <div className="flex items-center justify-between border-b border-light-border pb-2 px-1">
+                  <h3
+                    onClick={() => {
+                      setAcademicIndex(group.academicIndex);
+                      setViewMode('month');
+                    }}
+                    className="text-xs sm:text-sm font-black text-dark-primary flex items-center gap-2 cursor-pointer hover:text-brand-primary transition-colors group"
+                  >
+                    <i className="fas fa-calendar-day text-brand-primary" />
+                    <span>{group.monthName}</span>
+                    <span className="text-[10px] font-bold text-gray-400 group-hover:text-brand-primary transition-colors">
+                      ({group.events.length} {group.events.length === 1 ? 'event' : 'events'})
+                    </span>
+                    <i className="fas fa-arrow-up-right-from-square text-[9px] text-gray-300 group-hover:text-brand-primary transition-colors" />
+                  </h3>
+                </div>
+
+                {/* Event Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {group.events.map((event) => {
+                    const eventCfg = CALENDAR_EVENT_CONFIGS[event.event_type];
+                    const durationDays = getEventDuration(event.start_date, event.end_date);
+
+                    return (
+                      <div
+                        key={event.id}
+                        className="bg-white rounded-2xl border border-light-border p-4 shadow-xs hover:shadow-sm transition flex flex-col justify-between"
+                        style={{
+                          borderLeftColor: event.color_code || '#2563eb',
+                          borderLeftWidth: 5,
+                        }}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-0.5">
+                              <h4 className="text-sm font-black text-dark-primary">
+                                {event.event_name}
+                              </h4>
+                              <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1.5 mt-0.5">
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: event.color_code || '#2563eb' }}
+                                />
+                                <span>
+                                  {eventCfg?.label ||
+                                    CALENDAR_EVENT_TYPES.find((t) => t.value === event.event_type)
+                                      ?.label ||
+                                    'Event'}
+                                </span>
+                              </p>
+                            </div>
+
+                            {canEdit && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingEvent(event)}
+                                  title="Edit event"
+                                  className="w-7 h-7 rounded-lg text-blue-600 hover:bg-blue-50 transition cursor-pointer flex items-center justify-center"
+                                >
+                                  <i className="fas fa-edit text-xs" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteEvent(event)}
+                                  title="Delete event"
+                                  className="w-7 h-7 rounded-lg text-red-600 hover:bg-red-50 transition cursor-pointer flex items-center justify-center"
+                                >
+                                  <i className="fas fa-trash text-xs" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Date Range & Duration */}
+                          <div className="flex items-center gap-2 text-xs font-bold text-brand-primary">
+                            <i className="far fa-clock text-[11px]" />
+                            <span>
+                              {formatDate(event.start_date)}
+                              {event.end_date && event.end_date !== event.start_date
+                                ? ` – ${formatDate(event.end_date)}`
+                                : ''}
+                            </span>
+                            <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded-md">
+                              {durationDays} {durationDays === 1 ? 'day' : 'days'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Impact Tags */}
+                        <div className="mt-3 pt-2.5 border-t border-light-border/60 flex flex-wrap gap-1.5 items-center">
+                          {event.is_teaching_day && (
+                            <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              👨‍🏫 Teaching Day
+                            </span>
+                          )}
+                          {event.is_student_holiday && (
+                            <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              🎓 Student Holiday
+                            </span>
+                          )}
+                          {event.is_teacher_holiday && (
+                            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              🧑‍🏫 Teacher Holiday
+                            </span>
+                          )}
+                          {event.ignore_attendence && (
+                            <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                              ⏱️ Ignore Attendance
+                            </span>
+                          )}
+                          {!event.is_student_holiday &&
+                            !event.is_teacher_holiday &&
+                            !event.ignore_attendence && (
+                              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                📋 Attendance Required
+                              </span>
+                            )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ----- Main JSX -----
   return (
-    <div className="min-h-[calc(100vh-160px)] bg-light-bg p-4 sm:p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-dark-primary flex items-center gap-2">
+    <div className="min-h-[calc(100vh-160px)] bg-light-bg p-3 sm:p-6">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
+        {/* Responsive Header Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-light-border shadow-xs">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg sm:text-2xl font-black text-dark-primary flex items-center gap-2 tracking-tight">
               <i className="fas fa-calendar-days text-brand-primary" /> Academic Calendar
             </h1>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigateMonth(-1)}
-                className="w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 transition"
-              >
-                <i className="fas fa-chevron-left" />
-              </button>
-              <span className="min-w-40 text-center text-sm font-black text-dark-primary">
-                {monthLabel()}
-              </span>
-              <button
-                type="button"
-                onClick={() => navigateMonth(1)}
-                className="w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 transition"
-              >
-                <i className="fas fa-chevron-right" />
-              </button>
-            </div>
-            <div className="flex rounded-xl border border-light-border bg-white p-1 sm:ml-auto">
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* View Mode Toggle (Monthly / Yearly / Events Only) */}
+            <div className="flex rounded-xl border border-light-border bg-gray-50/80 p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode('month')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   viewMode === 'month'
-                    ? 'bg-brand-primary text-white shadow-sm'
-                    : 'text-dark-soft hover:bg-gray-50'
+                    ? 'bg-brand-primary text-white shadow-xs'
+                    : 'text-dark-soft hover:text-dark-primary'
                 }`}
               >
                 Monthly
@@ -707,19 +1105,32 @@ const AcademicCalendarView = ({ canEdit = false }) => {
               <button
                 type="button"
                 onClick={() => setViewMode('year')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   viewMode === 'year'
-                    ? 'bg-brand-primary text-white shadow-sm'
-                    : 'text-dark-soft hover:bg-gray-50'
+                    ? 'bg-brand-primary text-white shadow-xs'
+                    : 'text-dark-soft hover:text-dark-primary'
                 }`}
               >
                 Yearly
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('events')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                  viewMode === 'events'
+                    ? 'bg-brand-primary text-white shadow-xs'
+                    : 'text-dark-soft hover:text-dark-primary'
+                }`}
+              >
+                Events Only
+              </button>
             </div>
+
+            {/* Filter Dropdown */}
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="sm:ml-auto px-3 py-2 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:border-brand-primary outline-none"
+              className="h-9 px-3 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:border-brand-primary outline-none cursor-pointer"
             >
               <option value="all">All Event Types</option>
               {CALENDAR_EVENT_TYPES.map((type) => (
@@ -728,97 +1139,146 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                 </option>
               ))}
             </select>
-          </div>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => setEditingEvent({})}
-              className="px-4 py-2.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-2 shadow-sm hover:shadow-md transition"
-            >
-              <i className="fas fa-plus" /> Add Event
-            </button>
-          )}
-        </div>
 
-        {/* Monthly Summary Stats */}
-        {viewMode === 'month' && monthSummary && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {[
-              ['📅 Total Days', monthSummary.total_days, 'text-blue-600'],
-              ['✅ Working Days', monthSummary.working_days, 'text-emerald-600'],
-              ['📖 Teaching Days', monthSummary.teaching_days, 'text-indigo-600'],
-              ['🌙 Weekends', monthSummary.weekend_days, 'text-purple-600'],
-              [
-                '🎯 Holidays / Exams',
-                `${monthSummary.holidays || 0} / ${monthSummary.exam_days || 0}`,
-                'text-amber-600',
-              ],
-            ].map(([label, value, color]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-light-border bg-white px-3 py-2.5 shadow-sm hover:shadow-md transition"
-              >
-                <p className="text-[10px] font-black uppercase tracking-wide text-gray-400">
-                  {label}
-                </p>
-                <p className={`text-base font-black mt-0.5 ${color}`}>{value}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Calendar Rules (Edit) */}
-        {canEdit && (
-          <section className="rounded-2xl border border-light-border bg-white p-4 space-y-3 shadow-sm">
-            <div>
-              <h2 className="text-sm font-black text-dark-primary">📋 Calendar Rules</h2>
-              <p className="text-[11px] font-bold text-gray-400 mt-1">
-                Choose weekly off days and the default monthly teaching-day target.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {WEEK_DAYS.map((day) => (
-                <label
-                  key={day}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-light-border px-2.5 py-1.5 text-xs font-bold text-dark-soft hover:bg-gray-50 transition"
-                >
-                  <input
-                    type="checkbox"
-                    checked={weeklyOffDays.includes(day)}
-                    onChange={() =>
-                      setWeeklyOffDays((prev) =>
-                        prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-                      )
-                    }
-                    className="h-3.5 w-3.5 rounded text-brand-primary"
-                  />
-                  {day.slice(0, 3)}
-                </label>
-              ))}
-              <label className="inline-flex items-center gap-2 text-xs font-bold text-dark-soft">
-                Default teaching days
-                <input
-                  type="number"
-                  min="0"
-                  max="31"
-                  value={defaultTeachingDays}
-                  onChange={(e) => setDefaultTeachingDays(e.target.value)}
-                  className="w-16 rounded-lg border border-light-border px-2 py-1.5 text-xs font-bold focus:border-brand-primary outline-none"
-                />
-              </label>
+            {/* Settings Icon / Calendar Rules Modal Trigger */}
+            {canEdit && (
               <button
                 type="button"
-                onClick={saveCalendarRules}
-                disabled={saving || weeklyOffDays.length === 0}
-                className="rounded-xl bg-brand-primary px-4 py-1.5 text-xs font-black text-white shadow-sm hover:bg-brand-primary/90 disabled:opacity-50 transition"
+                onClick={() => setShowRulesModal(true)}
+                title="Calendar Rules & Day Matrix"
+                className="h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center gap-1.5 shadow-xs transition cursor-pointer"
               >
-                {saving ? 'Saving...' : 'Save Rules'}
+                <i className="fas fa-gear text-xs text-brand-primary" />
+                <span className="hidden sm:inline">Rules</span>
               </button>
+            )}
+
+            {/* Add Event Button */}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setEditingEvent({})}
+                className="h-9 px-3.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer ml-auto sm:ml-0"
+              >
+                <i className="fas fa-plus text-xs" /> <span>Add Event</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Summary Stats Tiles (Monthly or Cumulative Academic Year) */}
+        {((viewMode === 'month' && monthSummary) ||
+          ((viewMode === 'year' || viewMode === 'events') && yearSummary)) &&
+          (() => {
+            const currentSummary = viewMode === 'month' ? monthSummary : yearSummary;
+            const isYearly = viewMode === 'year' || viewMode === 'events';
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-dark-soft flex items-center gap-1.5">
+                    <i
+                      className={`fas ${isYearly ? 'fa-chart-pie text-brand-primary' : 'fa-calendar-day text-brand-primary'}`}
+                    />
+                    {isYearly
+                      ? `Cumulative Summary (AY ${getAcademicYearLabel(baseYear)})`
+                      : `Monthly Summary (${new Date(currentGregorian.year, currentGregorian.month, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })})`}
+                  </span>
+                  {isYearly && (
+                    <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                      12 Months Total
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 sm:gap-3">
+                  {[
+                    ['📅 Total Days', currentSummary.total_days, 'text-blue-600'],
+                    ['💼 Working Days', currentSummary.working_days, 'text-emerald-600'],
+                    ['📖 Teaching Days', currentSummary.teaching_days, 'text-indigo-600'],
+                    ['🎨 Activity Days', currentSummary.activity_days || 0, 'text-violet-600'],
+                    ['🌙 Weekends', currentSummary.weekend_days, 'text-purple-600'],
+                    ['🎓 Student Hols', currentSummary.student_holidays || 0, 'text-rose-600'],
+                    ['🧑‍🏫 Teacher Hols', currentSummary.teacher_holidays || 0, 'text-amber-600'],
+                    ['🎯 Examinations', currentSummary.exam_days || 0, 'text-teal-600'],
+                  ].map(([label, value, color]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-light-border bg-white px-3 py-2.5 shadow-xs hover:shadow-sm transition"
+                    >
+                      <p className="text-[10px] font-black uppercase tracking-wide text-gray-400 truncate">
+                        {label}
+                      </p>
+                      <p className={`text-base sm:text-lg font-black mt-0.5 ${color}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+        {/* Navigation Bar Above Content */}
+        {viewMode === 'month' ? (
+          <div className="flex items-center justify-between bg-white rounded-2xl border border-light-border px-3 sm:px-4 py-2.5 shadow-xs">
+            <button
+              type="button"
+              onClick={() => navigateMonth(-1)}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 flex items-center justify-center transition cursor-pointer"
+              title="Previous Month (or swipe right)"
+            >
+              <i className="fas fa-chevron-left text-xs" />
+            </button>
+            <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-2 text-center">
+              <span className="text-sm sm:text-base font-black text-dark-primary tracking-tight">
+                {new Date(currentGregorian.year, currentGregorian.month, 1).toLocaleDateString(
+                  undefined,
+                  { month: 'long' }
+                )}{' '}
+                {currentGregorian.year}
+              </span>
+              <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                AY {getAcademicYearLabel(baseYear)}
+              </span>
             </div>
-          </section>
+            <button
+              type="button"
+              onClick={() => navigateMonth(1)}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 flex items-center justify-center transition cursor-pointer"
+              title="Next Month (or swipe left)"
+            >
+              <i className="fas fa-chevron-right text-xs" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between bg-white rounded-2xl border border-light-border px-3 sm:px-4 py-2.5 shadow-xs">
+            <button
+              type="button"
+              onClick={() => navigateYear(-1)}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 flex items-center justify-center transition cursor-pointer"
+              title="Previous Academic Year"
+            >
+              <i className="fas fa-chevron-left text-xs" />
+            </button>
+            <div className="flex items-center gap-2 text-center">
+              <span className="text-sm sm:text-base font-black text-dark-primary tracking-tight">
+                Academic Year {getAcademicYearLabel(baseYear)}
+              </span>
+              {viewMode === 'events' && (
+                <span className="text-[10px] font-bold text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full">
+                  Events View
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigateYear(1)}
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 flex items-center justify-center transition cursor-pointer"
+              title="Next Academic Year"
+            >
+              <i className="fas fa-chevron-right text-xs" />
+            </button>
+          </div>
         )}
 
-        {/* Main Content */}
+        {/* Main Content Branch */}
         {loading ? (
           <div className="bg-white rounded-2xl border border-light-border p-12 text-center text-xs font-bold text-gray-400">
             <i className="fas fa-spinner fa-spin mr-2" />
@@ -828,10 +1288,12 @@ const AcademicCalendarView = ({ canEdit = false }) => {
           <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center text-xs font-bold text-red-700">
             Unable to load calendar: {error}
           </div>
+        ) : viewMode === 'events' ? (
+          renderEventsOnlyView()
         ) : viewMode === 'year' ? (
           renderYearView()
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {renderMonthGrid()}
 
             {visibleEvents.length === 0 ? (
@@ -843,18 +1305,24 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                 {visibleEvents.map((event) => (
                   <div
                     key={event.id}
-                    className="bg-white rounded-2xl border border-light-border p-4 shadow-sm hover:shadow-md transition"
+                    className="bg-white rounded-2xl border border-light-border p-4 shadow-xs hover:shadow-sm transition"
                     style={{ borderLeftColor: event.color_code || '#2563eb', borderLeftWidth: 5 }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[10px] uppercase tracking-wider font-black text-gray-400">
-                          {CALENDAR_EVENT_TYPES.find((t) => t.value === event.event_type)?.label ||
-                            'Other'}
-                        </p>
-                        <h2 className="text-sm font-black text-dark-primary mt-1">
+                        <h2 className="text-sm font-black text-dark-primary">
                           {event.event_name}
                         </h2>
+                        <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1.5 mt-0.5">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ backgroundColor: event.color_code || '#2563eb' }}
+                          />
+                          <span>
+                            {CALENDAR_EVENT_TYPES.find((t) => t.value === event.event_type)?.label ||
+                              'Event'}
+                          </span>
+                        </p>
                       </div>
                       {canEdit && (
                         <div className="flex gap-1">
@@ -862,7 +1330,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                             type="button"
                             onClick={() => setEditingEvent(event)}
                             title="Edit event"
-                            className="w-8 h-8 rounded-lg text-blue-600 hover:bg-blue-50 transition"
+                            className="w-8 h-8 rounded-lg text-blue-600 hover:bg-blue-50 transition cursor-pointer"
                           >
                             <i className="fas fa-edit" />
                           </button>
@@ -870,7 +1338,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                             type="button"
                             onClick={() => deleteEvent(event)}
                             title="Delete event"
-                            className="w-8 h-8 rounded-lg text-red-600 hover:bg-red-50 transition"
+                            className="w-8 h-8 rounded-lg text-red-600 hover:bg-red-50 transition cursor-pointer"
                           >
                             <i className="fas fa-trash" />
                           </button>
@@ -883,14 +1351,34 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                         ? ` – ${formatDate(event.end_date)}`
                         : ''}
                     </p>
-                    <p className="text-xs font-semibold text-dark-soft mt-2 leading-relaxed">
-                      {event.is_teaching_day && '👨‍🏫 Teaching Day '}
-                      {event.is_student_holiday && '🎓 Student Holiday '}
-                      {event.is_teacher_holiday && '🧑‍🏫 Teacher Holiday '}
-                      {!event.is_teaching_day &&
-                        !event.is_student_holiday &&
+                    <p className="text-xs font-semibold text-dark-soft mt-2 leading-relaxed flex flex-wrap gap-1.5 items-center">
+                      {event.is_teaching_day && (
+                        <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          👨‍🏫 Teaching Day
+                        </span>
+                      )}
+                      {event.is_student_holiday && (
+                        <span className="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          🎓 Student Holiday
+                        </span>
+                      )}
+                      {event.is_teacher_holiday && (
+                        <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          🧑‍🏫 Teacher Holiday
+                        </span>
+                      )}
+                      {event.ignore_attendence && (
+                        <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                          ⏱️ Ignore Attendance
+                        </span>
+                      )}
+                      {!event.is_student_holiday &&
                         !event.is_teacher_holiday &&
-                        '—'}
+                        !event.ignore_attendence && (
+                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                            📋 Attendance Required
+                          </span>
+                        )}
                     </p>
                   </div>
                 ))}
@@ -900,7 +1388,187 @@ const AcademicCalendarView = ({ canEdit = false }) => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Calendar Rules Settings Modal (Matrix Grid) */}
+      {canEdit && showRulesModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowRulesModal(false);
+          }}
+          className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-dark-almostblack/45 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-2xl rounded-3xl border border-light-border bg-white shadow-2xl relative max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-light-border">
+              <div>
+                <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
+                  <i className="fas fa-sliders text-brand-primary" /> Calendar Rules & Day Matrix
+                </h3>
+                <p className="text-xs font-semibold text-gray-400 mt-0.5">
+                  Assign each weekday to a single classification (Teaching, Activity, or Weekly
+                  Off).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRulesModal(false)}
+                className="w-9 h-9 rounded-xl border border-light-border text-gray-400 hover:text-dark-primary flex items-center justify-center cursor-pointer"
+              >
+                <i className="fas fa-xmark" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {/* Presets */}
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-gray-400 block mb-2">
+                  Quick Presets:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('standard')}
+                    className="px-3 py-1.5 rounded-xl border border-light-border bg-gray-50 hover:bg-brand-primary/10 hover:border-brand-primary/30 text-xs font-bold text-dark-primary transition cursor-pointer"
+                  >
+                    ⚡ Mon–Fri Teaching, Sat Activity, Sun Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('6day')}
+                    className="px-3 py-1.5 rounded-xl border border-light-border bg-gray-50 hover:bg-brand-primary/10 hover:border-brand-primary/30 text-xs font-bold text-dark-primary transition cursor-pointer"
+                  >
+                    ⚡ 6-Day Teaching (Mon–Sat)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPreset('5day')}
+                    className="px-3 py-1.5 rounded-xl border border-light-border bg-gray-50 hover:bg-brand-primary/10 hover:border-brand-primary/30 text-xs font-bold text-dark-primary transition cursor-pointer"
+                  >
+                    ⚡ 5-Day Teaching (Sat–Sun Off)
+                  </button>
+                </div>
+              </div>
+
+              {/* Matrix Grid */}
+              <div className="rounded-2xl border border-light-border overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50/90 border-b border-light-border text-[11px] font-black text-gray-500 uppercase tracking-wider">
+                      <th className="py-3 px-4">Day</th>
+                      <th className="py-3 px-3 text-center text-emerald-700">📖 Teaching</th>
+                      <th className="py-3 px-3 text-center text-violet-700">🎨 Activity</th>
+                      <th className="py-3 px-3 text-center text-rose-700">🌙 Weekly Off</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-light-border">
+                    {WEEK_DAYS.map((day) => {
+                      const currentVal = daySchedule[day] || 'teaching';
+                      return (
+                        <tr
+                          key={day}
+                          className="hover:bg-gray-50/50 transition text-xs font-bold text-dark-primary"
+                        >
+                          <td className="py-3 px-4 font-black flex items-center gap-2">
+                            <span>{day}</span>
+                          </td>
+
+                          {/* Teaching Day Radio */}
+                          <td className="py-3 px-3 text-center">
+                            <label className="inline-flex items-center justify-center p-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`day-class-${day}`}
+                                checked={currentVal === 'teaching'}
+                                onChange={() =>
+                                  setDaySchedule((prev) => ({ ...prev, [day]: 'teaching' }))
+                                }
+                                className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </label>
+                          </td>
+
+                          {/* Activity Day Radio */}
+                          <td className="py-3 px-3 text-center">
+                            <label className="inline-flex items-center justify-center p-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`day-class-${day}`}
+                                checked={currentVal === 'activity'}
+                                onChange={() =>
+                                  setDaySchedule((prev) => ({ ...prev, [day]: 'activity' }))
+                                }
+                                className="w-4 h-4 text-violet-600 focus:ring-violet-500 cursor-pointer"
+                              />
+                            </label>
+                          </td>
+
+                          {/* Weekly Off Radio */}
+                          <td className="py-3 px-3 text-center">
+                            <label className="inline-flex items-center justify-center p-1.5 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`day-class-${day}`}
+                                checked={currentVal === 'weekly_off'}
+                                onChange={() =>
+                                  setDaySchedule((prev) => ({ ...prev, [day]: 'weekly_off' }))
+                                }
+                                className="w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                              />
+                            </label>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Schedule Summary Pills */}
+              <div className="bg-light-bg rounded-xl p-3 text-xs space-y-1.5">
+                <div className="flex items-center gap-2 text-dark-soft">
+                  <span className="font-bold">📖 Teaching Days:</span>
+                  <span className="font-black text-emerald-700">
+                    {defaultTeachingDays.join(', ') || 'None'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-dark-soft">
+                  <span className="font-bold">🎨 Activity Days:</span>
+                  <span className="font-black text-violet-700">
+                    {activityDays.join(', ') || 'None'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-dark-soft">
+                  <span className="font-bold">🌙 Weekly Off Days:</span>
+                  <span className="font-black text-rose-700">
+                    {weeklyOffDays.join(', ') || 'None'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-light-border bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => setShowRulesModal(false)}
+                className="px-4 py-2 rounded-xl border border-light-border text-xs font-bold text-dark-soft hover:bg-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveCalendarRules}
+                disabled={saving || weeklyOffDays.length === 0}
+                className="px-4 py-2 rounded-xl bg-brand-primary text-white text-xs font-black shadow-xs hover:bg-brand-primary/90 disabled:opacity-50 transition cursor-pointer"
+              >
+                {saving ? 'Saving...' : 'Save Matrix Rules'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Event Edit/Add */}
       {canEdit && editingEvent && (
         <AcademicCalendarEventModal
           event={editingEvent}
