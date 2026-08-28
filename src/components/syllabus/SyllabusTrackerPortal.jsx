@@ -3,6 +3,7 @@ import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import { getNonTeachingEventForDate } from '../../utils/academicEventsUtils';
 import DailyActivityTable from './DailyActivityTable';
 import SyllabusProgressGrid from './SyllabusProgressGrid';
 import AddWorkModalCompactView from './lesson-manager/AddWorkModalCompactView';
@@ -34,6 +35,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   const [allLessons, setAllLessons] = useState([]);
   const [lessonPlans, setLessonPlans] = useState([]);
   const [carryForwards, setCarryForwards] = useState([]);
+  const [academicEvents, setAcademicEvents] = useState([]);
   const [teacher, setTeacher] = useState(teacherRecord || null);
   const lastDailyFetchTimeRef = useRef(0);
   const teacherInitDoneRef = useRef('');
@@ -230,6 +232,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       setAllLessons(cache.allLessons);
       setLessonPlans(cache.lessonPlans);
       setCarryForwards(cache.carryForwards);
+      setAcademicEvents(cache.academicEvents || []);
       setLoading(false);
       return;
     }
@@ -311,6 +314,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
           (q) => q.in('status', ['planned', 'in_progress', 'completed'])
         ),
         supabase.from('lesson_plan_carry_forwards').select('*'),
+        supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
       ]);
 
       if (resClasses.error) throw resClasses.error;
@@ -325,6 +329,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       if (resLessons.error) throw resLessons.error;
       if (resPlans.error) throw resPlans.error;
       if (resCarryForwards.error) throw resCarryForwards.error;
+      if (resAcademicEvents && resAcademicEvents.error) throw resAcademicEvents.error;
 
       const dbClasses = resClasses.data || [];
       const dbSubjects = resSubjects.data || [];
@@ -338,6 +343,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       const rawLogs = resLogs.data || [];
       const rawPlans = resPlans.data || [];
       const dbCarryForwards = resCarryForwards.data || [];
+      const dbAcademicEvents = (resAcademicEvents && resAcademicEvents.data) || [];
 
       const dbLogs = rawLogs.map((log) => ({ ...log, current_status: log.status }));
       const dbPlans = rawPlans.map((plan) => ({ ...plan, target_date: plan.target_start_date }));
@@ -355,6 +361,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         allLessons: dbLessons,
         lessonPlans: dbPlans,
         carryForwards: dbCarryForwards,
+        academicEvents: dbAcademicEvents,
       };
     })();
 
@@ -565,7 +572,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             : item.lesson_progress;
           const fallbackLog = allLogs.find((l) => String(l.id) === String(item.progress_id));
           const progressObj =
-            nestedProgress || (typeof item.progress === 'object' ? item.progress : null) || fallbackLog;
+            nestedProgress ||
+            (typeof item.progress === 'object' ? item.progress : null) ||
+            fallbackLog;
           const log = progressObj ? { ...progressObj, current_status: progressObj.status } : null;
           const lesson =
             (progressObj && progressObj.lesson) ||
@@ -1015,6 +1024,19 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   const handleCarryForward = async (plan, newStartDate = null, newEndDate = null) => {
     try {
       setDailyLoading(true);
+
+      const targetCheckDate = newStartDate || newEndDate;
+      if (targetCheckDate) {
+        const nonTeaching = getNonTeachingEventForDate(targetCheckDate, academicEvents);
+        if (nonTeaching) {
+          showToast(
+            `Cannot plan on ${targetCheckDate}: Non-teaching day (${nonTeaching.event_name})`,
+            'error'
+          );
+          setDailyLoading(false);
+          return;
+        }
+      }
 
       const todayStr = new Date().toISOString().split('T')[0];
       const oldStart = plan.target_start_date ? String(plan.target_start_date).split('T')[0] : null;
@@ -1804,15 +1826,24 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                 data-name="lesson planner filters"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
-                  <label className="flex items-center gap-2 cursor-pointer bg-white border px-3 py-1 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors h-8 w-full sm:w-auto justify-center sm:justify-start">
-                    <input
-                      type="checkbox"
-                      checked={lpShowAllClasses}
-                      onChange={(e) => setLpShowAllClasses(e.target.checked)}
-                      className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer"
-                    />
-                    Show All Classes
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setLpShowAllClasses((prev) => !prev)}
+                    title={lpShowAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
+                    aria-label="Show All Classes"
+                    className={`h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-full sm:w-auto active:scale-95 flex ${
+                      lpShowAllClasses
+                        ? 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
+                        : 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-user-check text-xs ${
+                        lpShowAllClasses ? 'text-gray-600' : 'text-white'
+                      }`}
+                    ></i>
+                    <span>Mine Only</span>
+                  </button>
 
                   <select
                     value={lpFilterClassId}

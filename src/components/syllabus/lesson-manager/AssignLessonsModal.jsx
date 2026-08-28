@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
+import { getNonTeachingEventForDate } from '../../../utils/academicEventsUtils';
 
 const AssignLessonsModal = ({
   onClose,
@@ -11,8 +12,9 @@ const AssignLessonsModal = ({
   subjectId,
   progressRecords,
   setProgressRecords,
+  academicEvents = [],
   directMode,
-  directTarget
+  directTarget,
 }) => {
   const [selectedLessons, setSelectedLessons] = useState(lessons || []);
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,9 +35,21 @@ const AssignLessonsModal = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const nonTeachingEvent =
+    planningMode === 'date' && targetDate
+      ? getNonTeachingEventForDate(targetDate, academicEvents)
+      : null;
+
   const handleAssign = async () => {
     if (planningMode === 'date' && !targetDate) {
       showToast('Please select a target date.', 'error');
+      return;
+    }
+    if (planningMode === 'date' && nonTeachingEvent) {
+      showToast(
+        `Cannot plan lessons on ${targetDate}: Non-teaching day (${nonTeachingEvent.event_name})`,
+        'error'
+      );
       return;
     }
     if (planningMode === 'week' && !weekDate) {
@@ -354,6 +368,15 @@ const AssignLessonsModal = ({
                   )}
                 </div>
 
+                {nonTeachingEvent && (
+                  <div className="p-3 bg-amber-50/90 border border-amber-200 rounded-xl text-xs font-bold text-amber-800 flex items-center gap-2">
+                    <i className="fas fa-triangle-exclamation text-amber-600 text-sm shrink-0"></i>
+                    <span>
+                      Planning disabled: <strong>{nonTeachingEvent.event_name}</strong> is a designated non-teaching day.
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100">
                   <input 
                     type="checkbox" 
@@ -405,11 +428,17 @@ const AssignLessonsModal = ({
           </button>
           <button
             onClick={handleAssign}
-            disabled={saving || selectedLessons.length === 0 || (!targetDate && planningMode === 'date') || (!weekDate && planningMode === 'week')}
+            disabled={
+              saving ||
+              selectedLessons.length === 0 ||
+              (!targetDate && planningMode === 'date') ||
+              (planningMode === 'date' && !!nonTeachingEvent) ||
+              (!weekDate && planningMode === 'week')
+            }
             className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center gap-2 shadow hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-calendar-check"></i>}
-            Assign Lessons
+            {nonTeachingEvent ? 'Planning Disabled' : 'Assign Lessons'}
           </button>
         </div>
       </div>

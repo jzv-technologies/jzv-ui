@@ -76,15 +76,27 @@
           "nullable": "NO"
         },
         {
-          "type": "ARRAY",
-          "column": "weekly_off_days",
-          "default": "ARRAY['Saturday'::text, 'Sunday'::text]",
+          "type": "integer",
+          "column": "student_holidays",
+          "default": "0",
           "nullable": "NO"
         },
         {
           "type": "integer",
-          "column": "default_teaching_days",
-          "default": "20",
+          "column": "teacher_holidays",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "activity_days",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "jsonb",
+          "column": "day_schedule",
+          "default": "'{\"Friday\": \"teaching\", \"Monday\": \"teaching\", \"Sunday\": \"weekly_off\", \"Tuesday\": \"teaching\", \"Saturday\": \"activity\", \"Thursday\": \"teaching\", \"Wednesday\": \"teaching\"}'::jsonb",
           "nullable": "NO"
         }
       ]
@@ -174,6 +186,12 @@
           "type": "timestamp with time zone",
           "column": "updated_at",
           "default": "timezone('utc'::text, now())",
+          "nullable": "NO"
+        },
+        {
+          "type": "boolean",
+          "column": "ignore_attendence",
+          "default": "false",
           "nullable": "NO"
         }
       ]
@@ -2061,17 +2079,17 @@
       "with_check": null
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "classes",
-      "using": "has_any_role(((8 | 16) | 32))",
+      "using": "(has_any_role(56) OR (has_role_above(2) AND is_parent_of_class(id)))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "classes",
-      "using": "(has_any_role(56) OR (has_role_above(2) AND is_parent_of_class(id)))",
+      "using": "has_any_role(((8 | 16) | 32))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2101,7 +2119,7 @@
       "with_check": "((auth.uid() = auth_id) OR has_role_above(16))"
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "employees",
       "using": "true",
       "command": "SELECT",
@@ -2109,7 +2127,7 @@
       "with_check": null
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "employees",
       "using": "true",
       "command": "SELECT",
@@ -2301,17 +2319,17 @@
       "with_check": null
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["anon", "authenticated"],
       "table": "students",
-      "using": "has_role_above(2)",
+      "using": "is_parent_of_student((admission_no)::text)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": ["anon", "authenticated"],
+      "roles": ["authenticated"],
       "table": "students",
-      "using": "is_parent_of_student((admission_no)::text)",
+      "using": "has_role_above(2)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2333,7 +2351,7 @@
       "with_check": null
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "syl_classifications",
       "using": "true",
       "command": "SELECT",
@@ -2341,7 +2359,7 @@
       "with_check": null
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "syl_classifications",
       "using": "true",
       "command": "SELECT",
@@ -2365,7 +2383,7 @@
       "with_check": null
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "syl_subjects",
       "using": "true",
       "command": "SELECT",
@@ -2373,7 +2391,7 @@
       "with_check": null
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "syl_subjects",
       "using": "true",
       "command": "SELECT",
@@ -2437,17 +2455,17 @@
       "with_check": "true"
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "trk_book_level_progress",
-      "using": "true",
+      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "trk_book_level_progress",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
+      "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2461,17 +2479,17 @@
       "with_check": "true"
     },
     {
-      "roles": ["public"],
+      "roles": ["authenticated"],
       "table": "trk_daily_teacher_progress",
-      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "using": "has_role_above(8)",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": ["authenticated"],
+      "roles": ["public"],
       "table": "trk_daily_teacher_progress",
-      "using": "has_role_above(8)",
+      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2537,7 +2555,7 @@
     {
       "table": "academic_calendar",
       "function": "trigger_refresh_calendar_rules",
-      "definition": "CREATE TRIGGER academic_calendar_refresh_rules AFTER UPDATE OF weekly_off_days, default_teaching_days ON academic_calendar FOR EACH ROW EXECUTE FUNCTION trigger_refresh_calendar_rules()"
+      "definition": "CREATE TRIGGER academic_calendar_refresh_rules AFTER UPDATE OF day_schedule ON academic_calendar FOR EACH ROW EXECUTE FUNCTION trigger_refresh_calendar_rules()"
     },
     {
       "table": "academic_events",

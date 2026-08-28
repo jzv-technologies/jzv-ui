@@ -162,9 +162,23 @@ export const computeMonthSummary = (
 };
 
 const AcademicCalendarView = ({ canEdit = false }) => {
-  const [events, setEvents] = useState([]);
-  const [calendarMonths, setCalendarMonths] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState(() => {
+    try {
+      const cached = localStorage.getItem('jzv_academic_events_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [calendarMonths, setCalendarMonths] = useState(() => {
+    try {
+      const cached = localStorage.getItem('jzv_academic_calendar_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmConfig, setConfirmConfig] = useState(null);
 
@@ -183,7 +197,18 @@ const AcademicCalendarView = ({ canEdit = false }) => {
   const [saving, setSaving] = useState(false);
 
   // Unified Day Schedule state (matrix configuration)
-  const [daySchedule, setDaySchedule] = useState(DEFAULT_DAY_SCHEDULE);
+  const [daySchedule, setDaySchedule] = useState(() => {
+    try {
+      const cachedMo = localStorage.getItem('jzv_academic_calendar_cache');
+      if (cachedMo) {
+        const moList = JSON.parse(cachedMo);
+        if (moList?.[0]?.day_schedule && typeof moList[0].day_schedule === 'object') {
+          return { ...DEFAULT_DAY_SCHEDULE, ...moList[0].day_schedule };
+        }
+      }
+    } catch {}
+    return DEFAULT_DAY_SCHEDULE;
+  });
   const [showRulesModal, setShowRulesModal] = useState(false);
 
   // Touch gesture references for mobile calendar swiping
@@ -206,29 +231,66 @@ const AcademicCalendarView = ({ canEdit = false }) => {
 
   // ----- Data loading -----
   const loadEvents = async () => {
-    setLoading(true);
     setError('');
-    const [{ data, error: fetchError }, { data: months, error: monthError }] = await Promise.all([
-      supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
-      supabase
-        .from('academic_calendar')
-        .select('*')
-        .order('year', { ascending: true })
-        .order('month', { ascending: true }),
-    ]);
-    if (fetchError || monthError) setError((fetchError || monthError).message);
-    else {
-      setEvents(data || []);
-      setCalendarMonths(months || []);
+    try {
+      const [{ data, error: fetchError }, { data: months, error: monthError }] = await Promise.all([
+        supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
+        supabase
+          .from('academic_calendar')
+          .select('*')
+          .order('year', { ascending: true })
+          .order('month', { ascending: true }),
+      ]);
 
-      const firstMonth = months?.[0];
-      if (firstMonth) {
-        if (firstMonth.day_schedule && typeof firstMonth.day_schedule === 'object') {
+      if (fetchError || monthError) {
+        console.warn('Academic calendar Supabase fetch notice:', fetchError || monthError);
+        const cachedEv = localStorage.getItem('jzv_academic_events_cache');
+        const cachedMo = localStorage.getItem('jzv_academic_calendar_cache');
+        if (cachedEv) {
+          try {
+            setEvents(JSON.parse(cachedEv));
+          } catch {}
+        }
+        if (cachedMo) {
+          try {
+            const parsedMo = JSON.parse(cachedMo);
+            setCalendarMonths(parsedMo);
+            if (parsedMo?.[0]?.day_schedule && typeof parsedMo[0].day_schedule === 'object') {
+              setDaySchedule({ ...DEFAULT_DAY_SCHEDULE, ...parsedMo[0].day_schedule });
+            }
+          } catch {}
+        }
+        if (!cachedEv && !cachedMo) {
+          setError((fetchError || monthError)?.message || 'Failed to load events');
+        }
+      } else {
+        const evList = data || [];
+        const moList = months || [];
+        setEvents(evList);
+        setCalendarMonths(moList);
+        try {
+          localStorage.setItem('jzv_academic_events_cache', JSON.stringify(evList));
+          localStorage.setItem('jzv_academic_calendar_cache', JSON.stringify(moList));
+        } catch (e) {
+          console.error(e);
+        }
+
+        const firstMonth = moList?.[0];
+        if (firstMonth && firstMonth.day_schedule && typeof firstMonth.day_schedule === 'object') {
           setDaySchedule({ ...DEFAULT_DAY_SCHEDULE, ...firstMonth.day_schedule });
         }
       }
+    } catch (err) {
+      console.warn('Academic calendar load error:', err);
+      const cachedEv = localStorage.getItem('jzv_academic_events_cache');
+      if (cachedEv) {
+        try {
+          setEvents(JSON.parse(cachedEv));
+        } catch {}
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -1196,8 +1258,8 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                     ['📖 Teaching Days', currentSummary.teaching_days, 'text-indigo-600'],
                     ['🎨 Activity Days', currentSummary.activity_days || 0, 'text-violet-600'],
                     ['🌙 Weekends', currentSummary.weekend_days, 'text-purple-600'],
-                    ['🎓 Student Hols', currentSummary.student_holidays || 0, 'text-rose-600'],
-                    ['🧑‍🏫 Teacher Hols', currentSummary.teacher_holidays || 0, 'text-amber-600'],
+                    ['🎓 Student Holidays', currentSummary.student_holidays || 0, 'text-rose-600'],
+                    ['🧑‍🏫 Teacher Holidays', currentSummary.teacher_holidays || 0, 'text-amber-600'],
                     ['🎯 Examinations', currentSummary.exam_days || 0, 'text-teal-600'],
                   ].map(([label, value, color]) => (
                     <div
@@ -1310,17 +1372,15 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h2 className="text-sm font-black text-dark-primary">
-                          {event.event_name}
-                        </h2>
+                        <h2 className="text-sm font-black text-dark-primary">{event.event_name}</h2>
                         <p className="text-[11px] font-semibold text-gray-400 flex items-center gap-1.5 mt-0.5">
                           <span
                             className="w-2 h-2 rounded-full shrink-0"
                             style={{ backgroundColor: event.color_code || '#2563eb' }}
                           />
                           <span>
-                            {CALENDAR_EVENT_TYPES.find((t) => t.value === event.event_type)?.label ||
-                              'Event'}
+                            {CALENDAR_EVENT_TYPES.find((t) => t.value === event.event_type)
+                              ?.label || 'Event'}
                           </span>
                         </p>
                       </div>

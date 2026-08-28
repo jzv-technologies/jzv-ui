@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, fetchAllPages } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
+import { getNonTeachingEventForDate } from '../../../utils/academicEventsUtils';
 
 import SyllabusTreePanel from './SyllabusTreePanel';
 import TimelinePanel from './TimelinePanel';
@@ -21,6 +22,7 @@ let lessonManagerCache = {
   classifications: [],
   allLessons: [],
   progressRecords: [],
+  academicEvents: [],
   favorites: [],
   myWorkEntries: null,
   allTeachers: [],
@@ -70,7 +72,12 @@ const LessonManager = ({
   const [allLessons, setAllLessons] = useState(() =>
     lessonManagerCache.userId === user?.id ? lessonManagerCache.allLessons : []
   );
-  const [progressRecords, setProgressRecords] = useState([]); // Replaces lesson_plans + lesson_tracker_log
+  const [progressRecords, setProgressRecords] = useState(() =>
+    lessonManagerCache.userId === user?.id ? lessonManagerCache.progressRecords : []
+  );
+  const [academicEvents, setAcademicEvents] = useState(() =>
+    lessonManagerCache.userId === user?.id ? lessonManagerCache.academicEvents || [] : []
+  );
 
   // Toggle for filtering classes
   const [showAllClasses, setShowAllClasses] = useState(
@@ -126,6 +133,7 @@ const LessonManager = ({
       lessonManagerCache.bookClasses = bookClasses;
       lessonManagerCache.allLessons = allLessons;
       lessonManagerCache.progressRecords = progressRecords;
+      lessonManagerCache.academicEvents = academicEvents;
     }
   }, [
     user,
@@ -138,6 +146,7 @@ const LessonManager = ({
     bookClasses,
     allLessons,
     progressRecords,
+    academicEvents,
   ]);
 
   useEffect(() => {
@@ -254,6 +263,7 @@ const LessonManager = ({
         setClassifications(lessonManagerCache.classifications);
         setAllLessons(lessonManagerCache.allLessons);
         setProgressRecords(lessonManagerCache.progressRecords);
+        setAcademicEvents(lessonManagerCache.academicEvents || []);
         if (isAdminView) setAllTeachers(lessonManagerCache.allTeachers);
         else setTeacher(lessonManagerCache.teacher);
 
@@ -286,6 +296,7 @@ const LessonManager = ({
           ),
           supabase.from('syl_classifications').select('*'),
           supabase.from('timetable_slots').select('class_id, teacher_id, subject_id'),
+          supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
         ];
 
         if (isAdminView) {
@@ -350,6 +361,7 @@ const LessonManager = ({
           { data: dbProgress },
           { data: dbClassifications },
           { data: dbTimetableSlots },
+          { data: dbAcademicEvents },
           teachersResult,
         ] = results;
 
@@ -362,6 +374,7 @@ const LessonManager = ({
         setAllLessons(dbLessons || []);
         setProgressRecords(dbProgress || []);
         setClassifications(dbClassifications || []);
+        setAcademicEvents(dbAcademicEvents || []);
 
         const normalizedTeachers = ((teachersResult && teachersResult.data) || []).map((t) => ({
           ...t,
@@ -386,6 +399,7 @@ const LessonManager = ({
           allLessons: dbLessons || [],
           progressRecords: dbProgress || [],
           classifications: dbClassifications || [],
+          academicEvents: dbAcademicEvents || [],
           allTeachers: normalizedTeachers,
           teacher: isAdminView ? null : teacherRecord || lessonManagerCache.teacher,
         };
@@ -634,6 +648,17 @@ const LessonManager = ({
   };
 
   const handleDirectAssign = async (lessons, targetVal) => {
+    if (planningMode === 'date' && targetVal) {
+      const nonTeaching = getNonTeachingEventForDate(targetVal, academicEvents);
+      if (nonTeaching) {
+        showToast(
+          `Cannot plan lessons on ${targetVal}: Non-teaching day (${nonTeaching.event_name})`,
+          'error'
+        );
+        return;
+      }
+    }
+
     try {
       const upsertData = lessons.map((lesson) => {
         const existing = progressRecords.find(
@@ -765,15 +790,24 @@ const LessonManager = ({
 
               {!isAdminView && (
                 <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-                  <label className="flex items-center gap-2 cursor-pointer bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors h-[34px] w-full">
-                    <input
-                      type="checkbox"
-                      checked={showAllClasses}
-                      onChange={(e) => setShowAllClasses(e.target.checked)}
-                      className="w-3.5 h-3.5 text-brand-primary focus:ring-brand-primary rounded cursor-pointer shrink-0"
-                    />
-                    <span className="truncate">Show All Classes</span>
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllClasses((prev) => !prev)}
+                    title={showAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
+                    aria-label="Show All Classes"
+                    className={`h-[34px] w-full px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 select-none active:scale-95 ${
+                      showAllClasses
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-layer-group text-xs ${
+                        showAllClasses ? 'text-white' : 'text-gray-400'
+                      }`}
+                    ></i>
+                    <span className="truncate">Mine Only</span>
+                  </button>
                 </div>
               )}
 
@@ -904,6 +938,7 @@ const LessonManager = ({
             allLessons={allLessons}
             progressRecords={progressRecords}
             setProgressRecords={setProgressRecords}
+            academicEvents={academicEvents}
             planningMode={planningMode}
             setPlanningMode={setPlanningMode}
             activeTargetDate={activeTargetDate}
@@ -975,6 +1010,7 @@ const LessonManager = ({
           subjectId={selectedSubjectId}
           progressRecords={progressRecords}
           setProgressRecords={setProgressRecords}
+          academicEvents={academicEvents}
           directMode={assignModalTarget.directMode}
           directTarget={assignModalTarget.directTarget}
         />

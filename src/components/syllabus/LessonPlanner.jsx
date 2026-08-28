@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
+import { getNonTeachingEventForDate } from '../../utils/academicEventsUtils';
 
 // Module-level cache to persist data across page activations / subview toggles
 let lessonPlannerCache = {
@@ -14,6 +15,7 @@ let lessonPlannerCache = {
   bookClasses: [],
   allLessons: [],
   lessonPlans: [],
+  academicEvents: [],
   allTeachers: [],
   selectedTeacherId: '',
   selectedClassId: '',
@@ -50,6 +52,9 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     lessonPlannerCache.userId === user?.id ? lessonPlannerCache.allLessons : []
   );
   const [lessonPlans, setLessonPlans] = useState([]);
+  const [academicEvents, setAcademicEvents] = useState(() =>
+    lessonPlannerCache.userId === user?.id ? lessonPlannerCache.academicEvents || [] : []
+  );
 
   // Selection
   const [selectedClassId, setSelectedClassId] = useState(() =>
@@ -177,6 +182,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         setBookClasses(lessonPlannerCache.bookClasses);
         setAllLessons(lessonPlannerCache.allLessons);
         setLessonPlans(lessonPlannerCache.lessonPlans);
+        setAcademicEvents(lessonPlannerCache.academicEvents || []);
         if (isAdminView) {
           setAllTeachers(lessonPlannerCache.allTeachers);
         } else {
@@ -206,6 +212,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
               )
             : Promise.resolve({ data: [], error: null }),
           fetchAllPages('lesson_plans', '*'),
+          supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
         ];
 
         if (isAdminView) {
@@ -269,6 +276,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           { data: dbBookClasses },
           { data: dbAllLessons },
           { data: dbLessonPlans },
+          { data: dbAcademicEvents },
           teachersResult,
         ] = results;
 
@@ -279,6 +287,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         const resolvedBookClasses = dbBookClasses || [];
         const resolvedLessons = dbAllLessons || [];
         const resolvedLessonPlans = dbLessonPlans || [];
+        const resolvedAcademicEvents = dbAcademicEvents || [];
         const resolvedTeachers =
           isAdminView && teachersResult
             ? (teachersResult.data || []).map((t) => ({
@@ -295,6 +304,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
         setBookClasses(resolvedBookClasses);
         setAllLessons(resolvedLessons);
         setLessonPlans(resolvedLessonPlans);
+        setAcademicEvents(resolvedAcademicEvents);
 
         if (isAdminView) {
           setAllTeachers(resolvedTeachers);
@@ -311,6 +321,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
           bookClasses: resolvedBookClasses,
           allLessons: resolvedLessons,
           lessonPlans: resolvedLessonPlans,
+          academicEvents: resolvedAcademicEvents,
           allTeachers: resolvedTeachers,
           teacher: isAdminView ? null : teacherRecord || lessonPlannerCache.teacher,
         };
@@ -521,6 +532,13 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
   // Modal State and Logic
   // -------------------------
   const openAssignModal = (target) => {
+    if (target?.date) {
+      const nonTeaching = getNonTeachingEventForDate(target.date, academicEvents);
+      if (nonTeaching) {
+        showToast(`Cannot plan lessons on ${target.date}: Non-teaching day (${nonTeaching.event_name})`, 'error');
+        return;
+      }
+    }
     setAssignModalTarget(target);
     setModalStartDate(target?.date || '');
     setModalEndDate(target?.endDate || target?.date || '');
@@ -679,9 +697,40 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     const datesToPlan = startDate ? getDatesInRange(startDate, endDate) : [null];
     const planTeacherId = isAdminView ? selectedTeacherId || null : teacher?.id || null;
 
+    // Filter out non-teaching days
+    const validDates = [];
+    const blockedDates = [];
+    datesToPlan.forEach((dStr) => {
+      if (!dStr) {
+        validDates.push(null);
+        return;
+      }
+      const nonTeaching = getNonTeachingEventForDate(dStr, academicEvents);
+      if (nonTeaching) {
+        blockedDates.push({ date: dStr, eventName: nonTeaching.event_name });
+      } else {
+        validDates.push(dStr);
+      }
+    });
+
+    if (validDates.length === 0) {
+      showToast(
+        `Cannot assign: Selected date(s) fall on non-teaching events (${blockedDates.map((b) => `${b.date}: ${b.eventName}`).join(', ')})`,
+        'error'
+      );
+      return;
+    }
+
+    if (blockedDates.length > 0) {
+      showToast(
+        `Skipping non-teaching date(s): ${blockedDates.map((b) => `${b.date} (${b.eventName})`).join(', ')}`,
+        'info'
+      );
+    }
+
     const plansToInsert = [];
     lessonsToAssign.forEach((lesson) => {
-      datesToPlan.forEach((dStr) => {
+      validDates.forEach((dStr) => {
         plansToInsert.push({
           class_id: selectedClassId,
           subject_id: selectedSubjectId,
@@ -789,12 +838,33 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
     const planTeacherId = isAdminView ? selectedTeacherId || null : teacher?.id || null;
 
+    if (planningMode === 'date' && dateStr) {
+      const nonTeaching = getNonTeachingEventForDate(dateStr, academicEvents);
+      if (nonTeaching) {
+        showToast(`Cannot plan lessons on ${dateStr}: Non-teaching day (${nonTeaching.event_name})`, 'error');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const datesToPlan =
         planningMode === 'date' ? getDatesInRange(dateStr, endDateStr || dateStr) : [dateStr];
 
-      const newPlans = datesToPlan.map((dStr) => ({
+      // Filter out non-teaching days if in date mode
+      const validDates = datesToPlan.filter((dStr) => {
+        if (planningMode !== 'date' || !dStr) return true;
+        const nonTeaching = getNonTeachingEventForDate(dStr, academicEvents);
+        return !nonTeaching;
+      });
+
+      if (validDates.length === 0) {
+        showToast('Selected date(s) are non-teaching event days. Planning is disabled.', 'error');
+        setSaving(false);
+        return;
+      }
+
+      const newPlans = validDates.map((dStr) => ({
         class_id: selectedClassId,
         subject_id: selectedSubjectId,
         book_id: selectedBookId,
@@ -1804,6 +1874,7 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                       String(p.subject_id) === String(selectedSubjectId)
                   );
 
+                  const nonTeachingEvent = getNonTeachingEventForDate(date, academicEvents);
                   const isSelected = activeTargetDate === dateStr;
                   const isRangeSelected =
                     activeTargetDate &&
@@ -1824,6 +1895,10 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                     <div
                       key={dateStr}
                       onClick={(e) => {
+                        if (nonTeachingEvent) {
+                          showToast(`Cannot select ${dateStr}: Non-teaching day (${nonTeachingEvent.event_name})`, 'info');
+                          return;
+                        }
                         if (e.shiftKey && activeTargetDate) {
                           if (activeTargetDate < dateStr) {
                             setActiveTargetEndDate(dateStr);
@@ -1843,12 +1918,20 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                       }}
                       onDragEnter={(e) => {
                         e.preventDefault();
-                        setDraggedOverDate(dateStr);
+                        if (!nonTeachingEvent) {
+                          setDraggedOverDate(dateStr);
+                        }
                       }}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e) => {
+                        if (!nonTeachingEvent) e.preventDefault();
+                      }}
                       onDragLeave={() => setDraggedOverDate(null)}
                       onDrop={(e) => {
                         setDraggedOverDate(null);
+                        if (nonTeachingEvent) {
+                          showToast(`Cannot plan lessons on ${dateStr}: Non-teaching day (${nonTeachingEvent.event_name})`, 'error');
+                          return;
+                        }
                         const lessonId = e.dataTransfer.getData('text/plain');
                         const lesson = allLessons.find((l) => String(l.id) === lessonId);
                         if (lesson) {
@@ -1862,23 +1945,31 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                           );
                         }
                       }}
-                      className={`bg-white border rounded-lg p-3 shadow-sm transition-all cursor-pointer ${
-                        isSelected || isRangeSelected
+                      className={`bg-white border rounded-lg p-3 shadow-sm transition-all ${
+                        nonTeachingEvent
+                          ? 'bg-amber-50/30 border-amber-200 cursor-not-allowed opacity-90'
+                          : 'cursor-pointer'
+                      } ${
+                        (isSelected || isRangeSelected) && !nonTeachingEvent
                           ? 'ring-2 ring-pink-500 border-transparent bg-pink-50/20'
                           : 'border-gray-200'
                       } ${
-                        isDraggedOver ? 'border-2 border-dashed border-pink-500 bg-pink-50' : ''
+                        isDraggedOver && !nonTeachingEvent ? 'border-2 border-dashed border-pink-500 bg-pink-50' : ''
                       } ${
                         isToday ? 'border-2 border-pink-400 shadow-md ring-1 ring-pink-300' : ''
                       }`}
                     >
                       <div
-                        className={`flex justify-between items-center mb-2 border-b pb-2 flex-wrap gap-2 ${colorStyles.bg} -mx-3 -mt-3 p-2 rounded-t-lg`}
+                        className={`flex justify-between items-center mb-2 border-b pb-2 flex-wrap gap-2 ${
+                          nonTeachingEvent ? 'bg-amber-100/70 text-amber-900 border-amber-200' : colorStyles.bg
+                        } -mx-3 -mt-3 p-2 rounded-t-lg`}
                       >
                         <span
-                          className={`font-bold flex items-center gap-1.5 text-xs sm:text-sm ${colorStyles.text}`}
+                          className={`font-bold flex items-center gap-1.5 text-xs sm:text-sm ${
+                            nonTeachingEvent ? 'text-amber-900' : colorStyles.text
+                          }`}
                         >
-                          {isSelected && <i className="fas fa-map-pin text-pink-600 text-sm"></i>}
+                          {isSelected && !nonTeachingEvent && <i className="fas fa-map-pin text-pink-600 text-sm"></i>}
                           {date.toLocaleDateString(undefined, {
                             weekday: 'long',
                             month: 'short',
@@ -1889,33 +1980,56 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
                               Today
                             </span>
                           )}
+                          {nonTeachingEvent && (
+                            <span className="text-[10px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                              <i className="fas fa-calendar-xmark text-rose-600"></i> {nonTeachingEvent.event_name}
+                            </span>
+                          )}
                         </span>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAssignModal({
-                              date: dateStr,
-                              endDate:
-                                activeTargetEndDate &&
-                                (activeTargetDate === dateStr || isRangeSelected)
-                                  ? activeTargetEndDate
-                                  : dateStr,
-                            });
-                          }}
-                          disabled={saving}
-                          className="bg-white hover:bg-gray-150 text-gray-700 border border-gray-250 rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 disabled:opacity-50"
-                        >
-                          <i className="fas fa-plus text-[10px]"></i>
-                          Assign
-                        </button>
+                        {nonTeachingEvent ? (
+                          <span
+                            className="bg-gray-100 text-gray-400 border border-gray-200 rounded px-2.5 py-1 text-xs font-semibold flex items-center gap-1 cursor-not-allowed"
+                            title={`Planning disabled for ${nonTeachingEvent.event_name} (Non-Teaching Day)`}
+                          >
+                            <i className="fas fa-ban text-[10px]"></i> Disabled
+                          </span>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAssignModal({
+                                date: dateStr,
+                                endDate:
+                                  activeTargetEndDate &&
+                                  (activeTargetDate === dateStr || isRangeSelected)
+                                    ? activeTargetEndDate
+                                    : dateStr,
+                              });
+                            }}
+                            disabled={saving}
+                            className="bg-white hover:bg-gray-150 text-gray-700 border border-gray-250 rounded px-2.5 py-1 text-xs font-semibold shadow-sm transition-colors flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <i className="fas fa-plus text-[10px]"></i>
+                            Assign
+                          </button>
+                        )}
                       </div>
 
-                      {plansForDate.length === 0 ? (
+                      {nonTeachingEvent ? (
+                        <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-xs font-bold text-amber-800 flex items-center gap-2 my-1">
+                          <i className="fas fa-triangle-exclamation text-amber-600 text-sm shrink-0"></i>
+                          <span>
+                            Planning disabled: <strong>{nonTeachingEvent.event_name}</strong> is designated as a non-teaching day.
+                          </span>
+                        </div>
+                      ) : plansForDate.length === 0 ? (
                         <div className="text-xs text-gray-400 italic py-1">
                           No lessons planned. Drag a syllabus item here or click "+ Assign".
                         </div>
-                      ) : (
+                      ) : null}
+
+                      {plansForDate.length > 0 && (
                         <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                           {plansForDate.map((plan) => {
                             const lesson = allLessons.find(

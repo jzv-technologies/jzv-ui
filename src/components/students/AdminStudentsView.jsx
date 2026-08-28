@@ -1,5 +1,5 @@
 // src/components/portals/admin/AdminStudentsView.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
@@ -7,9 +7,12 @@ import { calculateAge } from '../../utils/dateUtils';
 import DataGrid from '../DataGrid';
 import ConfirmModal from '../ConfirmModal';
 import StudentFeesView from './StudentFeesView';
+import StudentBulkImportModal from './StudentBulkImportModal';
+import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents';
 
 const STUDENTS_STORAGE_KEY = 'jzv_students_local_data';
 const TIMETABLE_STORAGE_KEY = 'jzv_timetable_local_data';
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 const AdminStudentsView = () => {
   const [activeTab, setActiveTab] = useState('records'); // "records" | "fees"
@@ -30,17 +33,21 @@ const AdminStudentsView = () => {
     admission_no: '',
     edsoft_id: '',
     student_name: '',
+    father_name: '',
     birth_date: '',
     age: '',
-    gender: 'Male',
-    father_name: '',
+    blood_group: '',
+    area: '',
+    transport_point: '',
     class_id: '',
     mobile1: '',
     mobile2: '',
-    enrollment: 'Active',
+    photo_id: '',
     hostel: 'No',
-    transport_point: '',
   });
+
+  // Bulk Import Modal state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Load classes from Supabase or LocalStorage
   const loadClasses = async () => {
@@ -99,7 +106,6 @@ const AdminStudentsView = () => {
       } else {
         // Seed first-time local storage with mock data
         let seedData = [...DEFAULT_MOCK_STUDENTS];
-        // Attempt to match mock classes with loaded class IDs if available
         if (loadedClasses.length > 0) {
           seedData = seedData.map((std, idx) => ({
             ...std,
@@ -142,26 +148,41 @@ const AdminStudentsView = () => {
 
     setLoading(true);
     const calculatedAgeVal = calculateAge(formData.birth_date);
+
     const savePayload = {
-      ...formData,
-      age: calculatedAgeVal ? parseFloat(calculatedAgeVal) : null,
+      admission_no: formData.admission_no.trim(),
+      student_name: formData.student_name.trim(),
+      father_name: formData.father_name.trim(),
+      mobile1: formData.mobile1.trim(),
+      mobile2: formData.mobile2.trim(),
+      birth_date: formData.birth_date || null,
+      blood_group: formData.blood_group || '',
+      area: formData.area.trim(),
+      transport_point: formData.transport_point.trim(),
+      edsoft_id: formData.edsoft_id.trim(),
       class_id: formData.class_id || null,
+      photo_id: formData.photo_id.trim(),
+      hostel: formData.hostel || 'No',
     };
 
     if (isSupabaseMode) {
       try {
-        const { age, gender, ...dbPayload } = savePayload;
         if (editingStudent) {
           // Update
           const { error: dbErr } = await supabase
             .from('students')
-            .update(dbPayload)
+            .update({
+              ...savePayload,
+              updated_at: new Date().toISOString(),
+            })
             .eq('id', editingStudent.id);
           if (dbErr) throw dbErr;
+          showToast('Student profile updated successfully!', 'success');
         } else {
           // Insert
-          const { error: dbErr } = await supabase.from('students').insert([dbPayload]);
+          const { error: dbErr } = await supabase.from('students').insert([savePayload]);
           if (dbErr) throw dbErr;
+          showToast('New student added successfully!', 'success');
         }
         setIsModalOpen(false);
         await loadStudents(classes);
@@ -177,7 +198,7 @@ const AdminStudentsView = () => {
         // Check uniqueness for admission number among other records
         const duplicate = updatedStudents.some(
           (s) =>
-            s.admission_no.toLowerCase() === formData.admission_no.toLowerCase() &&
+            String(s.admission_no || '').toLowerCase() === savePayload.admission_no.toLowerCase() &&
             s.id !== editingStudent.id
         );
         if (duplicate) {
@@ -189,10 +210,12 @@ const AdminStudentsView = () => {
         updatedStudents = updatedStudents.map((s) =>
           s.id === editingStudent.id ? { ...s, ...savePayload } : s
         );
+        showToast('Student profile updated successfully!', 'success');
       } else {
         // Check uniqueness for admission number
         const duplicate = updatedStudents.some(
-          (s) => s.admission_no.toLowerCase() === formData.admission_no.toLowerCase()
+          (s) =>
+            String(s.admission_no || '').toLowerCase() === savePayload.admission_no.toLowerCase()
         );
         if (duplicate) {
           showToast('A student with this Admission Number already exists!', 'error');
@@ -201,8 +224,11 @@ const AdminStudentsView = () => {
         }
 
         const newId =
-          updatedStudents.length > 0 ? Math.max(...updatedStudents.map((s) => s.id)) + 1 : 1;
+          updatedStudents.length > 0
+            ? Math.max(...updatedStudents.map((s) => Number(s.id) || 0)) + 1
+            : 1;
         updatedStudents.push({ id: newId, ...savePayload });
+        showToast('New student added successfully!', 'success');
       }
 
       setStudents(updatedStudents);
@@ -225,6 +251,7 @@ const AdminStudentsView = () => {
           try {
             const { error: dbErr } = await supabase.from('students').delete().eq('id', studentId);
             if (dbErr) throw dbErr;
+            showToast('Student deleted successfully', 'success');
             setIsModalOpen(false);
             await loadStudents(classes);
           } catch (err) {
@@ -236,11 +263,168 @@ const AdminStudentsView = () => {
           const updatedStudents = students.filter((s) => s.id !== studentId);
           setStudents(updatedStudents);
           localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(updatedStudents));
+          showToast('Student deleted successfully', 'success');
           setIsModalOpen(false);
           setLoading(false);
         }
       },
     });
+  };
+
+  // Bulk Import Handler
+  const handleBulkImportStudents = async ({ rows, updateMode, selectedColumns }) => {
+    let insertedCount = 0;
+    let updatedCount = 0;
+    const errors = [];
+
+    if (isSupabaseMode) {
+      for (const r of rows) {
+        if (r.isUpdate && (r.existingId || r.admission_no)) {
+          // Construct update payload based on updateMode
+          const updatePayload = {};
+          const fieldsToUpdate =
+            updateMode === 'full'
+              ? [
+                  'student_name',
+                  'father_name',
+                  'mobile1',
+                  'mobile2',
+                  'birth_date',
+                  'blood_group',
+                  'area',
+                  'transport_point',
+                  'edsoft_id',
+                  'class_id',
+                  'photo_id',
+                  'hostel',
+                ]
+              : selectedColumns;
+
+          fieldsToUpdate.forEach((fieldKey) => {
+            if (fieldKey === 'birth_date') {
+              updatePayload.birth_date = r.birth_date || null;
+            } else if (fieldKey === 'class_id') {
+              updatePayload.class_id = r.class_id || null;
+            } else {
+              updatePayload[fieldKey] = r[fieldKey] !== undefined ? r[fieldKey] : '';
+            }
+          });
+          updatePayload.updated_at = new Date().toISOString();
+
+          const query = r.existingId
+            ? supabase.from('students').update(updatePayload).eq('id', r.existingId)
+            : supabase.from('students').update(updatePayload).eq('admission_no', r.admission_no);
+
+          const { error: upErr } = await query;
+          if (upErr) {
+            errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${upErr.message}`);
+          } else {
+            updatedCount++;
+          }
+        } else {
+          // Insert new record
+          const insertPayload = {
+            admission_no: r.admission_no,
+            student_name: r.student_name || 'New Student',
+            father_name: r.father_name || '',
+            mobile1: r.mobile1 || '',
+            mobile2: r.mobile2 || '',
+            birth_date: r.birth_date || null,
+            blood_group: r.blood_group || '',
+            area: r.area || '',
+            transport_point: r.transport_point || '',
+            edsoft_id: r.edsoft_id || '',
+            class_id: r.class_id || null,
+            photo_id: r.photo_id || '',
+            hostel: r.hostel || 'No',
+          };
+
+          const { error: inErr } = await supabase.from('students').insert([insertPayload]);
+          if (inErr) {
+            errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${inErr.message}`);
+          } else {
+            insertedCount++;
+          }
+        }
+      }
+
+      await loadStudents(classes);
+    } else {
+      // LocalStorage Mode
+      let updatedList = [...students];
+      for (const r of rows) {
+        const matchIdx = updatedList.findIndex(
+          (s) =>
+            String(s.admission_no || '')
+              .trim()
+              .toLowerCase() === String(r.admission_no).trim().toLowerCase()
+        );
+
+        if (matchIdx >= 0) {
+          const existing = updatedList[matchIdx];
+          const updateObj = { ...existing };
+          const fieldsToUpdate =
+            updateMode === 'full'
+              ? [
+                  'student_name',
+                  'father_name',
+                  'mobile1',
+                  'mobile2',
+                  'birth_date',
+                  'blood_group',
+                  'area',
+                  'transport_point',
+                  'edsoft_id',
+                  'class_id',
+                  'photo_id',
+                  'hostel',
+                ]
+              : selectedColumns;
+
+          fieldsToUpdate.forEach((fieldKey) => {
+            updateObj[fieldKey] = r[fieldKey];
+          });
+
+          updatedList[matchIdx] = updateObj;
+          updatedCount++;
+        } else {
+          const newId =
+            updatedList.length > 0 ? Math.max(...updatedList.map((s) => Number(s.id) || 0)) + 1 : 1;
+          updatedList.push({
+            id: newId,
+            admission_no: r.admission_no,
+            student_name: r.student_name || 'New Student',
+            father_name: r.father_name || '',
+            mobile1: r.mobile1 || '',
+            mobile2: r.mobile2 || '',
+            birth_date: r.birth_date || '',
+            blood_group: r.blood_group || '',
+            area: r.area || '',
+            transport_point: r.transport_point || '',
+            edsoft_id: r.edsoft_id || '',
+            class_id: r.class_id || null,
+            photo_id: r.photo_id || '',
+            hostel: r.hostel || 'No',
+          });
+          insertedCount++;
+        }
+      }
+
+      setStudents(updatedList);
+      localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(updatedList));
+    }
+
+    if (errors.length > 0) {
+      showToast(
+        `Import finished with ${insertedCount} created, ${updatedCount} updated, ${errors.length} errors.`,
+        'error'
+      );
+    } else {
+      showToast(
+        `Successfully imported: ${insertedCount} created, ${updatedCount} updated.`,
+        'success'
+      );
+    }
   };
 
   const openAddModal = () => {
@@ -249,16 +433,17 @@ const AdminStudentsView = () => {
       admission_no: '',
       edsoft_id: '',
       student_name: '',
+      father_name: '',
       birth_date: '',
       age: '',
-      gender: 'Male',
-      father_name: '',
+      blood_group: '',
+      area: '',
+      transport_point: '',
       class_id: classes[0]?.id || '',
       mobile1: '',
       mobile2: '',
-      enrollment: 'Active',
+      photo_id: '',
       hostel: 'No',
-      transport_point: '',
     });
     setIsModalOpen(true);
   };
@@ -271,23 +456,24 @@ const AdminStudentsView = () => {
         admission_no: original.admission_no || '',
         edsoft_id: original.edsoft_id || '',
         student_name: original.student_name || '',
+        father_name: original.father_name || '',
         birth_date: original.birth_date || '',
         age: original.age || '',
-        gender: original.gender || 'Male',
-        father_name: original.father_name || '',
+        blood_group: original.blood_group || '',
+        area: original.area || '',
+        transport_point: original.transport_point || '',
         class_id: original.class_id || '',
         mobile1: original.mobile1 || '',
         mobile2: original.mobile2 || '',
-        enrollment: original.enrollment || 'Active',
+        photo_id: original.photo_id || '',
         hostel: original.hostel || 'No',
-        transport_point: original.transport_point || '',
       });
       setIsModalOpen(true);
     }
   };
 
   // Calculate Class Distribution Statistics
-  const classStats = React.useMemo(() => {
+  const classStats = useMemo(() => {
     const countsMap = new Map();
     students.forEach((s) => {
       const cId = s.class_id ? String(s.class_id) : 'unassigned';
@@ -313,7 +499,7 @@ const AdminStudentsView = () => {
   }, [students, classes]);
 
   // Map students array to pretty headers for DataGrid rendering
-  const displayData = React.useMemo(() => {
+  const displayData = useMemo(() => {
     let mapped = students.map((s) => {
       const cls = classes.find((c) => String(c.id) === String(s.class_id));
       return {
@@ -324,13 +510,15 @@ const AdminStudentsView = () => {
         'Student Name': s.student_name || '',
         Class: cls ? cls.name : 'Unassigned',
         'Father Name': s.father_name || '',
-        'Birth Date': s.birth_date || '',
-        Age: calculateAge(s.birth_date),
         'Mobile 1': s.mobile1 || '',
         'Mobile 2': s.mobile2 || '',
-        Enrollment: s.enrollment || 'Active',
-        Hostel: s.hostel || 'No',
+        'Birth Date': s.birth_date || '',
+        Age: calculateAge(s.birth_date),
+        'Blood Group': s.blood_group || '',
+        Area: s.area || '',
         'Transport Point': s.transport_point || '',
+        'Photo ID': s.photo_id || '',
+        Hostel: s.hostel || 'No',
       };
     });
 
@@ -355,7 +543,19 @@ const AdminStudentsView = () => {
           String(s['Father Name'] || '')
             .toLowerCase()
             .includes(q) ||
+          String(s['Edsoft ID'] || '')
+            .toLowerCase()
+            .includes(q) ||
           String(s['Mobile 1'] || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(s['Area'] || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(s['Blood Group'] || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(s['Transport Point'] || '')
             .toLowerCase()
             .includes(q)
       );
@@ -376,13 +576,15 @@ const AdminStudentsView = () => {
       'Student Name': r['Student Name'],
       Class: r['Class'],
       'Father Name': r['Father Name'],
-      'Birth Date': r['Birth Date'],
-      Age: r['Age'],
       'Mobile 1': r['Mobile 1'],
       'Mobile 2': r['Mobile 2'],
-      Enrollment: r['Enrollment'],
-      Hostel: r['Hostel'],
+      'Birth Date': r['Birth Date'],
+      Age: r['Age'],
+      'Blood Group': r['Blood Group'],
+      Area: r['Area'],
       'Transport Point': r['Transport Point'],
+      'Photo ID': r['Photo ID'],
+      Hostel: r['Hostel'],
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
@@ -451,7 +653,7 @@ const AdminStudentsView = () => {
                   <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
                   <input
                     type="text"
-                    placeholder="Search by Admission No, Student Name..."
+                    placeholder="Search by Admission No, Name, Father Name, Area..."
                     value={recordsSearchQuery}
                     onChange={(e) => setRecordsSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-4 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:border-brand-primary transition-all"
@@ -489,11 +691,19 @@ const AdminStudentsView = () => {
                 </button>
 
                 <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="flex-1 sm:flex-none px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <i className="fas fa-file-import text-indigo-600"></i>
+                  Import Students
+                </button>
+
+                <button
                   onClick={handleExportRecordsExcel}
                   className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                 >
                   <i className="fas fa-file-excel text-emerald-600"></i>
-                  Export Excel
+                  Download
                 </button>
 
                 <button
@@ -751,6 +961,20 @@ const AdminStudentsView = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
+                      Edsoft ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. ED-10001"
+                      value={formData.edsoft_id}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, edsoft_id: e.target.value }))
+                      }
+                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
                       Class
                     </label>
                     <select
@@ -770,31 +994,16 @@ const AdminStudentsView = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Enrollment ID
+                      Hostel Accommodation
                     </label>
-                    <input
-                      type="text"
-                      placeholder="000126B000"
-                      value={formData.enrollment}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, enrollment: e.target.value }))
-                      }
-                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Edsoft ID
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ED-10001"
-                      value={formData.edsoft_id}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, edsoft_id: e.target.value }))
-                      }
-                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
-                    />
+                    <select
+                      value={formData.hostel}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, hostel: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-light-border bg-white rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary cursor-pointer"
+                    >
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -802,7 +1011,7 @@ const AdminStudentsView = () => {
               {/* Personal Details Section */}
               <div>
                 <h4 className="text-xs font-bold text-dark-soft uppercase tracking-wider mb-4 border-b border-light-border pb-2">
-                  <i className="fas fa-user mr-1.5 text-green-dark"></i> Personal Details
+                  <i className="fas fa-user mr-1.5 text-green-dark"></i> Student & Personal Details
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
@@ -811,11 +1020,28 @@ const AdminStudentsView = () => {
                     </label>
                     <input
                       type="text"
-                      placeholder="Full Name"
+                      placeholder="Full Student Name"
                       required
                       value={formData.student_name}
                       onChange={(e) =>
                         setFormData((prev) => ({ ...prev, student_name: e.target.value }))
+                      }
+                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
+                      Father Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Father's Name"
+                      value={formData.father_name}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          father_name: e.target.value,
+                        }))
                       }
                       className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
                     />
@@ -845,35 +1071,50 @@ const AdminStudentsView = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Gender
+                      Blood Group
                     </label>
                     <select
-                      value={formData.gender}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, gender: e.target.value }))}
+                      value={formData.blood_group}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, blood_group: e.target.value }))
+                      }
                       className="w-full px-4 py-2.5 border border-light-border bg-white rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary cursor-pointer"
                     >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
+                      <option value="">Select Blood Group</option>
+                      {BLOOD_GROUPS.map((bg) => (
+                        <option key={bg} value={bg}>
+                          {bg}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Father Name
+                      Photo ID
                     </label>
                     <input
                       type="text"
-                      placeholder="Father's Name"
-                      value={formData.father_name}
+                      placeholder="e.g. PH-101"
+                      value={formData.photo_id}
                       onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, father_name: e.target.value }))
+                        setFormData((prev) => ({ ...prev, photo_id: e.target.value }))
                       }
                       className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Contact & Location Section */}
+              <div>
+                <h4 className="text-xs font-bold text-dark-soft uppercase tracking-wider mb-4 border-b border-light-border pb-2">
+                  <i className="fas fa-map-location-dot mr-1.5 text-green-dark"></i> Contact &
+                  Location Details
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Mobile 1
+                      Mobile 1 (Primary)
                     </label>
                     <input
                       type="tel"
@@ -887,7 +1128,7 @@ const AdminStudentsView = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Mobile 2
+                      Mobile 2 (Secondary)
                     </label>
                     <input
                       type="tel"
@@ -899,29 +1140,19 @@ const AdminStudentsView = () => {
                       className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
                     />
                   </div>
-                </div>
-              </div>
-
-              {/* Status & Options Section */}
-              <div>
-                <h4 className="text-xs font-bold text-dark-soft uppercase tracking-wider mb-4 border-b border-light-border pb-2">
-                  <i className="fas fa-sliders-h mr-1.5 text-green-dark"></i> Facilities
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
-                      Hostel Accommodation
+                      Area
                     </label>
-                    <select
-                      value={formData.hostel}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, hostel: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-light-border bg-white rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary cursor-pointer"
-                    >
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
+                    <input
+                      type="text"
+                      placeholder="e.g. Central City, Sector 4"
+                      value={formData.area}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, area: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                    />
                   </div>
-                  <div className="md:col-span-2">
+                  <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1.5">
                       Transport Point
                     </label>
@@ -972,6 +1203,17 @@ const AdminStudentsView = () => {
         </div>
       )}
 
+      {/* Bulk Import Modal */}
+      <StudentBulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        existingStudents={students}
+        classes={classes}
+        onImportSuccess={handleBulkImportStudents}
+        isSupabaseMode={isSupabaseMode}
+      />
+
+      {/* Confirm Modal */}
       <ConfirmModal
         isOpen={confirmConfig !== null}
         title={confirmConfig?.title}

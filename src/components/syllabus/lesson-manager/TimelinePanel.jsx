@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { supabase } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 import ConfirmModal from '../../ConfirmModal';
+import { getNonTeachingEventForDate } from '../../../utils/academicEventsUtils';
 
 const ViewLogsModal = ({ isOpen, onClose, record, lesson }) => {
   const [logs, setLogs] = useState([]);
@@ -140,6 +141,7 @@ const TimelinePanel = ({
   allLessons,
   progressRecords,
   setProgressRecords,
+  academicEvents = [],
   planningMode,
   setPlanningMode,
   activeTargetDate,
@@ -259,7 +261,12 @@ const TimelinePanel = ({
     return parts.join(' > ');
   };
 
-  const renderStatusBadge = (record, lesson = null, onReplanClick = null) => {
+  const renderStatusBadge = (
+    record,
+    lesson = null,
+    onReplanClick = null,
+    onViolatedClick = null
+  ) => {
     const isRevision = lesson?.level1?.toLowerCase().includes('_revision');
 
     // Check violation
@@ -279,9 +286,28 @@ const TimelinePanel = ({
     }
 
     if (statusWarning === 'violated') {
+      const clickHandler = onViolatedClick || onReplanClick;
+      const clickableProps = clickHandler
+        ? {
+            onClick: (e) => {
+              e.stopPropagation();
+              clickHandler(record);
+            },
+            className:
+              'cursor-pointer hover:bg-red-200 text-[10px] bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded font-bold uppercase shrink-0 shadow-sm transition-all flex items-center gap-1 hover:scale-105 active:scale-95 group/violated',
+            title: 'Click to go to planned date and update',
+          }
+        : {
+            className:
+              'text-[10px] bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 shadow-sm flex items-center gap-1',
+          };
       return (
-        <span className="text-[10px] bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 shadow-sm">
-          <i className="fas fa-exclamation-triangle"></i> Violated
+        <span {...clickableProps}>
+          <i className="fas fa-exclamation-triangle text-red-600"></i>
+          <span>Violated</span>
+          {clickHandler && (
+            <i className="fas fa-arrow-right text-[8px] opacity-75 group-hover/violated:translate-x-0.5 transition-transform"></i>
+          )}
         </span>
       );
     }
@@ -293,8 +319,8 @@ const TimelinePanel = ({
               onReplanClick(record);
             },
             className:
-              'cursor-pointer hover:bg-orange-200 text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 shadow-sm transition-colors',
-            title: 'Click to update date',
+              'cursor-pointer hover:bg-orange-200 text-[10px] bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded font-bold uppercase shrink-0 shadow-sm transition-all flex items-center gap-1 hover:scale-105 active:scale-95 group/replan',
+            title: 'Click to go to planned date and update',
           }
         : {
             className:
@@ -303,6 +329,9 @@ const TimelinePanel = ({
       return (
         <span {...clickableProps}>
           <i className="fas fa-clock"></i> Re-plan Required
+          {onReplanClick && (
+            <i className="fas fa-arrow-right text-[8px] opacity-75 group-hover/replan:translate-x-0.5 transition-transform"></i>
+          )}
         </span>
       );
     }
@@ -357,6 +386,70 @@ const TimelinePanel = ({
     );
   };
 
+  const handleGoToPlannedDate = (record) => {
+    if (!record) return;
+    const rawPlannedDate = record.target_start_date
+      ? String(record.target_start_date).split('T')[0]
+      : record.target_end_date
+        ? String(record.target_end_date).split('T')[0]
+        : getLocalISODate(new Date());
+
+    const plannedDate = rawPlannedDate;
+
+    // Switch to daily mode if in weekly mode
+    if (planningMode !== 'date') {
+      setPlanningMode('date');
+    }
+
+    // Ensure the target planned date falls within the visible timeline dates
+    const targetD = new Date(plannedDate);
+    const startD = new Date(startDateStr);
+    const endRangeD = new Date(startDateStr);
+    endRangeD.setDate(endRangeD.getDate() + timelineDays);
+
+    if (targetD < startD || targetD >= endRangeD) {
+      // Calculate Monday of the planned date's week
+      const d = new Date(targetD);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      monday.setMinutes(monday.getMinutes() - monday.getTimezoneOffset());
+      setStartDateStr(monday.toISOString().split('T')[0]);
+      if (timelineDays < 14) setTimelineDays(14);
+    }
+
+    // Set active target date
+    setActiveTargetDate(plannedDate);
+
+    // Open inline date editor for this record
+    setUpdatingReplanId(record.id);
+    const start = record.target_start_date
+      ? String(record.target_start_date).split('T')[0]
+      : plannedDate;
+    const end = record.target_end_date
+      ? String(record.target_end_date).split('T')[0]
+      : start;
+    setReplanDate(start);
+    setReplanEndDate(end);
+    setUpdateMode('replan');
+
+    // Scroll smoothly to the planned date card
+    setTimeout(() => {
+      const cardEl =
+        document.getElementById(`record-item-${record.id}`) ||
+        document.getElementById(`timeline-date-${plannedDate}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        cardEl.classList.add('ring-4', 'ring-indigo-400');
+        setTimeout(() => {
+          cardEl.classList.remove('ring-4', 'ring-indigo-400');
+        }, 2500);
+      }
+    }, 150);
+
+    showToast(`Navigated to planned date: ${plannedDate}`, 'info');
+  };
+
   const getActiveTargetName = () => {
     if (planningMode === 'date' && activeTargetDate) {
       return new Date(activeTargetDate).toLocaleDateString(undefined, {
@@ -374,6 +467,15 @@ const TimelinePanel = ({
   const handleDropAssign = async (e, dropDateStr, isWeekMode = false) => {
     e.preventDefault();
     setDraggedOverTarget(null);
+
+    if (!isWeekMode && dropDateStr) {
+      const nonTeaching = getNonTeachingEventForDate(dropDateStr, academicEvents);
+      if (nonTeaching) {
+        showToast(`Cannot plan lessons on ${dropDateStr}: Non-teaching day (${nonTeaching.event_name})`, 'error');
+        return;
+      }
+    }
+
     const lessonId = e.dataTransfer.getData('text/plain');
     if (!lessonId) return;
 
@@ -628,13 +730,19 @@ const TimelinePanel = ({
     }
   };
 
-  const handleUpdateDateLevel = async (records) => {
+  const handleUpdateDateLevel = async (recordsToUpdate) => {
     if (!replanDate) {
-      showToast('Please select a new date.', 'error');
+      showToast('Please select a target date', 'error');
+      return;
+    }
+
+    const nonTeaching = getNonTeachingEventForDate(replanDate, academicEvents);
+    if (nonTeaching) {
+      showToast(`Cannot change plan to ${replanDate}: Non-teaching day (${nonTeaching.event_name})`, 'error');
       return;
     }
     try {
-      const promises = records.map(async (record) => {
+      const promises = recordsToUpdate.map(async (record) => {
         let newStart = record.target_start_date;
         let newEnd = record.target_end_date;
 
@@ -888,11 +996,12 @@ const TimelinePanel = ({
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {renderStatusBadge(record, lesson, (rec) => {
-                        setUpdatingReplanId(rec.id);
-                        setReplanDate(getLocalISODate(new Date()));
-                        setUpdateMode('replan');
-                      })}
+                      {renderStatusBadge(
+                        record,
+                        lesson,
+                        handleGoToPlannedDate,
+                        handleGoToPlannedDate
+                      )}
 
                       {record.status !== 'planned' && (
                         <button
@@ -939,6 +1048,7 @@ const TimelinePanel = ({
               return dateStr >= start && dateStr <= end;
             });
 
+            const nonTeachingEvent = getNonTeachingEventForDate(date, academicEvents);
             const allPlanned = recordsForDate.length > 0 && recordsForDate.every((r) => r.status === 'planned');
             const isSelected = activeTargetDate === dateStr;
             const isDraggedOver = draggedOverTarget === dateStr;
@@ -948,30 +1058,54 @@ const TimelinePanel = ({
             return (
               <div
                 key={dateStr}
-                onClick={() => setActiveTargetDate((prev) => (prev === dateStr ? null : dateStr))}
+                id={`timeline-date-${dateStr}`}
+                onClick={() => {
+                  if (nonTeachingEvent) {
+                    showToast(`Cannot select ${dateStr}: Non-teaching day (${nonTeachingEvent.event_name})`, 'info');
+                    return;
+                  }
+                  setActiveTargetDate((prev) => (prev === dateStr ? null : dateStr));
+                }}
                 onDragEnter={(e) => {
                   e.preventDefault();
-                  setDraggedOverTarget(dateStr);
+                  if (!nonTeachingEvent) setDraggedOverTarget(dateStr);
                 }}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  if (!nonTeachingEvent) e.preventDefault();
+                }}
                 onDragLeave={() => setDraggedOverTarget(null)}
-                onDrop={(e) => handleDropAssign(e, dateStr)}
-                className={`bg-white rounded-xl p-3 shadow-sm transition-all cursor-pointer ${
-                  isSelected
+                onDrop={(e) => {
+                  if (nonTeachingEvent) {
+                    e.preventDefault();
+                    showToast(`Cannot plan lessons on ${dateStr}: Non-teaching day (${nonTeachingEvent.event_name})`, 'error');
+                    return;
+                  }
+                  handleDropAssign(e, dateStr);
+                }}
+                className={`bg-white rounded-xl p-3 shadow-sm transition-all ${
+                  nonTeachingEvent
+                    ? 'bg-amber-50/30 border border-amber-200 cursor-not-allowed opacity-90'
+                    : 'cursor-pointer'
+                } ${
+                  isSelected && !nonTeachingEvent
                     ? 'ring-2 ring-indigo-600 border border-transparent bg-indigo-50/20'
                     : 'border border-gray-200'
-                } ${isDraggedOver ? 'border-2 border-dashed border-indigo-500 bg-indigo-50' : ''} ${
+                } ${isDraggedOver && !nonTeachingEvent ? 'border-2 border-dashed border-indigo-500 bg-indigo-50' : ''} ${
                   isToday ? 'border-l-4 border-l-emerald-500 shadow-md ring-1 ring-emerald-300' : ''
                 }`}
               >
                 {/* Card Header */}
                 <div
-                  className={`flex justify-between items-center mb-3 border-b pb-2 flex-wrap gap-2 ${colorStyles.bg} -mx-3 -mt-3 p-2 rounded-t-xl`}
+                  className={`flex justify-between items-center mb-3 border-b pb-2 flex-wrap gap-2 ${
+                    nonTeachingEvent ? 'bg-amber-100/70 text-amber-900 border-amber-200' : colorStyles.bg
+                  } -mx-3 -mt-3 p-2 rounded-t-xl`}
                 >
                   <span
-                    className={`font-bold flex items-center gap-1.5 text-sm ${colorStyles.text}`}
+                    className={`font-bold flex items-center gap-1.5 text-sm ${
+                      nonTeachingEvent ? 'text-amber-900' : colorStyles.text
+                    }`}
                   >
-                    {isSelected && <i className="fas fa-map-pin text-indigo-600 text-sm"></i>}
+                    {isSelected && !nonTeachingEvent && <i className="fas fa-map-pin text-indigo-600 text-sm"></i>}
                     {date.toLocaleDateString(undefined, {
                       weekday: 'long',
                       month: 'short',
@@ -982,8 +1116,20 @@ const TimelinePanel = ({
                         Today
                       </span>
                     )}
+                    {nonTeachingEvent && (
+                      <span className="text-[10px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <i className="fas fa-calendar-xmark text-rose-600"></i> {nonTeachingEvent.event_name}
+                      </span>
+                    )}
                   </span>
-                  {updatingDateLevelStr === dateStr ? (
+                  {nonTeachingEvent ? (
+                    <span
+                      className="bg-gray-100 text-gray-400 border border-gray-200 rounded px-2.5 py-1 text-xs font-semibold flex items-center gap-1 cursor-not-allowed"
+                      title={`Planning disabled for ${nonTeachingEvent.event_name} (Non-Teaching Day)`}
+                    >
+                      <i className="fas fa-ban text-[10px]"></i> Disabled
+                    </span>
+                  ) : updatingDateLevelStr === dateStr ? (
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="date"
@@ -1040,11 +1186,20 @@ const TimelinePanel = ({
                 </div>
 
                 {/* Card Content (Progress Records) */}
-                {recordsForDate.length === 0 ? (
+                {nonTeachingEvent ? (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-xs font-bold text-amber-800 flex items-center gap-2 my-1">
+                    <i className="fas fa-triangle-exclamation text-amber-600 text-sm shrink-0"></i>
+                    <span>
+                      Planning disabled: <strong>{nonTeachingEvent.event_name}</strong> is designated as a non-teaching day.
+                    </span>
+                  </div>
+                ) : recordsForDate.length === 0 ? (
                   <div className="text-xs text-gray-400 italic py-2 text-center bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
                     Drag a syllabus item here to plan it.
                   </div>
-                ) : (
+                ) : null}
+
+                {recordsForDate.length > 0 && (
                   <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                     {recordsForDate.map((record) => {
                       const lesson = allLessons.find(
@@ -1055,6 +1210,7 @@ const TimelinePanel = ({
                       return (
                         <div
                           key={record.id}
+                          id={`record-item-${record.id}`}
                           draggable={true}
                           onDragStart={(e) => {
                             e.dataTransfer.setData('text/plain', String(record.lesson_id));
