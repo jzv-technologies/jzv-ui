@@ -58,7 +58,7 @@ const EmployeeRecordsView = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('active'); // 'active' | 'inactive' | 'all'
-  const [sortField, setSortField] = useState('emp_id');
+  const [sortField, setSortField] = useState('name');
   const [sortOrder, setSortOrder] = useState('asc');
 
   // Modals
@@ -189,11 +189,17 @@ const EmployeeRecordsView = ({
       let fetchedEmps = null;
       let empErr = null;
 
-      const { data: eData, error: eErr } = await supabase.from('employees').select('*');
+      const { data: eData, error: eErr } = await supabase
+        .from('employees')
+        .select('*')
+        .order('name', { ascending: true });
       if (!eErr && eData && eData.length > 0) {
         fetchedEmps = eData;
       } else {
-        const { data: tData, error: tErr } = await supabase.from('teachers').select('*');
+        const { data: tData, error: tErr } = await supabase
+          .from('teachers')
+          .select('*')
+          .order('name', { ascending: true });
         if (!tErr && tData && tData.length > 0) {
           fetchedEmps = tData;
         } else {
@@ -336,8 +342,10 @@ const EmployeeRecordsView = ({
       if (valA === undefined || valA === null) valA = '';
       if (valB === undefined || valB === null) valB = '';
 
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (typeof valA === 'string' && typeof valB === 'string') {
+        const cmp = valA.localeCompare(valB, undefined, { sensitivity: 'base', numeric: true });
+        return sortOrder === 'asc' ? cmp : -cmp;
+      }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;

@@ -11,6 +11,7 @@ import CompensationHistoryModal from './salary-tracker/CompensationHistoryModal'
 import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
 import SalaryTrackerExportModal from './salary-tracker/SalaryTrackerExportModal';
 import SalaryTrackerUploadModal from './salary-tracker/SalaryTrackerUploadModal';
+import InitializeMonthPromptModal from './salary-tracker/InitializeMonthPromptModal';
 import { isMonthBeforeJoining } from './salary-tracker/joiningDateHelper';
 
 const MONTH_NAMES = [
@@ -149,6 +150,13 @@ const SalaryTrackerView = ({
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
+  // Uninitialized Month Prompt Modal State
+  const [uninitializedPromptState, setUninitializedPromptState] = useState({
+    isOpen: false,
+    monthObj: null,
+    employee: null,
+  });
+
   // Fetch data
   const fetchData = async () => {
     setLoading(true);
@@ -175,11 +183,23 @@ const SalaryTrackerView = ({
 
       // 2. Fetch Selected Month Tracker Records
       let currentTrackers = [];
-      const { data: curTrackData, error: curTrackErr } = await supabase
-        .from('salary_tracker')
+      let { data: curTrackData, error: curTrackErr } = await supabase
+        .from('trk_emp_salary')
         .select('*')
         .eq('sal_year', salYear)
         .eq('sal_month', salMonth);
+
+      if (curTrackErr) {
+        const fb = await supabase
+          .from('salary_tracker')
+          .select('*')
+          .eq('sal_year', salYear)
+          .eq('sal_month', salMonth);
+        if (!fb.error && fb.data) {
+          curTrackData = fb.data;
+          curTrackErr = null;
+        }
+      }
 
       if (!curTrackErr && Array.isArray(curTrackData)) {
         currentTrackers = curTrackData;
@@ -193,11 +213,23 @@ const SalaryTrackerView = ({
 
       // 3. Fetch Previous Month Tracker Records
       let prevTrackers = [];
-      const { data: prevTrackData, error: prevTrackErr } = await supabase
-        .from('salary_tracker')
+      let { data: prevTrackData, error: prevTrackErr } = await supabase
+        .from('trk_emp_salary')
         .select('*')
         .eq('sal_year', prevYear)
         .eq('sal_month', prevMonth);
+
+      if (prevTrackErr) {
+        const fb = await supabase
+          .from('salary_tracker')
+          .select('*')
+          .eq('sal_year', prevYear)
+          .eq('sal_month', prevMonth);
+        if (!fb.error && fb.data) {
+          prevTrackData = fb.data;
+          prevTrackErr = null;
+        }
+      }
 
       if (!prevTrackErr && Array.isArray(prevTrackData)) {
         prevTrackers = prevTrackData;
@@ -211,7 +243,14 @@ const SalaryTrackerView = ({
 
       // 4. Fetch 9-Month Matrix Records
       try {
-        const { data: matData, error: matErr } = await supabase.from('salary_tracker').select('*');
+        let { data: matData, error: matErr } = await supabase.from('trk_emp_salary').select('*');
+        if (matErr) {
+          const fb = await supabase.from('salary_tracker').select('*');
+          if (!fb.error && fb.data) {
+            matData = fb.data;
+            matErr = null;
+          }
+        }
 
         if (!matErr && Array.isArray(matData)) {
           setMatrixTrackerRecords(matData);
@@ -259,35 +298,45 @@ const SalaryTrackerView = ({
   }, [selectedPaymentItem, selectedExtrasItem]);
 
   // Requirement 5: Initialize Month Records in DB & State
-  const handleInitializeMonthRecords = async () => {
+  // Initialize Month Records in DB & State (Batch or Single Employee)
+  const handleInitializeSpecificMonth = async (
+    targetYear,
+    targetMonth,
+    targetEmp = null,
+    onlyTarget = false
+  ) => {
     if (!canUpdateSalaryTracker) {
       showToast('Salary Tracker can be updated by Management and above level only', 'error');
-      return;
+      return false;
     }
     if (!Array.isArray(employees) || employees.length === 0) {
       showToast('No active salaried employees found to initialize', 'error');
-      return;
+      return false;
     }
 
     setInitializing(true);
     try {
-      const existingMap = new Map();
-      trackerRecords.forEach((tr) => {
-        const key = `${tr.employee_id}_${tr.organization || ''}`;
-        existingMap.set(key, tr);
-      });
+      const existingSet = new Set();
+      matrixTrackerRecords
+        .filter((tr) => tr.sal_year === targetYear && tr.sal_month === targetMonth)
+        .forEach((tr) => {
+          existingSet.add(`${tr.employee_id}_${tr.organization || ''}`);
+        });
 
+      const employeesToInit = onlyTarget && targetEmp ? [targetEmp] : employees;
       const newPayloads = [];
-      employees.forEach((emp) => {
+
+      employeesToInit.forEach((emp) => {
         const org = emp.organization || 'Jamia Zaytoonah';
         const key = `${emp.id}_${org}`;
-        if (!existingMap.has(key)) {
+        if (!existingSet.has(key)) {
           const baseSalary = Number(emp.current_salary) || 0;
           newPayloads.push({
             employee_id: emp.id,
+            employee_name: emp.name || '',
             organization: org,
-            sal_year: salYear,
-            sal_month: salMonth,
+            sal_year: targetYear,
+            sal_month: targetMonth,
             salary: baseSalary,
             extras: 0,
             deductions: 0,
@@ -298,45 +347,79 @@ const SalaryTrackerView = ({
       });
 
       if (newPayloads.length === 0) {
-        showToast('All salaried employees already initialized for this month.', 'info');
+        if (onlyTarget && targetEmp) {
+          showToast(`Salary record for ${targetEmp.name} already exists for this month.`, 'info');
+        } else {
+          showToast('All salaried employees already initialized for this month.', 'info');
+        }
         setInitializing(false);
-        return;
+        return true;
       }
 
-      const { data: insertedData, error: insertErr } = await supabase
-        .from('salary_tracker')
+      let { data: insertedData, error: insertErr } = await supabase
+        .from('trk_emp_salary')
         .insert(newPayloads)
         .select();
 
       if (insertErr) {
-        console.warn(
-          'Supabase error during initialization (using local fallback):',
-          insertErr.message
-        );
+        const fb = await supabase
+          .from('salary_tracker')
+          .insert(newPayloads)
+          .select();
+        if (!fb.error && fb.data) {
+          insertedData = fb.data;
+          insertErr = null;
+        } else {
+          console.warn(
+            'Supabase error during initialization (using local fallback):',
+            insertErr.message
+          );
+        }
       }
 
-      const updatedRecords = [
-        ...trackerRecords,
-        ...(insertedData || newPayloads.map((p, idx) => ({ ...p, id: Date.now() + idx }))),
-      ];
+      const generatedRecords =
+        insertedData || newPayloads.map((p, idx) => ({ ...p, id: Date.now() + idx }));
 
-      setTrackerRecords(updatedRecords);
-      localStorage.setItem(
-        `jzv_salary_tracker_${salYear}_${salMonth}`,
-        JSON.stringify(updatedRecords)
-      );
-      setMatrixTrackerRecords((prev) => [...prev, ...updatedRecords]);
+      if (targetYear === salYear && targetMonth === salMonth) {
+        setTrackerRecords((prev) => {
+          const updated = [...prev, ...generatedRecords];
+          localStorage.setItem(
+            `jzv_salary_tracker_${targetYear}_${targetMonth}`,
+            JSON.stringify(updated)
+          );
+          return updated;
+        });
+      }
 
-      showToast(
-        `Successfully initialized salary records for ${newPayloads.length} employee(s) for ${salMonth}/${salYear}!`,
-        'success'
-      );
+      setMatrixTrackerRecords((prev) => [...prev, ...generatedRecords]);
+
+      const monthLabel = MONTH_NAMES[targetMonth - 1]
+        ? `${MONTH_NAMES[targetMonth - 1]} '${String(targetYear).slice(-2)}`
+        : `${targetMonth}/${targetYear}`;
+
+      if (onlyTarget && targetEmp) {
+        showToast(
+          `Successfully initialized salary record for ${targetEmp.name} for ${monthLabel}!`,
+          'success'
+        );
+      } else {
+        showToast(
+          `Successfully initialized salary records for ${newPayloads.length} employee(s) for ${monthLabel}!`,
+          'success'
+        );
+      }
+      return true;
     } catch (err) {
       console.error('Failed to initialize month records:', err);
       showToast('Failed to initialize month records: ' + err.message, 'error');
+      return false;
     } finally {
       setInitializing(false);
     }
+  };
+
+  const handleInitializeMonthRecords = async () => {
+    return handleInitializeSpecificMonth(salYear, salMonth);
   };
 
   // Map of Previous Month Pending Balances
@@ -474,6 +557,7 @@ const SalaryTrackerView = ({
 
       const payload = {
         employee_id: emp.id,
+        employee_name: emp.name || '',
         organization: org,
         sal_year: targetY,
         sal_month: targetM,
@@ -487,13 +571,22 @@ const SalaryTrackerView = ({
         notes: extrasNotes || undefined,
       };
 
-      const { data: upsertData, error: upsertErr } = await supabase
-        .from('salary_tracker')
+      let { data: upsertData, error: upsertErr } = await supabase
+        .from('trk_emp_salary')
         .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
         .select();
 
       if (upsertErr) {
-        console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        const fb = await supabase
+          .from('salary_tracker')
+          .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
+          .select();
+        if (!fb.error && fb.data) {
+          upsertData = fb.data;
+          upsertErr = null;
+        } else {
+          console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        }
       }
 
       const newTrackerList = [...trackerRecords];
@@ -561,10 +654,25 @@ const SalaryTrackerView = ({
   };
 
   // Open Payment Settlement Modal directly from Matrix Swatch Click
-  const handleOpenMatrixPaymentModal = (emp, m) => {
+  const handleOpenMatrixPaymentModal = (emp, m, skipPrompt = false) => {
     if (!canUpdateSalaryTracker) {
       showToast('Salary Tracker can be updated by Management and above level only', 'error');
       return;
+    }
+
+    // Requirement 2: Check if target month has 0 initialized entries across all staff
+    if (!skipPrompt) {
+      const monthEntries = matrixTrackerRecords.filter(
+        (r) => r.sal_year === m.year && r.sal_month === m.month
+      );
+      if (monthEntries.length === 0) {
+        setUninitializedPromptState({
+          isOpen: true,
+          monthObj: m,
+          employee: emp,
+        });
+        return;
+      }
     }
 
     const org = emp.organization || 'Jamia Zaytoonah';
@@ -601,11 +709,12 @@ const SalaryTrackerView = ({
       status,
       targetYear: m.year,
       targetMonth: m.month,
+      isNewEntry: !existing,
     };
 
     setSelectedPaymentItem(item);
     setSettlementForm({
-      amount: balance > 0 ? String(balance) : '',
+      amount: balance > 0 ? String(balance) : (baseSalary > 0 ? String(baseSalary) : ''),
       date: new Date().toISOString().split('T')[0],
       paid_by: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Admin',
       paid_through: 'Bank Transfer',
@@ -682,6 +791,7 @@ const SalaryTrackerView = ({
 
       const payload = {
         employee_id: emp.id,
+        employee_name: emp.name || '',
         organization: org,
         sal_year: targetY,
         sal_month: targetM,
@@ -695,13 +805,22 @@ const SalaryTrackerView = ({
         notes: noteContent || undefined,
       };
 
-      const { data: upsertData, error: upsertErr } = await supabase
-        .from('salary_tracker')
+      let { data: upsertData, error: upsertErr } = await supabase
+        .from('trk_emp_salary')
         .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
         .select();
 
       if (upsertErr) {
-        console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        const fb = await supabase
+          .from('salary_tracker')
+          .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
+          .select();
+        if (!fb.error && fb.data) {
+          upsertData = fb.data;
+          upsertErr = null;
+        } else {
+          console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        }
       }
 
       const newTrackerList = [...trackerRecords];
@@ -740,6 +859,10 @@ const SalaryTrackerView = ({
         return [...filtered, recordToSave];
       });
 
+      const toastMsg = selectedPaymentItem.isNewEntry
+        ? `Salary entry initialized and payment of ₹${amountNum.toLocaleString('en-IN')} recorded for ${emp.name}!`
+        : `Payment settlement of ₹${amountNum.toLocaleString('en-IN')} recorded for ${emp.name}!`;
+
       showToast(toastMsg, 'success');
       setSelectedPaymentItem(null);
     } catch (err) {
@@ -773,6 +896,7 @@ const SalaryTrackerView = ({
 
       const payload = {
         employee_id: emp.id,
+        employee_name: emp.name || '',
         organization: org,
         sal_year: targetY,
         sal_month: targetM,
@@ -786,13 +910,22 @@ const SalaryTrackerView = ({
         notes: lastRec?.notes || undefined,
       };
 
-      const { data: upsertData, error: upsertErr } = await supabase
-        .from('salary_tracker')
+      let { data: upsertData, error: upsertErr } = await supabase
+        .from('trk_emp_salary')
         .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
         .select();
 
       if (upsertErr) {
-        console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        const fb = await supabase
+          .from('salary_tracker')
+          .upsert(payload, { onConflict: 'employee_id,organization,sal_year,sal_month' })
+          .select();
+        if (!fb.error && fb.data) {
+          upsertData = fb.data;
+          upsertErr = null;
+        } else {
+          console.warn('Supabase upsert error (using local cache fallback):', upsertErr.message);
+        }
       }
 
       const newTrackerList = [...trackerRecords];
@@ -981,18 +1114,20 @@ const SalaryTrackerView = ({
       // Retroactively update selected Salary Tracker records
       if (Array.isArray(trackerUpdateMonths) && trackerUpdateMonths.length > 0) {
         for (const mObj of trackerUpdateMonths) {
-          const { error: trError } = await supabase
-            .from('salary_tracker')
+          let { error: trError } = await supabase
+            .from('trk_emp_salary')
             .update({ salary: newSalaryNum })
             .eq('employee_id', empId)
             .eq('sal_year', mObj.year)
             .eq('sal_month', mObj.month);
 
           if (trError) {
-            console.warn(
-              `Failed to update salary_tracker for month ${mObj.month}/${mObj.year}:`,
-              trError.message
-            );
+            await supabase
+              .from('salary_tracker')
+              .update({ salary: newSalaryNum })
+              .eq('employee_id', empId)
+              .eq('sal_year', mObj.year)
+              .eq('sal_month', mObj.month);
           }
         }
         showToast(
@@ -1112,9 +1247,16 @@ const SalaryTrackerView = ({
 
     setSaving(true);
     try {
+      const empMap = new Map();
+      employees.forEach((e) => empMap.set(String(e.id), e.name));
+      const enrichedRows = payloadRows.map((r) => ({
+        ...r,
+        employee_name: r.employee_name || empMap.get(String(r.employee_id)) || '',
+      }));
+
       const { data: upsertedData, error } = await supabase
         .from('salary_tracker')
-        .upsert(payloadRows, { onConflict: 'employee_id,sal_year,sal_month' })
+        .upsert(enrichedRows, { onConflict: 'employee_id,sal_year,sal_month' })
         .select();
 
       if (error) {
@@ -1122,8 +1264,7 @@ const SalaryTrackerView = ({
       }
 
       showToast(`Successfully processed ${payloadRows.length} salary record(s)!`, 'success');
-      await fetchCurrentMonthTrackerRecords();
-      await fetchMatrixTrackerRecords();
+      await fetchData();
     } catch (err) {
       console.error('Error during bulk upsert salary tracker:', err);
       showToast('Error saving bulk entries: ' + err.message, 'error');
@@ -1179,6 +1320,10 @@ const SalaryTrackerView = ({
         onOpenBulkIncrement={() => setIsBulkApplyModalOpen(true)}
         onOpenExport={() => setIsExportModalOpen(true)}
         onOpenUpload={() => setIsUploadModalOpen(true)}
+        onInitializeMonth={handleInitializeMonthRecords}
+        isMonthInitialized={trackerRecords.length > 0}
+        initializing={initializing}
+        canUpdateSalaryTracker={canUpdateSalaryTracker}
         hideHeaderTopRow={hideHeaderTopRow}
       />
 
@@ -1283,6 +1428,45 @@ const SalaryTrackerView = ({
         matrixTrackerRecords={matrixTrackerRecords}
         onBulkUpsert={handleBulkUpsertSalaryTracker}
         saving={saving}
+      />
+
+      <InitializeMonthPromptModal
+        isOpen={uninitializedPromptState.isOpen}
+        onClose={() =>
+          setUninitializedPromptState({ isOpen: false, monthObj: null, employee: null })
+        }
+        monthObj={uninitializedPromptState.monthObj}
+        employee={uninitializedPromptState.employee}
+        totalEmployees={employees.length}
+        onInitializeAll={async () => {
+          const { monthObj, employee } = uninitializedPromptState;
+          if (!monthObj || !employee) return;
+          const success = await handleInitializeSpecificMonth(
+            monthObj.year,
+            monthObj.month,
+            employee,
+            false
+          );
+          if (success) {
+            setUninitializedPromptState({ isOpen: false, monthObj: null, employee: null });
+            handleOpenMatrixPaymentModal(employee, monthObj, true);
+          }
+        }}
+        onInitializeSingle={async () => {
+          const { monthObj, employee } = uninitializedPromptState;
+          if (!monthObj || !employee) return;
+          const success = await handleInitializeSpecificMonth(
+            monthObj.year,
+            monthObj.month,
+            employee,
+            true
+          );
+          if (success) {
+            setUninitializedPromptState({ isOpen: false, monthObj: null, employee: null });
+            handleOpenMatrixPaymentModal(employee, monthObj, true);
+          }
+        }}
+        initializing={initializing}
       />
     </div>
   );

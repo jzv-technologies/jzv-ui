@@ -49,13 +49,29 @@ const StudentFeesView = ({
   const loadFeesData = async () => {
     setLoading(true);
     try {
-      const { data, error: dbErr } = await supabase.from('student_fees').select('*');
+      let data = null;
+      let dbErr = null;
+      const { data: primaryData, error: primaryErr } = await supabase
+        .from('trk_student_fees')
+        .select('*');
+      if (!primaryErr && primaryData) {
+        data = primaryData;
+      } else {
+        const { data: fallbackData, error: fallbackErr } = await supabase
+          .from('student_fees')
+          .select('*');
+        if (!fallbackErr && fallbackData) {
+          data = fallbackData;
+        } else {
+          dbErr = primaryErr || fallbackErr;
+        }
+      }
       if (dbErr) throw dbErr;
 
       setFeesData(data || []);
       setIsSupabaseMode(true);
     } catch (e) {
-      console.warn('Supabase student_fees table unavailable, using LocalStorage:', e.message);
+      console.warn('Supabase trk_student_fees table unavailable, using LocalStorage:', e.message);
       setIsSupabaseMode(false);
       const raw = localStorage.getItem(STUDENT_FEES_STORAGE_KEY);
       if (raw) {
@@ -240,10 +256,15 @@ const StudentFeesView = ({
 
     if (isSupabaseMode) {
       try {
-        const { error } = await supabase
-          .from('student_fees')
+        let { error } = await supabase
+          .from('trk_student_fees')
           .upsert(payload, { onConflict: 'admission_no' });
-        if (error) throw error;
+        if (error) {
+          const { error: fallbackErr } = await supabase
+            .from('student_fees')
+            .upsert(payload, { onConflict: 'admission_no' });
+          if (fallbackErr) throw error;
+        }
 
         showToast(`Fee record for "${formData.admission_no}" updated successfully.`, 'success');
         setIsEditModalOpen(false);
@@ -456,10 +477,15 @@ const StudentFeesView = ({
       }));
 
       if (isSupabaseMode) {
-        const { error } = await supabase
-          .from('student_fees')
+        let { error } = await supabase
+          .from('trk_student_fees')
           .upsert(payloadList, { onConflict: 'admission_no' });
-        if (error) throw error;
+        if (error) {
+          const { error: fallbackErr } = await supabase
+            .from('student_fees')
+            .upsert(payloadList, { onConflict: 'admission_no' });
+          if (fallbackErr) throw error;
+        }
         showToast(`Successfully imported/updated ${payloadList.length} fee records.`, 'success');
         await loadFeesData();
       } else {

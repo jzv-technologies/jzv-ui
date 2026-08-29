@@ -106,10 +106,17 @@ const PaymentSettlementModal = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b pb-3">
           <div>
-            <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-hand-holding-dollar text-teal-600"></i> Monthly Payment
-              Settlement
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
+                <i className="fas fa-hand-holding-dollar text-teal-600"></i> Monthly Payment
+                Settlement
+              </h3>
+              {selectedPaymentItem.isNewEntry && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-blue-50 text-blue-800 px-2 py-0.5 rounded-full border border-blue-200">
+                  <i className="fas fa-sparkles text-blue-600"></i> New Entry
+                </span>
+              )}
+            </div>
             <p className="text-xs text-dark-muted font-semibold mt-0.5">
               {selectedPaymentItem.emp?.name} ({selectedPaymentItem.organization}) — Target Month:{' '}
               {selectedPaymentItem.targetMonth}/{selectedPaymentItem.targetYear}
@@ -117,7 +124,7 @@ const PaymentSettlementModal = ({
           </div>
           <button
             onClick={() => setSelectedPaymentItem(null)}
-            className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-xs transition-colors"
+            className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center text-xs transition-colors cursor-pointer"
           >
             <i className="fas fa-times"></i>
           </button>

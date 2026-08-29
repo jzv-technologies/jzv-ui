@@ -18,8 +18,23 @@ const SalaryTrackerHeader = ({
   onOpenBulkIncrement,
   onOpenExport,
   onOpenUpload,
+  onInitializeMonth,
+  isMonthInitialized = false,
+  initializing = false,
+  canUpdateSalaryTracker = true,
   hideHeaderTopRow = false,
 }) => {
+  const monthLabel = React.useMemo(() => {
+    if (!selectedMonthStr) return '';
+    const parts = selectedMonthStr.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+      return `${monthNames[m - 1]} '${String(y).slice(-2)}`;
+    }
+    return selectedMonthStr;
+  }, [selectedMonthStr]);
   // If top row is hidden AND grouping is ON (so middle stats tiles are also hidden), hide header box completely
   if (hideHeaderTopRow && groupByOrg) {
     return null;
@@ -227,6 +242,33 @@ const SalaryTrackerHeader = ({
                 selectedMonthStr={selectedMonthStr}
                 onChangeMonth={setSelectedMonthStr}
               />
+
+              {/* Initialize Salary Record Button */}
+              {onInitializeMonth && (
+                <button
+                  type="button"
+                  onClick={onInitializeMonth}
+                  disabled={isMonthInitialized || initializing || !canUpdateSalaryTracker}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs shrink-0 ${
+                    isMonthInitialized
+                      ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-40'
+                      : 'bg-teal-600 hover:bg-teal-700 text-white border border-teal-700 active:scale-95 cursor-pointer shadow-xs'
+                  }`}
+                  title={
+                    !canUpdateSalaryTracker
+                      ? 'Management and above level access required'
+                      : isMonthInitialized
+                      ? `Salary records for ${monthLabel} are already initialized`
+                      : `Initialize Salary Records for ${monthLabel}`
+                  }
+                >
+                  <i
+                    className={`fas ${
+                      initializing ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'
+                    } text-xs`}
+                  ></i>
+                </button>
+              )}
 
               {/* Refresh Button */}
               {onRefresh && (
