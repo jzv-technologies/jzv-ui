@@ -259,88 +259,343 @@ const GroupedSubjectMultiSelect = ({
   );
 };
 
+export const TeacherMappingModal = ({
+  teacher,
+  subjects = [],
+  classifications = [],
+  isOpen,
+  onClose,
+  onSave,
+}) => {
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeClsId, setActiveClsId] = useState('all');
+
+  useEffect(() => {
+    if (teacher && isOpen) {
+      setSelectedSubjects(teacher.subjects ? [...teacher.subjects] : []);
+      setSearchQuery('');
+      setActiveClsId('all');
+    }
+  }, [teacher, isOpen]);
+
+  if (!isOpen || !teacher) return null;
+
+  // Filter subjects based on search query and classification
+  const filteredSubjects = subjects.filter((s) => {
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCls =
+      activeClsId === 'all' ||
+      (activeClsId === 'unclassified'
+        ? !s.classification_id
+        : String(s.classification_id) === String(activeClsId));
+    return matchesSearch && matchesCls;
+  });
+
+  // Group filtered subjects by classification
+  const grouped = classifications
+    .map((cls) => ({
+      id: String(cls.id),
+      name: cls.name,
+      theme: cls.theme,
+      items: filteredSubjects.filter((s) => String(s.classification_id) === String(cls.id)),
+    }))
+    .filter((g) => g.items.length > 0);
+
+  const unclassifiedItems = filteredSubjects.filter(
+    (s) =>
+      !s.classification_id ||
+      !classifications.some((c) => String(c.id) === String(s.classification_id))
+  );
+
+  if (unclassifiedItems.length > 0) {
+    grouped.push({
+      id: 'unclassified',
+      name: 'Unclassified Subjects',
+      theme: 'charcoal',
+      items: unclassifiedItems,
+    });
+  }
+
+  const handleToggleSubject = (subId) => {
+    const subStr = String(subId);
+    setSelectedSubjects((prev) =>
+      prev.some((id) => String(id) === subStr)
+        ? prev.filter((id) => String(id) !== subStr)
+        : [...prev, subId]
+    );
+  };
+
+  const handleSelectAllFiltered = () => {
+    const filteredIds = filteredSubjects.map((s) => s.id);
+    setSelectedSubjects((prev) => {
+      const remaining = prev.filter((id) => !filteredIds.some((fid) => String(fid) === String(id)));
+      return [...remaining, ...filteredIds];
+    });
+  };
+
+  const handleDeselectAllFiltered = () => {
+    const filteredIds = filteredSubjects.map((s) => String(s.id));
+    setSelectedSubjects((prev) => prev.filter((id) => !filteredIds.includes(String(id))));
+  };
+
+  const handleSave = () => {
+    onSave(teacher.id, teacher.name, selectedSubjects, teacher.is_male !== false);
+    onClose();
+  };
+
+  const totalSelectedCount = selectedSubjects.length;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-primary/50 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white border border-light-border rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="bg-light-lbg/60 border-b border-light-border px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center font-black shadow-xs">
+              <i className="fas fa-sliders-h text-base"></i>
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-dark-primary">
+                Teacher Subject Mapping
+              </h3>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs font-bold text-dark-deepblue">{teacher.name}</span>
+                {teacher.is_male !== false ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                    <i className="fas fa-mars text-[9px]"></i> Male
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                    <i className="fas fa-venus text-[9px]"></i> Female
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold text-dark-muted">
+                  • {totalSelectedCount} of {subjects.length} subjects qualified
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-light-lbg hover:bg-light-border/60 text-dark-muted hover:text-dark-primary flex items-center justify-center transition-colors"
+          >
+            <i className="fas fa-times text-xs"></i>
+          </button>
+        </div>
+
+        {/* Search and Classification Filters */}
+        <div className="p-5 border-b border-light-border bg-light-bg/20 space-y-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+              <input
+                type="text"
+                placeholder="Search subjects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all shadow-2xs"
+              />
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="px-3 py-1.5 bg-white hover:bg-brand-lbg/20 text-brand-primary border border-brand-primary/30 rounded-xl text-xs font-bold transition-all"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={handleDeselectAllFiltered}
+                className="px-3 py-1.5 bg-white hover:bg-gray-100 text-gray-600 border border-gray-250 rounded-xl text-xs font-bold transition-all"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          {/* Classification Pill Filters */}
+          {classifications.length > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+              <button
+                type="button"
+                onClick={() => setActiveClsId('all')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  activeClsId === 'all'
+                    ? 'bg-dark-primary text-white shadow-xs'
+                    : 'bg-white text-dark-soft border border-light-border hover:bg-light-lbg/40'
+                }`}
+              >
+                All Classifications ({subjects.length})
+              </button>
+              {classifications.map((cls) => {
+                const count = subjects.filter(
+                  (s) => String(s.classification_id) === String(cls.id)
+                ).length;
+                return (
+                  <button
+                    key={cls.id}
+                    type="button"
+                    onClick={() => setActiveClsId(String(cls.id))}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                      activeClsId === String(cls.id)
+                        ? 'bg-dark-primary text-white shadow-xs'
+                        : 'bg-white text-dark-soft border border-light-border hover:bg-light-lbg/40'
+                    }`}
+                  >
+                    {cls.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Subjects Checklist Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {grouped.length === 0 ? (
+            <div className="text-center py-12 text-dark-muted">
+              <i className="fas fa-book-open text-3xl mb-2 text-dark-muted/40"></i>
+              <p className="text-sm font-bold">No subjects found matching your criteria</p>
+            </div>
+          ) : (
+            grouped.map((group) => {
+              const groupTheme = CARD_THEMES[group.theme] || CARD_THEMES.charcoal;
+              const groupSelectedCount = group.items.filter((s) =>
+                selectedSubjects.some((sid) => String(sid) === String(s.id))
+              ).length;
+
+              return (
+                <div
+                  key={group.id}
+                  className="border border-light-border rounded-2xl p-4 bg-white shadow-2xs space-y-3"
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-light-border">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-3 h-3 rounded-full bg-${groupTheme.color}`} />
+                      <span className="text-xs font-black text-dark-deepblue uppercase tracking-wider">
+                        {group.name}
+                      </span>
+                      <span className="text-[11px] font-bold text-dark-muted">
+                        ({groupSelectedCount}/{group.items.length} selected)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gIds = group.items.map((s) => s.id);
+                          setSelectedSubjects((prev) => {
+                            const remaining = prev.filter(
+                              (id) => !gIds.some((gid) => String(gid) === String(id))
+                            );
+                            return [...remaining, ...gIds];
+                          });
+                        }}
+                        className="text-brand-primary font-bold hover:underline"
+                      >
+                        All
+                      </button>
+                      <span className="text-gray-300">•</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gIds = group.items.map((s) => String(s.id));
+                          setSelectedSubjects((prev) =>
+                            prev.filter((id) => !gIds.includes(String(id)))
+                          );
+                        }}
+                        className="text-gray-500 font-bold hover:underline"
+                      >
+                        None
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {group.items.map((sub) => {
+                      const isSelected = selectedSubjects.some(
+                        (sid) => String(sid) === String(sub.id)
+                      );
+                      return (
+                        <label
+                          key={sub.id}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                            isSelected
+                              ? 'bg-brand-primary/10 border-brand-primary/40 text-brand-primary shadow-xs ring-1 ring-brand-primary/20'
+                              : 'bg-white border-light-border hover:bg-light-lbg/30 text-dark-primary'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSubject(sub.id)}
+                            className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary border-gray-300 cursor-pointer"
+                          />
+                          <span className="text-xs font-bold truncate flex-1">{sub.name}</span>
+                          {isSelected && (
+                            <i className="fas fa-check-circle text-xs text-brand-primary shrink-0"></i>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-light-lbg/60 border-t border-light-border px-6 py-4 flex items-center justify-between shrink-0">
+          <div className="text-xs font-bold text-dark-soft">
+            <span className="text-brand-primary font-extrabold">{totalSelectedCount}</span> subjects
+            qualified
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-light-border bg-white text-dark-soft hover:bg-light-lbg text-xs font-bold transition-all shadow-2xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition-all flex items-center gap-2"
+            >
+              <i className="fas fa-check"></i>
+              Save Qualifications
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const TeachersSetup = ({
   teachers,
   subjects,
   classifications = [],
-  onAddTeacher,
   onUpdateTeacher,
   onDeleteTeacher,
   onToggleTeacherActive,
-  slots,
-  assignments,
+  slots = [],
+  assignments = [],
 }) => {
-  const [name, setName] = useState('');
-  const [isMale, setIsMale] = useState(true);
-  const [selectedSubjects, setSelectedSubjects] = useState([]);
-
-  const [editingTeacher, setEditingTeacher] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [editIsMale, setEditIsMale] = useState(true);
-  const [editSelectedSubjects, setEditSelectedSubjects] = useState([]);
+  const [teacherSearch, setTeacherSearch] = useState('');
+  const [mappingTeacher, setMappingTeacher] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
-
-  const [activeSubjectDropdownId, setActiveSubjectDropdownId] = useState(null);
-  const dropdownRef = React.useRef(null);
-
-  React.useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setActiveSubjectDropdownId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleInlineSubjectToggle = (teacher, subjectId) => {
-    const currentSubjects = teacher.subjects || [];
-    let newSubjects;
-    if (currentSubjects.some((sid) => String(sid) === String(subjectId))) {
-      newSubjects = currentSubjects.filter((id) => String(id) !== String(subjectId));
-    } else {
-      newSubjects = [...currentSubjects, subjectId];
-    }
-    onUpdateTeacher(teacher.id, teacher.name, newSubjects, teacher.is_male !== false);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    onAddTeacher(name.trim(), selectedSubjects, isMale);
-    setName('');
-    setSelectedSubjects([]);
-    setIsMale(true);
-  };
-
-  const handleSubjectToggle = (subId, isEdit = false) => {
-    if (isEdit) {
-      setEditSelectedSubjects((prev) =>
-        prev.some((sid) => String(sid) === String(subId))
-          ? prev.filter((sid) => String(sid) !== String(subId))
-          : [...prev, subId]
-      );
-    } else {
-      setSelectedSubjects((prev) =>
-        prev.some((sid) => String(sid) === String(subId))
-          ? prev.filter((sid) => String(sid) !== String(subId))
-          : [...prev, subId]
-      );
-    }
-  };
-
-  const handleStartEdit = (teacher) => {
-    setEditingTeacher(teacher);
-    setEditName(teacher.name);
-    setEditSelectedSubjects(teacher.subjects || []);
-    setEditIsMale(teacher.is_male !== false);
-  };
-
-  const handleSaveEdit = () => {
-    if (!editName.trim()) return;
-    onUpdateTeacher(editingTeacher.id, editName.trim(), editSelectedSubjects, editIsMale);
-    setEditingTeacher(null);
-  };
 
   const handleDelete = (teacherId, teacherName) => {
     const isUsedInSlots = slots.some((s) => String(s.teacher_id) === String(teacherId));
@@ -363,151 +618,82 @@ export const TeachersSetup = ({
     });
   };
 
-  const getSubjectNamesStr = (subjectIds = []) => {
-    if (subjectIds.length === 0)
+  const getSubjectBadges = (subjectIds = []) => {
+    if (!subjectIds || subjectIds.length === 0) {
       return (
-        <span className="text-red-primary font-semibold italic text-xs">No qualifications set</span>
+        <span className="text-red-500 font-semibold italic text-xs bg-red-50 border border-red-100 px-2 py-0.5 rounded-md">
+          No qualifications set
+        </span>
       );
-    return subjectIds
-      .map((id) => subjects.find((s) => String(s.id) === String(id))?.name)
+    }
+
+    const matchedSubjects = subjectIds
+      .map((id) => subjects.find((s) => String(s.id) === String(id)))
       .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b))
-      .join(', ');
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (matchedSubjects.length === 0) {
+      return (
+        <span className="text-dark-muted font-semibold italic text-xs">
+          {subjectIds.length} subject(s) mapped
+        </span>
+      );
+    }
+
+    return (
+      <div className="flex flex-wrap gap-1.5 max-w-xl">
+        {matchedSubjects.slice(0, 4).map((s) => (
+          <span
+            key={s.id}
+            className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-light-lbg border border-light-border text-dark-primary"
+          >
+            {s.name}
+          </span>
+        ))}
+        {matchedSubjects.length > 4 && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-extrabold bg-brand-primary/10 text-brand-primary border border-brand-primary/20">
+            +{matchedSubjects.length - 4} more
+          </span>
+        )}
+      </div>
+    );
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Add form */}
-      {!editingTeacher && (
-        <div className="bg-light-lbg/50 border border-light-border p-5 rounded-2xl">
-          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-3">
-            Add New Teacher
-          </h4>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-end gap-3">
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">
-                  Teacher Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Teacher's Full Name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                />
-              </div>
-              <div className="w-full md:w-32">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
-                <select
-                  value={isMale ? 'male' : 'female'}
-                  onChange={(e) => setIsMale(e.target.value === 'male')}
-                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
-              </div>
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">
-                  Qualified Subjects
-                </label>
-                {subjects.length === 0 ? (
-                  <p className="text-xs text-dark-muted italic py-2.5">
-                    Please add subjects first.
-                  </p>
-                ) : (
-                  <GroupedSubjectMultiSelect
-                    subjects={subjects}
-                    classifications={classifications}
-                    selectedIds={selectedSubjects}
-                    onChange={setSelectedSubjects}
-                    placeholder="Select qualified subjects..."
-                  />
-                )}
-              </div>
-              <button
-                type="submit"
-                className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 transition-all shrink-0 justify-center h-[42px] md:w-auto w-full"
-              >
-                <i className="fas fa-plus"></i> Add Teacher
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+  const filteredTeachers = teachers
+    .filter((t) => {
+      const matchName = t.name.toLowerCase().includes(teacherSearch.toLowerCase());
+      const matchSubjects = (t.subjects || []).some((subId) => {
+        const sub = subjects.find((s) => String(s.id) === String(subId));
+        return sub && sub.name.toLowerCase().includes(teacherSearch.toLowerCase());
+      });
+      return matchName || matchSubjects;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-      {/* Edit Overlay / Panel */}
-      {editingTeacher && (
-        <div className="bg-blue-50/50 border border-blue-200 p-5 rounded-2xl animate-in fade-in duration-300">
-          <h4 className="text-sm font-bold text-blue-dark uppercase tracking-wide mb-3">
-            Edit Teacher: {editingTeacher.name}
-          </h4>
-          <div className="space-y-4">
-            <div className="flex flex-col md:flex-row md:items-end gap-3">
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">
-                  Teacher Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                />
-              </div>
-              <div className="w-full md:w-32">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">Gender</label>
-                <select
-                  value={editIsMale ? 'male' : 'female'}
-                  onChange={(e) => setEditIsMale(e.target.value === 'male')}
-                  className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
-              </div>
-              <div className="flex-1 w-full">
-                <label className="block text-xs font-bold text-dark-soft mb-1.5">
-                  Qualified Subjects
-                </label>
-                {subjects.length === 0 ? (
-                  <p className="text-xs text-dark-muted italic py-2.5">
-                    Please add subjects first.
-                  </p>
-                ) : (
-                  <GroupedSubjectMultiSelect
-                    subjects={subjects}
-                    classifications={classifications}
-                    selectedIds={editSelectedSubjects}
-                    onChange={setEditSelectedSubjects}
-                    placeholder="Select qualified subjects..."
-                  />
-                )}
-              </div>
-              <div className="flex gap-2 shrink-0 md:w-auto w-full">
-                <button
-                  onClick={handleSaveEdit}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all h-[42px] flex-1 md:flex-initial"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingTeacher(null)}
-                  className="bg-light-ui hover:bg-light-border text-dark-soft px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all h-[42px] flex-1 md:flex-initial"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
+  return (
+    <div className="space-y-5">
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-light-lbg/40 p-4 rounded-2xl border border-light-border">
+        <div className="relative flex-1 max-w-md">
+          <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+          <input
+            type="text"
+            placeholder="Search teachers by name or subject..."
+            value={teacherSearch}
+            onChange={(e) => setTeacherSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 bg-white border border-light-border rounded-xl text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary/20 shadow-2xs"
+          />
         </div>
-      )}
+        <div className="text-xs font-bold text-dark-soft flex items-center gap-2">
+          <span>Total Teachers:</span>
+          <span className="bg-brand-primary text-white px-2.5 py-0.5 rounded-full text-xs font-extrabold">
+            {filteredTeachers.length}
+          </span>
+        </div>
+      </div>
 
       {/* Teachers List */}
-      <div className="border border-light-border rounded-2xl overflow-hidden bg-white">
+      <div className="border border-light-border rounded-2xl overflow-hidden bg-white shadow-2xs">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="bg-light-lbg border-b border-light-border">
@@ -523,149 +709,100 @@ export const TeachersSetup = ({
               <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase">
                 Qualified Subjects
               </th>
-              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[180px]">
+              <th className="py-3.5 px-4 font-bold text-xs text-dark-primary tracking-wider uppercase text-right w-[160px]">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-light-border">
-            {teachers.length === 0 ? (
+            {filteredTeachers.length === 0 ? (
               <tr>
-                <td colSpan="5" className="py-8 text-center text-dark-muted text-sm">
-                  No teachers configured. Add one above!
+                <td colSpan="5" className="py-10 text-center text-dark-muted text-sm">
+                  <i className="fas fa-user-friends text-3xl mb-2 text-dark-muted/40 block"></i>
+                  No teachers found.
                 </td>
               </tr>
             ) : (
-              [...teachers]
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((teacher) => (
-                  <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
-                    <td className="py-3 px-4 font-bold text-sm text-dark-deepblue">
-                      {teacher.name}
-                    </td>
-                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
-                      {teacher.is_male !== false ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                          <i className="fas fa-mars text-[10px]"></i> Male
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
-                          <i className="fas fa-venus text-[10px]"></i> Female
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft">
-                      {teacher.is_active !== false ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
-                          Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-xs font-semibold text-dark-soft max-w-md">
-                      {getSubjectNamesStr(teacher.subjects)}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <div
-                          className="relative"
-                          ref={activeSubjectDropdownId === teacher.id ? dropdownRef : null}
-                        >
-                          <button
-                            onClick={() =>
-                              setActiveSubjectDropdownId(
-                                activeSubjectDropdownId === teacher.id ? null : teacher.id
-                              )
-                            }
-                            className="text-brand-primary hover:text-brand-dark p-2 rounded-lg hover:bg-brand-lbg transition-all"
-                            title="Assign Subjects"
-                            disabled={!!editingTeacher}
-                          >
-                            <i className="fas fa-book-medical"></i>
-                          </button>
-                          {activeSubjectDropdownId === teacher.id && (
-                            <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-light-border rounded-xl shadow-xl z-50 p-2 max-h-60 overflow-y-auto">
-                              <h5 className="text-xs font-bold text-dark-deepblue mb-2 px-1 border-b border-light-border pb-1">
-                                Assign Subjects to {teacher.name}
-                              </h5>
-                              <div className="flex flex-col gap-1">
-                                {subjects.length === 0 ? (
-                                  <span className="text-[10px] text-dark-muted px-1">
-                                    No subjects available
-                                  </span>
-                                ) : (
-                                  [...subjects]
-                                    .sort((a, b) => a.name.localeCompare(b.name))
-                                    .map((sub) => (
-                                      <label
-                                        key={sub.id}
-                                        className="flex items-center gap-2 p-1.5 hover:bg-light-lbg rounded cursor-pointer transition-colors"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5 border-light-border"
-                                          checked={(teacher.subjects || []).some(
-                                            (sid) => String(sid) === String(sub.id)
-                                          )}
-                                          onChange={() =>
-                                            handleInlineSubjectToggle(teacher, sub.id)
-                                          }
-                                        />
-                                        <span className="text-xs font-semibold text-dark-primary truncate">
-                                          {sub.name}
-                                        </span>
-                                      </label>
-                                    ))
-                                )}
-                              </div>
-                              <div className="mt-2 pt-2 border-t border-light-border text-right">
-                                <button
-                                  onClick={() => setActiveSubjectDropdownId(null)}
-                                  className="bg-brand-primary hover:bg-brand-dark text-white px-3 py-1 rounded-md text-[10px] font-bold"
-                                >
-                                  Done
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => onToggleTeacherActive?.(teacher.id)}
-                          className={`p-2 rounded-lg hover:bg-light-lbg transition-all ${
-                            teacher.is_active !== false ? 'text-red-primary hover:text-red-dark' : 'text-green-600 hover:text-green-800'
-                          }`}
-                          title={teacher.is_active !== false ? 'Deactivate' : 'Reactivate'}
-                          disabled={!!editingTeacher}
-                        >
-                          <i className={`fas ${teacher.is_active !== false ? 'fa-user-slash' : 'fa-user-check'}`}></i>
-                        </button>
-                        <button
-                          onClick={() => handleStartEdit(teacher)}
-                          className="text-blue-medium hover:text-blue-dark p-2 rounded-lg hover:bg-blue-lbg transition-all"
-                          title="Edit Teacher"
-                          disabled={!!editingTeacher}
-                        >
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(teacher.id, teacher.name)}
-                          className="text-red-primary hover:text-red-dark p-2 rounded-lg hover:bg-red-lbg transition-all"
-                          title="Delete"
-                          disabled={!!editingTeacher}
-                        >
-                          <i className="fas fa-trash-alt"></i>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+              filteredTeachers.map((teacher) => (
+                <tr key={teacher.id} className="hover:bg-light-bg/20 transition-colors">
+                  <td className="py-3.5 px-4 font-extrabold text-sm text-dark-deepblue">
+                    {teacher.name}
+                  </td>
+                  <td className="py-3.5 px-4 text-xs font-semibold text-dark-soft">
+                    {teacher.is_male !== false ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">
+                        <i className="fas fa-mars text-[10px]"></i> Male
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                        <i className="fas fa-venus text-[10px]"></i> Female
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4 text-xs font-semibold text-dark-soft">
+                    {teacher.is_active !== false ? (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-100">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                        Inactive
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4 text-xs font-semibold text-dark-soft">
+                    {getSubjectBadges(teacher.subjects)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="flex justify-end items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMappingTeacher(teacher)}
+                        className="hover:bg-brand-primary text-brand-primary hover:text-white border p-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                        title="Edit Qualified Subjects"
+                      >
+                        <i className="fas fa-edit text-xs"></i>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onToggleTeacherActive?.(teacher.id)}
+                        className={`p-2 rounded-xl border hover:bg-light-lbg transition-all cursor-pointer ${
+                          teacher.is_active !== false
+                            ? 'text-amber-600 border-amber-200 hover:bg-amber-50'
+                            : 'text-green-600 border-green-200 hover:bg-green-50'
+                        }`}
+                        title={teacher.is_active !== false ? 'Deactivate' : 'Reactivate'}
+                      >
+                        <i
+                          className={`fas ${teacher.is_active !== false ? 'fa-user-slash' : 'fa-user-check'} text-xs`}
+                        ></i>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(teacher.id, teacher.name)}
+                        className="text-red-primary hover:text-red-dark p-2 rounded-xl border border-red-100 hover:bg-red-50 transition-all cursor-pointer"
+                        title="Delete"
+                      >
+                        <i className="fas fa-trash-alt text-xs"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Modal for Editing Teacher Mapping */}
+      <TeacherMappingModal
+        teacher={mappingTeacher}
+        subjects={subjects}
+        classifications={classifications}
+        isOpen={mappingTeacher !== null}
+        onClose={() => setMappingTeacher(null)}
+        onSave={onUpdateTeacher}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig !== null}
@@ -683,13 +820,7 @@ export const TeachersSetup = ({
 // ==========================================
 // 3. CLASSES SETUP (CRUD + Teacher assignments)
 // ==========================================
-const ResolveDuplicatesModal = ({
-  isOpen,
-  onClose,
-  activeClass,
-  duplicateGroups,
-  onResolve,
-}) => {
+const ResolveDuplicatesModal = ({ isOpen, onClose, activeClass, duplicateGroups, onResolve }) => {
   const [selectedKeeps, setSelectedKeeps] = useState({});
 
   useEffect(() => {
@@ -745,11 +876,16 @@ const ResolveDuplicatesModal = ({
         {/* Content */}
         <div className="p-5 overflow-y-auto space-y-4 flex-1">
           <p className="text-xs text-dark-soft font-semibold">
-            Select which teacher should teach each subject for <strong>{activeClass?.name}</strong>. Unselected duplicate mappings will be removed from class assignments and scheduled timetable slots.
+            Select which teacher should teach each subject for <strong>{activeClass?.name}</strong>.
+            Unselected duplicate mappings will be removed from class assignments and scheduled
+            timetable slots.
           </p>
 
           {duplicateGroups.map((group) => (
-            <div key={group.subjectId} className="border border-amber-200 bg-amber-50/40 rounded-xl p-3.5 space-y-2">
+            <div
+              key={group.subjectId}
+              className="border border-amber-200 bg-amber-50/40 rounded-xl p-3.5 space-y-2"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-dark-deepblue flex items-center gap-1.5">
                   <i className="fas fa-book text-amber-600 text-[11px]" />
@@ -790,7 +926,8 @@ const ResolveDuplicatesModal = ({
                           {ass.scheduledCount > 0 && (
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
                               <i className="fas fa-calendar-check text-[8px] mr-1" />
-                              {ass.scheduledCount} slot{ass.scheduledCount > 1 ? 's' : ''} in timetable
+                              {ass.scheduledCount} slot{ass.scheduledCount > 1 ? 's' : ''} in
+                              timetable
                             </span>
                           )}
                         </div>
@@ -882,9 +1019,12 @@ export const ClassesSetup = ({
       Object.keys(map[cid]).forEach((sid) => {
         if (map[cid][sid].length > 1) {
           if (!duplicates[cid]) duplicates[cid] = [];
-          const subName = subjects.find((s) => String(s.id) === String(sid))?.name || 'Unknown Subject';
+          const subName =
+            subjects.find((s) => String(s.id) === String(sid))?.name || 'Unknown Subject';
           const assList = map[cid][sid].map((ass) => {
-            const tName = teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name || 'Unknown Teacher';
+            const tName =
+              teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name ||
+              'Unknown Teacher';
             const scheduledCount = (slots || []).filter(
               (s) =>
                 String(s.class_id) === String(ass.class_id) &&
@@ -956,7 +1096,12 @@ export const ClassesSetup = ({
   const getQualifiedTeachers = (subjectId) => {
     if (!subjectId) return [];
     return teachers
-      .filter((t) => t.is_active !== false && t.subjects && t.subjects.some((sid) => String(sid) === String(subjectId)))
+      .filter(
+        (t) =>
+          t.is_active !== false &&
+          t.subjects &&
+          t.subjects.some((sid) => String(sid) === String(subjectId))
+      )
       .sort((a, b) => a.name.localeCompare(b.name));
   };
 
@@ -1141,10 +1286,12 @@ export const ClassesSetup = ({
                   <i className="fas fa-exclamation-triangle text-amber-600 text-lg shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-xs font-extrabold text-amber-900 uppercase tracking-wide">
-                      Duplicate Teacher Mappings ({activeClassDuplicates.length} Subject{activeClassDuplicates.length > 1 ? 's' : ''})
+                      Duplicate Teacher Mappings ({activeClassDuplicates.length} Subject
+                      {activeClassDuplicates.length > 1 ? 's' : ''})
                     </h4>
                     <p className="text-xs text-amber-700 font-semibold mt-0.5">
-                      Some subjects in {activeClass.name} have multiple teachers mapped. This causes conflicts in the Timetable Planner.
+                      Some subjects in {activeClass.name} have multiple teachers mapped. This causes
+                      conflicts in the Timetable Planner.
                     </p>
                   </div>
                 </div>

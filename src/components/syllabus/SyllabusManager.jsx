@@ -1044,8 +1044,6 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   name: data.name,
                   classification_id: data.classificationId || null,
                   requires_teacher: data.requires_teacher,
-                  deactivated: false,
-                  deactivate: false,
                 },
               ])
               .select();

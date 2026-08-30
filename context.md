@@ -454,7 +454,7 @@ The `ReporterTicketsView` and `DetailModal` components implement a ticket tracki
 | `syllabus_books`           | Book definitions (name, subject, hierarchy labels)                           |
 | `teacher_availability`     | Teacher availability configuration                                           |
 | `teacher_cache`            | Cached teacher data                                                          |
-| `teacher_subjects`         | Maps teachers to qualified subjects                                          |
+| `map_teacher_subject`      | Maps teachers to qualified subjects                                          |
 | `teachers`                 | Teacher records (name, auth_id, is_male, is_active)                          |
 | `timetable_slots`          | Individual timetable slot assignments (day, period, class, subject, teacher) |
 | `useful_links`             | Curated links with role-based visibility (bitmask)                           |

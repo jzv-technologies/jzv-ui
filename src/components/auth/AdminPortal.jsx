@@ -472,14 +472,14 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     >
       {/* Employee Management view */}
       {(subView === 'employee-management' || subView === 'user-management') && (
-        <div data-employee-management="true">
+        <div data-feature="employee-management">
           <EmployeeRecordsView role="admin" user={user} userRoles={userRoles} />
         </div>
       )}
 
       {/* Form configs view (kept as before) */}
       {subView === 'form-configurations' && (
-        <div data-form-configurations="true">
+        <div data-feature="form-configurations">
           <AdminFormConfigsView
             configs={configs}
             sheetMappings={sheetMappings}
@@ -498,35 +498,35 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
 
       {/* Timetable Planner view */}
       {subView === 'timetable-planner' && (
-        <div data-timetable-planner="true">
+        <div data-feature="timetable-planner">
           <TimetableManager />
         </div>
       )}
 
       {/* Student Database view */}
       {subView === 'student-records' && (
-        <div data-student-records="true">
+        <div data-feature="student-records">
           <AdminStudentsView />
         </div>
       )}
 
       {/* Syllabus Manager view */}
       {subView === 'syllabus-manager' && (
-        <div data-syllabus-manager="true">
+        <div data-feature="syllabus-manager">
           <SyllabusManager role="admin" />
         </div>
       )}
 
       {/* Syllabus Progress Report view */}
       {subView === 'lesson-planner-tracker' && (
-        <div data-lesson-planner-tracker="true">
+        <div data-feature="lesson-planner-tracker">
           <SyllabusTrackerPortal role="admin" />
         </div>
       )}
 
       {/* Lesson Manager view */}
       {subView === 'lesson-planner' && (
-        <div data-lesson-planner="true">
+        <div data-feature="lesson-planner">
           <LessonManager role="admin" user={user} />
         </div>
       )}

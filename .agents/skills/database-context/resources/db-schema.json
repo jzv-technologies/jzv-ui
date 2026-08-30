@@ -1161,7 +1161,7 @@
       ]
     },
     {
-      "table": "teacher_subjects",
+      "table": "map_teacher_subject",
       "columns": [
         {
           "type": "bigint",
@@ -1350,9 +1350,7 @@
   ],
   "policies": [
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "admin_configruation",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1360,9 +1358,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "admin_configruation",
       "using": "true",
       "command": "SELECT",
@@ -1370,9 +1366,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "applications",
       "using": null,
       "command": "INSERT",
@@ -1380,9 +1374,7 @@
       "with_check": "true"
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "applications",
       "using": "true",
       "command": "SELECT",
@@ -1390,9 +1382,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "applications",
       "using": "(auth.role() = 'authenticated'::text)",
       "command": "UPDATE",
@@ -1400,9 +1390,7 @@
       "with_check": "(auth.role() = 'authenticated'::text)"
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "book_tracker",
       "using": "true",
       "command": "ALL",
@@ -1410,9 +1398,7 @@
       "with_check": "true"
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "book_tracker",
       "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
       "command": "SELECT",
@@ -1420,9 +1406,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "book_tracker",
       "using": "true",
       "command": "SELECT",
@@ -1430,9 +1414,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "class_assignments",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1440,9 +1422,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "class_assignments",
       "using": "has_role_above(8)",
       "command": "SELECT",
@@ -1450,9 +1430,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "classes",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1460,9 +1438,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "classes",
       "using": "has_any_role(((8 | 16) | 32))",
       "command": "SELECT",
@@ -1470,9 +1446,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "classes",
       "using": "(has_any_role(56) OR (has_role_above(2) AND is_parent_of_class(id)))",
       "command": "SELECT",
@@ -1480,9 +1454,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "dynamic_form_configs",
       "using": "has_role_above(32)",
       "command": "ALL",
@@ -1490,9 +1462,7 @@
       "with_check": "(auth.role() = 'authenticated'::text)"
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "dynamic_form_configs",
       "using": "true",
       "command": "SELECT",
@@ -1500,9 +1470,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "google_sheet_mappings",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1510,9 +1478,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "google_sheet_mappings",
       "using": "true",
       "command": "SELECT",
@@ -1520,9 +1486,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_plan_carry_forwards",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1530,9 +1494,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_plans",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1540,9 +1502,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_plans",
       "using": "(teacher_id IN ( SELECT teachers.id\n   FROM teachers\n  WHERE (teachers.auth_id = auth.uid())))",
       "command": "ALL",
@@ -1550,9 +1510,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_progress",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1560,9 +1518,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_progress",
       "using": "has_role_above(16)",
       "command": "SELECT",
@@ -1570,9 +1526,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "lesson_progress",
       "using": "(has_role_above(2) AND is_parent_of_class(class_id))",
       "command": "SELECT",
@@ -1580,9 +1534,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_progress_items",
       "using": "true",
       "command": "ALL",
@@ -1590,9 +1542,7 @@
       "with_check": "true"
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_progress_items",
       "using": "has_role_above(8)",
       "command": "SELECT",
@@ -1600,9 +1550,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "lesson_progress_items",
       "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM lesson_progress l\n  WHERE ((l.id = lesson_progress_items.progress_id) AND is_parent_of_class(l.class_id)))))",
       "command": "SELECT",
@@ -1610,9 +1558,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "lesson_progress_items",
       "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM lesson_tracker_log l\n  WHERE ((l.id = lesson_progress_items.progress_id) AND is_parent_of_class(l.class_id))))))",
       "command": "SELECT",
@@ -1620,9 +1566,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_tracker_log",
       "using": "true",
       "command": "ALL",
@@ -1630,9 +1574,7 @@
       "with_check": "true"
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "lesson_tracker_log",
       "using": "true",
       "command": "SELECT",
@@ -1640,9 +1582,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "lesson_tracker_log",
       "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
       "command": "SELECT",
@@ -1650,9 +1590,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "periods",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1660,9 +1598,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "periods",
       "using": "true",
       "command": "SELECT",
@@ -1670,9 +1606,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "students",
       "using": "has_role_above(2)",
       "command": "SELECT",
@@ -1680,10 +1614,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "anon",
-        "authenticated"
-      ],
+      "roles": ["anon", "authenticated"],
       "table": "students",
       "using": "is_parent_of_student((admission_no)::text)",
       "command": "SELECT",
@@ -1691,9 +1622,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "subject_classifications",
       "using": "true",
       "command": "SELECT",
@@ -1701,9 +1630,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "subject_classifications",
       "using": "true",
       "command": "SELECT",
@@ -1711,9 +1638,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "subjects",
       "using": "true",
       "command": "SELECT",
@@ -1721,9 +1646,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "subjects",
       "using": "true",
       "command": "SELECT",
@@ -1731,9 +1654,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "syllabus_book_classes",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1741,9 +1662,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "syllabus_book_classes",
       "using": "true",
       "command": "SELECT",
@@ -1751,9 +1670,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "syllabus_book_lessons",
       "using": "true",
       "command": "ALL",
@@ -1761,9 +1678,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "syllabus_book_lessons",
       "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_book_lessons.book_id) AND is_parent_of_class(sbc.class_id))))))",
       "command": "SELECT",
@@ -1771,9 +1686,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "syllabus_books",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1781,9 +1694,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "syllabus_books",
       "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM syllabus_book_classes sbc\n  WHERE ((sbc.book_id = syllabus_books.id) AND is_parent_of_class(sbc.class_id))))))",
       "command": "SELECT",
@@ -1791,9 +1702,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "teacher_availability",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1801,9 +1710,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "teacher_availability",
       "using": "true",
       "command": "SELECT",
@@ -1811,9 +1718,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "teacher_cache",
       "using": "has_role_above(8)",
       "command": "ALL",
@@ -1821,29 +1726,23 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "teacher_subjects",
+      "roles": ["authenticated"],
+      "table": "map_teacher_subject",
       "using": "has_role_above(16)",
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "teacher_subjects",
+      "roles": ["authenticated"],
+      "table": "map_teacher_subject",
       "using": "true",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "teachers",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1851,9 +1750,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "teachers",
       "using": "true",
       "command": "SELECT",
@@ -1861,9 +1758,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "teachers",
       "using": "true",
       "command": "SELECT",
@@ -1871,9 +1766,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "timetable_slots",
       "using": "has_role_above(32)",
       "command": "ALL",
@@ -1881,10 +1774,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "anon",
-        "authenticated"
-      ],
+      "roles": ["anon", "authenticated"],
       "table": "timetable_slots",
       "using": "is_parent_of_class(class_id)",
       "command": "SELECT",
@@ -1892,9 +1782,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "timetable_slots",
       "using": "true",
       "command": "SELECT",
@@ -1902,9 +1790,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "useful_links",
       "using": "has_role_above(32)",
       "command": "ALL",
@@ -1912,9 +1798,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "useful_links",
       "using": "true",
       "command": "SELECT",
@@ -1922,9 +1806,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "authenticated"
-      ],
+      "roles": ["authenticated"],
       "table": "user_roles",
       "using": "has_role_above(16)",
       "command": "ALL",
@@ -1932,9 +1814,7 @@
       "with_check": null
     },
     {
-      "roles": [
-        "public"
-      ],
+      "roles": ["public"],
       "table": "user_roles",
       "using": "(auth.uid() = user_id)",
       "command": "SELECT",

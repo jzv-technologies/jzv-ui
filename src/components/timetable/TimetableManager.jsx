@@ -143,7 +143,7 @@ const TimetableManager = () => {
         supabase.from('syl_subjects').select('*'),
         supabase.from('teachers').select('*'),
         supabase.from('map_teacher_subject').select('*'),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
@@ -422,7 +422,7 @@ const TimetableManager = () => {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
           .from('employees')
-          .insert([{ name, is_male: isMale, is_active: true }])
+          .insert([{ name, is_male: isMale, is_active: true, is_teacher: true }])
           .select();
 
         if (teacherErr) throw teacherErr;
@@ -482,7 +482,7 @@ const TimetableManager = () => {
         // 1. Update teachers table
         const { error: teacherErr } = await supabase
           .from('employees')
-          .update({ name, is_male: isMale })
+          .update({ name, is_male: isMale, is_teacher: true, is_active: true })
           .eq('id', id);
         if (teacherErr) throw teacherErr;
 
@@ -535,7 +535,10 @@ const TimetableManager = () => {
     };
 
     let res = await execute(primaryCol);
-    if (res.error && (res.error.code === '42703' || res.error.message?.includes('does not exist'))) {
+    if (
+      res.error &&
+      (res.error.code === '42703' || res.error.message?.includes('does not exist'))
+    ) {
       res = await execute(fallbackCol);
     }
     return res;
@@ -549,19 +552,21 @@ const TimetableManager = () => {
       try {
         await supabase.from('class_assignments').delete().eq('teacher_id', id);
         await supabase.from('timetable_slots').update({ teacher_id: null }).eq('teacher_id', id);
-        await supabase.from('teacher_subjects').delete().eq('teacher_id', id);
+        await supabase.from('map_teacher_subject').delete().eq('teacher_id', id);
         await supabase.from('map_teacher_subject').delete().eq('teacher_id', id);
 
         const resTeach = await mutateSupabaseTable('teachers', 'delete', null, id);
         const resEmp = await mutateSupabaseTable('employees', 'delete', null, id);
 
         const teacherDeleted =
-          (resTeach.data && resTeach.data.length > 0) ||
-          (resEmp.data && resEmp.data.length > 0);
+          (resTeach.data && resTeach.data.length > 0) || (resEmp.data && resEmp.data.length > 0);
 
         if (!teacherDeleted) {
           dbDeleted = false;
-          dbErrDetail = resTeach.error?.message || resEmp.error?.message || 'Database permissions / RLS blocked row deletion.';
+          dbErrDetail =
+            resTeach.error?.message ||
+            resEmp.error?.message ||
+            'Database permissions / RLS blocked row deletion.';
         }
       } catch (err) {
         dbDeleted = false;
@@ -1863,7 +1868,7 @@ const TimetableManager = () => {
                 {[
                   { id: 'scheduler', label: 'Scheduler Setup' },
                   { id: 'classes', label: 'Classes Setup' },
-                  { id: 'teachers', label: 'Teachers Setup' },
+                  { id: 'teachers', label: 'Teacher Mapping' },
                   { id: 'periods', label: 'Season Setup' },
                   { id: 'tools', label: 'Switch Teacher' },
                 ].map((tab) => (
@@ -1881,7 +1886,7 @@ const TimetableManager = () => {
             {[
               { id: 'scheduler', label: 'Scheduler Setup', icon: 'fa-eye' },
               { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
-              { id: 'teachers', label: 'Teachers Setup', icon: 'fa-users' },
+              { id: 'teachers', label: 'Teacher Mapping', icon: 'fa-users' },
               { id: 'periods', label: 'Season Setup', icon: 'fa-clock' },
               { id: 'tools', label: 'Switch Teacher', icon: 'fa-exchange-alt' },
             ].map((tab) => (

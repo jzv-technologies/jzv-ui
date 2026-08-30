@@ -109,7 +109,7 @@ const SyllabusProgressGrid = ({
     return (
       <div
         className="w-full lg:w-[35%] bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-left"
-        data-level1-progress-panel="true"
+        data-feature="level1-progress-panel"
       >
         <div>
           <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
@@ -256,7 +256,7 @@ const SyllabusProgressGrid = ({
     return (
       <div
         className="flex-1 bg-white border border-light-border rounded-2xl p-5 shadow-sm text-left flex flex-col gap-4 animate-slide-in-right overflow-hidden w-full"
-        data-lesson-progress-panel="true"
+        data-feature="lesson-progress-panel"
       >
         {progressLoading ? (
           <div className="flex flex-col items-center justify-center p-12 gap-2 w-full">

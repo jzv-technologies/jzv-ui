@@ -827,7 +827,7 @@ const EmployeeRecordsView = ({
             .from('timetable_slots')
             .update({ teacher_id: null })
             .eq('teacher_id', emp.id);
-          await supabase.from('teacher_subjects').delete().eq('teacher_id', emp.id);
+          await supabase.from('map_teacher_subject').delete().eq('teacher_id', emp.id);
           await supabase.from('map_teacher_subject').delete().eq('teacher_id', emp.id);
           await supabase.from('teacher_availability').delete().eq('teacher_id', emp.id);
         } catch (depErr) {

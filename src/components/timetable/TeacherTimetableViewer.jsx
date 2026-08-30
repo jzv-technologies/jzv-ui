@@ -86,7 +86,7 @@ const TeacherTimetableViewer = ({ user }) => {
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),

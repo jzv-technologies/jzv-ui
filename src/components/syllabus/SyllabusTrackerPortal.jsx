@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
@@ -17,6 +18,318 @@ import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
 let syllabusTrackerPortalCache = {
   data: null,
   loadingPromise: null,
+};
+
+const usePortalPosition = (desiredWidth = 240, minHeight = 220) => {
+  const triggerRef = useRef(null);
+  const [panelStyle, setPanelStyle] = useState({});
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+
+    const panelWidth = Math.min(desiredWidth, viewportW - 20);
+
+    // Clamp horizontally between 10px and (viewportW - panelWidth - 10px)
+    let left = rect.left;
+    if (left + panelWidth > viewportW - 10) {
+      left = viewportW - panelWidth - 10;
+    }
+    if (left < 10) {
+      left = 10;
+    }
+
+    // Auto flip upward if too close to bottom of screen
+    const spaceBelow = viewportH - rect.bottom;
+    const spaceAbove = rect.top;
+    const isCloseToBottom = spaceBelow < minHeight && spaceAbove > spaceBelow;
+
+    setPanelStyle({
+      position: 'fixed',
+      top: isCloseToBottom ? 'auto' : `${rect.bottom + 6}px`,
+      bottom: isCloseToBottom ? `${viewportH - rect.top + 6}px` : 'auto',
+      left: `${left}px`,
+      width: `${panelWidth}px`,
+      maxWidth: 'calc(100vw - 20px)',
+      maxHeight: isCloseToBottom
+        ? `${Math.max(160, spaceAbove - 16)}px`
+        : `${Math.max(160, spaceBelow - 16)}px`,
+      zIndex: 99999,
+    });
+  }, [desiredWidth, minHeight]);
+
+  return { triggerRef, panelStyle, updatePosition };
+};
+
+const FeatureSortDropdown = ({
+  options = [],
+  value,
+  onChange,
+  featureName = 'sort',
+  className = '',
+}) => {
+  const [open, setOpen] = useState(false);
+  const { triggerRef, panelStyle, updatePosition } = usePortalPosition(240, 220);
+
+  const selectedOpt = options.find((o) => o.key === value) || options[0] || {};
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const onScroll = () => updatePosition();
+    const onResize = () => updatePosition();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target) &&
+        !e.target.closest('[data-sort-dropdown-panel]')
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div className={`relative ${className}`} data-feature-sort={featureName}>
+      {/* Mobile view dropdown button */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex sm:hidden items-center justify-between gap-1.5 h-9 px-3 rounded-xl border border-gray-250 bg-white text-xs font-bold text-gray-700 shadow-2xs hover:bg-gray-50 active:scale-95 transition-all cursor-pointer w-full min-w-0"
+        title={selectedOpt.label}
+        aria-label={selectedOpt.label}
+      >
+        <span className="flex items-center gap-1.5 truncate min-w-0">
+          <i
+            className={`fas ${selectedOpt.icon || 'fa-sort'} text-brand-primary text-xs shrink-0`}
+          ></i>
+          <span className="truncate">{selectedOpt.label}</span>
+        </span>
+        <i
+          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[9px] text-gray-400 ml-1 shrink-0 transition-transform`}
+        ></i>
+      </button>
+
+      {/* Mobile Popover Menu using Portal */}
+      {open &&
+        ReactDOM.createPortal(
+          <div
+            data-sort-dropdown-panel
+            className="sm:hidden bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150"
+            style={panelStyle}
+          >
+            <div className="px-2.5 py-1 text-[9px] font-black text-gray-400 uppercase tracking-wider border-b border-light-border/60 mb-1">
+              Options
+            </div>
+            <div className="overflow-y-auto max-h-56 space-y-0.5">
+              {options.map((opt) => {
+                const isSelected = opt.key === value;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.key);
+                      setOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-brand-primary/10 text-brand-primary font-black'
+                        : 'text-gray-700 hover:bg-gray-50 font-bold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected
+                            ? 'bg-brand-primary text-white shadow-xs'
+                            : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        <i className={`fas ${opt.icon} text-xs`}></i>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs truncate font-bold leading-tight">{opt.label}</div>
+                        {opt.desc && (
+                          <div className="text-[10px] text-gray-400 font-normal truncate mt-0.5">
+                            {opt.desc}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <i className="fas fa-check text-xs text-brand-primary shrink-0 ml-1"></i>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Desktop view pill buttons */}
+      <div className="hidden sm:flex bg-gray-100 p-0.5 rounded-xl border h-8 items-center gap-0.5 select-none">
+        {options.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => onChange(opt.key)}
+            title={opt.desc || opt.label}
+            aria-label={opt.label}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all h-full cursor-pointer flex items-center gap-1.5 ${
+              value === opt.key
+                ? 'bg-brand-primary text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+            }`}
+          >
+            <i className={`fas ${opt.icon} text-[10px]`}></i>
+            <span>{opt.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const UpcomingDateRangePicker = ({
+  startDate,
+  endDate,
+  onStartDateChange,
+  onEndDateChange,
+  onReset,
+  className = '',
+}) => {
+  const [open, setOpen] = useState(false);
+  const { triggerRef, panelStyle, updatePosition } = usePortalPosition(280, 240);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const onScroll = () => updatePosition();
+    const onResize = () => updatePosition();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(e.target) &&
+        !e.target.closest('[data-date-popover-panel]')
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div className={`col-span-1 relative w-full sm:w-auto ${className}`}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex items-center justify-between gap-2 h-9 sm:h-8 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer w-full sm:w-auto bg-white text-gray-600 border-gray-250 hover:bg-gray-50 active:scale-95"
+        title="Select Date Range"
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          <i className="fas fa-calendar-alt text-xs shrink-0 text-brand-primary"></i>
+          <span className="truncate">
+            {new Date(startDate).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+            })}
+            {' - '}
+            {new Date(endDate).toLocaleDateString(undefined, {
+              month: 'short',
+              day: 'numeric',
+            })}
+          </span>
+        </div>
+        <i
+          className={`fas fa-chevron-down text-[9px] text-gray-400 transition-transform shrink-0 ${
+            open ? 'rotate-180' : ''
+          }`}
+        ></i>
+      </button>
+
+      {open &&
+        ReactDOM.createPortal(
+          <div
+            data-date-popover-panel
+            className="bg-white border border-light-border rounded-2xl shadow-2xl p-4 space-y-3 text-left animate-in fade-in zoom-in-95 duration-150"
+            style={panelStyle}
+          >
+            <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
+              Date Range
+            </h5>
+            <div className="space-y-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">From:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => onStartDateChange(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">To:</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => onEndDateChange(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-light-border">
+              <button
+                type="button"
+                onClick={() => {
+                  onReset();
+                  setOpen(false);
+                }}
+                className="px-2.5 py-1 text-xs font-bold text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="px-3.5 py-1 text-xs font-bold bg-brand-primary text-white rounded-xl shadow-xs hover:bg-brand-dark cursor-pointer"
+              >
+                Apply
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+    </div>
+  );
 };
 
 const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOnly = false }) => {
@@ -287,6 +600,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         resLessons,
         resPlans,
         resCarryForwards,
+        resAcademicEvents,
       ] = await Promise.all([
         supabase.from('classes').select('*').order('id', { ascending: true }),
         supabase.from('syl_subjects').select('*').order('name', { ascending: true }),
@@ -937,7 +1251,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
     setActiveTab(tabKey);
     if (tabKey === 'teacher-activity' || tabKey === 'two-weeks-class') {
       await fetchDailyEntries();
-    } else if (role === 'teacher' && tabKey === 'class-progress') {
+    } else if (role === 'teacher' && tabKey === 'syllabus-progress') {
       await fetchTeacherProgressData();
       setProgressExpandedBook(null);
       setProgressExpandedClass(null);
@@ -1452,7 +1766,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         icon: 'fa-calendar-week',
       },
       {
-        key: 'class-progress',
+        key: 'syllabus-progress',
         label: 'Syllabus Progress',
         shortLabel: 'Progress',
         icon: 'fa-chart-pie',
@@ -1472,7 +1786,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         icon: 'fa-calendar-check',
       },
       {
-        key: 'class-progress',
+        key: 'syllabus-progress',
         label: 'Syllabus Progress',
         shortLabel: 'Progress',
         icon: 'fa-chart-pie',
@@ -1498,7 +1812,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         icon: 'fa-list-check',
       },
       {
-        key: 'class-progress',
+        key: 'syllabus-progress',
         label: 'Syllabus Progress',
         shortLabel: 'Progress',
         icon: 'fa-chart-pie',
@@ -1524,7 +1838,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         icon: 'fa-list-check',
       },
       {
-        key: 'class-progress',
+        key: 'syllabus-progress',
         label: 'Syllabus Progress',
         shortLabel: 'Progress',
         icon: 'fa-chart-pie',
@@ -1552,11 +1866,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         {!dashboardOnly && (
           <div
             className="flex justify-between items-center gap-4 border-b mb-6 pb-2 flex-wrap"
-            data-name="Lesson Planner and Tracker Tabs"
+            data-feature="lesson-planner-and-tracker-tabs"
           >
             <div
               className="flex gap-4 items-center flex-wrap w-full sm:w-auto"
-              data-name="navigation tabs"
+              data-feature="navigation-tabs"
             >
               <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
                 {currentTabs.map((tab) => (
@@ -1591,8 +1905,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             {/* Inline Daily Activity Filters */}
             {(activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') && (
               <div
-                className="w-full flex flex-wrap items-center gap-2 mt-2"
-                data-name="daily activity filters"
+                className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
+                data-feature-filter="teacher-activity"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                   {role !== 'parent' && (
@@ -1646,21 +1960,82 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
+                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600"
                   >
                     <option value="">All Statuses</option>
                     <option value="completed">Completed</option>
                     <option value="in_progress">In Progress</option>
                     <option value="not_started">Not Started</option>
                   </select>
+
                   {/* Desktop view topic search input */}
                   <input
                     type="text"
                     value={filterTopic}
                     onChange={(e) => setFilterTopic(e.target.value)}
                     placeholder="Filter topic..."
-                    className="hidden sm:block border px-3.5 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white min-w-[120px]"
+                    className="hidden sm:block border border-gray-250 px-3.5 py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white min-w-[120px]"
                   />
+
+                  {/* Mobile view topic search trigger button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileTopicSearchOpen((prev) => !prev)}
+                    title="Filter topic"
+                    aria-label="Search topic"
+                    className={`sm:hidden col-span-1 h-9 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-between active:scale-95 ${
+                      isMobileTopicSearchOpen || filterTopic
+                        ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
+                        : 'bg-white text-gray-700 border-gray-250 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 truncate min-w-0">
+                      <i className="fas fa-search text-xs"></i>
+                      <span className="truncate">
+                        {filterTopic ? `Topic: ${filterTopic}` : 'Topic Search'}
+                      </span>
+                    </span>
+                    {filterTopic && (
+                      <i
+                        className="fas fa-times text-xs ml-1 hover:text-red-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFilterTopic('');
+                          setIsMobileTopicSearchOpen(false);
+                        }}
+                      ></i>
+                    )}
+                  </button>
+
+                  {/* Time Sort Filter integrated inside the grid on mobile, floats to sm:ml-auto on desktop */}
+                  {activeTab === 'teacher-activity' && (
+                    <FeatureSortDropdown
+                      featureName="teacher-activity"
+                      value={timeFilter}
+                      onChange={setTimeFilter}
+                      className="col-span-1 sm:ml-auto"
+                      options={[
+                        {
+                          key: '7_days',
+                          label: '7 Days',
+                          desc: 'Last 7 days of activity',
+                          icon: 'fa-calendar-week',
+                        },
+                        {
+                          key: '30_days',
+                          label: '30 Days',
+                          desc: 'Last 30 days of activity',
+                          icon: 'fa-calendar-alt',
+                        },
+                        {
+                          key: 'range',
+                          label: 'Custom Range',
+                          desc: 'Specify custom start and end date',
+                          icon: 'fa-calendar-days',
+                        },
+                      ]}
+                    />
+                  )}
 
                   {(filterClasses.length > (role === 'parent' ? 1 : 0) ||
                     filterSubjects.length > 0 ||
@@ -1673,121 +2048,29 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                         clearDailyFilters();
                         setIsMobileTopicSearchOpen(false);
                       }}
-                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
+                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 sm:py-1 rounded-xl border border-red-100 transition-colors h-9 sm:h-8 flex items-center justify-center cursor-pointer"
                     >
                       Reset
                     </button>
                   )}
                 </div>
 
-                {activeTab === 'teacher-activity' && (
-                  <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:ml-auto justify-between sm:justify-end mt-1 sm:mt-0">
-                    <div className="flex items-center gap-2 flex-1 sm:flex-initial">
-                      {/* Mobile view time filter dropdown */}
-                      <select
-                        value={timeFilter}
-                        onChange={(e) => setTimeFilter(e.target.value)}
-                        className="block sm:hidden border border-gray-250 rounded-lg px-2 py-1 text-xs font-bold text-gray-700 bg-white h-8 outline-none focus:ring-1 focus:ring-brand-primary cursor-pointer flex-1"
-                      >
-                        <option value="7_days">7 Days</option>
-                        <option value="30_days">30 Days</option>
-                        <option value="range">Custom Range</option>
-                      </select>
-
-                      {/* Mobile view topic search icon next to Days filter */}
-                      <button
-                        type="button"
-                        onClick={() => setIsMobileTopicSearchOpen((prev) => !prev)}
-                        title="Filter topic"
-                        aria-label="Search topic"
-                        className={`sm:hidden h-8 w-8 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center shrink-0 active:scale-95 ${
-                          isMobileTopicSearchOpen || filterTopic
-                            ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
-                            : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
-                        }`}
-                      >
-                        <i className="fas fa-search text-xs"></i>
-                      </button>
-                    </div>
-
-                    {/* Desktop view pill buttons */}
-                    <div className="hidden sm:flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
-                      {[
-                        { key: '7_days', label: '7 Days' },
-                        { key: '30_days', label: '30 Days' },
-                        { key: 'range', label: 'Custom Range' },
-                      ].map((t) => (
-                        <button
-                          key={t.key}
-                          type="button"
-                          onClick={() => setTimeFilter(t.key)}
-                          className={`px-3.5 py-1 rounded-md text-[10px] font-extrabold transition-all h-full cursor-pointer flex items-center ${
-                            timeFilter === t.key
-                              ? 'bg-brand-primary text-white shadow-sm'
-                              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                          }`}
-                        >
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {timeFilter === 'range' && (
-                      <div className="flex items-center gap-2 text-xs font-bold text-gray-700 w-full sm:w-auto justify-end">
-                        <input
-                          type="date"
-                          value={dateRange.start}
-                          onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                          className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
-                        />
-                        <span>to</span>
-                        <input
-                          type="date"
-                          value={dateRange.end}
-                          onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                          className="border rounded-lg px-2.5 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
-                        />
-                      </div>
-                    )}
-
-                    {/* Mobile view showing entries badge next to Add Work button */}
-                    {role !== 'parent' && (
-                      <span className="inline-flex sm:hidden items-center text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-lg select-none whitespace-nowrap h-8">
-                        {filteredDailyEntries.length}/{dailyEntries.length} entries
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => fetchDailyEntries()}
-                      disabled={dailyLoading}
-                      title="Refresh Activity Logs"
-                      className="px-2.5 py-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0 disabled:opacity-50"
-                    >
-                      <i
-                        className={`fas fa-rotate-right text-brand-primary text-xs ${dailyLoading ? 'animate-spin' : ''}`}
-                      />
-                      <span className="hidden sm:inline">Refresh</span>
-                    </button>
-
-                    {role === 'teacher' && (
-                      <button
-                        onClick={() => setIsAddWorkModalOpen(true)}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0"
-                      >
-                        <i className="fas fa-plus"></i> Add Work
-                      </button>
-                    )}
-
-                    {(role === 'admin' || role === 'management') && (
-                      <button
-                        onClick={() => setIsExceptionsModalOpen(true)}
-                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer h-8 shrink-0"
-                        title="Manage Requests & Exceptions"
-                      >
-                        <i className="fas fa-comment-dots"></i> Requests
-                      </button>
-                    )}
+                {/* Custom range date inputs if active */}
+                {activeTab === 'teacher-activity' && timeFilter === 'range' && (
+                  <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 md:mt-0">
+                    <input
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                      className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
+                    />
+                    <span className="text-gray-400 font-bold text-xs">-</span>
+                    <input
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                      className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
+                    />
                   </div>
                 )}
 
@@ -1800,9 +2083,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       onChange={(e) => setFilterTopic(e.target.value)}
                       placeholder="Filter topic..."
                       autoFocus
-                      className="w-full border pl-8 pr-8 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-8 bg-white"
+                      className="w-full border pl-8 pr-8 py-1.5 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary h-9 bg-white"
                     />
-                    <i className="fas fa-search text-gray-400 text-xs absolute left-2.5 top-2.5 pointer-events-none"></i>
+                    <i className="fas fa-search text-gray-400 text-xs absolute left-2.5 top-3 pointer-events-none"></i>
                     {filterTopic && (
                       <button
                         type="button"
@@ -1810,7 +2093,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                           setFilterTopic('');
                           setIsMobileTopicSearchOpen(false);
                         }}
-                        className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600 p-1"
+                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
                       >
                         <i className="fas fa-times text-xs"></i>
                       </button>
@@ -1822,29 +2105,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
 
             {activeTab === 'lesson-planner' && role === 'teacher' && (
               <div
-                className="w-full flex flex-wrap items-center gap-2 mt-2"
-                data-name="lesson planner filters"
+                className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
+                data-feature-filter="lesson-planner"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => setLpShowAllClasses((prev) => !prev)}
-                    title={lpShowAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
-                    aria-label="Show All Classes"
-                    className={`h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-full sm:w-auto active:scale-95 flex ${
-                      lpShowAllClasses
-                        ? 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
-                        : 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
-                    }`}
-                  >
-                    <i
-                      className={`fas fa-user-check text-xs ${
-                        lpShowAllClasses ? 'text-gray-600' : 'text-white'
-                      }`}
-                    ></i>
-                    <span>Mine Only</span>
-                  </button>
-
                   <select
                     value={lpFilterClassId}
                     onChange={(e) => {
@@ -1853,7 +2117,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       setLpFilterSubjectId('');
                       setLpFilterBookId('');
                     }}
-                    className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500"
+                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600"
                   >
                     <option value="">Class</option>
                     {lpAvailableClasses.map((c) => (
@@ -1871,7 +2135,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       setLpFilterBookId('');
                     }}
                     disabled={!lpFilterClassId || lpAvailableClassifications.length === 0}
-                    className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
                   >
                     <option value="">Classification</option>
                     {lpAvailableClassifications.map((cl) => (
@@ -1888,7 +2152,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       setLpFilterBookId('');
                     }}
                     disabled={!lpFilterClassId}
-                    className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
                   >
                     <option value="">Subject</option>
                     {lpVisibleSubjects.map((s) => (
@@ -1902,7 +2166,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                     value={lpFilterBookId}
                     onChange={(e) => setLpFilterBookId(e.target.value)}
                     disabled={!lpFilterSubjectId}
-                    className="w-full sm:w-auto border px-2 py-1 rounded-lg font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-8 cursor-pointer text-gray-500 disabled:opacity-50"
+                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
                   >
                     <option value="">Book</option>
                     {lpAvailableBooks.map((b) => (
@@ -1911,6 +2175,24 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => setLpShowAllClasses((prev) => !prev)}
+                    title={lpShowAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
+                    aria-label="Show All Classes"
+                    className={`h-9 sm:h-8 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-full sm:w-auto active:scale-95 flex ${
+                      lpShowAllClasses
+                        ? 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
+                        : 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-user-check text-xs ${
+                        lpShowAllClasses ? 'text-gray-600' : 'text-white'
+                      }`}
+                    ></i>
+                    <span>Mine Only</span>
+                  </button>
 
                   {(lpFilterClassId ||
                     lpFilterClassificationId ||
@@ -1923,7 +2205,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                         setLpFilterSubjectId('');
                         setLpFilterBookId('');
                       }}
-                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
+                      className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-red-600 disabled:opacity-50"
                     >
                       Reset
                     </button>
@@ -1932,11 +2214,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
               </div>
             )}
 
-            {/* Inline Class Progress Filters */}
-            {activeTab === 'class-progress' && role !== 'parent' && (
+            {/* Inline Syllabus Progress Filters */}
+            {activeTab === 'syllabus-progress' && role !== 'parent' && (
               <div
-                className="w-full flex flex-wrap items-center gap-2 mt-2"
-                data-name="class progress filters"
+                className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
+                data-feature-filter="syllabus-progress"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                   <MultiSelectDropdown
@@ -2014,7 +2296,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                           : 'Show Mine Only: Inactive (Showing all subjects)'
                       }
                       aria-label="Show Mine Only"
-                      className={`hidden sm:flex h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-auto active:scale-95 ${
+                      className={`h-9 sm:h-8 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-full sm:w-auto active:scale-95 flex ${
                         cpTeacherShowMineOnly
                           ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
                           : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
@@ -2028,6 +2310,35 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       <span>Mine Only</span>
                     </button>
                   )}
+
+                  {/* Grouping Sort Filter integrated directly inside filter grid */}
+                  <FeatureSortDropdown
+                    featureName="syllabus-progress"
+                    value={cpGroupingMode}
+                    onChange={setCpGroupingMode}
+                    className="col-span-1 sm:ml-auto"
+                    options={[
+                      {
+                        key: 'none',
+                        label: 'No Group',
+                        desc: 'Standard tabular layout',
+                        icon: 'fa-bars',
+                      },
+                      {
+                        key: 'classification',
+                        label: 'Classification',
+                        desc: 'Group cards by classification',
+                        icon: 'fa-tags',
+                      },
+                      {
+                        key: 'subject',
+                        label: 'Subject',
+                        desc: 'Group cards by subject',
+                        icon: 'fa-book',
+                      },
+                    ]}
+                  />
+
                   {(cpFilterClasses.length > 0 ||
                     cpFilterBooks.length > 0 ||
                     cpFilterClassifications.length > 0 ||
@@ -2043,61 +2354,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                         setProgressExpandedBook(null);
                         setProgressExpandedClass(null);
                       }}
-                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
+                      className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 sm:py-1 rounded-xl border border-red-100 transition-colors h-9 sm:h-8 flex items-center justify-center cursor-pointer"
                     >
                       Reset
                     </button>
                   )}
-                </div>
-
-                <div className="w-full sm:w-auto sm:ml-auto flex items-center justify-between sm:justify-end gap-2 mt-1 sm:mt-0">
-                  {role === 'teacher' && (
-                    <button
-                      type="button"
-                      onClick={() => setCpTeacherShowMineOnly((prev) => !prev)}
-                      title={
-                        cpTeacherShowMineOnly
-                          ? 'Show Mine Only: Active (Showing my subjects)'
-                          : 'Show Mine Only: Inactive (Showing all subjects)'
-                      }
-                      aria-label="Show Mine Only"
-                      className={`flex sm:hidden h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none active:scale-95 ${
-                        cpTeacherShowMineOnly
-                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
-                          : 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
-                      }`}
-                    >
-                      <i
-                        className={`fas fa-user-check text-xs ${
-                          cpTeacherShowMineOnly ? 'text-white' : 'text-gray-400'
-                        }`}
-                      ></i>
-                      <span>Mine Only</span>
-                    </button>
-                  )}
-
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg items-center border h-8 select-none gap-0.5">
-                    {[
-                      { key: 'none', label: 'No Group', icon: 'fa-bars' },
-                      { key: 'classification', label: 'Classification', icon: 'fa-tags' },
-                      { key: 'subject', label: 'Subject', icon: 'fa-book' },
-                    ].map((g) => (
-                      <button
-                        key={g.key}
-                        type="button"
-                        onClick={() => setCpGroupingMode(g.key)}
-                        title={g.label}
-                        aria-label={g.label}
-                        className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
-                          cpGroupingMode === g.key
-                            ? 'bg-brand-primary text-white shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                        }`}
-                      >
-                        <i className={`fas ${g.icon} text-xs`}></i>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
             )}
@@ -2105,8 +2366,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             {/* Inline Upcoming Lessons Filters */}
             {activeTab === 'upcoming-lessons' && (
               <div
-                className="w-full flex flex-wrap items-center gap-2 mt-2"
-                data-name="upcoming lessons filters"
+                className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
+                data-feature-filter="upcoming-lessons"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                   {role === 'parent' ? null : (
@@ -2178,93 +2439,45 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                     </>
                   )}
 
-                  <div className="hidden sm:block relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
-                      className={`flex items-center justify-between gap-2 h-8 px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                        upcomingStartDate !== getLocalDateStr(0) ||
-                        upcomingEndDate !== getDefaultEndDateStr()
-                          ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
-                          : 'bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
-                      title="Select Date Range"
-                    >
-                      <i className="fas fa-calendar-alt text-xs"></i>
-                      <span>
-                        {new Date(upcomingStartDate).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                        {' - '}
-                        {new Date(upcomingEndDate).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                      <i
-                        className={`fas fa-chevron-down text-[10px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
-                      ></i>
-                    </button>
+                  {/* Date Range Popover Button */}
+                  <UpcomingDateRangePicker
+                    startDate={upcomingStartDate}
+                    endDate={upcomingEndDate}
+                    onStartDateChange={setUpcomingStartDate}
+                    onEndDateChange={setUpcomingEndDate}
+                    onReset={() => {
+                      setUpcomingStartDate(getLocalDateStr(0));
+                      setUpcomingEndDate(getDefaultEndDateStr());
+                    }}
+                  />
 
-                    {isUpDatePopoverOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setIsUpDatePopoverOpen(false)}
-                        />
-                        <div className="absolute right-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
-                          <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
-                            Date Range
-                          </h5>
-                          <div className="space-y-2">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase">
-                                From:
-                              </span>
-                              <input
-                                type="date"
-                                value={upcomingStartDate}
-                                onChange={(e) => setUpcomingStartDate(e.target.value)}
-                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase">
-                                To:
-                              </span>
-                              <input
-                                type="date"
-                                value={upcomingEndDate}
-                                onChange={(e) => setUpcomingEndDate(e.target.value)}
-                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2 pt-2 border-t">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setUpcomingStartDate(getLocalDateStr(0));
-                                setUpcomingEndDate(getDefaultEndDateStr());
-                                setIsUpDatePopoverOpen(false);
-                              }}
-                              className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsUpDatePopoverOpen(false)}
-                              className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  {/* Grouping Sort Filter integrated directly inside filter grid */}
+                  <FeatureSortDropdown
+                    featureName="upcoming-lessons"
+                    value={upcomingGroupingMode}
+                    onChange={setUpcomingGroupingMode}
+                    className="col-span-1 sm:ml-auto"
+                    options={[
+                      {
+                        key: 'teacher',
+                        label: 'Teacher',
+                        desc: 'Group upcoming lessons by teacher',
+                        icon: 'fa-user-tie',
+                      },
+                      {
+                        key: 'class',
+                        label: 'Class',
+                        desc: 'Group upcoming lessons by class',
+                        icon: 'fa-graduation-cap',
+                      },
+                      {
+                        key: 'date',
+                        label: 'Date',
+                        desc: 'Group upcoming lessons by date',
+                        icon: 'fa-calendar-day',
+                      },
+                    ]}
+                  />
 
                   {(() => {
                     const hasActiveFilters =
@@ -2289,127 +2502,12 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                           setUpcomingStartDate(getLocalDateStr(0));
                           setUpcomingEndDate(getDefaultEndDateStr());
                         }}
-                        className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 transition-colors h-8 flex items-center justify-center"
+                        className="col-span-2 sm:col-span-1 w-full sm:w-auto text-xs font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 sm:py-1 rounded-xl border border-red-100 transition-colors h-9 sm:h-8 flex items-center justify-center cursor-pointer"
                       >
                         Reset
                       </button>
                     );
                   })()}
-                </div>
-
-                <div className="w-full sm:w-auto sm:ml-auto flex items-center justify-between sm:justify-end gap-2 mt-1 sm:mt-0">
-                  {/* Mobile view Date Selector button next to grouping icons */}
-                  <div className="sm:hidden relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsUpDatePopoverOpen(!isUpDatePopoverOpen)}
-                      className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                        upcomingStartDate !== getLocalDateStr(0) ||
-                        upcomingEndDate !== getDefaultEndDateStr()
-                          ? 'bg-brand-primary/10 border-brand-primary/30 text-brand-primary'
-                          : 'bg-white text-gray-600 hover:bg-gray-50'
-                      }`}
-                      title="Select Date Range"
-                    >
-                      <i className="fas fa-calendar-alt text-xs"></i>
-                      <span>
-                        {new Date(upcomingStartDate).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                      <i
-                        className={`fas fa-chevron-down text-[9px] transition-transform ${isUpDatePopoverOpen ? 'rotate-180' : ''}`}
-                      ></i>
-                    </button>
-
-                    {isUpDatePopoverOpen && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setIsUpDatePopoverOpen(false)}
-                        />
-                        <div className="absolute left-0 mt-2 p-4 bg-white border rounded-xl shadow-xl z-50 min-w-[240px] space-y-3 text-left">
-                          <h5 className="text-xs font-black text-dark-primary uppercase tracking-wider border-b pb-1 mb-2">
-                            Date Range
-                          </h5>
-                          <div className="space-y-2">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase">
-                                From:
-                              </span>
-                              <input
-                                type="date"
-                                value={upcomingStartDate}
-                                onChange={(e) => setUpcomingStartDate(e.target.value)}
-                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-gray-400 uppercase">
-                                To:
-                              </span>
-                              <input
-                                type="date"
-                                value={upcomingEndDate}
-                                onChange={(e) => setUpcomingEndDate(e.target.value)}
-                                className="border rounded-lg px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-brand-primary w-full bg-white"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex justify-end gap-2 pt-2 border-t">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setUpcomingStartDate(getLocalDateStr(0));
-                                setUpcomingEndDate(getDefaultEndDateStr());
-                                setIsUpDatePopoverOpen(false);
-                              }}
-                              className="px-2 py-1 text-[10px] font-bold text-red-500 hover:bg-red-50 rounded"
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsUpDatePopoverOpen(false)}
-                              className="px-3 py-1 text-[10px] font-bold bg-brand-primary text-white rounded shadow-sm hover:bg-brand-primary/90"
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg border h-8 items-center gap-0.5 select-none">
-                    {[
-                      {
-                        key: 'class_subject',
-                        icon: 'fa-graduation-cap',
-                        tooltip: 'Sort by Class & Subject',
-                      },
-                      {
-                        key: 'subject_class',
-                        icon: 'fa-book',
-                        tooltip: 'Sort by Subject & Class',
-                      },
-                    ].map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => setUpcomingGroupingMode(t.key)}
-                        title={t.tooltip}
-                        aria-label={t.tooltip}
-                        className={`w-8 h-7 rounded-md transition-all cursor-pointer flex items-center justify-center ${
-                          upcomingGroupingMode === t.key
-                            ? 'bg-brand-primary text-white shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-                        }`}
-                      >
-                        <i className={`fas ${t.icon} text-xs`}></i>
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </div>
             )}
@@ -2418,7 +2516,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
 
         {/* Tab Contents */}
         {!dashboardOnly && activeTab === 'lesson-planner' && role === 'teacher' && (
-          <div data-lesson-planner="true">
+          <div data-feature="lesson-planner">
             <LessonManager
               user={user}
               teacherRecord={teacherRecord}
@@ -2443,7 +2541,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         )}
 
         {!dashboardOnly && activeTab === 'teacher-activity' && role === 'teacher' && (
-          <div data-teacher-activity="true">
+          <div data-feature="teacher-activity">
             <DailyActivityTable
               role="teacher"
               activeTab={activeTab}
@@ -2462,10 +2560,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         {!dashboardOnly &&
           ((activeTab === 'teacher-activity' && role !== 'teacher') ||
             activeTab === 'two-weeks-class') && (
-            <div
-              data-teacher-activity={activeTab === 'teacher-activity' ? 'true' : undefined}
-              data-two-weeks-class={activeTab === 'two-weeks-class' ? 'true' : undefined}
-            >
+            <div data-feature={activeTab}>
               <DailyActivityTable
                 role={role}
                 student={student}
@@ -2498,7 +2593,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
           )}
 
         {!dashboardOnly && activeTab === 'upcoming-lessons' && (
-          <div data-upcoming-lessons="true">
+          <div data-feature="upcoming-lessons">
             <UpcomingLessonsGrid
               role={role}
               student={student}
@@ -2523,7 +2618,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         )}
 
         {!dashboardOnly && activeTab === 'teacher-adherence' && (
-          <div data-teacher-adherence="true">
+          <div data-feature="teacher-adherence">
             <SyllabusTeacherAdherence
               teachers={teachers}
               lessonPlans={lessonPlans}
@@ -2535,7 +2630,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         )}
 
         {dashboardOnly && (
-          <div data-overview="true">
+          <div data-feature="overview">
             <SyllabusOverviewDashboard
               role={role}
               classes={classes}
@@ -2567,14 +2662,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                 setProgressExpandedClass(null);
                 setExpandedLogIds({});
                 setLogItemsMap({});
-                setActiveTab('class-progress');
+                setActiveTab('syllabus-progress');
               }}
             />
           </div>
         )}
 
-        {!dashboardOnly && activeTab === 'class-progress' && (
-          <div data-class-progress="true">
+        {!dashboardOnly && activeTab === 'syllabus-progress' && (
+          <div data-feature="syllabus-progress">
             <SyllabusProgressGrid
               role={role}
               student={student}

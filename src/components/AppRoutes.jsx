@@ -222,22 +222,22 @@ export const AppRoutes = ({
                 openModal={openModal}
               >
                 {parentSubView === 'timetable' && (
-                  <div data-timetable="true">
+                  <div data-feature="timetable">
                     <ParentTimetableViewer student={user?.student} />
                   </div>
                 )}
                 {parentSubView === 'tickets' && (
-                  <div data-tickets="true">
+                  <div data-feature="tickets">
                     <ReporterTicketsView user={user} fullName={fullName} />
                   </div>
                 )}
                 {parentSubView === 'lesson-planner-tracker' && (
-                  <div data-lesson-planner-tracker="true">
+                  <div data-feature="lesson-planner-tracker">
                     <SyllabusTrackerPortal role="parent" student={user?.student} />
                   </div>
                 )}
                 {parentSubView === 'academic-calendar' && (
-                  <div data-academic-calendar="true">
+                  <div data-feature="academic-calendar">
                     <AcademicCalendarView canEdit={false} />
                   </div>
                 )}
@@ -344,7 +344,7 @@ export const AppRoutes = ({
                 openModal={openModal}
               >
                 {teacherSubView === 'personal-info' && (
-                  <div data-personal-info="true">
+                  <div data-feature="personal-info">
                     <EmployeeRecordsView
                       role="employee"
                       user={user}
@@ -353,27 +353,27 @@ export const AppRoutes = ({
                   </div>
                 )}
                 {teacherSubView === 'timetable' && (
-                  <div data-timetable="true">
+                  <div data-feature="timetable">
                     <TeacherTimetableViewer user={user} />
                   </div>
                 )}
                 {teacherSubView === 'students' && (
-                  <div data-students="true">
+                  <div data-feature="students">
                     <TeacherStudentsViewer />
                   </div>
                 )}
                 {teacherSubView === 'syllabus' && (
-                  <div data-syllabus="true">
+                  <div data-feature="syllabus">
                     <SyllabusManager role="teacher" user={user} teacherRecord={teacherRecord} />
                   </div>
                 )}
                 {teacherSubView === 'lesson-planner' && (
-                  <div data-lesson-planner="true">
+                  <div data-feature="lesson-planner">
                     <LessonManager user={user} teacherRecord={teacherRecord} />
                   </div>
                 )}
                 {teacherSubView === 'lesson-planner-tracker' && (
-                  <div data-lesson-planner-tracker="true">
+                  <div data-feature="lesson-planner-tracker">
                     <SyllabusTrackerPortal
                       role="teacher"
                       user={user}
@@ -382,7 +382,7 @@ export const AppRoutes = ({
                   </div>
                 )}
                 {teacherSubView === 'dashboard' && (
-                  <div data-dashboard="true">
+                  <div data-feature="dashboard">
                     <SyllabusTrackerPortal
                       role="teacher"
                       user={user}
@@ -392,12 +392,12 @@ export const AppRoutes = ({
                   </div>
                 )}
                 {teacherSubView === 'tickets' && (
-                  <div data-tickets="true">
+                  <div data-feature="tickets">
                     <ReporterTicketsView user={user} fullName={fullName} />
                   </div>
                 )}
                 {teacherSubView === 'academic-calendar' && (
-                  <div data-academic-calendar="true">
+                  <div data-feature="academic-calendar">
                     <AcademicCalendarView canEdit={false} />
                   </div>
                 )}

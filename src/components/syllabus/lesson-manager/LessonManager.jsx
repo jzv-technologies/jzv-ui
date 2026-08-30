@@ -55,7 +55,16 @@ const LessonManager = ({
   const [activeBottomTab, setActiveBottomTab] = useState('none'); // 'none' | 'progress' | 'activity'
 
   // Teacher context
-  const [teacher, setTeacher] = useState(null);
+  const [teacher, setTeacher] = useState(() => {
+    if (teacherRecord) {
+      return {
+        ...teacherRecord,
+        id: teacherRecord.id ?? teacherRecord.teacher_id,
+        name: teacherRecord.name ?? teacherRecord.full_name ?? '',
+      };
+    }
+    return lessonManagerCache.userId === user?.id ? lessonManagerCache.teacher : null;
+  });
   const [allTeachers, setAllTeachers] = useState([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState(() =>
     lessonManagerCache.userId === user?.id ? lessonManagerCache.selectedTeacherId : ''
@@ -65,7 +74,6 @@ const LessonManager = ({
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [timetableSlots, setTimetableSlots] = useState([]);
   const [books, setBooks] = useState([]);
   const [bookClasses, setBookClasses] = useState([]);
   const [classifications, setClassifications] = useState([]);
@@ -261,8 +269,8 @@ const LessonManager = ({
         setBooks(lessonManagerCache.books);
         setBookClasses(lessonManagerCache.bookClasses);
         setClassifications(lessonManagerCache.classifications);
-        setAllLessons(lessonManagerCache.allLessons);
-        setProgressRecords(lessonManagerCache.progressRecords);
+        setAllLessons(lessonManagerCache.allLessons || []);
+        setProgressRecords(lessonManagerCache.progressRecords || []);
         setAcademicEvents(lessonManagerCache.academicEvents || []);
         if (isAdminView) setAllTeachers(lessonManagerCache.allTeachers);
         else setTeacher(lessonManagerCache.teacher);
@@ -282,20 +290,7 @@ const LessonManager = ({
           supabase.from('class_assignments').select('*'),
           supabase.from('syl_books').select('*'),
           supabase.from('map_class_books').select('*'),
-          selectedBookId
-            ? fetchAllPages('syl_lessons', '*', (q) =>
-                q
-                  .eq('book_id', selectedBookId)
-                  .order('sequence', { ascending: true, nullsFirst: false })
-                  .order('id', { ascending: true })
-              )
-            : Promise.resolve({ data: [], error: null }),
-          fetchAllPages(
-            'trk_lesson_level_progress',
-            'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end'
-          ),
           supabase.from('syl_classifications').select('*'),
-          supabase.from('timetable_slots').select('class_id, teacher_id, subject_id'),
           supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
         ];
 
@@ -357,10 +352,7 @@ const LessonManager = ({
           { data: dbAssignments },
           { data: dbBooks },
           { data: dbBookClasses },
-          { data: dbLessons },
-          { data: dbProgress },
           { data: dbClassifications },
-          { data: dbTimetableSlots },
           { data: dbAcademicEvents },
           teachersResult,
         ] = results;
@@ -368,11 +360,8 @@ const LessonManager = ({
         setClasses(dbClasses || []);
         setSubjects(dbSubjects || []);
         setAssignments(dbAssignments || []);
-        setTimetableSlots(dbTimetableSlots || []);
         setBooks(dbBooks || []);
         setBookClasses(dbBookClasses || []);
-        setAllLessons(dbLessons || []);
-        setProgressRecords(dbProgress || []);
         setClassifications(dbClassifications || []);
         setAcademicEvents(dbAcademicEvents || []);
 
@@ -393,11 +382,8 @@ const LessonManager = ({
           classes: dbClasses || [],
           subjects: dbSubjects || [],
           assignments: dbAssignments || [],
-          timetableSlots: dbTimetableSlots || [],
           books: dbBooks || [],
           bookClasses: dbBookClasses || [],
-          allLessons: dbLessons || [],
-          progressRecords: dbProgress || [],
           classifications: dbClassifications || [],
           academicEvents: dbAcademicEvents || [],
           allTeachers: normalizedTeachers,
@@ -423,18 +409,13 @@ const LessonManager = ({
     if (isAdminView && !selectedTeacherId) return classes;
     if (showAllClasses) return classes;
 
-    return classes.filter(
-      (c) =>
-        assignments.some(
-          (a) =>
-            String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
-        ) ||
-        timetableSlots.some(
-          (s) =>
-            String(s.class_id) === String(c.id) && String(s.teacher_id) === String(filterTeacherId)
-        )
+    return classes.filter((c) =>
+      assignments.some(
+        (a) =>
+          String(a.class_id) === String(c.id) && String(a.teacher_id) === String(filterTeacherId)
+      )
     );
-  }, [classes, assignments, timetableSlots, filterTeacherId, isAdminView, showAllClasses]);
+  }, [classes, assignments, filterTeacherId, isAdminView, showAllClasses]);
 
   const classSubjects = useMemo(() => {
     if (!selectedClassId) return [];
@@ -442,24 +423,16 @@ const LessonManager = ({
     const isFilteredByTeacher =
       Boolean(filterTeacherId) && !showAllClasses && !(isAdminView && !selectedTeacherId);
 
-    // Subjects assigned to the specific teacher for this class (from class_assignments OR scheduled timetable_slots)
-    const teacherAssignmentSubjectIds = new Set([
-      ...assignments
+    // Subjects assigned to the specific teacher for this class (from class_assignments)
+    const teacherAssignmentSubjectIds = new Set(
+      assignments
         .filter(
           (a) =>
             String(a.class_id) === String(selectedClassId) &&
             String(a.teacher_id) === String(filterTeacherId)
         )
-        .map((a) => String(a.subject_id)),
-      ...timetableSlots
-        .filter(
-          (s) =>
-            String(s.class_id) === String(selectedClassId) &&
-            String(s.teacher_id) === String(filterTeacherId) &&
-            Boolean(s.subject_id)
-        )
-        .map((s) => String(s.subject_id)),
-    ]);
+        .map((a) => String(a.subject_id))
+    );
 
     if (isFilteredByTeacher) {
       // Return only subjects assigned to this teacher for the selected class
@@ -501,7 +474,6 @@ const LessonManager = ({
     books,
     subjects,
     assignments,
-    timetableSlots,
     filterTeacherId,
     showAllClasses,
     isAdminView,
@@ -519,11 +491,6 @@ const LessonManager = ({
     assignments.forEach((assignment) => {
       if (scopedClassIds.has(String(assignment.class_id))) {
         scopedSubjectIds.add(String(assignment.subject_id));
-      }
-    });
-    timetableSlots.forEach((slot) => {
-      if (scopedClassIds.has(String(slot.class_id)) && slot.subject_id) {
-        scopedSubjectIds.add(String(slot.subject_id));
       }
     });
     bookClasses.forEach((mapping) => {
@@ -545,7 +512,6 @@ const LessonManager = ({
     showAllClasses,
     availableClasses,
     assignments,
-    timetableSlots,
     bookClasses,
     books,
     subjects,
@@ -599,42 +565,83 @@ const LessonManager = ({
     availableBooks,
   ]);
 
-  // Lazy load lessons for the selected book on-demand
+  // Lazy load lessons and progress records for the selected book on-demand
   useEffect(() => {
     if (!selectedBookId) return;
 
-    const bookLessonsLoaded = allLessons.some((l) => String(l.book_id) === String(selectedBookId));
-    if (bookLessonsLoaded) return;
-
     let isMounted = true;
-    const fetchBookLessons = async () => {
+    const fetchBookData = async () => {
       try {
-        const { data, error } = await fetchAllPages('syl_lessons', '*', (q) =>
-          q
-            .eq('book_id', selectedBookId)
-            .order('sequence', { ascending: true, nullsFirst: false })
-            .order('id', { ascending: true })
+        const bookLessonsLoaded = allLessons.some(
+          (l) => String(l.book_id) === String(selectedBookId)
         );
-        if (error) throw error;
-        if (isMounted && data) {
-          setAllLessons((prev) => {
-            const existingIds = new Set(prev.map((l) => String(l.id)));
-            const newLessons = data.filter((l) => !existingIds.has(String(l.id)));
-            const updated = [...prev, ...newLessons];
-            lessonManagerCache.allLessons = updated;
-            return updated;
-          });
+        const bookProgressLoaded = progressRecords.some(
+          (p) => String(p.book_id) === String(selectedBookId)
+        );
+
+        const promises = [];
+
+        if (!bookLessonsLoaded) {
+          promises.push(
+            fetchAllPages('syl_lessons', '*', (q) =>
+              q
+                .eq('book_id', selectedBookId)
+                .order('sequence', { ascending: true, nullsFirst: false })
+                .order('id', { ascending: true })
+            ).then(({ data, error }) => {
+              if (error) throw error;
+              return { type: 'lessons', data: data || [] };
+            })
+          );
         }
+
+        if (!bookProgressLoaded) {
+          promises.push(
+            fetchAllPages(
+              'trk_lesson_level_progress',
+              'id, class_id, subject_id, book_id, lesson_id, target_start_date, target_end_date, due_date, academic_week, status, completion_percentage, replan_counter, carry_forward_counter, carry_forward_count, delay_start, delay_end',
+              (q) => q.eq('book_id', selectedBookId)
+            ).then(({ data, error }) => {
+              if (error) throw error;
+              return { type: 'progress', data: data || [] };
+            })
+          );
+        }
+
+        if (promises.length === 0) return;
+
+        const results = await Promise.all(promises);
+        if (!isMounted) return;
+
+        results.forEach((res) => {
+          if (res.type === 'lessons') {
+            setAllLessons((prev) => {
+              const existingIds = new Set(prev.map((l) => String(l.id)));
+              const newLessons = res.data.filter((l) => !existingIds.has(String(l.id)));
+              const updated = [...prev, ...newLessons];
+              lessonManagerCache.allLessons = updated;
+              return updated;
+            });
+          } else if (res.type === 'progress') {
+            setProgressRecords((prev) => {
+              const existingIds = new Set(prev.map((p) => String(p.id)));
+              const newProgress = res.data.filter((p) => !existingIds.has(String(p.id)));
+              const updated = [...prev, ...newProgress];
+              lessonManagerCache.progressRecords = updated;
+              return updated;
+            });
+          }
+        });
       } catch (err) {
-        console.error('Failed to lazy load lessons for book:', selectedBookId, err);
+        console.error('Failed to lazy load lessons/progress for book:', selectedBookId, err);
       }
     };
 
-    fetchBookLessons();
+    fetchBookData();
     return () => {
       isMounted = false;
     };
-  }, [selectedBookId, allLessons]);
+  }, [selectedBookId, allLessons, progressRecords]);
 
   // UI Handlers
   const handleRefresh = async () => {
@@ -760,14 +767,14 @@ const LessonManager = ({
     <div className="flex flex-col h-auto lg:h-[calc(100vh-130px)] lg:min-h-[600px] bg-light-bg font-sans pb-24 lg:pb-0">
       {/* Header and Selectors */}
       {!hideFilterHeader && (
-        <div className="bg-white border-b px-4 py-4 md:px-6 shadow-sm shrink-0">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="bg-white border-b px-4 py-3 sm:py-4 md:px-6 shadow-xs shrink-0">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-3 sm:gap-4">
             <div
-              className="grid grid-cols-2 md:flex md:flex-wrap items-center gap-2 w-full md:w-auto pb-2 md:pb-0"
-              data-name="lesson planner filters"
+              className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full flex-1 min-w-0"
+              data-feature-filter="lesson-planner"
             >
               {isAdminView && (
-                <div className="col-span-2 md:col-span-1 md:min-w-[150px] w-full md:w-auto">
+                <div className="col-span-2 sm:col-span-1 w-full sm:w-auto sm:min-w-[150px]">
                   <select
                     value={selectedTeacherId}
                     onChange={(e) => {
@@ -776,7 +783,7 @@ const LessonManager = ({
                       setSelectedSubjectId('');
                       setSelectedBookId('');
                     }}
-                    className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all"
+                    className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-xl px-3 py-1.5 h-9 sm:h-8 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all cursor-pointer"
                   >
                     <option value="">All Teachers</option>
                     {allTeachers.map((t) => (
@@ -788,30 +795,7 @@ const LessonManager = ({
                 </div>
               )}
 
-              {!isAdminView && (
-                <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setShowAllClasses((prev) => !prev)}
-                    title={showAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
-                    aria-label="Show All Classes"
-                    className={`h-[34px] w-full px-3 rounded-lg border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 select-none active:scale-95 ${
-                      showAllClasses
-                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
-                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <i
-                      className={`fas fa-layer-group text-xs ${
-                        showAllClasses ? 'text-white' : 'text-gray-400'
-                      }`}
-                    ></i>
-                    <span className="truncate">Mine Only</span>
-                  </button>
-                </div>
-              )}
-
-              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+              <div className="col-span-1 w-full sm:w-auto sm:min-w-[130px]">
                 <select
                   value={selectedClassId}
                   onChange={(e) => {
@@ -820,7 +804,7 @@ const LessonManager = ({
                     setSelectedSubjectId('');
                     setSelectedBookId('');
                   }}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all"
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-xl px-3 py-1.5 h-9 sm:h-8 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all cursor-pointer"
                 >
                   <option value="">Select Class...</option>
                   {availableClasses.map((c) => (
@@ -831,7 +815,7 @@ const LessonManager = ({
                 </select>
               </div>
 
-              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+              <div className="col-span-1 w-full sm:w-auto sm:min-w-[140px]">
                 <select
                   value={selectedClassificationId}
                   onChange={(e) => {
@@ -840,7 +824,7 @@ const LessonManager = ({
                     setSelectedBookId('');
                   }}
                   disabled={!selectedClassId || availableClassifications.length === 0}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-xl px-3 py-1.5 h-9 sm:h-8 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <option value="">All Classifications</option>
                   {availableClassifications.map((cl) => (
@@ -851,7 +835,7 @@ const LessonManager = ({
                 </select>
               </div>
 
-              <div className="col-span-1 md:min-w-[140px] w-full md:w-auto">
+              <div className="col-span-1 w-full sm:w-auto sm:min-w-[130px]">
                 <select
                   value={selectedSubjectId}
                   onChange={(e) => {
@@ -859,7 +843,7 @@ const LessonManager = ({
                     setSelectedBookId('');
                   }}
                   disabled={!selectedClassId}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50"
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-xl px-3 py-1.5 h-9 sm:h-8 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <option value="">Select Subject...</option>
                   {availableSubjects.map((s) => (
@@ -870,7 +854,7 @@ const LessonManager = ({
                 </select>
               </div>
 
-              <div className="col-span-1 md:min-w-[160px] w-full md:w-auto">
+              <div className="col-span-2 sm:col-span-1 w-full sm:w-auto sm:min-w-[150px]">
                 <select
                   value={selectedBookId}
                   onChange={(e) => {
@@ -881,7 +865,7 @@ const LessonManager = ({
                     }
                   }}
                   disabled={!selectedSubjectId}
-                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all disabled:opacity-50 shadow-sm"
+                  className="w-full bg-gray-50 border border-gray-200 text-dark-primary text-xs font-bold rounded-xl px-3 py-1.5 h-9 sm:h-8 outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary transition-all disabled:opacity-50 shadow-2xs cursor-pointer"
                 >
                   <option value="">Select Book...</option>
                   {availableBooks.map((b) => (
@@ -896,6 +880,32 @@ const LessonManager = ({
                   )}
                 </select>
               </div>
+              {!isAdminView && (
+                <div className="col-span-1 w-full sm:w-auto sm:min-w-[130px]">
+                  <button
+                    type="button"
+                    onClick={() => setShowAllClasses((prev) => !prev)}
+                    title={
+                      showAllClasses
+                        ? 'Show All Classes (Click to show mine only)'
+                        : 'Showing My Classes Only (Click to show all)'
+                    }
+                    aria-label="Toggle Show All Classes"
+                    className={`h-9 sm:h-8 w-full px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 select-none active:scale-95 ${
+                      showAllClasses
+                        ? 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        : 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
+                    }`}
+                  >
+                    <i
+                      className={`fas fa-layer-group text-xs ${
+                        showAllClasses ? 'text-gray-400' : 'text-white'
+                      }`}
+                    ></i>
+                    <span className="truncate">Mine Only</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -14,20 +14,38 @@ const useDropdownPortal = () => {
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const minW = Math.max(180, Math.floor(rect.width));
-    const maxLeft = Math.max(10, Math.min(rect.left, window.innerWidth - minW - 10));
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+
+    const desiredWidth = Math.max(180, Math.min(280, Math.floor(rect.width)));
+    const panelWidth = Math.min(desiredWidth, viewportW - 20);
+
+    // Calculate left: align with trigger left if possible, but clamp safely
+    let left = rect.left;
+    if (left + panelWidth > viewportW - 10) {
+      left = viewportW - panelWidth - 10;
+    }
+    if (left < 10) {
+      left = 10;
+    }
 
     // Auto flip upward if too close to bottom of screen
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const isCloseToBottom = spaceBelow < 280 && rect.top > 280;
+    const spaceBelow = viewportH - rect.bottom;
+    const spaceAbove = rect.top;
+    const minHeight = 280;
+    const isCloseToBottom = spaceBelow < minHeight && spaceAbove > spaceBelow;
 
     setPanelStyle({
       position: 'fixed',
-      top: isCloseToBottom ? 'auto' : rect.bottom + 6,
-      bottom: isCloseToBottom ? window.innerHeight - rect.top + 6 : 'auto',
-      left: maxLeft,
-      minWidth: minW,
-      zIndex: 9999,
+      top: isCloseToBottom ? 'auto' : `${rect.bottom + 6}px`,
+      bottom: isCloseToBottom ? `${viewportH - rect.top + 6}px` : 'auto',
+      left: `${left}px`,
+      width: `${panelWidth}px`,
+      maxWidth: 'calc(100vw - 20px)',
+      maxHeight: isCloseToBottom
+        ? `${Math.max(160, spaceAbove - 16)}px`
+        : `${Math.max(160, spaceBelow - 16)}px`,
+      zIndex: 99999,
     });
   }, []);
 
@@ -289,17 +307,17 @@ const MultiSelectDropdown = ({
   const displayTitle = label || placeholder;
 
   return (
-    <div className={`${fullWidth ? 'w-full' : 'relative inline-block'} ${className}`}>
+    <div className={`${fullWidth ? 'w-full' : 'relative inline-block w-full sm:w-auto'} ${className}`}>
       {/* {label && <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>} */}
       <button
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center justify-between gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+        className={`flex items-center justify-between gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
           selectedCount > 0 || genderBadge
             ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
             : 'bg-white border-gray-250 text-gray-700 hover:border-brand-primary/50 hover:bg-gray-50/50'
-        } ${fullWidth ? 'w-full' : 'whitespace-nowrap min-w-[120px]'}`}
+        } ${fullWidth ? 'w-full' : 'w-full sm:w-auto whitespace-nowrap min-w-0 sm:min-w-[120px]'}`}
       >
         <span className="flex items-center gap-1.5 truncate min-w-0">
           <i className="fas fa-filter text-[9px] shrink-0 opacity-80" />

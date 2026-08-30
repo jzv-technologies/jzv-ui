@@ -222,7 +222,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
-        supabase.from('teacher_subjects').select('*'),
+        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
@@ -1511,20 +1511,17 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       onSetSubView={onSetSubView}
     >
       {subView === 'job-applications' || subView === 'registered-complaints' ? (
-        <div
-          data-job-applications={subView === 'job-applications' ? 'true' : undefined}
-          data-registered-complaints={subView === 'registered-complaints' ? 'true' : undefined}
-        >
+        <div data-feature={subView}>
           {renderTableView()}
         </div>
       ) : null}
       {subView === 'student-records' && (
-        <div data-student-records="true">
+        <div data-feature="student-records">
           <AdminStudentsView role="management" user={user} />
         </div>
       )}
       {subView === 'employee-records' && (
-        <div data-employee-records="true">
+        <div data-feature="employee-records">
           <EmployeeRecordsView
             role="management"
             user={user}
@@ -1534,7 +1531,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         </div>
       )}
       {subView === 'salary-tracker' && (
-        <div data-salary-tracker="true">
+        <div data-feature="salary-tracker">
           <EmployeeRecordsView
             role="management"
             user={user}
@@ -1543,34 +1540,34 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           />
         </div>
       )}
-      {subView === 'take-test' ? <div data-take-test="true">{renderTakeTestView()}</div> : null}
+      {subView === 'take-test' ? <div data-feature="take-test">{renderTakeTestView()}</div> : null}
       {subView === 'lesson-planner-tracker' && (
-        <div data-lesson-planner-tracker="true">
+        <div data-feature="lesson-planner-tracker">
           <SyllabusTrackerPortal role="management" />
         </div>
       )}
       {subView === 'dashboard' && (
-        <div data-dashboard="true">
+        <div data-feature="dashboard">
           <SyllabusTrackerPortal role="management" dashboardOnly />
         </div>
       )}
       {subView === 'academic-calendar' && (
-        <div data-academic-calendar="true">
+        <div data-feature="academic-calendar">
           <AcademicCalendarView canEdit />
         </div>
       )}
       {subView === 'syllabus-manager' && (
-        <div data-syllabus-manager="true">
+        <div data-feature="syllabus-manager">
           <SyllabusManager role="management" user={user} />
         </div>
       )}
       {subView === 'lesson-planner' && (
-        <div data-lesson-planner="true">
+        <div data-feature="lesson-planner">
           <LessonManager role="management" user={user} />
         </div>
       )}
       {subView === 'timetable-viewer' && (
-        <div data-timetable-viewer="true">
+        <div data-feature="timetable-viewer">
           {ttLoading ? (
             <div className="flex items-center justify-center py-24">
               <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
