@@ -1,6 +1,7 @@
 import React from 'react';
 import ModalErrorBoundary from './ModalErrorBoundary';
 import MultiSelectRolesDropdown from './MultiSelectRolesDropdown';
+import { normalizeRoles } from '../../../utils/roleUtils';
 
 const DEFAULT_ORGANIZATIONS = [
   'MRQU Educational & Charitable Trust',
@@ -1045,9 +1046,10 @@ const EmployeeEditModal = ({
                           ...formData,
                           auth_id: selectedId,
                           email: formData.email || (matched ? matched.email : formData.email),
-                          mapped_roles_sum: matched?.role
-                            ? String(matched.role)
-                            : formData.mapped_roles_sum,
+                          mapped_roles:
+                            Array.isArray(matched?.roles) && matched.roles.length > 0
+                              ? matched.roles
+                              : formData.mapped_roles || ['teacher'],
                         });
                       }}
                       className={`w-full px-3 py-2 border rounded-xl font-bold outline-none ${
@@ -1113,9 +1115,12 @@ const EmployeeEditModal = ({
                     </label>
                     <MultiSelectRolesDropdown
                       disabled={!formData.login_allowed || !formData.auth_id}
-                      value={formData.mapped_roles_sum}
-                      onChange={(nextSum) =>
-                        setFormData({ ...formData, mapped_roles_sum: nextSum })
+                      value={formData.mapped_roles || ['teacher']}
+                      onChange={(nextRoles) =>
+                        setFormData({
+                          ...formData,
+                          mapped_roles: nextRoles,
+                        })
                       }
                     />
                     {!formData.auth_id && formData.login_allowed && (

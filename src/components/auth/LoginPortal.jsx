@@ -27,16 +27,12 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
     }
   }, [isOpen]);
 
-  // Handle post-login behaviour: redirect or show selection/pending
+  // Handle post-login behaviour: redirect to unified portal v2 or show pending
   useEffect(() => {
     if (user && isOpen && !rolesLoading) {
-      if (userRoles.length === 1) {
-        navigate(`/portal/${userRoles[0]}`);
+      if (userRoles.length >= 1) {
+        navigate('/portal');
         onClose();
-      } else if (userRoles.length > 1) {
-        if (authMode !== "selection") {
-          setAuthMode("selection");
-        }
       } else if (userRoles.length === 0) {
         if (authMode !== "pending") {
           setAuthMode("pending");
@@ -194,7 +190,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
 
       // Success! Log in parent session
       loginAsParent(matchedStudents[0], matchedStudents);
-      navigate("/portal/parent");
+      navigate("/portal");
       onClose();
     } catch (err) {
       setMessage({ type: "error", text: err.message });
@@ -231,7 +227,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
 
       // Login as Candidate!
       loginAsCandidate(cleanMobile, config.test, config.expire_on);
-      navigate("/portal/candidate");
+      navigate("/portal");
       onClose();
     } catch (err) {
       setMessage({ type: "error", text: err.message });
@@ -532,7 +528,7 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
                         <button
                           key={login.type}
                           onClick={() => {
-                            navigate(`/portal/${login.type}`);
+                            navigate('/portal');
                             handleClose();
                           }}
                           className={`${login.color} w-full p-5 rounded-2xl border text-left hover:shadow-md transition-all group flex items-center gap-4`}

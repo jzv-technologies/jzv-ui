@@ -1,22 +1,32 @@
 import React, { useMemo } from 'react';
+import { SYSTEM_ROLES, normalizeRoles } from '../../../utils/roleUtils';
 
-const SYSTEM_ROLES = [
-  { id: 1, name: 'Guest' },
-  { id: 2, name: 'Parents' },
-  { id: 4, name: 'Staff' },
-  { id: 8, name: 'Teacher' },
-  { id: 16, name: 'Management' },
-  { id: 32, name: 'Administrator' },
-];
+const formatPortalRoles = (roleData) => {
+  let roles = [];
+  if (Array.isArray(roleData)) {
+    roles = roleData;
+  } else if (roleData && typeof roleData === 'object') {
+    roles = roleData.roles || [];
+  } else {
+    roles = normalizeRoles(roleData);
+  }
 
-const formatPortalRoles = (sum) => {
-  const num = parseInt(sum, 10) || 0;
-  if (!num) return <span className="text-gray-400 font-normal">None</span>;
-  const roles = SYSTEM_ROLES.filter((r) => (num & r.id) !== 0).map(
-    (r) => `${r.name.slice(0, 2).toUpperCase()}(${r.id})`
+  if (!roles || roles.length === 0) {
+    return <span className="text-gray-400 font-normal text-xs">None</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {roles.map((r) => (
+        <span
+          key={r}
+          className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-800 border-purple-200 capitalize"
+        >
+          {r}
+        </span>
+      ))}
+    </div>
   );
-  if (roles.length === 0) return <span className="text-gray-400 font-normal">None</span>;
-  return roles.join(', ');
 };
 
 const EmployeeRecordsTable = ({
@@ -31,13 +41,13 @@ const EmployeeRecordsTable = ({
   isManagement,
   authUsers = [],
 }) => {
-  // Map auth_id -> role sum from user_roles
+  // Map auth_id -> user roles from user_roles
   const authUserRoleMap = useMemo(() => {
     const map = new Map();
     if (Array.isArray(authUsers)) {
       authUsers.forEach((u) => {
-        if (u && u.user_id && u.role != null) {
-          map.set(String(u.user_id), u.role);
+        if (u && u.user_id) {
+          map.set(String(u.user_id), u.roles || []);
         }
       });
     }
@@ -161,14 +171,14 @@ const EmployeeRecordsTable = ({
                   </th>
                   <th className="p-4">Contact</th>
                   <th
-                    onClick={() => handleSort('mapped_roles_sum')}
+                    onClick={() => handleSort('mapped_roles')}
                     className="p-4 cursor-pointer select-none hover:bg-gray-100/80 transition-colors"
                   >
                     <div className="flex items-center gap-1.5">
                       Portal Role
                       <i
                         className={`fas ${
-                          sortField === 'mapped_roles_sum'
+                          sortField === 'mapped_roles'
                             ? sortOrder === 'asc'
                               ? 'fa-sort-up text-brand-primary'
                               : 'fa-sort-down text-brand-primary'
@@ -199,19 +209,19 @@ const EmployeeRecordsTable = ({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {orgEmps.map((emp) => {
-                  let roleSum = null;
+                  let roleData = null;
                   if (emp.auth_id && authUserRoleMap.has(String(emp.auth_id))) {
-                    roleSum = authUserRoleMap.get(String(emp.auth_id));
+                    roleData = authUserRoleMap.get(String(emp.auth_id));
                   }
-                  if (!roleSum || String(roleSum).trim() === '' || String(roleSum) === '0') {
-                    roleSum = emp.mapped_roles_sum;
+                  if (!roleData || (typeof roleData === 'string' && (roleData.trim() === '' || roleData === '0'))) {
+                    roleData = emp.mapped_roles;
                   }
-                  if (!roleSum || String(roleSum).trim() === '' || String(roleSum) === '0') {
+                  if (!roleData || (typeof roleData === 'string' && (roleData.trim() === '' || roleData === '0'))) {
                     const desig = (emp.designation || emp.role || '').toLowerCase();
-                    if (desig.includes('teacher')) roleSum = 8;
-                    else if (desig.includes('admin') || desig.includes('superadmin')) roleSum = 32;
-                    else if (desig.includes('management') || desig.includes('principal')) roleSum = 16;
-                    else if (desig.includes('staff') || desig.includes('accountant') || desig.includes('librarian')) roleSum = 4;
+                    if (desig.includes('teacher')) roleData = ['teacher'];
+                    else if (desig.includes('admin') || desig.includes('superadmin')) roleData = ['admin'];
+                    else if (desig.includes('management') || desig.includes('principal')) roleData = ['management'];
+                    else if (desig.includes('staff') || desig.includes('accountant') || desig.includes('librarian')) roleData = ['staff'];
                   }
 
                   return (
@@ -264,7 +274,7 @@ const EmployeeRecordsTable = ({
                       </td>
                       <td className="p-4 space-y-1">
                         <div className="font-extrabold text-purple-950 text-xs">
-                          {formatPortalRoles(roleSum)}
+                          {formatPortalRoles(roleData)}
                         </div>
                       </td>
                       <td className="p-4 text-center">

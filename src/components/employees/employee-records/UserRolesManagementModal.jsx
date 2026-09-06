@@ -1,23 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import MultiSelectRolesDropdown from './MultiSelectRolesDropdown';
+import { SYSTEM_ROLES, normalizeRoles } from '../../../utils/roleUtils';
 
-const SYSTEM_ROLES = [
-  { id: 1, name: 'Guest' },
-  { id: 2, name: 'Parents' },
-  { id: 4, name: 'Staff' },
-  { id: 8, name: 'Teacher' },
-  { id: 16, name: 'Management' },
-  { id: 32, name: 'Administrator' },
-];
+const formatPortalRoles = (userOrRoles) => {
+  let roles = [];
+  if (Array.isArray(userOrRoles)) {
+    roles = userOrRoles;
+  } else if (userOrRoles && typeof userOrRoles === 'object') {
+    roles = userOrRoles.roles || [];
+  } else {
+    roles = normalizeRoles(userOrRoles);
+  }
 
-const formatPortalRoles = (sum) => {
-  const num = parseInt(sum, 10) || 0;
-  if (!num) return <span className="text-gray-400 font-normal">None</span>;
-  const roles = SYSTEM_ROLES.filter((r) => (num & r.id) !== 0).map(
-    (r) => `${r.name.slice(0, 2).toUpperCase()}(${r.id})`
+  if (!roles || roles.length === 0) {
+    return <span className="text-gray-400 font-normal">None</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {roles.map((r) => (
+        <span
+          key={r}
+          className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-800 border-purple-200 capitalize"
+        >
+          {r}
+        </span>
+      ))}
+    </div>
   );
-  if (roles.length === 0) return <span className="text-gray-400 font-normal">None</span>;
-  return roles.join(', ');
 };
 
 const UserRolesManagementModal = ({
@@ -30,14 +40,14 @@ const UserRolesManagementModal = ({
   mappedAuthUserMap,
   editingAuthUser,
   setEditingAuthUser,
-  editingRoleSum,
-  setEditingRoleSum,
   editingEmpId,
   setEditingEmpId,
   employees,
   handleSaveUserRoleDirect,
   saving,
 }) => {
+  const [editingRoles, setEditingRoles] = useState([]);
+
   if (!isUserRolesModalOpen) return null;
 
   return (
@@ -50,8 +60,7 @@ const UserRolesManagementModal = ({
               (Auth Users)
             </h3>
             <p className="text-xs text-dark-muted font-semibold mt-0.5">
-              Update role bitmask permissions for any registered Auth User (including
-              non-employees).
+              Update role permissions for any registered Auth User (including system and custom roles).
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -174,13 +183,13 @@ const UserRolesManagementModal = ({
                         {isEditingThis ? (
                           <div className="w-56">
                             <MultiSelectRolesDropdown
-                              value={editingRoleSum}
-                              onChange={(nextSum) => setEditingRoleSum(nextSum)}
+                              value={editingRoles}
+                              onChange={(nextRoles) => setEditingRoles(nextRoles)}
                             />
                           </div>
                         ) : (
                           <div className="font-extrabold text-purple-950 text-xs">
-                            {formatPortalRoles(u.role)}
+                            {formatPortalRoles(u)}
                           </div>
                         )}
                       </td>
@@ -192,7 +201,7 @@ const UserRolesManagementModal = ({
                               onClick={() =>
                                 handleSaveUserRoleDirect(
                                   u.user_id,
-                                  editingRoleSum,
+                                  editingRoles,
                                   editingEmpId
                                 )
                               }
@@ -214,7 +223,8 @@ const UserRolesManagementModal = ({
                             type="button"
                             onClick={() => {
                               setEditingAuthUser(u.user_id);
-                              setEditingRoleSum(String(u.role || '8'));
+                              const initialRoles = Array.isArray(u.roles) ? u.roles : normalizeRoles(u.roles);
+                              setEditingRoles(initialRoles);
                               setEditingEmpId(mappedEmp ? String(mappedEmp.emp_id) : '');
                             }}
                             className="px-3 py-1 bg-purple-100 text-purple-800 hover:bg-purple-200 rounded-lg text-xs font-bold transition-all"

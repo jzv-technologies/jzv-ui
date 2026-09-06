@@ -8,6 +8,7 @@ import DetailModal from '../DetailModal';
 import { supabase } from '../../utils/supabase';
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents';
 import TimetableAdminView from '../timetable/TimetableAdminView';
+import TimetableManager from '../timetable/TimetableManager';
 import SyllabusTrackerPortal from '../syllabus/SyllabusTrackerPortal';
 import SyllabusManager from '../syllabus/SyllabusManager';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
@@ -559,8 +560,6 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       fetchSubmissions(uuidMap[subView]);
     } else if (subView === 'student-records') {
       fetchStudents();
-    } else if (subView === 'timetable-viewer') {
-      fetchTimetableData();
     }
   }, [subView]);
 
@@ -612,13 +611,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       onClick: () => onSetSubView('registered-complaints'),
     },
     {
-      id: 'timetable-viewer',
-      title: 'Timetable Viewer',
-      description: 'View all class and teacher schedules across the school.',
+      id: 'timetable-planner',
+      title: 'Timetable',
+      description: 'View schedules, manage classes, teachers, subjects, and plan conflict-free timetables.',
       icon: 'fa-calendar-alt',
       buttonColor: 'bg-brand-primary text-white',
       shadow: 'shadow-brand-lbg',
-      onClick: () => onSetSubView('timetable-viewer'),
+      onClick: () => onSetSubView('timetable-planner'),
     },
 
     {
@@ -1566,27 +1565,9 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           <LessonManager role="management" user={user} />
         </div>
       )}
-      {subView === 'timetable-viewer' && (
-        <div data-feature="timetable-viewer">
-          {ttLoading ? (
-            <div className="flex items-center justify-center py-24">
-              <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : (
-            <TimetableAdminView
-              classes={ttClasses}
-              teachers={ttTeachers}
-              subjects={ttSubjects}
-              classifications={ttClassifications}
-              periods={ttPeriods}
-              slots={ttSlots}
-              assignments={ttAssignments}
-              seasonsConfig={ttSeasonsConfig}
-              onRefresh={fetchTimetableData}
-              refreshing={ttLoading}
-              // no onUpdateSlot = read-only
-            />
-          )}
+      {(subView === 'timetable-planner' || subView === 'timetable-viewer') && (
+        <div data-feature="timetable-planner">
+          <TimetableManager userRoles={userRoles} user={user} />
         </div>
       )}
 

@@ -1,17 +1,30 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  SYSTEM_ROLES,
+  normalizeRoles,
+  fetchAllAppRoles,
+} from '../../../utils/roleUtils';
 
-const SYSTEM_ROLES = [
-  { id: 1, name: 'Guest' },
-  { id: 2, name: 'Parents' },
-  { id: 4, name: 'Staff' },
-  { id: 8, name: 'Teacher' },
-  { id: 16, name: 'Management' },
-  { id: 32, name: 'Administrator' },
-];
-
-const MultiSelectRolesDropdown = ({ value, onChange, disabled }) => {
+const MultiSelectRolesDropdown = ({ value, onChange, disabled, rolesList }) => {
   const [open, setOpen] = useState(false);
+  const [allRoles, setAllRoles] = useState(rolesList || SYSTEM_ROLES);
   const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!rolesList) {
+      fetchAllAppRoles().then((roles) => {
+        if (mounted && Array.isArray(roles) && roles.length > 0) {
+          setAllRoles(roles);
+        }
+      });
+    } else {
+      setAllRoles(rolesList);
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [rolesList]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -23,23 +36,32 @@ const MultiSelectRolesDropdown = ({ value, onChange, disabled }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const currentSum = parseInt(value, 10) || 0;
-  const selectedRoles = SYSTEM_ROLES.filter((r) => (currentSum & r.id) !== 0);
+  // Parse incoming value into an array of string role keys
+  const selectedRoleKeys = useMemo(() => {
+    return normalizeRoles(value);
+  }, [value]);
 
-  const handleToggle = (roleId) => {
+  const selectedRoles = useMemo(() => {
+    return allRoles.filter((r) => selectedRoleKeys.includes(r.id));
+  }, [allRoles, selectedRoleKeys]);
+
+  const handleToggle = (roleKey) => {
     if (disabled) return;
-    let nextSum;
-    if ((currentSum & roleId) !== 0) {
-      nextSum = currentSum - roleId;
+    const cleanKey = String(roleKey).toLowerCase().trim();
+    let nextRoles;
+    if (selectedRoleKeys.includes(cleanKey)) {
+      nextRoles = selectedRoleKeys.filter((k) => k !== cleanKey);
     } else {
-      nextSum = currentSum + roleId;
+      nextRoles = [...selectedRoleKeys, cleanKey];
     }
-    onChange(String(nextSum));
+    if (onChange) {
+      onChange(nextRoles);
+    }
   };
 
   const displayText =
     selectedRoles.length > 0
-      ? selectedRoles.map((r) => `${r.name} (${r.id})`).join(', ')
+      ? selectedRoles.map((r) => r.label || r.name).join(', ')
       : 'Select portal roles...';
 
   return (
@@ -61,33 +83,37 @@ const MultiSelectRolesDropdown = ({ value, onChange, disabled }) => {
           }`}
         ></i>
       </button>
+
       {!disabled && open && (
-        <div className="absolute left-0 right-0 mt-1 p-2 bg-white border border-purple-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in fade-in duration-100">
-          <div className="space-y-1">
-            {SYSTEM_ROLES.map((role) => {
-              const isChecked = (currentSum & role.id) !== 0;
-              return (
-                <label
-                  key={role.id}
-                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer text-xs font-bold transition-all ${
-                    isChecked
-                      ? 'bg-purple-100 text-purple-900'
-                      : 'text-dark-soft hover:bg-purple-50 hover:text-dark-primary'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => handleToggle(role.id)}
-                    className="rounded text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 border-gray-300"
-                  />
-                  <span className="truncate flex-1">
-                    {role.name} ({role.id})
+        <div className="absolute left-0 right-0 mt-1 p-2 bg-white border border-purple-200 rounded-2xl shadow-xl z-50 max-h-56 overflow-y-auto scrollbar-thin animate-in fade-in duration-100 space-y-1">
+          {allRoles.map((role) => {
+            const isChecked = selectedRoleKeys.includes(role.id);
+            return (
+              <label
+                key={role.id}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl cursor-pointer text-xs font-bold transition-all ${
+                  isChecked
+                    ? 'bg-purple-100 text-purple-900'
+                    : 'text-dark-soft hover:bg-purple-50 hover:text-dark-primary'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => handleToggle(role.id)}
+                  className="rounded text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 border-gray-300"
+                />
+                <span className="truncate flex-1">
+                  {role.label || role.name}
+                </span>
+                {role.is_system_role === false && (
+                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-800">
+                    Custom
                   </span>
-                </label>
-              );
-            })}
-          </div>
+                )}
+              </label>
+            );
+          })}
         </div>
       )}
     </div>

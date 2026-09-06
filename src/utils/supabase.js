@@ -6,6 +6,30 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Restore parent mobile header immediately on module load if parent session exists
+try {
+  const savedParent = typeof window !== 'undefined' ? localStorage.getItem('jzv_parent_session') : null;
+  if (savedParent) {
+    const parsed = JSON.parse(savedParent);
+    const parentMobile =
+      parsed.user?.parentMobile ||
+      parsed.user?.student?.mobile1 ||
+      parsed.user?.student?.mobile2 ||
+      '';
+    if (parentMobile) {
+      const formattedMobile = parentMobile.replace(/\D/g, '');
+      if (supabase.rest.headers && typeof supabase.rest.headers.set === 'function') {
+        supabase.rest.headers.set('x-parent-mobile', formattedMobile);
+      } else {
+        if (!supabase.rest.headers) supabase.rest.headers = {};
+        supabase.rest.headers['x-parent-mobile'] = formattedMobile;
+      }
+    }
+  }
+} catch (e) {
+  // Ignore localStorage parsing errors during initial load
+}
+
 /**
  * Helper to fetch all rows from a Supabase table across multiple pages,
  * bypassing the default 1000 row PostgREST limit.

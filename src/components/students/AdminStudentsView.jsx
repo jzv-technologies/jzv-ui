@@ -169,19 +169,29 @@ const AdminStudentsView = () => {
       try {
         if (editingStudent) {
           // Update
-          const { error: dbErr } = await supabase
+          const { data: updatedRows, error: dbErr } = await supabase
             .from('students')
             .update({
               ...savePayload,
               updated_at: new Date().toISOString(),
             })
-            .eq('id', editingStudent.id);
+            .eq('id', editingStudent.id)
+            .select();
           if (dbErr) throw dbErr;
+          if (!updatedRows || updatedRows.length === 0) {
+            throw new Error('Update failed: 0 rows affected. Your account role does not have database permission (RLS) to modify student records.');
+          }
           showToast('Student profile updated successfully!', 'success');
         } else {
           // Insert
-          const { error: dbErr } = await supabase.from('students').insert([savePayload]);
+          const { data: insertedRows, error: dbErr } = await supabase
+            .from('students')
+            .insert([savePayload])
+            .select();
           if (dbErr) throw dbErr;
+          if (!insertedRows || insertedRows.length === 0) {
+            throw new Error('Insert failed: 0 rows affected. Your account role does not have database permission (RLS) to create student records.');
+          }
           showToast('New student added successfully!', 'success');
         }
         setIsModalOpen(false);
@@ -249,8 +259,15 @@ const AdminStudentsView = () => {
         setLoading(true);
         if (isSupabaseMode) {
           try {
-            const { error: dbErr } = await supabase.from('students').delete().eq('id', studentId);
+            const { data: deletedRows, error: dbErr } = await supabase
+              .from('students')
+              .delete()
+              .eq('id', studentId)
+              .select();
             if (dbErr) throw dbErr;
+            if (!deletedRows || deletedRows.length === 0) {
+              throw new Error('Delete failed: 0 rows affected. Your account role does not have database permission (RLS) to delete student records.');
+            }
             showToast('Student deleted successfully', 'success');
             setIsModalOpen(false);
             await loadStudents(classes);
@@ -312,12 +329,14 @@ const AdminStudentsView = () => {
           updatePayload.updated_at = new Date().toISOString();
 
           const query = r.existingId
-            ? supabase.from('students').update(updatePayload).eq('id', r.existingId)
-            : supabase.from('students').update(updatePayload).eq('admission_no', r.admission_no);
+            ? supabase.from('students').update(updatePayload).eq('id', r.existingId).select()
+            : supabase.from('students').update(updatePayload).eq('admission_no', r.admission_no).select();
 
-          const { error: upErr } = await query;
+          const { data: upData, error: upErr } = await query;
           if (upErr) {
             errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${upErr.message}`);
+          } else if (!upData || upData.length === 0) {
+            errors.push(`Row ${r.rowIndex} (${r.admission_no}): 0 rows updated — RLS permission denied`);
           } else {
             updatedCount++;
           }
@@ -339,9 +358,11 @@ const AdminStudentsView = () => {
             hostel: r.hostel || 'No',
           };
 
-          const { error: inErr } = await supabase.from('students').insert([insertPayload]);
+          const { data: inData, error: inErr } = await supabase.from('students').insert([insertPayload]).select();
           if (inErr) {
             errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${inErr.message}`);
+          } else if (!inData || inData.length === 0) {
+            errors.push(`Row ${r.rowIndex} (${r.admission_no}): 0 rows inserted — RLS permission denied`);
           } else {
             insertedCount++;
           }

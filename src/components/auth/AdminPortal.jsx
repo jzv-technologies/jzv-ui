@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import RolePortal from './RolePortal';
-import AdminUsersView from '../admin-settings/AdminUsersView';
 import AdminFormConfigsView from '../form-config/AdminFormConfigsView';
 import TimetableManager from '../timetable/TimetableManager';
 import AdminStudentsView from '../students/AdminStudentsView';
@@ -9,16 +8,14 @@ import SyllabusManager from '../syllabus/SyllabusManager';
 import EmployeeRecordsView from '../employees/EmployeeRecordsView';
 import SyllabusTrackerPortal from '../syllabus/SyllabusTrackerPortal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
+import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ConfirmModal from '../ConfirmModal';
 import { showToast } from '../../utils/toast';
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
 const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [teachers, setTeachers] = useState([]);
 
   // Form configs state
   const [configs, setConfigs] = useState([]);
@@ -30,204 +27,6 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   const fetchingRef = useRef(false);
   const lastSubViewRef = useRef(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
-
-  // ----- User Management -----
-  const fetchTeachers = async () => {
-    try {
-      const { data, error } = await supabase.from('teachers').select('*');
-      if (error) throw error;
-      setTeachers((data || []).map((t) => ({ ...t, id: t.teacher_id || t.id })));
-    } catch (err) {
-      console.warn(
-        'Error fetching teachers from Supabase, loading from LocalStorage:',
-        err.message
-      );
-      const raw = localStorage.getItem('jzv_timetable_data');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          setTeachers(parsed.teachers || []);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-  };
-
-  const fetchAllUsers = async () => {
-    if (fetchingRef.current) return;
-    fetchingRef.current = true;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.from('admin_users_view').select('*');
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (err) {
-      console.error('Error fetching users:', err);
-      showToast('Failed to load users.', 'error');
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-    }
-  };
-
-  const handleUpdateUser = async (userId, role, teacherId) => {
-    setSaving(true);
-    try {
-      // 1. Upsert roles and students
-      const { error: roleErr } = await supabase.from('user_roles').upsert(
-        {
-          user_id: userId,
-          role: role,
-        },
-        { onConflict: 'user_id' }
-      );
-      if (roleErr) throw roleErr;
-
-      // 2. Map teacher auth_id
-      // Clear previous mapping for this user
-      await supabase.from('employees').update({ auth_id: null }).eq('auth_id', userId);
-
-      // Link new mapping if selected
-      if (teacherId) {
-        const { error: teachErr } = await supabase
-          .from('employees')
-          .update({ auth_id: userId })
-          .eq('id', teacherId);
-        if (teachErr) throw teachErr;
-      }
-
-      // 3. Fallback/Local storage sync
-      const raw = localStorage.getItem('jzv_timetable_data');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          const nextTeachers = (parsed.teachers || []).map((t) => {
-            if (String(t.auth_id) === String(userId)) {
-              return { ...t, auth_id: null };
-            }
-            if (teacherId && String(t.id) === String(teacherId)) {
-              return { ...t, auth_id: userId };
-            }
-            return t;
-          });
-          parsed.teachers = nextTeachers;
-          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      showToast('User updated successfully!', 'success');
-      fetchAllUsers(); // refresh
-      fetchTeachers(); // refresh mapping state
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAddTeacherFromUser = async (userId, fullName) => {
-    setSaving(true);
-    try {
-      // 1. Create the teacher in the database
-      const { data: newTeacherData, error: insertErr } = await supabase
-        .from('employees')
-        .insert([
-          {
-            name: fullName,
-            auth_id: userId,
-            is_active: true,
-          },
-        ])
-        .select();
-
-      if (insertErr) throw insertErr;
-      const newTeacher = newTeacherData[0];
-
-      // 2. Update the user's role to include Teacher role (8)
-      const user = users.find((u) => String(u.user_id) === String(userId));
-      const currentRole = user ? parseInt(user.role, 10) || 0 : 0;
-      const newRoleSum = String(currentRole | 8);
-
-      const { error: roleErr } = await supabase.from('user_roles').upsert(
-        {
-          user_id: userId,
-          role: newRoleSum,
-        },
-        { onConflict: 'user_id' }
-      );
-      if (roleErr) throw roleErr;
-
-      // 3. Fallback/Local storage sync
-      const raw = localStorage.getItem('jzv_timetable_data');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          const localTeachers = parsed.teachers || [];
-          const nextTeachers = localTeachers.map((t) =>
-            String(t.auth_id) === String(userId) ? { ...t, auth_id: null } : t
-          );
-          nextTeachers.push({
-            id: newTeacher.id,
-            name: fullName,
-            is_male: true,
-            auth_id: userId,
-            is_active: true,
-            subjects: [],
-          });
-          parsed.teachers = nextTeachers;
-          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      showToast(`Teacher record created and mapped for "${fullName}"`, 'success');
-      fetchAllUsers();
-      fetchTeachers();
-    } catch (err) {
-      showToast('Failed to add teacher: ' + err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleToggleTeacherActiveFromUser = async (teacherId, currentStatus) => {
-    setSaving(true);
-    const nextStatus = !currentStatus;
-    try {
-      const { error } = await supabase
-        .from('employees')
-        .update({ is_active: nextStatus })
-        .eq('id', teacherId);
-
-      if (error) throw error;
-
-      // Local storage sync
-      const raw = localStorage.getItem('jzv_timetable_data');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          parsed.teachers = (parsed.teachers || []).map((t) =>
-            String(t.id) === String(teacherId) ? { ...t, is_active: nextStatus } : t
-          );
-          localStorage.setItem('jzv_timetable_data', JSON.stringify(parsed));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-
-      showToast(`Teacher status updated to ${nextStatus ? 'Active' : 'Inactive'}`, 'success');
-      fetchAllUsers();
-      fetchTeachers();
-    } catch (err) {
-      showToast('Failed to update status: ' + err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // ----- Form Configurations & Sheet Mappings -----
   const fetchConfigs = async () => {
@@ -385,10 +184,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
   useEffect(() => {
     if (subView === lastSubViewRef.current) return;
     lastSubViewRef.current = subView;
-    if (subView === 'user-management') {
-      fetchAllUsers();
-      fetchTeachers();
-    } else if (subView === 'form-configurations') {
+    if (subView === 'form-configurations') {
       fetchConfigs();
     }
   }, [subView]);
@@ -424,8 +220,8 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
     },
     {
       id: 'timetable-planner',
-      title: 'Timetable Planner',
-      description: 'Manage classes, teachers, subjects, and schedule conflict-free timetables.',
+      title: 'Timetable',
+      description: 'View schedules, manage classes, teachers, subjects, and plan conflict-free timetables.',
       icon: 'fa-calendar-alt',
       buttonColor: 'bg-brand-primary text-white',
       shadow: 'shadow-brand-lbg',
@@ -459,6 +255,15 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       buttonColor: 'bg-emerald-600 text-white',
       shadow: 'shadow-emerald-200',
       onClick: () => window.open('/portal/display', '_blank'),
+    },
+    {
+      id: 'avc-admin-manager',
+      title: 'View Controller Manager',
+      description: 'Manage app_view_controller table — tile visibility, ordering, and access roles.',
+      icon: 'fa-cubes',
+      buttonColor: 'bg-purple-700 text-white',
+      shadow: 'shadow-purple-200',
+      onClick: () => onSetSubView('avc-admin-manager'),
     },
   ];
 
@@ -499,7 +304,7 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {/* Timetable Planner view */}
       {subView === 'timetable-planner' && (
         <div data-feature="timetable-planner">
-          <TimetableManager />
+          <TimetableManager userRoles={userRoles} user={user} />
         </div>
       )}
 
@@ -528,6 +333,13 @@ const AdminPortal = ({ userRoles, subView, onSetSubView, user }) => {
       {subView === 'lesson-planner' && (
         <div data-feature="lesson-planner">
           <LessonManager role="admin" user={user} />
+        </div>
+      )}
+
+      {/* View Controller Manager view */}
+      {subView === 'avc-admin-manager' && (
+        <div data-feature="avc-admin-manager">
+          <ViewControllerManager onBack={() => onSetSubView(null)} />
         </div>
       )}
 

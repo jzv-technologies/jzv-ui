@@ -61,15 +61,12 @@ const App = () => {
 
     if (isNowLoggedIn && rolesReady && !hasRedirectedRef.current) {
       // If already on a deep link/portal page (like /portal/display), don't force redirect
-      if (location.pathname !== '/' && location.pathname !== '/portal') {
+      if (location.pathname !== '/' && !location.pathname.startsWith('/portal')) {
         hasRedirectedRef.current = true;
         return;
       }
 
-      if (userRoles.length === 1) {
-        hasRedirectedRef.current = true;
-        navigate(`/portal/${userRoles[0]}`, { replace: true });
-      } else if (userRoles.length > 1) {
+      if (userRoles.length >= 1) {
         hasRedirectedRef.current = true;
         navigate("/portal", { replace: true });
       } else {
@@ -101,10 +98,8 @@ const App = () => {
   // Custom handler for card clicks (fixes "My Portal" navigation)
   const handleCardClick = (id) => {
     if (id === "my-portal") {
-      if (userRoles.length > 1) {
+      if (userRoles.length >= 1) {
         navigate("/portal");
-      } else if (userRoles.length === 1) {
-        navigate(`/portal/${userRoles[0]}`);
       } else {
         setShowLoginPortal(true);
       }

@@ -147,7 +147,7 @@ export const useAuth = () => {
       try {
         const { data, error } = await supabase
           .from('admin_users_view')
-          .select('role')
+          .select('roles')
           .eq('user_id', userId)
           .single();
 
@@ -167,34 +167,14 @@ export const useAuth = () => {
         }
 
         let roles = [];
-        if (data?.role) {
-          const sumValue = parseInt(data.role, 10);
-          if (!isNaN(sumValue)) {
-            // Bitwise integer sum format
-            const bitwiseRoles = [
-              { id: 1, name: 'guest' },
-              { id: 2, name: 'parent' },
-              { id: 4, name: 'staff' },
-              { id: 8, name: 'teacher' },
-              { id: 16, name: 'management' },
-              { id: 32, name: 'admin' },
-            ];
-            roles = bitwiseRoles.filter((r) => (sumValue & r.id) !== 0).map((r) => r.name);
-          } else {
-            // Fallback for legacy format
-            const roleMap = {
-              A: 'admin',
-              M: 'management',
-              T: 'teacher',
-              P: 'parent',
-              G: 'guest',
-              S: 'staff',
-            };
-            roles = data.role
-              .split(',')
-              .map((code) => roleMap[code.trim().toUpperCase()])
-              .filter(Boolean);
-          }
+        if (Array.isArray(data?.roles)) {
+          roles = data.roles.map((r) => String(r).toLowerCase().trim()).filter(Boolean);
+        } else if (typeof data?.roles === 'string') {
+          roles = data.roles
+            .replace(/[{}]/g, '')
+            .split(',')
+            .map((r) => r.toLowerCase().trim())
+            .filter(Boolean);
         }
 
         // Save to cookie

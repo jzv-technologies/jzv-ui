@@ -1,7 +1,8 @@
 // src/components/portals/admin/timetable/TimetableManager.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import TimetableAdminView from './TimetableAdminView';
 import ConfirmModal from '../ConfirmModal';
 import TimetableCompareModal from './TimetableCompareModal';
@@ -86,8 +87,70 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
   },
 });
 
-const TimetableManager = () => {
-  const [activeTab, setActiveTab] = useState('scheduler'); // "view" | "classes" | "teachers" | "subjects" | "periods" | "sync"
+const TimetableManager = ({ userRoles, user }) => {
+  const canAccess = useCanAccess(userRoles);
+
+  const WORKSPACE_TABS = useMemo(
+    () => [
+      {
+        id: 'viewer',
+        componentName: 'timetable-viewer',
+        label: 'Timetable View',
+        icon: 'fa-calendar-alt',
+      },
+      {
+        id: 'scheduler',
+        componentName: 'scheduler-setup',
+        label: 'Scheduler Setup',
+        icon: 'fa-th-large',
+      },
+      {
+        id: 'classes',
+        componentName: 'classes-setup',
+        label: 'Classes Setup',
+        icon: 'fa-building',
+      },
+      {
+        id: 'teachers',
+        componentName: 'teachers-mapping',
+        label: 'Teacher Mapping',
+        icon: 'fa-users',
+      },
+      {
+        id: 'periods',
+        componentName: 'season-setup',
+        label: 'Season Setup',
+        icon: 'fa-clock',
+      },
+      {
+        id: 'tools',
+        componentName: 'switch-teachers',
+        label: 'Switch Teacher',
+        icon: 'fa-exchange-alt',
+      },
+    ],
+    []
+  );
+
+  const availableTabs = useMemo(() => {
+    return WORKSPACE_TABS.filter((tab) => canAccess(tab.componentName));
+  }, [WORKSPACE_TABS, canAccess]);
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canAccess('scheduler-setup')) return 'scheduler';
+    return 'viewer';
+  });
+
+  // Ensure activeTab is always one of the permitted availableTabs (unless sync is open)
+  useEffect(() => {
+    if (
+      availableTabs.length > 0 &&
+      !availableTabs.some((t) => t.id === activeTab) &&
+      activeTab !== 'sync'
+    ) {
+      setActiveTab(availableTabs[0].id);
+    }
+  }, [availableTabs, activeTab]);
 
   // Timetable State
   const [classifications, setClassifications] = useState([]);
@@ -141,7 +204,15 @@ const TimetableManager = () => {
       ] = await Promise.all([
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syl_subjects').select('*'),
-        supabase.from('teachers').select('*'),
+        supabase
+          .from('employees')
+          .select('id, name, is_male, auth_id, is_active, emp_id')
+          .eq('is_teacher', true)
+          .order('name', { ascending: true })
+          .then((res) => {
+            if (!res.error && res.data && res.data.length > 0) return res;
+            return supabase.from('teachers').select('*');
+          }),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
@@ -153,7 +224,7 @@ const TimetableManager = () => {
       const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
 
       const teachersWithSubjects = (dbTeachers || []).map((t) => {
-        const tid = t.teacher_id || t.id;
+        const tid = t.id || t.teacher_id;
         return {
           ...t,
           id: tid,
@@ -1837,7 +1908,7 @@ const TimetableManager = () => {
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
               <i className="fas fa-calendar-alt text-brand-primary"></i>
-              Timetable Planner
+              Timetable
               <div className="flex items-center gap-2 mt-1">
                 <span
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xl font-bold ${
@@ -1846,12 +1917,6 @@ const TimetableManager = () => {
                 >
                   <i className="fas fa-lightbulb "></i>
                 </span>
-                <button
-                  onClick={() => setActiveTab('sync')}
-                  className="text-xl text-brand-primary font-bold hover:underline"
-                >
-                  <i className="fas fa-cog text-brand-primary"></i>
-                </button>
               </div>
             </h2>
           </div>
@@ -1865,13 +1930,7 @@ const TimetableManager = () => {
                 onChange={(e) => setActiveTab(e.target.value)}
                 className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
               >
-                {[
-                  { id: 'scheduler', label: 'Scheduler Setup' },
-                  { id: 'classes', label: 'Classes Setup' },
-                  { id: 'teachers', label: 'Teacher Mapping' },
-                  { id: 'periods', label: 'Season Setup' },
-                  { id: 'tools', label: 'Switch Teacher' },
-                ].map((tab) => (
+                {availableTabs.map((tab) => (
                   <option key={tab.id} value={tab.id}>
                     {tab.label}
                   </option>
@@ -1883,17 +1942,11 @@ const TimetableManager = () => {
 
           {/* Desktop view (>= md): Pill tabs */}
           <div className="hidden md:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-wrap gap-1 w-full md:w-auto">
-            {[
-              { id: 'scheduler', label: 'Scheduler Setup', icon: 'fa-eye' },
-              { id: 'classes', label: 'Classes Setup', icon: 'fa-building' },
-              { id: 'teachers', label: 'Teacher Mapping', icon: 'fa-users' },
-              { id: 'periods', label: 'Season Setup', icon: 'fa-clock' },
-              { id: 'tools', label: 'Switch Teacher', icon: 'fa-exchange-alt' },
-            ].map((tab) => (
+            {availableTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
+                className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer ${
                   activeTab === tab.id
                     ? 'text-white bg-brand-primary shadow-sm'
                     : 'text-dark-soft hover:text-dark-primary'
@@ -1905,57 +1958,59 @@ const TimetableManager = () => {
             ))}
           </div>
           {/* Export / Import backup */}
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <button
-              onClick={handleExportJson}
-              className="flex-1 md:flex-none bg-green-500 hover:bg-green-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-              title="Download full timetable configuration in JSON format"
-            >
-              <i className="fas fa-file-download"></i>
-            </button>
+          <ConditionalBlock name="timetable-json-config" roles={userRoles}>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <button
+                onClick={handleExportJson}
+                className="flex-1 md:flex-none bg-green-500 hover:bg-green-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                title="Download full timetable configuration in JSON format"
+              >
+                <i className="fas fa-file-download"></i>
+              </button>
 
-            <input
-              type="file"
-              accept=".json"
-              ref={fileInputRef}
-              onChange={handleImportJson}
-              className="hidden"
-            />
+              <input
+                type="file"
+                accept=".json"
+                ref={fileInputRef}
+                onChange={handleImportJson}
+                className="hidden"
+              />
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1 md:flex-none bg-blue-500 hover:bg-blue-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-              title="Upload and restore timetable config from a JSON file"
-            >
-              <i className="fas fa-file-upload"></i>
-            </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 md:flex-none bg-blue-500 hover:bg-blue-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                title="Upload and restore timetable config from a JSON file"
+              >
+                <i className="fas fa-file-upload"></i>
+              </button>
 
-            {/* Compare Button */}
-            <input
-              type="file"
-              accept=".json"
-              ref={compareInputRef}
-              onChange={handleCompareJson}
-              className="hidden"
-            />
-            <button
-              onClick={() => compareInputRef.current?.click()}
-              className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-              title="Compare offline JSON with currently active timetable"
-            >
-              <i className="fas fa-wave-square"></i>
-            </button>
-            <button
-              onClick={loadData}
-              disabled={loading}
-              className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              title="Refresh Timetable Data"
-            >
-              <i
-                className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
-              ></i>
-            </button>
-          </div>
+              {/* Compare Button */}
+              <input
+                type="file"
+                accept=".json"
+                ref={compareInputRef}
+                onChange={handleCompareJson}
+                className="hidden"
+              />
+              <button
+                onClick={() => compareInputRef.current?.click()}
+                className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                title="Compare offline JSON with currently active timetable"
+              >
+                <i className="fas fa-wave-square"></i>
+              </button>
+              <button
+                onClick={loadData}
+                disabled={loading}
+                className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Refresh Timetable Data"
+              >
+                <i
+                  className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
+                ></i>
+              </button>
+            </div>
+          </ConditionalBlock>
         </div>
       </div>
 
@@ -1966,205 +2021,107 @@ const TimetableManager = () => {
         </div>
       ) : (
         <div className="flex-1">
+          {activeTab === 'viewer' && (
+            <ConditionalBlock name="timetable-viewer" roles={userRoles}>
+              <TimetableAdminView
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                classifications={classifications}
+                periods={periods}
+                slots={slots}
+                assignments={assignments}
+                seasonsConfig={seasonsConfig}
+                onRefresh={loadData}
+                refreshing={loading}
+                user={user}
+                showMyTimetable={true}
+              />
+            </ConditionalBlock>
+          )}
+
           {activeTab === 'scheduler' && (
-            <TimetableAdminView
-              classes={classes}
-              teachers={teachers}
-              subjects={subjects}
-              classifications={classifications}
-              periods={periods}
-              slots={slots}
-              assignments={assignments}
-              onRefresh={loadData}
-              refreshing={loading}
-              onUpdateSlot={handleUpdateSlot}
-              onMoveSlot={handleMoveSlot}
-              onClearSlots={handleClearSlots}
-              onMoveColumn={handleMoveColumn}
-            />
+            <ConditionalBlock name="scheduler-setup" roles={userRoles}>
+              <TimetableAdminView
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                classifications={classifications}
+                periods={periods}
+                slots={slots}
+                assignments={assignments}
+                seasonsConfig={seasonsConfig}
+                onRefresh={loadData}
+                refreshing={loading}
+                user={user}
+                onUpdateSlot={handleUpdateSlot}
+                onMoveSlot={handleMoveSlot}
+                onClearSlots={handleClearSlots}
+                onMoveColumn={handleMoveColumn}
+              />
+            </ConditionalBlock>
           )}
 
           {activeTab === 'teachers' && (
-            <TeachersSetup
-              teachers={teachers}
-              subjects={subjects}
-              classifications={classifications}
-              onAddTeacher={handleAddTeacher}
-              onUpdateTeacher={handleUpdateTeacher}
-              onDeleteTeacher={handleDeleteTeacher}
-              onToggleTeacherActive={handleToggleTeacherActive}
-              slots={slots}
-              assignments={assignments}
-            />
+            <ConditionalBlock name="teachers-mapping" roles={userRoles}>
+              <TeachersSetup
+                teachers={teachers}
+                subjects={subjects}
+                classifications={classifications}
+                onAddTeacher={handleAddTeacher}
+                onUpdateTeacher={handleUpdateTeacher}
+                onDeleteTeacher={handleDeleteTeacher}
+                onToggleTeacherActive={handleToggleTeacherActive}
+                slots={slots}
+                assignments={assignments}
+              />
+            </ConditionalBlock>
           )}
 
           {activeTab === 'classes' && (
-            <ClassesSetup
-              classes={classes}
-              teachers={teachers}
-              subjects={subjects}
-              classifications={classifications}
-              assignments={assignments}
-              onAddClass={handleAddClass}
-              onUpdateClass={handleUpdateClass}
-              onDeleteClass={handleDeleteClass}
-              onAddAssignment={handleAddAssignment}
-              onRemoveAssignment={handleRemoveAssignment}
-              onRemoveMultipleAssignments={handleRemoveMultipleAssignments}
-              slots={slots}
-            />
+            <ConditionalBlock name="classes-setup" roles={userRoles}>
+              <ClassesSetup
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                classifications={classifications}
+                assignments={assignments}
+                onAddClass={handleAddClass}
+                onUpdateClass={handleUpdateClass}
+                onDeleteClass={handleDeleteClass}
+                onAddAssignment={handleAddAssignment}
+                onRemoveAssignment={handleRemoveAssignment}
+                onRemoveMultipleAssignments={handleRemoveMultipleAssignments}
+                slots={slots}
+              />
+            </ConditionalBlock>
           )}
 
           {activeTab === 'periods' && (
-            <PeriodsSetup
-              periods={periods}
-              onSavePeriods={handleSavePeriods}
-              slots={slots}
-              seasonsConfig={seasonsConfig}
-              onSaveSeasonsConfig={handleSaveSeasonsConfig}
-              onCopySeason={handleCopySeason}
-            />
+            <ConditionalBlock name="season-setup" roles={userRoles}>
+              <PeriodsSetup
+                periods={periods}
+                onSavePeriods={handleSavePeriods}
+                slots={slots}
+                seasonsConfig={seasonsConfig}
+                onSaveSeasonsConfig={handleSaveSeasonsConfig}
+                onCopySeason={handleCopySeason}
+              />
+            </ConditionalBlock>
           )}
 
           {activeTab === 'tools' && (
-            <TimetableTools
-              classes={classes}
-              teachers={teachers}
-              subjects={subjects}
-              slots={slots}
-              assignments={assignments}
-              onSwapTeachers={handleSwapTeachers}
-              onReassignTeacher={handleReassignTeacher}
-            />
-          )}
-
-          {activeTab === 'sync' && (
-            <div className="bg-white border border-light-border p-6 sm:p-8 rounded-3xl space-y-6">
-              <div>
-                <h3 className="text-lg font-bold text-dark-deepblue mb-1">
-                  Database Integration Settings
-                </h3>
-                <p className="text-xs text-dark-soft">
-                  Enable cloud database synchronization via Supabase for multi-user access and
-                  secure backups.
-                </p>
-              </div>
-
-              <div className="border border-light-border p-5 rounded-2xl bg-light-lbg/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-4 h-4 rounded-full animate-pulse ${
-                      isSupabaseMode ? 'bg-green-bright' : 'bg-orange-primary'
-                    }`}
-                  />
-                  <div>
-                    <span className="text-xs text-dark-soft font-bold block">
-                      Current Sync Mode
-                    </span>
-                    <span className="text-sm font-extrabold text-dark-deepblue">
-                      {isSupabaseMode
-                        ? 'Supabase Live Database'
-                        : 'Offline (Local Browser Storage)'}
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => loadData()}
-                  className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all"
-                >
-                  <i className="fas fa-sync mr-1.5 animate-spin-slow"></i> Re-test Connection
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-2xl">
-                  <h4 className="text-sm font-bold text-blue-dark uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i className="fas fa-info-circle"></i> Supabase Setup Instructions
-                  </h4>
-                  <p className="text-xs text-dark-soft leading-relaxed mb-3">
-                    If you haven't set up the timetable tables in Supabase yet, please run the
-                    following SQL commands in your Supabase SQL editor. Once the tables are
-                    successfully created, reload this page to connect.
-                  </p>
-
-                  <details className="cursor-pointer group">
-                    <summary className="text-xs font-bold text-brand-primary hover:underline outline-none">
-                      Show SQL Migration Commands
-                    </summary>
-                    <div className="mt-3 bg-dark-deepblue text-brand-lbg p-4 rounded-xl text-xs font-mono overflow-x-auto max-h-[300px]">
-                      <pre>{`-- 1. Create Subjects Table
-CREATE TABLE public.subjects (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name VARCHAR(255) UNIQUE NOT NULL,
-  requires_teacher BOOLEAN DEFAULT TRUE,
-  deactivated BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 2. Create Teachers Table
-CREATE TABLE public.teachers (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. Create Teacher Subjects Table
-CREATE TABLE public.map_teacher_subject (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  teacher_id BIGINT NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
-  subject_id BIGINT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (teacher_id, subject_id)
-);
-
--- 4. Create Periods Table
-CREATE TABLE public.periods (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  period_number INTEGER NOT NULL UNIQUE,
-  name VARCHAR(100) NOT NULL,
-  start_time TIME,
-  end_time TIME,
-  is_break BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 5. Create Classes Table
-CREATE TABLE public.classes (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name VARCHAR(255) UNIQUE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-
--- 6. Create Class Assignments Table
-CREATE TABLE public.class_assignments (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  class_id BIGINT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
-  teacher_id BIGINT NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
-  subject_id BIGINT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (class_id, teacher_id, subject_id)
-);
-
--- 7. Create Timetable Slots Table
-CREATE TABLE public.timetable_slots (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  class_id BIGINT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
-  day VARCHAR(20) NOT NULL,
-  period_id BIGINT NOT NULL REFERENCES public.periods(id) ON DELETE CASCADE,
-  subject_id BIGINT REFERENCES public.subjects(id) ON DELETE SET NULL,
-  teacher_id BIGINT REFERENCES public.teachers(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (class_id, day, period_id)
-);
-
--- 8. Enforce Conflict Prevention
-CREATE UNIQUE INDEX unique_teacher_period ON public.timetable_slots (day, period_id, teacher_id) WHERE teacher_id IS NOT NULL;`}</pre>
-                    </div>
-                  </details>
-                </div>
-              </div>
-            </div>
+            <ConditionalBlock name="switch-teachers" roles={userRoles}>
+              <TimetableTools
+                classes={classes}
+                teachers={teachers}
+                subjects={subjects}
+                slots={slots}
+                assignments={assignments}
+                onSwapTeachers={handleSwapTeachers}
+                onReassignTeacher={handleReassignTeacher}
+              />
+            </ConditionalBlock>
           )}
         </div>
       )}

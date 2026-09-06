@@ -15,6 +15,10 @@ import ConfirmModal from '../ConfirmModal';
 
 import SalaryTrackerView from './SalaryTrackerView';
 import MonthSwatches from './salary-tracker/MonthSwatches';
+import {
+  normalizeRoles,
+  fetchAllAppRoles,
+} from '../../utils/roleUtils';
 
 const DEFAULT_ROLES = [
   'Teacher',
@@ -69,7 +73,6 @@ const EmployeeRecordsView = ({
   const [isUserRolesModalOpen, setIsUserRolesModalOpen] = useState(false);
   const [userRolesSearch, setUserRolesSearch] = useState('');
   const [editingAuthUser, setEditingAuthUser] = useState(null);
-  const [editingRoleSum, setEditingRoleSum] = useState('8');
   const [editingEmpId, setEditingEmpId] = useState('');
 
   // Bulk Apply Increments State
@@ -146,7 +149,7 @@ const EmployeeRecordsView = ({
     is_active: true,
     login_allowed: false,
     auth_id: '',
-    mapped_roles_sum: '8',
+    mapped_roles: ['teacher'],
   });
 
   const [newIncrement, setNewIncrement] = useState({
@@ -223,21 +226,37 @@ const EmployeeRecordsView = ({
         }
       }
 
-      // Fetch Auth Users & Roles via secure RPC bound to authenticated user context.
+      // Fetch Auth Users & Roles from admin_users_view (which includes roles text[]) or secure RPC
       let usersList = [];
       try {
-        const { data: authData, error: authErr } = await supabase.rpc(
-          'get_auth_users_with_roles_secure',
-          {
-            p_auth_id: user?.id || null,
+        const { data: viewUsers, error: viewErr } = await supabase
+          .from('admin_users_view')
+          .select('user_id, email, full_name, roles');
+        if (!viewErr && Array.isArray(viewUsers) && viewUsers.length > 0) {
+          usersList = viewUsers;
+        } else {
+          const { data: authData, error: authErr } = await supabase.rpc(
+            'get_auth_users_with_roles_secure',
+            {
+              p_auth_id: user?.id || null,
+            }
+          );
+          if (!authErr && Array.isArray(authData) && authData.length > 0) {
+            usersList = authData;
           }
-        );
-        if (!authErr && Array.isArray(authData) && authData.length > 0) {
-          usersList = authData;
         }
       } catch (e) {
-        console.warn('get_auth_users_with_roles_secure RPC failed:', e);
+        console.warn('Failed to load auth users from view/rpc:', e);
       }
+
+      // Ensure every user has the roles array properly populated
+      usersList = usersList.map((u) => ({
+        ...u,
+        roles:
+          Array.isArray(u.roles) && u.roles.length > 0
+            ? u.roles
+            : normalizeRoles(u.roles || u.role),
+      }));
 
       // Offline / Local state fallback if usersList is still empty
       if (usersList.length === 0) {
@@ -249,13 +268,16 @@ const EmployeeRecordsView = ({
             localEmps.forEach((e) => {
               if (e.auth_id || e.email) {
                 const uid = e.auth_id || `local_user_${e.id}`;
+                const userRoles = Array.isArray(e.mapped_roles) && e.mapped_roles.length > 0
+                  ? e.mapped_roles
+                  : normalizeRoles(e.mapped_roles_sum || ['teacher']);
                 constructedMap.set(uid, {
                   user_id: uid,
                   email:
                     e.email ||
                     `${(e.name || 'user').toLowerCase().replace(/\s+/g, '')}@zaytoonah.in`,
                   full_name: e.name,
-                  role: Number(e.mapped_roles_sum) || 8,
+                  roles: userRoles,
                 });
               }
             });
@@ -397,7 +419,7 @@ const EmployeeRecordsView = ({
         is_active: true,
         login_allowed: false,
         auth_id: '',
-        mapped_roles_sum: '8',
+        mapped_roles: ['teacher'],
       };
       setFormData(nextData);
       setInitialFormData(nextData);
@@ -405,6 +427,14 @@ const EmployeeRecordsView = ({
       const targetEmp = emp || currentSelfEmployee;
       setEditableSections({ sec1: false, sec2: false, sec3: false, sec4: false, sec5: true });
       if (targetEmp) {
+        const matchedAuth = targetEmp.auth_id
+          ? authUsers.find((u) => String(u.user_id) === String(targetEmp.auth_id))
+          : null;
+        const initialRoles =
+          Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
+            ? matchedAuth.roles
+            : normalizeRoles(targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']);
+
         const nextData = {
           name: targetEmp.name || '',
           father_husband_name: targetEmp.father_husband_name || '',
@@ -447,7 +477,7 @@ const EmployeeRecordsView = ({
           is_active: targetEmp.is_active !== false,
           login_allowed: targetEmp.login_allowed || false,
           auth_id: targetEmp.auth_id || '',
-          mapped_roles_sum: String(targetEmp.mapped_roles_sum || '8'),
+          mapped_roles: initialRoles,
         };
         setFormData(nextData);
         setInitialFormData(nextData);
@@ -463,6 +493,14 @@ const EmployeeRecordsView = ({
   const switchRecordDirect = (targetEmp) => {
     setSelectedEmployee(targetEmp);
     setEditableSections({ sec1: false, sec2: false, sec3: false, sec4: false, sec5: true });
+    const matchedAuth = targetEmp.auth_id
+      ? authUsers.find((u) => String(u.user_id) === String(targetEmp.auth_id))
+      : null;
+    const initialRoles =
+      Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
+        ? matchedAuth.roles
+        : normalizeRoles(targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']);
+
     const nextData = {
       name: targetEmp.name || '',
       father_husband_name: targetEmp.father_husband_name || '',
@@ -505,7 +543,7 @@ const EmployeeRecordsView = ({
       is_active: targetEmp.is_active !== false,
       login_allowed: targetEmp.login_allowed || false,
       auth_id: targetEmp.auth_id || '',
-      mapped_roles_sum: String(targetEmp.mapped_roles_sum || '8'),
+      mapped_roles: initialRoles,
     };
     setFormData(nextData);
     setInitialFormData(nextData);
@@ -649,6 +687,47 @@ const EmployeeRecordsView = ({
     return res;
   };
 
+  const saveUserRoleToDb = async (targetUserId, rolesArray, email = null) => {
+    let success = false;
+    // 1. Try modern RPC (SECURITY DEFINER with p_roles and p_email)
+    try {
+      const { error: rpcErr } = await supabase.rpc('update_user_role_admin', {
+        p_user_id: targetUserId,
+        p_roles: rolesArray,
+        p_email: email,
+      });
+      if (!rpcErr) {
+        success = true;
+      } else {
+        console.warn('update_user_role_admin RPC failed:', rpcErr.message);
+      }
+    } catch (e) {
+      console.warn('RPC update_user_role_admin threw:', e);
+    }
+
+    if (!success) {
+      // 2. Direct upsert into user_roles
+      const upsertPayload = {
+        user_id: targetUserId,
+        roles: rolesArray,
+      };
+      if (email) upsertPayload.email = email;
+
+      const { error: upsertErr } = await supabase.from('user_roles').upsert(
+        upsertPayload,
+        { onConflict: 'user_id' }
+      );
+
+      if (!upsertErr) {
+        success = true;
+      } else {
+        console.warn('Direct user_roles upsert failed:', upsertErr.message);
+      }
+    }
+
+    return success;
+  };
+
   const handleSaveEmployee = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -713,11 +792,21 @@ const EmployeeRecordsView = ({
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if ((isAdmin || isManagement) && formData.auth_id && formData.mapped_roles_sum) {
-          await supabase.rpc('update_user_role_admin', {
-            p_user_id: formData.auth_id,
-            p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
-          });
+        if ((isAdmin || isManagement) && formData.auth_id) {
+          const rolesArray =
+            Array.isArray(formData.mapped_roles) && formData.mapped_roles.length > 0
+              ? formData.mapped_roles
+              : ['teacher'];
+
+          await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
+
+          setAuthUsers((prev) =>
+            prev.map((u) =>
+              String(u.user_id) === String(formData.auth_id)
+                ? { ...u, roles: rolesArray, email: formData.email || u.email }
+                : u
+            )
+          );
         }
 
         showToast('New employee record created successfully!', 'success');
@@ -769,16 +858,21 @@ const EmployeeRecordsView = ({
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if (
-          (isAdmin || isManagement) &&
-          formData.auth_id &&
-          formData.mapped_roles_sum &&
-          String(formData.mapped_roles_sum) !== String(existingRec?.mapped_roles_sum)
-        ) {
-          await supabase.rpc('update_user_role_admin', {
-            p_user_id: formData.auth_id,
-            p_role: parseInt(formData.mapped_roles_sum, 10) || 1,
-          });
+        if ((isAdmin || isManagement) && formData.auth_id) {
+          const rolesArray =
+            Array.isArray(formData.mapped_roles) && formData.mapped_roles.length > 0
+              ? formData.mapped_roles
+              : ['teacher'];
+
+          await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
+
+          setAuthUsers((prev) =>
+            prev.map((u) =>
+              String(u.user_id) === String(formData.auth_id)
+                ? { ...u, roles: rolesArray, email: formData.email || u.email }
+                : u
+            )
+          );
         }
 
         showToast('Employee record updated successfully!', 'success');
@@ -1216,18 +1310,18 @@ const EmployeeRecordsView = ({
     }
   };
 
-  const handleSaveUserRoleDirect = async (targetUserId, newRoleSum, targetEmpId) => {
+  const handleSaveUserRoleDirect = async (
+    targetUserId,
+    newRoles,
+    targetEmpId
+  ) => {
     setSaving(true);
     try {
-      const sumNum = parseInt(newRoleSum, 10) || 8;
-      const { error: rpcErr } = await supabase.rpc('update_user_role_admin', {
-        p_user_id: targetUserId,
-        p_role: sumNum,
-      });
+      const finalRoles = Array.isArray(newRoles) ? newRoles : normalizeRoles(newRoles);
+      const targetAuth = authUsers.find((u) => String(u.user_id) === String(targetUserId));
+      const email = targetAuth?.email || null;
 
-      if (rpcErr) {
-        console.warn('RPC update_user_role_admin error:', rpcErr.message);
-      }
+      await saveUserRoleToDb(targetUserId, finalRoles, email);
 
       const prevEmpLinked = employees.find((e) => String(e.auth_id) === String(targetUserId));
       if (prevEmpLinked && String(prevEmpLinked.id) !== String(targetEmpId)) {
@@ -1240,20 +1334,24 @@ const EmployeeRecordsView = ({
           .update({
             auth_id: targetUserId,
             login_allowed: true,
-            mapped_roles_sum: sumNum,
+            mapped_roles: finalRoles,
           })
           .eq('id', targetEmpId);
       }
 
       setAuthUsers((prev) =>
-        prev.map((u) => (String(u.user_id) === String(targetUserId) ? { ...u, role: sumNum } : u))
+        prev.map((u) =>
+          String(u.user_id) === String(targetUserId)
+            ? { ...u, roles: finalRoles }
+            : u
+        )
       );
 
       setEditingAuthUser(null);
       await fetchEmployees();
       showToast('Portal User role permissions updated successfully!', 'success');
     } catch (err) {
-      console.error('Error saving user role:', err);
+      console.error('Error updating user role direct:', err);
       showToast('Error updating role: ' + err.message, 'error');
     } finally {
       setSaving(false);
@@ -1789,8 +1887,6 @@ const EmployeeRecordsView = ({
         mappedAuthUserMap={mappedAuthUserMap}
         editingAuthUser={editingAuthUser}
         setEditingAuthUser={setEditingAuthUser}
-        editingRoleSum={editingRoleSum}
-        setEditingRoleSum={setEditingRoleSum}
         editingEmpId={editingEmpId}
         setEditingEmpId={setEditingEmpId}
         employees={employees}
