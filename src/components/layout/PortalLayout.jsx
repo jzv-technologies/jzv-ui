@@ -81,6 +81,14 @@ const PortalLayout = ({
     if (onSetSubView) onSetSubView(null);
   };
 
+  const handleMobileBack = () => {
+    if (subView && activeGroup) {
+      handleGroupClick();
+      return;
+    }
+    handlePortalClick();
+  };
+
   const styles = roleStyles[roleName] || defaultStyles;
 
   const displayTitle =
@@ -100,7 +108,7 @@ const PortalLayout = ({
     >
       <div className="w-full flex items-center justify-between gap-2">
         {/* Left: Breadcrumbs Navigation */}
-        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-wrap">
+        <div className="hidden sm:flex items-center gap-1 sm:gap-1.5 min-w-0 flex-wrap">
           <button
             onClick={handlePortalClick}
             className={`${
@@ -141,6 +149,26 @@ const PortalLayout = ({
           )}
         </div>
 
+        <div className="sm:hidden flex items-center gap-2 min-w-0">
+          <button
+            onClick={handlePortalClick}
+            className={`${!isAtRoot ? styles.textColor : `${styles.activeTextColor} font-bold`} ${styles.hoverColor} flex items-center gap-1 transition-colors font-semibold cursor-pointer shrink-0 text-xs`}
+          >
+            <i className="fas fa-th-large text-[11px]"></i>
+            <span>Portal</span>
+          </button>
+          {!isAtRoot && (
+            <button
+              type="button"
+              onClick={handleMobileBack}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border ${styles.borderColor} bg-white/80 ${styles.textColor} ${styles.hoverColor} text-[11px] font-bold transition-colors cursor-pointer`}
+            >
+              <i className="fas fa-arrow-left text-[10px]"></i>
+              <span>Back</span>
+            </button>
+          )}
+        </div>
+
         {/* Right: Category Switch Options */}
         {groups && groups.length > 0 && (
           <div className="flex items-center shrink-0">
@@ -169,30 +197,30 @@ const PortalLayout = ({
               })}
             </div>
 
-            {/* Mobile View: Dropdown */}
-            <div className="md:hidden relative">
-              <select
-                value={activeGroup || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (!val) {
-                    if (onSetSubView) onSetSubView(null);
-                    if (onSetActiveGroup) onSetActiveGroup(null);
-                  } else {
-                    if (onSetSubView) onSetSubView(null);
-                    if (onSetActiveGroup) onSetActiveGroup(val);
-                  }
-                }}
-                className="appearance-none text-[11px] font-semibold bg-white/90 border border-light-border/90 rounded-md pl-2 pr-6 py-1 text-dark-deepblue focus:outline-none focus:ring-1 focus:ring-orange-primary shadow-2xs max-w-[130px] truncate cursor-pointer"
-              >
-                <option value="">All Categories</option>
-                {groups.map((g) => (
-                  <option key={g.info.key} value={g.info.key}>
-                    {g.info.label}
-                  </option>
-                ))}
-              </select>
-              <i className="fas fa-chevron-down absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] text-dark-muted pointer-events-none" />
+            {/* Mobile View: Icon-only category controls */}
+            <div className="md:hidden flex items-center gap-1 max-w-[58vw] overflow-x-auto scrollbar-hide py-0.5">
+              {groups.map((g) => {
+                const isCurrent = activeGroup === g.info.key;
+                return (
+                  <button
+                    key={g.info.key}
+                    type="button"
+                    title={g.info.label}
+                    aria-label={g.info.label}
+                    onClick={() => {
+                      if (onSetSubView) onSetSubView(null);
+                      if (onSetActiveGroup) onSetActiveGroup(g.info.key);
+                    }}
+                    className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-orange-primary text-white shadow-xs font-bold'
+                        : 'bg-white/80 border border-light-border/70 text-dark-muted hover:text-dark-deepblue active:scale-95'
+                    }`}
+                  >
+                    <i className={`fas ${g.info.icon}`}></i>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
