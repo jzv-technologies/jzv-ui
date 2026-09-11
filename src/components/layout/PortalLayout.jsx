@@ -68,6 +68,8 @@ const PortalLayout = ({
   onSetActiveGroup,
   activeGroupTitle,
   groups = [],
+  isCategoryView = true,
+  onCategoryViewChange,
 }) => {
   const navigate = useNavigate();
 
@@ -173,61 +175,76 @@ const PortalLayout = ({
           )}
         </div>
 
-        {/* Right: Category Switch Options */}
-        {groups && groups.length > 0 && (
-          <div className="flex items-center shrink-0">
-            {/* Desktop View: Icons only, no description */}
-            <div className="hidden md:flex items-center gap-1 bg-white/70 backdrop-blur-xs border border-light-border/70 rounded-lg p-0.5 shadow-2xs">
-              {groups.map((g) => {
-                const isCurrent = activeGroup === g.info.key;
-                return (
-                  <button
-                    key={g.info.key}
-                    type="button"
-                    title={g.info.label}
-                    onClick={() => {
-                      if (onSetSubView) onSetSubView(null);
-                      if (onSetActiveGroup) onSetActiveGroup(g.info.key);
-                    }}
-                    className={`w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
-                      isCurrent
-                        ? 'bg-orange-primary text-white shadow-xs font-bold scale-105'
-                        : 'text-dark-muted hover:text-dark-deepblue hover:bg-white/90 active:scale-95'
-                    }`}
-                  >
-                    <i className={`fas ${g.info.icon}`}></i>
-                  </button>
-                );
-              })}
-            </div>
+        {/* Right: Category view and group controls */}
+        <div className="flex items-center shrink-0 gap-2">
+          {isCategoryView && groups && groups.length > 0 && (
+            <>
+              {/* Desktop View: Icons only, no description */}
+              <div className="hidden md:flex items-center gap-1 bg-white/70 backdrop-blur-xs border border-light-border/70 rounded-lg p-0.5 shadow-2xs">
+                {groups.map((g) => {
+                  const isCurrent = activeGroup === g.info.key;
+                  return (
+                    <button
+                      key={g.info.key}
+                      type="button"
+                      title={g.info.label}
+                      onClick={() => {
+                        if (onSetSubView) onSetSubView(null);
+                        if (onSetActiveGroup) onSetActiveGroup(g.info.key);
+                      }}
+                      className={`w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-orange-primary text-white shadow-xs font-bold scale-105'
+                          : 'text-dark-muted hover:text-dark-deepblue hover:bg-white/90 active:scale-95'
+                      }`}
+                    >
+                      <i className={`fas ${g.info.icon}`}></i>
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Mobile View: Icon-only category controls */}
-            <div className="md:hidden flex items-center gap-1 max-w-[58vw] overflow-x-auto scrollbar-hide py-0.5">
-              {groups.map((g) => {
-                const isCurrent = activeGroup === g.info.key;
-                return (
-                  <button
-                    key={g.info.key}
-                    type="button"
-                    title={g.info.label}
-                    aria-label={g.info.label}
-                    onClick={() => {
-                      if (onSetSubView) onSetSubView(null);
-                      if (onSetActiveGroup) onSetActiveGroup(g.info.key);
-                    }}
-                    className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
-                      isCurrent
-                        ? 'bg-orange-primary text-white shadow-xs font-bold'
-                        : 'bg-white/80 border border-light-border/70 text-dark-muted hover:text-dark-deepblue active:scale-95'
-                    }`}
-                  >
-                    <i className={`fas ${g.info.icon}`}></i>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+              {/* Mobile View: Icon-only category controls */}
+              <div className="md:hidden flex items-center gap-1 max-w-[48vw] overflow-x-auto scrollbar-hide py-0.5">
+                {groups.map((g) => {
+                  const isCurrent = activeGroup === g.info.key;
+                  return (
+                    <button
+                      key={g.info.key}
+                      type="button"
+                      title={g.info.label}
+                      aria-label={g.info.label}
+                      onClick={() => {
+                        if (onSetSubView) onSetSubView(null);
+                        if (onSetActiveGroup) onSetActiveGroup(g.info.key);
+                      }}
+                      className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-orange-primary text-white shadow-xs font-bold'
+                          : 'bg-white/80 border border-light-border/70 text-dark-muted hover:text-dark-deepblue active:scale-95'
+                      }`}
+                    >
+                      <i className={`fas ${g.info.icon}`}></i>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <label
+            className="inline-flex items-center gap-1.5 cursor-pointer"
+            title={isCategoryView ? 'Show all tiles directly' : 'Group tiles by category'}
+          >
+            <input
+              type="checkbox"
+              checked={isCategoryView}
+              onChange={(event) => onCategoryViewChange?.(event.target.checked)}
+              className="sr-only peer"
+              aria-label="Group portal tiles by category"
+            />
+            <span className="relative h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-orange-primary after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-xs after:transition-transform peer-checked:after:translate-x-4" />
+          </label>
+        </div>
       </div>
     </div>
   );

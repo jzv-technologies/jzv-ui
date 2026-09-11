@@ -62,6 +62,15 @@ export const UnifiedPortal = ({
 
   // Nested navigation states
   const [activeGroup, setActiveGroup] = useState(null);
+  const [isCategoryView, setIsCategoryView] = useState(true);
+
+  const handleCategoryViewChange = (enabled) => {
+    setIsCategoryView(enabled);
+    if (!enabled) {
+      setActiveGroup(null);
+      setSubView(null);
+    }
+  };
 
   // Group tiles by their parent_name
   // Requirement 2: If the group has only one tile inside, then direct tile to be displayed
@@ -162,7 +171,7 @@ export const UnifiedPortal = ({
 
     // Default: switch subview
     const groupInfo = resolveGroupInfo(tile.parent_name);
-    if (groupInfo && multiTileGroups.some((g) => g.info.key === groupInfo.key)) {
+    if (isCategoryView && groupInfo && multiTileGroups.some((g) => g.info.key === groupInfo.key)) {
       setActiveGroup(groupInfo.key);
     }
     setSubView(tile.id);
@@ -504,6 +513,8 @@ export const UnifiedPortal = ({
       onSetActiveGroup={setActiveGroup}
       activeGroupTitle={activeGroupTitle}
       groups={multiTileGroups}
+      isCategoryView={isCategoryView}
+      onCategoryViewChange={handleCategoryViewChange}
     >
       <div className="w-full">
         {/* Active SubView Content */}
@@ -513,7 +524,7 @@ export const UnifiedPortal = ({
           </div>
         ) : (
           /* Dashboard View */
-          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-in fade-in duration-300">
+          <div className="w-full max-w-7xl mx-auto px-2 sm:px-3 py-6 sm:py-8 animate-in fade-in duration-300">
             {loading ? (
               <div className="flex items-center justify-center py-24">
                 <div className="w-10 h-10 border-4 border-orange-primary border-t-transparent rounded-full animate-spin" />
@@ -545,7 +556,11 @@ export const UnifiedPortal = ({
             ) : (
               <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
                 {/* ── Level 2: Group Drill-down View (when activeGroup is selected) ── */}
-                {activeGroup && currentGroupEntry ? (
+                {!isCategoryView ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 animate-in fade-in duration-300">
+                    {displayedTiles.map((tile) => renderTileButton(tile))}
+                  </div>
+                ) : activeGroup && currentGroupEntry ? (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     {/* Tiles Grid for this group */}
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
