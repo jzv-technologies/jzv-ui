@@ -13,6 +13,10 @@ import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents'
 const STUDENTS_STORAGE_KEY = 'jzv_students_local_data';
 const TIMETABLE_STORAGE_KEY = 'jzv_timetable_local_data';
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+let studentRecordsCache = {
+  classes: null,
+  students: null,
+};
 
 const AdminStudentsView = ({
   initialTab = 'records',
@@ -73,10 +77,16 @@ const AdminStudentsView = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Load classes from Supabase or LocalStorage
-  const loadClasses = async () => {
+  const loadClasses = async (force = false) => {
+    if (!force && studentRecordsCache.classes) {
+      setClasses(studentRecordsCache.classes);
+      return studentRecordsCache.classes;
+    }
+
     try {
       const { data, error: dbErr } = await supabase.from('classes').select('*');
       if (!dbErr && data) {
+        studentRecordsCache.classes = data;
         setClasses(data);
         return data;
       }
@@ -100,14 +110,23 @@ const AdminStudentsView = ({
   };
 
   // Load students from Supabase or LocalStorage
-  const loadStudents = async (loadedClasses = []) => {
+  const loadStudents = async (loadedClasses = [], force = false) => {
     setLoading(true);
     setError('');
+    if (!force && studentRecordsCache.students) {
+      setStudents(studentRecordsCache.students);
+      setIsSupabaseMode(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error: dbErr } = await supabase.from('students').select('*');
       if (dbErr) throw dbErr;
 
-      setStudents(data || []);
+      const fetchedStudents = data || [];
+      studentRecordsCache.students = fetchedStudents;
+      setStudents(fetchedStudents);
       setIsSupabaseMode(true);
     } catch (e) {
       console.warn(
@@ -226,7 +245,8 @@ const AdminStudentsView = ({
           showToast('New student added successfully!', 'success');
         }
         setIsModalOpen(false);
-        await loadStudents(classes);
+        studentRecordsCache.students = null;
+        await loadStudents(classes, true);
       } catch (err) {
         showToast('DB Error: ' + err.message, 'error');
       } finally {
@@ -307,7 +327,8 @@ const AdminStudentsView = ({
             }
             showToast('Student deleted successfully', 'success');
             setIsModalOpen(false);
-            await loadStudents(classes);
+            studentRecordsCache.students = null;
+            await loadStudents(classes, true);
           } catch (err) {
             showToast('DB Error: ' + err.message, 'error');
           } finally {
@@ -421,7 +442,8 @@ const AdminStudentsView = ({
         }
       }
 
-      await loadStudents(classes);
+      studentRecordsCache.students = null;
+      await loadStudents(classes, true);
     } else {
       // LocalStorage Mode
       let updatedList = [...students];
@@ -768,7 +790,7 @@ const AdminStudentsView = ({
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-2 shrink-0 sm:flex sm:flex-wrap sm:items-center">
                 <button
-                  onClick={() => loadStudents(classes)}
+                  onClick={() => loadStudents(classes, true)}
                   disabled={loading}
                   className="w-full sm:w-auto px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                   title="Refresh database"
@@ -985,7 +1007,7 @@ const AdminStudentsView = ({
         <StudentFeesView
           students={students}
           classes={classes}
-          onRefreshStudents={() => loadStudents(classes)}
+          onRefreshStudents={() => loadStudents(classes, true)}
           onRegisterControls={setFeesControls}
         />
       ) : (
@@ -999,7 +1021,7 @@ const AdminStudentsView = ({
             data={displayData}
             loading={loading}
             error={error}
-            onRetry={() => loadStudents(classes)}
+            onRetry={() => loadStudents(classes, true)}
             onRowClick={canManage ? openEditModal : undefined}
             excludeColumns={['id', 'class_id']}
           />

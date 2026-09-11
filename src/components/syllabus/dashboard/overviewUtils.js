@@ -2,8 +2,18 @@ export const DEFAULT_WORKING_DAYS = 22;
 export const DEFAULT_TEACHING_DAYS = 20;
 
 const MONTH_LABELS = {
-  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
+  1: 'Jan',
+  2: 'Feb',
+  3: 'Mar',
+  4: 'Apr',
+  5: 'May',
+  6: 'Jun',
+  7: 'Jul',
+  8: 'Aug',
+  9: 'Sep',
+  10: 'Oct',
+  11: 'Nov',
+  12: 'Dec',
 };
 
 /**
@@ -12,8 +22,14 @@ const MONTH_LABELS = {
  * Defaults to Jun–May (12 months) if not provided.
  */
 export const buildAcademicMonths = (startMonth = 6, endMonth = 5) => {
-  const s = typeof startMonth === 'object' ? Number(startMonth?.start_month || startMonth?.month || 6) : Number(startMonth);
-  const e = typeof endMonth === 'object' ? Number(endMonth?.end_month || endMonth?.month || 5) : Number(endMonth);
+  const s =
+    typeof startMonth === 'object'
+      ? Number(startMonth?.start_month || startMonth?.month || 6)
+      : Number(startMonth);
+  const e =
+    typeof endMonth === 'object'
+      ? Number(endMonth?.end_month || endMonth?.month || 5)
+      : Number(endMonth);
   const cleanStart = Number.isFinite(s) && s >= 1 && s <= 12 ? s : 6;
   const cleanEnd = Number.isFinite(e) && e >= 1 && e <= 12 ? e : 5;
 
@@ -46,19 +62,26 @@ export const parseAcademicYearLabel = (label) => {
 };
 
 export const getCurrentAcademicYearLabel = (today = new Date()) => {
-  const safeDate = (today instanceof Date && !isNaN(today.getTime())) ? today : new Date();
-  const startYear = safeDate.getMonth() + 1 >= 6 ? safeDate.getFullYear() : safeDate.getFullYear() - 1;
+  const safeDate = today instanceof Date && !isNaN(today.getTime()) ? today : new Date();
+  const startYear =
+    safeDate.getMonth() + 1 >= 6 ? safeDate.getFullYear() : safeDate.getFullYear() - 1;
   return formatAcademicYearLabel(startYear);
 };
 
 export const getAcademicMonthYear = (startYear, month) => {
-  const m = typeof month === 'object' ? Number(month?.month || month?.start_month || 6) : Number(month);
+  const m =
+    typeof month === 'object' ? Number(month?.month || month?.start_month || 6) : Number(month);
   const cleanMonth = Number.isFinite(m) ? m : 6;
   const y = Number(startYear) || new Date().getFullYear();
   return cleanMonth >= 6 ? y : y + 1;
 };
 
-export const buildAcademicCalendarRows = (academicYearLabel, calendarEntries = [], startMonth = 6, endMonth = 5) => {
+export const buildAcademicCalendarRows = (
+  academicYearLabel,
+  calendarEntries = [],
+  startMonth = 6,
+  endMonth = 5
+) => {
   const startYear = parseAcademicYearLabel(academicYearLabel);
   const months = buildAcademicMonths(startMonth, endMonth);
   const entryMap = new Map(calendarEntries.map((entry) => [`${entry.year}-${entry.month}`, entry]));
@@ -169,7 +192,9 @@ const getWindowCoverage = (calendarRows, windowStartMonth, windowEndMonth, today
   const pastWindow = windowEnd ? today > windowEnd : false;
 
   const firstWindowRow = windowRows[0];
-  const windowStart = firstWindowRow ? new Date(firstWindowRow.year, firstWindowRow.month - 1, 1) : null;
+  const windowStart = firstWindowRow
+    ? new Date(firstWindowRow.year, firstWindowRow.month - 1, 1)
+    : null;
   const beforeWindow = windowStart ? today < windowStart : false;
 
   return { totalWindowDays, elapsedWindowDays, pastWindow, beforeWindow };
@@ -190,7 +215,7 @@ export const buildPacingRecords = ({
 }) => {
   const endOfWeekDate = getEndOfWeekDate(today);
   const lastCalendarRow = [...calendarRows]
-    .sort((left, right) => (left.year * 12 + left.month) - (right.year * 12 + right.month))
+    .sort((left, right) => left.year * 12 + left.month - (right.year * 12 + right.month))
     .pop();
   const lastCalendarMonth = lastCalendarRow?.month ?? academicEndMonth;
 
@@ -229,18 +254,17 @@ export const buildPacingRecords = ({
       const periodsPerWeek = periodsPerWeekMap.get(`${mapping.class_id}-${book.subject_id}`) || 0;
 
       const totalLessons = toNumber(
-        tracker?.total_lessons ||
-          book.total_leaf_lessons ||
-          book.total_lessons,
+        tracker?.total_lessons || book.total_leaf_lessons || book.total_lessons,
         0
       );
       const completedLessons = toNumber(tracker?.completed, 0);
       const inProgressLessons = toNumber(tracker?.in_progress, 0);
       const pendingLessons = Math.max(0, totalLessons - completedLessons);
 
-      const actualProgress = totalLessons > 0
-        ? clamp(Number(((completedLessons / totalLessons) * 100).toFixed(1)), 0, 100)
-        : clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
+      const actualProgress =
+        totalLessons > 0
+          ? clamp(Number(((completedLessons / totalLessons) * 100).toFixed(1)), 0, 100)
+          : clamp(toNumber(tracker?.completion_percentage, 0), 0, 100);
 
       const firstLesson = firstLessonMonthMap.get(`${mapping.class_id}-${mapping.book_id}`);
       const rawStart = tracker?.expected_start_date;
@@ -279,20 +303,21 @@ export const buildPacingRecords = ({
         expectedProgress = 100;
         if (actualProgress < 100) isOverdue = true;
       } else {
-        expectedProgress = win.totalWindowDays > 0
-          ? clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100)
-          : 0;
+        expectedProgress =
+          win.totalWindowDays > 0
+            ? clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100)
+            : 0;
       }
 
       // Expected completed lessons based on pace
-      const expectedLessons = totalLessons > 0
-        ? Math.round((expectedProgress / 100) * totalLessons)
-        : 0;
+      const expectedLessons =
+        totalLessons > 0 ? Math.round((expectedProgress / 100) * totalLessons) : 0;
       const lessonDelta = completedLessons - expectedLessons;
 
-      const lessonBasedExpectedProgress = totalLessons > 0
-        ? clamp(Math.round((expectedLessons / totalLessons) * 100), 0, 100)
-        : Math.round(expectedProgress);
+      const lessonBasedExpectedProgress =
+        totalLessons > 0
+          ? clamp(Math.round((expectedLessons / totalLessons) * 100), 0, 100)
+          : Math.round(expectedProgress);
 
       return {
         id: mapping.id,
@@ -358,7 +383,7 @@ export const buildOverviewSummary = ({
       const pct = record.actualProgress ?? 0;
       const expected = record.expectedProgress ?? 0;
       const delta = pct - expected;
-      const ratio = expected > 0 ? pct / expected : (pct >= 100 ? 1.25 : 0);
+      const ratio = expected > 0 ? pct / expected : pct >= 100 ? 1.25 : 0;
 
       if (ratio >= 1.25 || pct >= 125) {
         accumulator.suspicious += 1;
@@ -430,9 +455,7 @@ export const buildHeatmapModel = ({
   books = [],
 }) => {
   const subjectMap = new Map(subjects.map((s) => [String(s.id), s]));
-  const classificationMap = new Map(
-    classifications.map((c) => [String(c.id), c])
-  );
+  const classificationMap = new Map(classifications.map((c) => [String(c.id), c]));
   const bookMap = new Map((books || []).map((b) => [String(b.id), b]));
 
   // Build unique columns per (subject_id, book_id) combination
@@ -457,9 +480,7 @@ export const buildHeatmapModel = ({
       ).size;
 
       const displayName =
-        totalSubjectBooks > 1 && bTitle
-          ? `${subject.name} (${bTitle})`
-          : subject.name;
+        totalSubjectBooks > 1 && bTitle ? `${subject.name} (${bTitle})` : subject.name;
 
       columnKeyMap.set(key, {
         id: key,
@@ -506,9 +527,7 @@ export const buildHeatmapModel = ({
   });
 
   // Pre-build set of assigned class-subject keys
-  const assignedKeys = new Set(
-    assignments.map((a) => `${a.class_id}-${a.subject_id}`)
-  );
+  const assignedKeys = new Set(assignments.map((a) => `${a.class_id}-${a.subject_id}`));
 
   const rows = classes
     .map((classRecord) => {
@@ -771,7 +790,8 @@ export const buildAttentionAlerts = ({
     }
 
     const delta = record.actualProgress - record.expectedProgress;
-    const isCriticalBehind = (record.actualProgress === 0 && record.expectedProgress >= 10) || delta <= -15;
+    const isCriticalBehind =
+      (record.actualProgress === 0 && record.expectedProgress >= 10) || delta <= -15;
     if (isCriticalBehind || delta <= -10) {
       alerts.push({
         id: `behind-${record.classId}-${record.bookId}`,
@@ -853,11 +873,7 @@ export const buildAttentionAlerts = ({
     .slice(0, 12);
 };
 
-export const buildClassDonutData = ({
-  classes = [],
-  bookTrackers = [],
-  lessonPlans = [],
-}) => {
+export const buildClassDonutData = ({ classes = [], bookTrackers = [], lessonPlans = [] }) => {
   const classMap = new Map(classes.map((item) => [String(item.id), item]));
 
   return Array.from(
@@ -900,7 +916,11 @@ export const buildClassDonutData = ({
       const remainingUnstarted = Math.max(0, item.totalLessons - item.completed - item.inProgress);
       const planned = Math.min(pendingPlansCount, remainingUnstarted);
       const notPlanned = Math.max(0, remainingUnstarted - planned);
-      const total = Math.max(item.totalLessons, item.completed + item.inProgress + planned + notPlanned, 1);
+      const total = Math.max(
+        item.totalLessons,
+        item.completed + item.inProgress + planned + notPlanned,
+        1
+      );
 
       return {
         ...item,
@@ -988,7 +1008,10 @@ export const buildTeacherActivityData = ({
       };
     })
     .filter((item) => item.totalPlans > 0 || item.logs7d > 0 || item.carryForwards7d > 0)
-    .sort((left, right) => right.logs7d - left.logs7d || right.adherenceAcadYear - left.adherenceAcadYear);
+    .sort(
+      (left, right) =>
+        right.logs7d - left.logs7d || right.adherenceAcadYear - left.adherenceAcadYear
+    );
 };
 
 export const buildEstimateRows = ({
@@ -1157,6 +1180,8 @@ export const buildTeacherSubmissionHeatmap = ({
   periods = [],
   weeks = 5,
   today = new Date(),
+  startDate = null,
+  endDate = null,
 }) => {
   const SCHOOL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -1192,29 +1217,56 @@ export const buildTeacherSubmissionHeatmap = ({
   // Find Monday of anchor week
   const currentDay = anchorDate.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
   const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-  const currentMonday = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), anchorDate.getDate() + diffToMonday);
+  const currentMonday = new Date(
+    anchorDate.getFullYear(),
+    anchorDate.getMonth(),
+    anchorDate.getDate() + diffToMonday
+  );
 
-  // Generate N structured calendar weeks (Monday to Saturday)
   const weekBlocks = [];
   const allDates = [];
   const weekLabels = [];
+  const rangeStart = startDate ? new Date(`${startDate}T00:00:00`) : null;
+  const rangeEnd = endDate ? new Date(`${endDate}T00:00:00`) : null;
+  const hasExplicitRange =
+    rangeStart && rangeEnd && !isNaN(rangeStart.getTime()) && !isNaN(rangeEnd.getTime());
+  const fmt = (dt) => `${dt.getDate()}/${dt.getMonth() + 1}`;
 
-  for (let w = weeks - 1; w >= 0; w--) {
-    const wMonday = new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() - w * 7);
-    const days = [];
-    for (let d = 0; d < 6; d++) {
-      const dayDate = new Date(wMonday.getFullYear(), wMonday.getMonth(), wMonday.getDate() + d);
-      days.push(dayDate);
+  if (hasExplicitRange) {
+    const weeksByMonday = new Map();
+    for (const date = new Date(rangeStart); date <= rangeEnd; date.setDate(date.getDate() + 1)) {
+      if (date.getDay() === 0) continue;
+      const dayDate = new Date(date);
       allDates.push(dayDate);
+      const monday = new Date(dayDate);
+      monday.setDate(dayDate.getDate() - (dayDate.getDay() - 1));
+      const key = monday.toISOString().slice(0, 10);
+      if (!weeksByMonday.has(key)) weeksByMonday.set(key, { monday, days: [] });
+      weeksByMonday.get(key).days.push(dayDate);
     }
-    const wSaturday = days[5];
-    const fmt = (dt) => `${dt.getDate()}/${dt.getMonth() + 1}`;
-    const label = `${fmt(wMonday)}–${fmt(wSaturday)}`;
-    weekLabels.push(label);
-    weekBlocks.push({
-      label,
-      days,
+    weeksByMonday.forEach(({ monday, days }) => {
+      const label = `${fmt(days[0] || monday)}–${fmt(days[days.length - 1] || monday)}`;
+      weekLabels.push(label);
+      weekBlocks.push({ label, days });
     });
+  } else {
+    for (let w = weeks - 1; w >= 0; w--) {
+      const wMonday = new Date(
+        currentMonday.getFullYear(),
+        currentMonday.getMonth(),
+        currentMonday.getDate() - w * 7
+      );
+      const days = [];
+      for (let d = 0; d < 6; d++) {
+        const dayDate = new Date(wMonday.getFullYear(), wMonday.getMonth(), wMonday.getDate() + d);
+        days.push(dayDate);
+        allDates.push(dayDate);
+      }
+      const wSaturday = days[5];
+      const label = `${fmt(wMonday)}–${fmt(wSaturday)}`;
+      weekLabels.push(label);
+      weekBlocks.push({ label, days });
+    }
   }
 
   // 1. DIRECT DATABASE VIEW PATH (heatmap_teacher_tracker)
@@ -1225,9 +1277,7 @@ export const buildTeacherSubmissionHeatmap = ({
       teacherMap.set(tid, t.name || 'Unnamed');
     });
 
-    const bookMap = new Map(
-      books.map((b) => [String(b.id), b.title || b.name || ''])
-    );
+    const bookMap = new Map(books.map((b) => [String(b.id), b.title || b.name || '']));
 
     const teacherDateMap = new Map();
     teacherHeatmapRows.forEach((r) => {
@@ -1486,9 +1536,9 @@ export const buildTeacherSubmissionHeatmap = ({
       const cells = allDates.map((date) => {
         const dateStr = toLocalDateStr(date);
         const dayName = getDayName(date);
-        const allocatedSlots = (daySlotsMap.get(dayName) || []).slice().sort(
-          (a, b) => (Number(a.periodNum) || 0) - (Number(b.periodNum) || 0)
-        );
+        const allocatedSlots = (daySlotsMap.get(dayName) || [])
+          .slice()
+          .sort((a, b) => (Number(a.periodNum) || 0) - (Number(b.periodNum) || 0));
         const submissionLogs = logEntriesMap.get(`${teacherId}-${dateStr}`) || [];
         const submissions = submissionLogs.length;
         const allocated = allocatedSlots.length;
@@ -1659,7 +1709,7 @@ export const buildBookWeeklyTrendData = ({
         }).length;
 
         const cumulativePct = Number(
-          (Math.min(100, (lessonsUpToWeek / Math.max(totalLessons, 1)) * 100)).toFixed(1)
+          Math.min(100, (lessonsUpToWeek / Math.max(totalLessons, 1)) * 100).toFixed(1)
         );
 
         // Calculate expected completion % for this specific book as of this academic week
@@ -1673,9 +1723,12 @@ export const buildBookWeeklyTrendData = ({
           } else if (win.pastWindow) {
             expectedWeekPct = 100;
           } else {
-            expectedWeekPct = win.totalWindowDays > 0
-              ? Number(clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100).toFixed(1))
-              : 0;
+            expectedWeekPct =
+              win.totalWindowDays > 0
+                ? Number(
+                    clamp((win.elapsedWindowDays / win.totalWindowDays) * 100, 0, 100).toFixed(1)
+                  )
+                : 0;
           }
         } else if (pacingRec && typeof pacingRec.expectedProgress === 'number') {
           expectedWeekPct = Number(pacingRec.expectedProgress.toFixed(1));
@@ -1691,7 +1744,7 @@ export const buildBookWeeklyTrendData = ({
 
       record.currentProgress = pacingRec
         ? Number((pacingRec.actualProgress || 0).toFixed(1))
-        : Number((Math.min(100, (cumulativeCompleted / Math.max(totalLessons, 1)) * 100)).toFixed(1));
+        : Number(Math.min(100, (cumulativeCompleted / Math.max(totalLessons, 1)) * 100).toFixed(1));
 
       // Book-specific expected progress from pacing records (taking into account target end month and teaching days)
       const bookExpectedProgress =

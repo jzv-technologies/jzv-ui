@@ -35,8 +35,7 @@ export const TimetableAdminViewContainer = ({ user }) => {
 
       const [
         { data: dbSubjects },
-        { data: dbTeacherSubjectsMap },
-        { data: dbTeacherSubjectsDirect },
+        { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
@@ -46,7 +45,6 @@ export const TimetableAdminViewContainer = ({ user }) => {
         { data: settingsData },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
-        supabase.from('map_teacher_subject').select('*'),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
@@ -61,7 +59,7 @@ export const TimetableAdminViewContainer = ({ user }) => {
           .maybeSingle(),
       ]);
 
-      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
+      const teacherSubjectMappings = dbTeacherSubjects || [];
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
       if (secureTeachersErr) {
@@ -77,7 +75,7 @@ export const TimetableAdminViewContainer = ({ user }) => {
           name: t.name,
           is_male: t.is_male,
           auth_id: t.auth_id || null,
-          subjects: (dbTeacherSubjects || [])
+          subjects: teacherSubjectMappings
             .filter((ts) => String(ts.teacher_id) === String(tid))
             .map((ts) => ts.subject_id),
         };

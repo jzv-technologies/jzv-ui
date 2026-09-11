@@ -73,8 +73,7 @@ const TeacherTimetableViewer = ({ user }) => {
 
       const [
         { data: dbSubjects },
-        { data: dbTeacherSubjectsMap },
-        { data: dbTeacherSubjectsDirect },
+        { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbSlots },
         { data: dbPeriods },
@@ -85,7 +84,6 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: dbAssignments },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
-        supabase.from('map_teacher_subject').select('*'),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('timetable_slots').select('*'),
@@ -105,7 +103,7 @@ const TeacherTimetableViewer = ({ user }) => {
         throw new Error('No classes or slots found in database. Loading mock data.');
       }
 
-      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
+      const teacherSubjectMappings = dbTeacherSubjects || [];
 
       const currentTeacher = Array.isArray(currentTeacherData)
         ? currentTeacherData[0]
@@ -127,7 +125,7 @@ const TeacherTimetableViewer = ({ user }) => {
           name: t.name,
           is_male: t.is_male,
           auth_id: isCurrent ? user?.id || t.auth_id || null : t.auth_id || null,
-          subjects: (dbTeacherSubjects || [])
+          subjects: teacherSubjectMappings
             .filter((ts) => String(ts.teacher_id) === String(tid))
             .map((ts) => ts.subject_id),
         };

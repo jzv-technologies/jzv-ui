@@ -195,8 +195,7 @@ const TimetableManager = ({ userRoles, user }) => {
         { data: dbClassifications },
         { data: dbSubjects },
         { data: dbTeachers },
-        { data: dbTeacherSubjectsMap },
-        { data: dbTeacherSubjectsDirect },
+        { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
@@ -214,14 +213,13 @@ const TimetableManager = ({ userRoles, user }) => {
             return supabase.from('teachers').select('*');
           }),
         supabase.from('map_teacher_subject').select('*'),
-        supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
 
-      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
+      const teacherSubjectMappings = dbTeacherSubjects || [];
 
       const teachersWithSubjects = (dbTeachers || []).map((t) => {
         const tid = t.id || t.teacher_id;
@@ -229,7 +227,7 @@ const TimetableManager = ({ userRoles, user }) => {
           ...t,
           id: tid,
           teacher_id: tid,
-          subjects: (dbTeacherSubjects || [])
+          subjects: teacherSubjectMappings
             .filter((ts) => String(ts.teacher_id) === String(tid))
             .map((ts) => ts.subject_id),
         };

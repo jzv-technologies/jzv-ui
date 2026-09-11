@@ -4,6 +4,64 @@ import { supabase } from '../utils/supabase';
 import { getUserDataCookie, setUserDataCookie, clearUserDataCookie } from '../utils/cookies';
 import { showToast } from '../utils/toast';
 
+const teacherRecordCache = new Map();
+const teacherRecordFetches = new Map();
+const TEACHER_RECORD_SESSION_PREFIX = 'jzv_teacher_record_';
+
+const readCachedTeacherRecord = (userId) => {
+  if (teacherRecordCache.has(userId)) return teacherRecordCache.get(userId);
+  try {
+    const cachedRecord = JSON.parse(
+      sessionStorage.getItem(`${TEACHER_RECORD_SESSION_PREFIX}${userId}`)
+    );
+    if (cachedRecord) {
+      teacherRecordCache.set(userId, cachedRecord);
+      return cachedRecord;
+    }
+  } catch (error) {}
+  return null;
+};
+
+const cacheTeacherRecord = (userId, record) => {
+  teacherRecordCache.set(userId, record);
+  try {
+    sessionStorage.setItem(`${TEACHER_RECORD_SESSION_PREFIX}${userId}`, JSON.stringify(record));
+  } catch (error) {}
+};
+
+const clearCachedTeacherRecord = (userId) => {
+  teacherRecordCache.delete(userId);
+  teacherRecordFetches.delete(userId);
+  try {
+    sessionStorage.removeItem(`${TEACHER_RECORD_SESSION_PREFIX}${userId}`);
+  } catch (error) {}
+};
+
+const fetchCurrentTeacherRecord = async (userId) => {
+  const cachedRecord = readCachedTeacherRecord(userId);
+  if (cachedRecord) return cachedRecord;
+
+  if (!teacherRecordFetches.has(userId)) {
+    teacherRecordFetches.set(
+      userId,
+      supabase
+        .rpc('get_current_teacher_details')
+        .then(({ data, error }) => {
+          if (error) {
+            console.warn('get_current_teacher_details RPC failed:', error);
+            return null;
+          }
+          const record = Array.isArray(data) ? data[0] : data;
+          if (record) cacheTeacherRecord(userId, record);
+          return record || null;
+        })
+        .finally(() => teacherRecordFetches.delete(userId))
+    );
+  }
+
+  return teacherRecordFetches.get(userId);
+};
+
 export const useAuth = () => {
   const [user, setUser] = useState(null);
   const [userRoles, setUserRoles] = useState([]);
@@ -58,18 +116,7 @@ export const useAuth = () => {
     if (fetchingTeacherRef.current) return null;
     fetchingTeacherRef.current = true;
     try {
-      // 1. Call RPC — resolves current user from auth.uid() server-side,
-      //    returns emp_id, id, name, is_male, auth_id etc. No client-side
-      //    auth_id leakage in the query string.
-      let teacherData = null;
-      try {
-        const { data, error } = await supabase.rpc('get_current_teacher_details');
-        if (!error && data) {
-          teacherData = Array.isArray(data) ? data[0] : data;
-        }
-      } catch (e) {
-        console.warn('get_current_teacher_details RPC failed:', e);
-      }
+      let teacherData = await fetchCurrentTeacherRecord(userId);
 
       // 2. Fallback: email lookup on employees for accounts not yet linked
       let empRecord = null;
@@ -101,10 +148,7 @@ export const useAuth = () => {
         return mergedRecord;
       }
     } catch (err) {
-      console.warn(
-        'Could not load teacher/employee record, checking LocalStorage fallback:',
-        err
-      );
+      console.warn('Could not load teacher/employee record, checking LocalStorage fallback:', err);
       const raw = localStorage.getItem('jzv_timetable_data');
       if (raw) {
         try {
@@ -225,6 +269,7 @@ export const useAuth = () => {
     }
     if (user && !user.parentMode) {
       clearUserDataCookie(user.id);
+      clearCachedTeacherRecord(user.id);
     }
     await supabase.auth.signOut();
     setUser(null);

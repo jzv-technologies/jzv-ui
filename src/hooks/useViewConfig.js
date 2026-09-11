@@ -4,11 +4,39 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-// Module-level cache to prevent repeated queries across renders and sub-components
-let cachedViewConfig = null;
-let cachedDynamicConfigs = null;
-let cacheTimestamp = 0;
-const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache';
+
+const readSessionCache = () => {
+  try {
+    const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
+    if (!rawCache) return null;
+    const cachedData = JSON.parse(rawCache);
+    if (!Array.isArray(cachedData.viewConfigs) || !Array.isArray(cachedData.dynamicConfigs)) {
+      return null;
+    }
+    return cachedData;
+  } catch (error) {
+    return null;
+  }
+};
+
+const initialSessionCache = typeof window === 'undefined' ? null : readSessionCache();
+
+// Module-level cache prevents duplicate queries across hook instances.
+let cachedViewConfig = initialSessionCache?.viewConfigs || null;
+let cachedDynamicConfigs = initialSessionCache?.dynamicConfigs || null;
+let viewConfigFetchPromise = null;
+
+const writeSessionCache = (viewConfigs, dynamicConfigs) => {
+  try {
+    sessionStorage.setItem(
+      VIEW_CONFIG_SESSION_KEY,
+      JSON.stringify({ viewConfigs, dynamicConfigs })
+    );
+  } catch (error) {
+    console.warn('[useViewConfig] Failed to cache view configuration for this session:', error);
+  }
+};
 
 /**
  * Manually invalidate module cache to trigger fresh fetch from Supabase.
@@ -16,7 +44,10 @@ const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL
 export const invalidateViewConfigCache = () => {
   cachedViewConfig = null;
   cachedDynamicConfigs = null;
-  cacheTimestamp = 0;
+  viewConfigFetchPromise = null;
+  try {
+    sessionStorage.removeItem(VIEW_CONFIG_SESSION_KEY);
+  } catch (error) {}
 };
 
 /**
@@ -32,8 +63,7 @@ export const useViewConfig = () => {
   const [error, setError] = useState(null);
 
   const fetchConfigs = useCallback(async (forceRefresh = false) => {
-    const isCacheValid =
-      !forceRefresh && cachedViewConfig && Date.now() - cacheTimestamp < CACHE_TTL_MS;
+    const isCacheValid = !forceRefresh && cachedViewConfig;
 
     if (isCacheValid) {
       setViewConfigs(cachedViewConfig);
@@ -46,47 +76,44 @@ export const useViewConfig = () => {
     setError(null);
 
     try {
-      // 1. Fetch app_view_controller
-      const { data: avcData, error: avcError } = await supabase
-        .from('app_view_controller')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_order', { ascending: true })
-        .order('type', { ascending: true });
+      if (!viewConfigFetchPromise) {
+        viewConfigFetchPromise = (async () => {
+          const { data: avcData, error: avcError } = await supabase
+            .from('app_view_controller')
+            .select('*')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true })
+            .order('type', { ascending: true });
 
-      if (avcError) {
-        console.error('[useViewConfig] Error fetching app_view_controller:', avcError);
-        setError(avcError);
-        setViewConfigs([]);
-        return;
+          if (avcError) throw avcError;
+
+          let formsData = [];
+          try {
+            const { data: dfData, error: dfError } = await supabase
+              .from('dynamic_form_configs')
+              .select('*');
+            if (!dfError && dfData) formsData = dfData;
+          } catch (dfErr) {
+            console.warn('[useViewConfig] Failed to fetch dynamic_form_configs:', dfErr);
+          }
+
+          return { viewConfigs: avcData || [], dynamicConfigs: formsData };
+        })();
       }
 
-      const resolvedConfigs = avcData || [];
+      const resolvedData = await viewConfigFetchPromise;
+      cachedViewConfig = resolvedData.viewConfigs;
+      cachedDynamicConfigs = resolvedData.dynamicConfigs;
+      writeSessionCache(resolvedData.viewConfigs, resolvedData.dynamicConfigs);
 
-      // 2. Fetch dynamic_form_configs
-      let formsData = [];
-      try {
-        const { data: dfData, error: dfError } = await supabase
-          .from('dynamic_form_configs')
-          .select('*');
-        if (!dfError && dfData) {
-          formsData = dfData;
-        }
-      } catch (dfErr) {
-        console.warn('[useViewConfig] Failed to fetch dynamic_form_configs:', dfErr);
-      }
-
-      cachedViewConfig = resolvedConfigs;
-      cachedDynamicConfigs = formsData;
-      cacheTimestamp = Date.now();
-
-      setViewConfigs(resolvedConfigs);
-      setDynamicConfigs(formsData);
+      setViewConfigs(resolvedData.viewConfigs);
+      setDynamicConfigs(resolvedData.dynamicConfigs);
     } catch (err) {
       console.error('[useViewConfig] Unexpected fetch error:', err);
       setError(err);
       setViewConfigs([]);
     } finally {
+      viewConfigFetchPromise = null;
       setLoading(false);
     }
   }, []);

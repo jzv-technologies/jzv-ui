@@ -28,6 +28,8 @@ const DEFAULT_ROLES = [
   'Librarian',
 ];
 
+const employeeRecordsCache = new Map();
+
 const EmployeeRecordsView = ({
   role = 'admin',
   user = null,
@@ -183,6 +185,14 @@ const EmployeeRecordsView = ({
   const fetchEmployees = async () => {
     setLoading(true);
     try {
+      const cacheKey = isEmployeeSelf ? `self:${user?.id || ''}` : 'directory';
+      const cachedDirectory = isEmployeeSelf ? null : employeeRecordsCache.get(cacheKey);
+      if (cachedDirectory) {
+        setEmployees(cachedDirectory.employees);
+        setAuthUsers(cachedDirectory.authUsers);
+        return;
+      }
+
       if (isEmployeeSelf) {
         // Security-first: do not send user-identifying query params from client.
         // Backend should resolve current user from auth context (auth.uid()).
@@ -361,6 +371,9 @@ const EmployeeRecordsView = ({
       }
 
       setAuthUsers(usersList);
+      if (fetchedEmps) {
+        employeeRecordsCache.set(cacheKey, { employees: fetchedEmps, authUsers: usersList });
+      }
     } catch (err) {
       console.error('Error fetching employees or auth users:', err);
     } finally {
@@ -960,6 +973,7 @@ const EmployeeRecordsView = ({
       setInitialFormData({ ...formData });
       setModalMode(null);
       if (!isEmployeeSelf) {
+        employeeRecordsCache.delete('directory');
         await fetchEmployees();
       }
       return true;
@@ -1042,6 +1056,7 @@ const EmployeeRecordsView = ({
 
       showToast(`Employee "${emp.name}" deleted successfully!`, 'success');
       if (!isLocalId) {
+        employeeRecordsCache.delete('directory');
         await fetchEmployees();
       }
     } catch (err) {
@@ -1381,6 +1396,7 @@ const EmployeeRecordsView = ({
 
       setIsCsvImportOpen(false);
       setCsvPreviewRows([]);
+      employeeRecordsCache.delete('directory');
       await fetchEmployees();
     } catch (err) {
       showToast('Import error: ' + err.message, 'error');
@@ -1467,6 +1483,7 @@ const EmployeeRecordsView = ({
       );
       setIsBulkApplyModalOpen(false);
       setSelectedBulkEmpIds([]);
+      employeeRecordsCache.delete('directory');
       await fetchEmployees();
     } catch (err) {
       showToast('Bulk update error: ' + err.message, 'error');

@@ -149,7 +149,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     const fetchPersonOptions = async () => {
       try {
         const [teachersRes, usersRes] = await Promise.all([
-          supabase.rpc('get_active_teacher_names_secure', { p_auth_id: user?.id || null }),
+          supabase.from('teachers').select('name').eq('is_active', true),
           supabase.from('admin_users_view').select('full_name'),
         ]);
         const namesMap = new Map();
@@ -211,8 +211,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
       const [
         { data: dbSubjects },
-        { data: dbTeacherSubjectsMap },
-        { data: dbTeacherSubjectsDirect },
+        { data: dbTeacherSubjects },
         { data: dbClasses },
         { data: dbAssignments },
         { data: dbSlots },
@@ -222,7 +221,6 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         { data: settingsData },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
-        supabase.from('map_teacher_subject').select('*'),
         supabase.from('map_teacher_subject').select('*'),
         supabase.from('classes').select('*'),
         supabase.from('class_assignments').select('*'),
@@ -237,7 +235,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           .maybeSingle(),
       ]);
 
-      const dbTeacherSubjects = dbTeacherSubjectsMap || dbTeacherSubjectsDirect || [];
+      const teacherSubjectMappings = dbTeacherSubjects || [];
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
       if (secureTeachersErr) {
@@ -253,7 +251,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
           name: t.name,
           is_male: t.is_male,
           auth_id: t.auth_id || null,
-          subjects: (dbTeacherSubjects || [])
+          subjects: teacherSubjectMappings
             .filter((ts) => String(ts.teacher_id) === String(tid))
             .map((ts) => ts.subject_id),
         };
@@ -1548,17 +1546,32 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'take-test' ? <div data-feature="take-test">{renderTakeTestView()}</div> : null}
       {subView === 'my-activity' && (
         <div data-feature="my-activity">
-          <SyllabusTrackerPortal role="teacher" initialTab="my-activity" user={user} userRoles={userRoles} />
+          <SyllabusTrackerPortal
+            role="teacher"
+            initialTab="my-activity"
+            user={user}
+            userRoles={userRoles}
+          />
         </div>
       )}
       {subView === 'teacher-activity' && (
         <div data-feature="teacher-activity">
-          <SyllabusTrackerPortal role="management" initialTab="teacher-activity" user={user} userRoles={userRoles} />
+          <SyllabusTrackerPortal
+            role="management"
+            initialTab="teacher-activity"
+            user={user}
+            userRoles={userRoles}
+          />
         </div>
       )}
       {subView === 'syllabus-progress-tracker' && (
         <div data-feature="syllabus-progress-tracker">
-          <SyllabusTrackerPortal role="management" initialTab="syllabus-progress" user={user} userRoles={userRoles} />
+          <SyllabusTrackerPortal
+            role="management"
+            initialTab="syllabus-progress"
+            user={user}
+            userRoles={userRoles}
+          />
         </div>
       )}
       {subView === 'dashboard' && (

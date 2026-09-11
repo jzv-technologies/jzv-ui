@@ -131,7 +131,9 @@ const PortalLayout = ({
                   {activeGroupTitle}
                 </button>
               ) : (
-                <span className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}>
+                <span
+                  className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}
+                >
                   {activeGroupTitle}
                 </span>
               )}
@@ -142,7 +144,9 @@ const PortalLayout = ({
           {subView && (
             <>
               <span className="text-gray-400 font-semibold select-none text-xs">\</span>
-              <span className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}>
+              <span
+                className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}
+              >
                 {displayTitle}
               </span>
             </>

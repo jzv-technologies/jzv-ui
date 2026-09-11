@@ -1096,7 +1096,7 @@ const SyllabusTrackerPortal = ({
       activeTab === 'my-activity' ||
       activeTab === 'two-weeks-class'
     ) {
-      fetchDailyEntries({ force: true, tab: activeTab });
+      fetchDailyEntries({ tab: activeTab });
     }
   }, [dashboardOnly, activeTab, fetchDailyEntries]);
 
@@ -1287,9 +1287,7 @@ const SyllabusTrackerPortal = ({
 
   const handleTabChange = async (tabKey) => {
     setActiveTab(tabKey);
-    if (tabKey === 'teacher-activity' || tabKey === 'my-activity' || tabKey === 'two-weeks-class') {
-      await fetchDailyEntries({ force: true, tab: tabKey });
-    } else if (role === 'teacher' && tabKey === 'syllabus-progress') {
+    if (role === 'teacher' && tabKey === 'syllabus-progress') {
       await fetchTeacherProgressData();
       setProgressExpandedBook(null);
       setProgressExpandedClass(null);

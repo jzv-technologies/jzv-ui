@@ -26,6 +26,27 @@ import {
   getAcademicMonthYear,
 } from './dashboard/overviewUtils';
 
+let overviewDataFetchPromise = null;
+const teacherHeatmapFetches = new Map();
+
+const getHeatmapDateRange = (range, customStart, customEnd) => {
+  if (range === 'custom' && customStart && customEnd && customStart <= customEnd) {
+    return { start: customStart, end: customEnd };
+  }
+
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - (range === '7d' ? 6 : 29));
+  const toDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  return { start: toDateString(startDate), end: toDateString(endDate) };
+};
+
 const SyllabusOverviewDashboard = ({
   role,
   classes = [],
@@ -50,6 +71,9 @@ const SyllabusOverviewDashboard = ({
   const [timetableSlots, setTimetableSlots] = useState([]);
   const [dailyLogs, setDailyLogs] = useState([]);
   const [teacherHeatmapRows, setTeacherHeatmapRows] = useState([]);
+  const [heatmapRange, setHeatmapRange] = useState('30d');
+  const [customHeatmapStart, setCustomHeatmapStart] = useState('');
+  const [customHeatmapEnd, setCustomHeatmapEnd] = useState('');
   const [loadingAuxData, setLoadingAuxData] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingCalendar, setIsSavingCalendar] = useState(false);
@@ -60,35 +84,38 @@ const SyllabusOverviewDashboard = ({
   const [academicEndMonth, setAcademicEndMonth] = useState(5);
 
   const [periods, setPeriods] = useState([]);
+  const heatmapDateRange = useMemo(
+    () => getHeatmapDateRange(heatmapRange, customHeatmapStart, customHeatmapEnd),
+    [heatmapRange, customHeatmapStart, customHeatmapEnd]
+  );
 
   const fetchOverviewData = useCallback(async () => {
     setLoadingAuxData(true);
 
-    const [
-      calendarResult,
-      timetableResult,
-      dailyLogsResult,
-      configResult,
-      periodsResult,
-      heatmapResult,
-    ] = await Promise.all([
-      supabase
-        .from('academic_calendar')
-        .select('id, year, month, working_days, teaching_days, ay')
-        .order('year', { ascending: true })
-        .order('month', { ascending: true }),
-      supabase
-        .from('timetable_slots')
-        .select('id, class_id, subject_id, teacher_id, day, period_id'),
-      fetchAllPages('trk_daily_teacher_progress', '*'),
-      supabase
-        .from('admin_configruation')
-        .select('val')
-        .eq('key', 'academic_year_range')
-        .maybeSingle(),
-      supabase.from('periods').select('*').order('period_number', { ascending: true }),
-      fetchAllPages('heatmap_teacher_tracker', '*'),
-    ]);
+    if (!overviewDataFetchPromise) {
+      overviewDataFetchPromise = Promise.all([
+        supabase
+          .from('academic_calendar')
+          .select('id, year, month, working_days, teaching_days, ay')
+          .order('year', { ascending: true })
+          .order('month', { ascending: true }),
+        supabase
+          .from('timetable_slots')
+          .select('id, class_id, subject_id, teacher_id, day, period_id'),
+        fetchAllPages('trk_daily_teacher_progress', '*'),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'academic_year_range')
+          .maybeSingle(),
+        supabase.from('periods').select('*').order('period_number', { ascending: true }),
+      ]).finally(() => {
+        overviewDataFetchPromise = null;
+      });
+    }
+
+    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult] =
+      await overviewDataFetchPromise;
 
     if (calendarResult.error) {
       console.warn('Academic calendar unavailable:', calendarResult.error.message);
@@ -114,13 +141,6 @@ const SyllabusOverviewDashboard = ({
       setDailyLogs([]);
     } else {
       setDailyLogs(dailyLogsResult.data || []);
-    }
-
-    if (heatmapResult.error) {
-      console.warn('Failed to load heatmap_teacher_tracker:', heatmapResult.error.message);
-      setTeacherHeatmapRows([]);
-    } else {
-      setTeacherHeatmapRows(heatmapResult.data || []);
     }
 
     if (!periodsResult.error && periodsResult.data && periodsResult.data.length > 0) {
@@ -154,6 +174,35 @@ const SyllabusOverviewDashboard = ({
   useEffect(() => {
     fetchOverviewData();
   }, [fetchOverviewData]);
+
+  useEffect(() => {
+    const { start, end } = heatmapDateRange;
+    const rangeKey = `${start}:${end}`;
+    let isCurrent = true;
+
+    if (!teacherHeatmapFetches.has(rangeKey)) {
+      const request = fetchAllPages('heatmap_teacher_tracker', '*', (query) =>
+        query.gte('date', start).lte('date', end)
+      ).finally(() => {
+        teacherHeatmapFetches.delete(rangeKey);
+      });
+      teacherHeatmapFetches.set(rangeKey, request);
+    }
+
+    teacherHeatmapFetches.get(rangeKey).then((result) => {
+      if (!isCurrent) return;
+      if (result.error) {
+        console.warn('Failed to load heatmap_teacher_tracker:', result.error.message);
+        setTeacherHeatmapRows([]);
+      } else {
+        setTeacherHeatmapRows(result.data || []);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [heatmapDateRange]);
 
   const academicMonths = useMemo(
     () => buildAcademicMonths(academicStartMonth, academicEndMonth),
@@ -245,7 +294,8 @@ const SyllabusOverviewDashboard = ({
         subjects,
         books,
         periods,
-        weeks: 5,
+        startDate: heatmapDateRange.start,
+        endDate: heatmapDateRange.end,
       }),
     [
       teachers,
@@ -258,6 +308,7 @@ const SyllabusOverviewDashboard = ({
       subjects,
       books,
       periods,
+      heatmapDateRange,
     ]
   );
 
@@ -587,6 +638,48 @@ const SyllabusOverviewDashboard = ({
 
       {/* Active Sub-View Content */}
       <div className="w-full">
+        {activeSubTab === 'tracker-heatmap' && (
+          <div className="mb-3 flex flex-wrap items-end gap-2">
+            <div className="inline-flex rounded-lg border border-light-border bg-white p-1 shadow-sm">
+              {[
+                ['7d', '7 days'],
+                ['30d', '30 days'],
+                ['custom', 'Custom'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setHeatmapRange(value)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                    heatmapRange === value
+                      ? 'bg-brand-primary text-white'
+                      : 'text-dark-soft hover:bg-light-bg'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {heatmapRange === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={customHeatmapStart}
+                  onChange={(event) => setCustomHeatmapStart(event.target.value)}
+                  aria-label="Heatmap start date"
+                  className="h-9 rounded-lg border border-light-border bg-white px-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+                <input
+                  type="date"
+                  value={customHeatmapEnd}
+                  onChange={(event) => setCustomHeatmapEnd(event.target.value)}
+                  aria-label="Heatmap end date"
+                  className="h-9 rounded-lg border border-light-border bg-white px-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </>
+            )}
+          </div>
+        )}
         {activeSubTab === 'class-dashboard' && <ClassDonutCharts classDonutData={classDonutData} />}
 
         {activeSubTab === 'subject-heatmap' && (
