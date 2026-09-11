@@ -33,9 +33,7 @@ export const useViewConfig = () => {
 
   const fetchConfigs = useCallback(async (forceRefresh = false) => {
     const isCacheValid =
-      !forceRefresh &&
-      cachedViewConfig &&
-      Date.now() - cacheTimestamp < CACHE_TTL_MS;
+      !forceRefresh && cachedViewConfig && Date.now() - cacheTimestamp < CACHE_TTL_MS;
 
     if (isCacheValid) {
       setViewConfigs(cachedViewConfig);
@@ -53,7 +51,8 @@ export const useViewConfig = () => {
         .from('app_view_controller')
         .select('*')
         .eq('is_active', true)
-        .order('display_order', { ascending: true });
+        .order('display_order', { ascending: true })
+        .order('type', { ascending: true });
 
       if (avcError) {
         console.error('[useViewConfig] Error fetching app_view_controller:', avcError);
@@ -115,7 +114,7 @@ export const useViewConfig = () => {
 
       // Filter active tile entries permitted for userRoles
       const activeTiles = viewConfigs.filter((item) => {
-        if (item.component_type !== 'tile') return false;
+        if (item.type !== 'tile') return false;
         const meta = TILE_METADATA_REGISTRY[item.component_name];
         const combinedRoles = Array.from(
           new Set([...(item.valid_access_roles || []), ...(meta?.valid_access_roles || [])])
@@ -133,8 +132,9 @@ export const useViewConfig = () => {
         })
         .map(([key, meta]) => ({
           component_name: key,
-          component_type: 'tile',
-          group_name: meta.group || 'General',
+          type: 'tile',
+          parent_name: meta.group || 'General',
+          display_name: meta.title || key,
           valid_access_roles: meta.valid_access_roles,
           display_order: meta.display_order ?? 50,
           is_active: true,
@@ -149,14 +149,21 @@ export const useViewConfig = () => {
         return {
           id: item.component_name,
           component_name: item.component_name,
-          component_type: item.component_type,
-          group_name: (item.group_name ? String(item.group_name).replace(/[\r\n]+/g, ' ').trim() : null) || meta.group || 'general',
-          title: meta.title || item.component_name,
+          type: item.type,
+          parent_name:
+            (item.parent_name
+              ? String(item.parent_name)
+                  .replace(/[\r\n]+/g, ' ')
+                  .trim()
+              : null) ||
+            meta.group ||
+            'general',
+          title: item.display_name || meta.title || item.component_name,
           titleKey: meta.titleKey || null,
           description: item.description || meta.description || '',
           descriptionKey: meta.descriptionKey || null,
-          icon: meta.icon || 'fa-cubes',
-          buttonColor: meta.buttonColor || 'bg-brand-primary text-white',
+          icon: item.icon || meta.icon || 'fa-cubes',
+          buttonColor: item.theme || meta.buttonColor || 'bg-brand-primary text-white',
           shadow: meta.shadow || 'shadow-brand-lbg',
           action: meta.action || 'subview',
           actionTarget: meta.actionTarget || null,
@@ -170,9 +177,7 @@ export const useViewConfig = () => {
       const dynamicTiles = (dynamicConfigs || [])
         .filter((config) => {
           if (!config.form_visibility) return false;
-          const allowedRoles = config.form_visibility
-            .split(',')
-            .map((r) => r.trim().toLowerCase());
+          const allowedRoles = config.form_visibility.split(',').map((r) => r.trim().toLowerCase());
           const userLower = userRoles.map((r) => String(r).toLowerCase().trim());
           return allowedRoles.includes('all') || userLower.some((r) => allowedRoles.includes(r));
         })
@@ -185,8 +190,7 @@ export const useViewConfig = () => {
           else if (themeKey.startsWith('teal')) shadowClass = 'shadow-teal-200';
           else if (themeKey === 'green') shadowClass = 'shadow-green-200';
           else if (themeKey === 'red') shadowClass = 'shadow-red-200';
-          else if (themeKey === 'dark' || themeKey === 'charcoal')
-            shadowClass = 'shadow-gray-200';
+          else if (themeKey === 'dark' || themeKey === 'charcoal') shadowClass = 'shadow-gray-200';
 
           const meta = TILE_METADATA_REGISTRY[config.form_name] || {};
           const groupName =
@@ -198,18 +202,15 @@ export const useViewConfig = () => {
           return {
             id: config.form_name,
             component_name: config.form_name,
-            component_type: 'tile',
-            group_name: groupName,
+            type: 'tile',
+            parent_name: groupName,
             title: config.display_name || config.form_name,
             titleKey: null,
             description:
-              config.description ||
-              `Fill out the ${config.display_name || config.form_name} form.`,
+              config.description || `Fill out the ${config.display_name || config.form_name} form.`,
             descriptionKey: null,
             icon: config.icon || 'fa-clipboard-list',
-            buttonColor: theme.color
-              ? `bg-${theme.color} text-white`
-              : 'bg-orange-dark text-white',
+            buttonColor: theme.color ? `bg-${theme.color} text-white` : 'bg-orange-dark text-white',
             shadow: shadowClass,
             action: 'open_modal',
             actionTarget: config.form_name,

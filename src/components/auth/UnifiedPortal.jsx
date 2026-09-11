@@ -63,7 +63,7 @@ export const UnifiedPortal = ({
   // Nested navigation states
   const [activeGroup, setActiveGroup] = useState(null);
 
-  // Group tiles by their group_name
+  // Group tiles by their parent_name
   // Requirement 2: If the group has only one tile inside, then direct tile to be displayed
   const { multiTileGroups, directTiles } = useMemo(() => {
     if (!displayedTiles || displayedTiles.length === 0) {
@@ -73,7 +73,7 @@ export const UnifiedPortal = ({
     const groupMap = new Map();
 
     displayedTiles.forEach((tile) => {
-      const groupInfo = resolveGroupInfo(tile.group_name);
+      const groupInfo = resolveGroupInfo(tile.parent_name);
       const groupKey = groupInfo.key;
 
       if (!groupMap.has(groupKey)) {
@@ -130,8 +130,8 @@ export const UnifiedPortal = ({
     if (currentGroupEntry) {
       return currentGroupEntry.info.label;
     }
-    if (subView && activeTile?.group_name) {
-      const gInfo = resolveGroupInfo(activeTile.group_name);
+    if (subView && activeTile?.parent_name) {
+      const gInfo = resolveGroupInfo(activeTile.parent_name);
       if (multiTileGroups.some((g) => g.info.key === gInfo.key)) {
         return gInfo.label;
       }
@@ -161,7 +161,7 @@ export const UnifiedPortal = ({
     }
 
     // Default: switch subview
-    const groupInfo = resolveGroupInfo(tile.group_name);
+    const groupInfo = resolveGroupInfo(tile.parent_name);
     if (groupInfo && multiTileGroups.some((g) => g.info.key === groupInfo.key)) {
       setActiveGroup(groupInfo.key);
     }
@@ -262,7 +262,9 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="student-records">
             <AdminStudentsView
-              role={isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'viewer'}
+              role={
+                isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'viewer'
+              }
               user={user}
               userRoles={userRoles}
               mode="records"
@@ -578,9 +580,7 @@ export const UnifiedPortal = ({
                                   <div
                                     className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-xl sm:text-2xl shadow-xs ${group.info.badgeBg} group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}
                                   >
-                                    <i
-                                      className={`fas ${group.info.icon} ${group.info.color}`}
-                                    ></i>
+                                    <i className={`fas ${group.info.icon} ${group.info.color}`}></i>
                                   </div>
                                   <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
                                     {group.tiles.length} features
@@ -599,12 +599,8 @@ export const UnifiedPortal = ({
                                       key={tile.id}
                                       className="inline-flex items-center gap-1 text-[11px] font-medium text-dark-slate bg-gray-50 group-hover:bg-orange-50/50 px-2 py-0.5 rounded-md border border-gray-200/70 transition-colors"
                                     >
-                                      <i
-                                        className={`fas ${tile.icon} text-[9px] opacity-70`}
-                                      ></i>
-                                      <span className="truncate max-w-[130px]">
-                                        {tile.title}
-                                      </span>
+                                      <i className={`fas ${tile.icon} text-[9px] opacity-70`}></i>
+                                      <span className="truncate max-w-[130px]">{tile.title}</span>
                                     </span>
                                   ))}
                                   {group.tiles.length > 4 && (

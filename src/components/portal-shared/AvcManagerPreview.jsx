@@ -8,13 +8,13 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
   const allGroups = useMemo(() => {
     const set = new Set();
     viewConfigs.forEach((c) => {
-      if (c.group_name) set.add(c.group_name);
+      if (c.parent_name) set.add(c.parent_name);
     });
     return Array.from(set);
   }, [viewConfigs]);
 
   const filtered = viewConfigs.filter((cfg) => {
-    const matchGroup = filterGroup === 'all' || cfg.group_name === filterGroup;
+    const matchGroup = filterGroup === 'all' || cfg.parent_name === filterGroup;
     const matchSearch =
       !search ||
       cfg.component_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -52,7 +52,6 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
         </div>
       </div>
 
-
       {/* Filter / Search Bar */}
       <div className="bg-white border border-light-border rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
         <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1">
@@ -67,7 +66,7 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
             All ({viewConfigs.length})
           </button>
           {allGroups.map((grp) => {
-            const count = viewConfigs.filter((c) => c.group_name === grp).length;
+            const count = viewConfigs.filter((c) => c.parent_name === grp).length;
             return (
               <button
                 key={grp}
@@ -112,19 +111,25 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
             </thead>
             <tbody>
               {filtered.map((cfg) => (
-                <tr key={cfg.component_name} className="border-b border-light-border/40 hover:bg-gray-50/60 transition-colors">
+                <tr
+                  key={cfg.component_name}
+                  className="border-b border-light-border/40 hover:bg-gray-50/60 transition-colors"
+                >
                   <td className="py-3 px-4 font-mono text-dark-muted">{cfg.display_order ?? 0}</td>
                   <td className="py-3 px-4 font-bold text-dark-deepblue">
-                    <span className="font-mono text-purple-700">{cfg.component_name}</span>
+                    <div>{cfg.display_name || cfg.component_name}</div>
+                    {cfg.display_name && (
+                      <span className="font-mono text-purple-700 text-[10px]">
+                        {cfg.component_name}
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-4">
                     <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-semibold text-[10px]">
-                      {cfg.component_type}
+                      {cfg.type}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-dark-muted">
-                    {cfg.group_name || '—'}
-                  </td>
+                  <td className="py-3 px-4 text-dark-muted">{cfg.parent_name || '—'}</td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap gap-1">
                       {(cfg.valid_access_roles || []).map((role) => (
@@ -140,15 +145,16 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
                   <td className="py-3 px-4">
                     <span
                       className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        cfg.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-600'
+                        cfg.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
                       }`}
                     >
                       {cfg.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-dark-muted max-w-xs truncate" title={cfg.description}>
+                  <td
+                    className="py-3 px-4 text-dark-muted max-w-xs truncate"
+                    title={cfg.description}
+                  >
                     {cfg.description || '—'}
                   </td>
                 </tr>
@@ -160,7 +166,8 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
 
       <div className="text-center text-xs text-dark-muted py-2">
         <i className="fas fa-info-circle mr-1 text-purple-600"></i>
-        Interactive drag-and-drop ordering and permission editing interface will be delivered in <strong>Phase 4</strong>.
+        Interactive drag-and-drop ordering and permission editing interface will be delivered in{' '}
+        <strong>Phase 4</strong>.
       </div>
     </div>
   );

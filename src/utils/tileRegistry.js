@@ -2,7 +2,7 @@
 /**
  * UI Metadata Registry for Unified Portal components.
  *
- * NOTE: UI styling and metadata (icon, colors, translations, action handlers)
+ * NOTE: Default UI styling and metadata (icon, colors, translations, action handlers)
  * are maintained here in code to keep the database table `app_view_controller`
  * focused strictly on access control, ordering, and activation state.
  */
@@ -20,7 +20,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'timetable-planner': {
     title: 'Timetable',
-    description: 'View class and teacher schedules, manage classes, subjects, and schedule conflict-free timetables.',
+    description:
+      'View class and teacher schedules, manage classes, subjects, and schedule conflict-free timetables.',
     icon: 'fa-calendar-alt',
     buttonColor: 'bg-brand-primary text-white',
     shadow: 'shadow-brand-lbg',
@@ -38,7 +39,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'manage-user-roles': {
     title: 'Manage Portal User Roles',
-    description: 'Manage authentication accounts, link employees, and assign system & portal roles.',
+    description:
+      'Manage authentication accounts, link employees, and assign system & portal roles.',
     icon: 'fa-user-shield',
     buttonColor: 'bg-purple-700 text-white',
     shadow: 'shadow-purple-200',
@@ -119,7 +121,7 @@ export const TILE_METADATA_REGISTRY = {
     group: 'General',
     action: 'subview',
   },
-  'complaint': {
+  complaint: {
     title: 'Register Feedback',
     description: 'Submit and track your requests or complaints online.',
     icon: 'fa-hand-point-up',
@@ -150,7 +152,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'take-test-management': {
     title: 'Take Test Management',
-    description: 'Enable/disable test access per candidate mobile number and configure available tests.',
+    description:
+      'Enable/disable test access per candidate mobile number and configure available tests.',
     icon: 'fa-vial',
     buttonColor: 'bg-teal-600 text-white',
     shadow: 'shadow-teal-200',
@@ -180,7 +183,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'syllabus-progress-tracker': {
     title: 'Syllabus Progress',
-    description: 'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
+    description:
+      'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
     icon: 'fa-chart-line',
     buttonColor: 'bg-blue-600 text-white',
     shadow: 'shadow-blue-200',
@@ -189,7 +193,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'my-activity': {
     title: 'My Activity',
-    description: 'Log and monitor your personal daily classroom teaching activity, chapter completion, and topic logs.',
+    description:
+      'Log and monitor your personal daily classroom teaching activity, chapter completion, and topic logs.',
     icon: 'fa-user-clock',
     buttonColor: 'bg-indigo-600 text-white',
     shadow: 'shadow-indigo-200',
@@ -199,7 +204,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'teacher-activity': {
     title: 'Teacher Activity',
-    description: 'Monitor daily classroom teaching activity, chapter completions, and topic logs across all teachers.',
+    description:
+      'Monitor daily classroom teaching activity, chapter completions, and topic logs across all teachers.',
     icon: 'fa-chalkboard-user',
     buttonColor: 'bg-blue-600 text-white',
     shadow: 'shadow-blue-200',
@@ -228,7 +234,7 @@ export const TILE_METADATA_REGISTRY = {
     group: 'Calendar and Schedules',
     action: 'subview',
   },
-  'dashboard': {
+  dashboard: {
     title: 'Dashboard',
     description: 'View syllabus progress, activity, and attention-required insights.',
     icon: 'fa-gauge-high',
@@ -413,7 +419,9 @@ export const resolveGroupInfo = (rawGroupName) => {
   }
 
   // Strip whitespace, carriage returns, and newlines
-  const cleaned = String(rawGroupName).replace(/[\r\n]+/g, ' ').trim();
+  const cleaned = String(rawGroupName)
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
   const lower = cleaned.toLowerCase();
 
   let canonicalKey = cleaned;
@@ -488,5 +496,3 @@ export const resolveGroupInfo = (rawGroupName) => {
     order: 500,
   };
 };
-
-

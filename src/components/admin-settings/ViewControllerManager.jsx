@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
-import {
-  TILE_METADATA_REGISTRY,
-} from '../../utils/tileRegistry';
+import { TILE_METADATA_REGISTRY } from '../../utils/tileRegistry';
 import { invalidateViewConfigCache } from '../../hooks/useViewConfig';
 import ConfirmModal from '../ConfirmModal';
 import Translate from '../Translate';
@@ -52,9 +50,7 @@ const HeaderMultiSelectFilter = ({
             : 'bg-white border-light-border text-dark-muted hover:border-gray-400'
         }`}
       >
-        <span className="truncate">
-          {count === 0 ? placeholder : `${count} selected`}
-        </span>
+        <span className="truncate">{count === 0 ? placeholder : `${count} selected`}</span>
         <i
           className={`fas fa-chevron-down text-[8px] text-gray-400 transition-transform ${
             open ? 'rotate-180' : ''
@@ -108,26 +104,111 @@ const HeaderMultiSelectFilter = ({
 };
 
 const DEFAULT_ROLES = [
-  { id: 'admin', label: 'Admin', color: 'bg-orange-100 text-orange-800 border-orange-200', is_system_role: true },
-  { id: 'management', label: 'Management', color: 'bg-purple-100 text-purple-800 border-purple-200', is_system_role: true },
-  { id: 'teacher', label: 'Teacher', color: 'bg-green-100 text-green-800 border-green-200', is_system_role: true },
-  { id: 'parent', label: 'Parent', color: 'bg-blue-100 text-blue-800 border-blue-200', is_system_role: true },
-  { id: 'staff', label: 'Staff', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', is_system_role: true },
-  { id: 'candidate', label: 'Candidate', color: 'bg-teal-100 text-teal-800 border-teal-200', is_system_role: true },
-  { id: 'guest', label: 'Guest', color: 'bg-gray-100 text-gray-800 border-gray-200', is_system_role: true },
+  {
+    id: 'admin',
+    label: 'Admin',
+    color: 'bg-orange-100 text-orange-800 border-orange-200',
+    is_system_role: true,
+  },
+  {
+    id: 'management',
+    label: 'Management',
+    color: 'bg-purple-100 text-purple-800 border-purple-200',
+    is_system_role: true,
+  },
+  {
+    id: 'teacher',
+    label: 'Teacher',
+    color: 'bg-green-100 text-green-800 border-green-200',
+    is_system_role: true,
+  },
+  {
+    id: 'parent',
+    label: 'Parent',
+    color: 'bg-blue-100 text-blue-800 border-blue-200',
+    is_system_role: true,
+  },
+  {
+    id: 'staff',
+    label: 'Staff',
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    is_system_role: true,
+  },
+  {
+    id: 'candidate',
+    label: 'Candidate',
+    color: 'bg-teal-100 text-teal-800 border-teal-200',
+    is_system_role: true,
+  },
+  {
+    id: 'guest',
+    label: 'Guest',
+    color: 'bg-gray-100 text-gray-800 border-gray-200',
+    is_system_role: true,
+  },
 ];
 
 const PRESET_ROLE_COLORS = [
-  { id: 'purple', label: 'Purple', bg: 'bg-purple-500', pill: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { id: 'indigo', label: 'Indigo', bg: 'bg-indigo-500', pill: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-  { id: 'blue', label: 'Blue', bg: 'bg-blue-500', pill: 'bg-blue-100 text-blue-800 border-blue-200' },
-  { id: 'teal', label: 'Teal', bg: 'bg-teal-500', pill: 'bg-teal-100 text-teal-800 border-teal-200' },
-  { id: 'green', label: 'Green', bg: 'bg-green-500', pill: 'bg-green-100 text-green-800 border-green-200' },
-  { id: 'amber', label: 'Amber', bg: 'bg-amber-500', pill: 'bg-amber-100 text-amber-800 border-amber-200' },
-  { id: 'orange', label: 'Orange', bg: 'bg-orange-500', pill: 'bg-orange-100 text-orange-800 border-orange-200' },
-  { id: 'rose', label: 'Rose', bg: 'bg-rose-500', pill: 'bg-rose-100 text-rose-800 border-rose-200' },
-  { id: 'pink', label: 'Pink', bg: 'bg-pink-500', pill: 'bg-pink-100 text-pink-800 border-pink-200' },
-  { id: 'gray', label: 'Gray', bg: 'bg-gray-500', pill: 'bg-gray-100 text-gray-800 border-gray-200' },
+  {
+    id: 'purple',
+    label: 'Purple',
+    bg: 'bg-purple-500',
+    pill: 'bg-purple-100 text-purple-800 border-purple-200',
+  },
+  {
+    id: 'indigo',
+    label: 'Indigo',
+    bg: 'bg-indigo-500',
+    pill: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  },
+  {
+    id: 'blue',
+    label: 'Blue',
+    bg: 'bg-blue-500',
+    pill: 'bg-blue-100 text-blue-800 border-blue-200',
+  },
+  {
+    id: 'teal',
+    label: 'Teal',
+    bg: 'bg-teal-500',
+    pill: 'bg-teal-100 text-teal-800 border-teal-200',
+  },
+  {
+    id: 'green',
+    label: 'Green',
+    bg: 'bg-green-500',
+    pill: 'bg-green-100 text-green-800 border-green-200',
+  },
+  {
+    id: 'amber',
+    label: 'Amber',
+    bg: 'bg-amber-500',
+    pill: 'bg-amber-100 text-amber-800 border-amber-200',
+  },
+  {
+    id: 'orange',
+    label: 'Orange',
+    bg: 'bg-orange-500',
+    pill: 'bg-orange-100 text-orange-800 border-orange-200',
+  },
+  {
+    id: 'rose',
+    label: 'Rose',
+    bg: 'bg-rose-500',
+    pill: 'bg-rose-100 text-rose-800 border-rose-200',
+  },
+  {
+    id: 'pink',
+    label: 'Pink',
+    bg: 'bg-pink-500',
+    pill: 'bg-pink-100 text-pink-800 border-pink-200',
+  },
+  {
+    id: 'gray',
+    label: 'Gray',
+    bg: 'bg-gray-500',
+    pill: 'bg-gray-100 text-gray-800 border-gray-200',
+  },
 ];
 
 const ROLE_COLOR_MAP = {
@@ -186,13 +267,16 @@ export const ViewControllerManager = () => {
   const [editingItem, setEditingItem] = useState(null); // null = create new
   const [formData, setFormData] = useState({
     component_name: '',
-    component_type: 'tile',
-    group_name: 'admin-only',
+    type: 'tile',
+    display_name: '',
+    parent_name: 'admin-only',
     display_order: 10,
     is_active: true,
     default_access: 'none',
     valid_access_roles: ['admin'],
     description: '',
+    icon: '',
+    theme: '',
   });
 
   // Delete confirm modal
@@ -205,7 +289,8 @@ export const ViewControllerManager = () => {
       const { data, error } = await supabase
         .from('app_view_controller')
         .select('*')
-        .order('display_order', { ascending: true });
+        .order('display_order', { ascending: true })
+        .order('type', { ascending: true });
 
       if (error) throw error;
       setConfigs(data || []);
@@ -227,7 +312,10 @@ export const ViewControllerManager = () => {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.warn('Could not fetch app_roles from Supabase, using default roles:', error.message);
+        console.warn(
+          'Could not fetch app_roles from Supabase, using default roles:',
+          error.message
+        );
         return;
       }
 
@@ -261,7 +349,10 @@ export const ViewControllerManager = () => {
   // Create custom role in app_roles
   const handleCreateRole = async (e) => {
     e.preventDefault();
-    const cleanKey = newRoleForm.role_key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const cleanKey = newRoleForm.role_key
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_');
     const cleanName = newRoleForm.role_name.trim();
 
     if (!cleanKey || !cleanName) {
@@ -284,9 +375,7 @@ export const ViewControllerManager = () => {
         is_system_role: false,
       };
 
-      const { error } = await supabase
-        .from('app_roles')
-        .insert([payload]);
+      const { error } = await supabase.from('app_roles').insert([payload]);
 
       if (error) throw error;
 
@@ -319,10 +408,7 @@ export const ViewControllerManager = () => {
       confirmText: 'Delete Role',
       onConfirm: async () => {
         try {
-          const { error } = await supabase
-            .from('app_roles')
-            .delete()
-            .eq('role_key', roleItem.id);
+          const { error } = await supabase.from('app_roles').delete().eq('role_key', roleItem.id);
 
           if (error) throw error;
           showToast(`Role "${roleItem.label}" deleted.`, 'success');
@@ -354,12 +440,12 @@ export const ViewControllerManager = () => {
   const filteredConfigs = useMemo(() => {
     return configs.filter((item) => {
       // 1. Filter by Types (if any selected)
-      if (selectedTypes.length > 0 && !selectedTypes.includes(item.component_type)) {
+      if (selectedTypes.length > 0 && !selectedTypes.includes(item.type)) {
         return false;
       }
 
       // 2. Filter by Groups (if any selected)
-      if (selectedGroups.length > 0 && !selectedGroups.includes(item.group_name)) {
+      if (selectedGroups.length > 0 && !selectedGroups.includes(item.parent_name)) {
         return false;
       }
 
@@ -378,7 +464,7 @@ export const ViewControllerManager = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
-        const titleMatch = meta.title?.toLowerCase().includes(q);
+        const titleMatch = (item.display_name || meta.title)?.toLowerCase().includes(q);
         const nameMatch = item.component_name?.toLowerCase().includes(q);
         const descMatch = item.description?.toLowerCase().includes(q);
         if (!titleMatch && !nameMatch && !descMatch) return false;
@@ -392,7 +478,7 @@ export const ViewControllerManager = () => {
   const allGroups = useMemo(() => {
     const set = new Set();
     configs.forEach((c) => {
-      if (c.group_name) set.add(c.group_name);
+      if (c.parent_name) set.add(c.parent_name);
     });
     return Array.from(set);
   }, [configs]);
@@ -401,22 +487,17 @@ export const ViewControllerManager = () => {
   const handleToggleActive = async (item) => {
     const nextState = !item.is_active;
     // Optimistic update
-    setConfigs((prev) =>
-      prev.map((c) => (c.id === item.id ? { ...c, is_active: nextState } : c))
-    );
+    setConfigs((prev) => prev.map((c) => (c.id === item.id ? { ...c, is_active: nextState } : c)));
 
     try {
       const { error } = await supabase
         .from('app_view_controller')
-        .update({ is_active: nextState, updated_at: new Date().toISOString() })
+        .update({ is_active: nextState })
         .eq('id', item.id);
 
       if (error) throw error;
       invalidateViewConfigCache();
-      showToast(
-        `"${item.component_name}" is now ${nextState ? 'Active' : 'Hidden'}`,
-        'success'
-      );
+      showToast(`"${item.component_name}" is now ${nextState ? 'Active' : 'Hidden'}`, 'success');
     } catch (err) {
       // Revert optimistic update
       setConfigs((prev) =>
@@ -442,15 +523,12 @@ export const ViewControllerManager = () => {
     try {
       const { error } = await supabase
         .from('app_view_controller')
-        .update({ valid_access_roles: updatedRoles, updated_at: new Date().toISOString() })
+        .update({ valid_access_roles: updatedRoles })
         .eq('id', item.id);
 
       if (error) throw error;
       invalidateViewConfigCache();
-      showToast(
-        `Updated roles for ${item.component_name}`,
-        'success'
-      );
+      showToast(`Updated roles for ${item.component_name}`, 'success');
     } catch (err) {
       setConfigs((prev) =>
         prev.map((c) => (c.id === item.id ? { ...c, valid_access_roles: currentRoles } : c))
@@ -471,26 +549,29 @@ export const ViewControllerManager = () => {
     const targetOrder = targetItem.display_order ?? 0;
 
     const newCurrentOrder = targetOrder;
-    const newTargetOrder = currentOrder === targetOrder ? currentOrder + (direction === 'up' ? 10 : -10) : currentOrder;
+    const newTargetOrder =
+      currentOrder === targetOrder ? currentOrder + (direction === 'up' ? 10 : -10) : currentOrder;
 
     // Optimistic update
     setConfigs((prev) =>
-      prev.map((c) => {
-        if (c.id === currentItem.id) return { ...c, display_order: newCurrentOrder };
-        if (c.id === targetItem.id) return { ...c, display_order: newTargetOrder };
-        return c;
-      }).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+      prev
+        .map((c) => {
+          if (c.id === currentItem.id) return { ...c, display_order: newCurrentOrder };
+          if (c.id === targetItem.id) return { ...c, display_order: newTargetOrder };
+          return c;
+        })
+        .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
     );
 
     try {
       await Promise.all([
         supabase
           .from('app_view_controller')
-          .update({ display_order: newCurrentOrder, updated_at: new Date().toISOString() })
+          .update({ display_order: newCurrentOrder })
           .eq('id', currentItem.id),
         supabase
           .from('app_view_controller')
-          .update({ display_order: newTargetOrder, updated_at: new Date().toISOString() })
+          .update({ display_order: newTargetOrder })
           .eq('id', targetItem.id),
       ]);
       invalidateViewConfigCache();
@@ -506,26 +587,32 @@ export const ViewControllerManager = () => {
       setEditingItem(item);
       setFormData({
         component_name: item.component_name,
-        component_type: item.component_type || 'tile',
-        group_name: item.group_name || 'admin-only',
+        type: item.type || 'tile',
+        display_name: item.display_name || '',
+        parent_name: item.parent_name || 'admin-only',
         display_order: item.display_order ?? 10,
         is_active: item.is_active ?? true,
         default_access: item.default_access || 'none',
         valid_access_roles: item.valid_access_roles || [],
         description: item.description || '',
+        icon: item.icon || '',
+        theme: item.theme || '',
       });
     } else {
       setEditingItem(null);
       const maxOrder = configs.reduce((max, c) => Math.max(max, c.display_order || 0), 0);
       setFormData({
         component_name: '',
-        component_type: 'tile',
-        group_name: 'admin-only',
+        type: 'tile',
+        display_name: '',
+        parent_name: 'admin-only',
         display_order: maxOrder + 10,
         is_active: true,
         default_access: 'none',
         valid_access_roles: ['admin'],
         description: '',
+        icon: '',
+        theme: '',
       });
     }
     setIsModalOpen(true);
@@ -544,14 +631,16 @@ export const ViewControllerManager = () => {
     try {
       const payload = {
         component_name: cleanName,
-        component_type: formData.component_type,
-        group_name: formData.group_name.trim() || 'general',
+        type: formData.type,
+        display_name: formData.display_name.trim() || null,
+        parent_name: formData.parent_name.trim() || 'general',
         display_order: Number(formData.display_order) || 0,
         is_active: Boolean(formData.is_active),
         default_access: formData.default_access,
         valid_access_roles: formData.valid_access_roles,
         description: formData.description.trim() || null,
-        updated_at: new Date().toISOString(),
+        icon: formData.icon.trim() || null,
+        theme: formData.theme.trim() || null,
       };
 
       if (editingItem) {
@@ -562,9 +651,7 @@ export const ViewControllerManager = () => {
         if (error) throw error;
         showToast(`Component "${cleanName}" updated.`, 'success');
       } else {
-        const { error } = await supabase
-          .from('app_view_controller')
-          .insert(payload);
+        const { error } = await supabase.from('app_view_controller').insert(payload);
         if (error) throw error;
         showToast(`Component "${cleanName}" created.`, 'success');
       }
@@ -589,10 +676,7 @@ export const ViewControllerManager = () => {
       onConfirm: async () => {
         setConfirmConfig(null);
         try {
-          const { error } = await supabase
-            .from('app_view_controller')
-            .delete()
-            .eq('id', item.id);
+          const { error } = await supabase.from('app_view_controller').delete().eq('id', item.id);
           if (error) throw error;
           showToast(`Deleted "${item.component_name}".`, 'success');
           invalidateViewConfigCache();
@@ -612,7 +696,7 @@ export const ViewControllerManager = () => {
         const cleanOrder = (i + 1) * 10;
         return supabase
           .from('app_view_controller')
-          .update({ display_order: cleanOrder, updated_at: new Date().toISOString() })
+          .update({ display_order: cleanOrder })
           .eq('id', cfg.id);
       });
       await Promise.all(updates);
@@ -631,11 +715,15 @@ export const ViewControllerManager = () => {
     if (!simulatorRole) return [];
     return configs
       .filter((c) => {
-        if (!c.is_active || c.component_type !== 'tile') return false;
+        if (!c.is_active || c.type !== 'tile') return false;
         if (c.default_access === 'all') return true;
         return (c.valid_access_roles || []).includes(simulatorRole);
       })
-      .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+      .sort(
+        (a, b) =>
+          (a.display_order ?? 0) - (b.display_order ?? 0) ||
+          (a.type || '').localeCompare(b.type || '')
+      );
   }, [configs, simulatorRole]);
 
   return (
@@ -748,10 +836,16 @@ export const ViewControllerManager = () => {
           {/* Miniature simulator grid */}
           <div>
             <p className="text-xs font-semibold text-purple-300 mb-2">
-              Visible Tiles for <span className="font-extrabold text-amber-300 uppercase tracking-wide">[{simulatorRole}]</span> ({simulatedTiles.length} tiles):
+              Visible Tiles for{' '}
+              <span className="font-extrabold text-amber-300 uppercase tracking-wide">
+                [{simulatorRole}]
+              </span>{' '}
+              ({simulatedTiles.length} tiles):
             </p>
             {simulatedTiles.length === 0 ? (
-              <p className="text-xs text-purple-300 py-4 text-center">No tiles currently permitted for this role.</p>
+              <p className="text-xs text-purple-300 py-4 text-center">
+                No tiles currently permitted for this role.
+              </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                 {simulatedTiles.map((tile) => {
@@ -762,11 +856,11 @@ export const ViewControllerManager = () => {
                       className="bg-white/10 backdrop-blur-md rounded-xl p-2.5 border border-white/15 flex items-center gap-2.5 relative overflow-hidden"
                     >
                       <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center text-xs shrink-0">
-                        <i className={`fas ${meta.icon || 'fa-cubes'}`}></i>
+                        <i className={`fas ${tile.icon || meta.icon || 'fa-cubes'}`}></i>
                       </div>
                       <div className="overflow-hidden">
                         <p className="font-bold text-xs truncate text-white">
-                          {meta.title || tile.component_name}
+                          {tile.display_name || meta.title || tile.component_name}
                         </p>
                         <p className="text-[10px] text-purple-300 font-mono">
                           Order: {tile.display_order}
@@ -911,7 +1005,9 @@ export const ViewControllerManager = () => {
                     <td colSpan="7" className="py-16 text-center text-dark-muted text-xs">
                       <i className="fas fa-search text-2xl mb-2 text-gray-300 block"></i>
                       <p className="font-bold text-dark-deepblue">No matching components found</p>
-                      <p className="mt-1 text-gray-400">Try clearing or adjusting your column filters.</p>
+                      <p className="mt-1 text-gray-400">
+                        Try clearing or adjusting your column filters.
+                      </p>
                       {hasActiveFilters && (
                         <button
                           type="button"
@@ -925,143 +1021,146 @@ export const ViewControllerManager = () => {
                   </tr>
                 ) : (
                   filteredConfigs.map((item, index) => {
-                  const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`border-b border-light-border/40 hover:bg-purple-50/30 transition-colors ${
-                        !item.is_active ? 'opacity-60 bg-gray-50/50' : ''
-                      }`}
-                    >
-                      {/* Order + Up/Down arrows */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="font-mono font-bold text-dark-deepblue w-6 text-center">
-                            {item.display_order ?? 0}
-                          </span>
-                          <div className="flex flex-col gap-0.5">
-                            <button
-                              onClick={() => handleMoveOrder(index, 'up')}
-                              disabled={index === 0}
-                              className="text-gray-400 hover:text-purple-600 disabled:opacity-20 leading-none text-[10px]"
-                              title="Move Up"
-                            >
-                              ▲
-                            </button>
-                            <button
-                              onClick={() => handleMoveOrder(index, 'down')}
-                              disabled={index === filteredConfigs.length - 1}
-                              className="text-gray-400 hover:text-purple-600 disabled:opacity-20 leading-none text-[10px]"
-                              title="Move Down"
-                            >
-                              ▼
-                            </button>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Component preview & Title */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shadow-sm shrink-0 ${
-                              meta.buttonColor || 'bg-purple-600 text-white'
-                            }`}
-                          >
-                            <i className={`fas ${meta.icon || 'fa-cubes'}`}></i>
-                          </div>
-                          <div className="max-w-xs">
-                            <p className="font-bold text-dark-deepblue text-xs leading-tight">
-                              {meta.title || item.component_name}
-                            </p>
-                            <p className="font-mono text-[10px] text-purple-700 truncate mt-0.5">
-                              {item.component_name}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Component Type */}
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold text-[10px] uppercase">
-                          {item.component_type}
-                        </span>
-                      </td>
-
-                      {/* Group */}
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-dark-muted font-medium text-[11px]">
-                          {item.group_name || 'general'}
-                        </span>
-                      </td>
-
-                      {/* Access roles with instant in-place toggle */}
-                      <td className="py-3 px-4">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {roles.map((r) => {
-                            const isGranted = (item.valid_access_roles || []).includes(r.id);
-                            return (
+                    const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
+                    return (
+                      <tr
+                        key={item.id}
+                        className={`border-b border-light-border/40 hover:bg-purple-50/30 transition-colors ${
+                          !item.is_active ? 'opacity-60 bg-gray-50/50' : ''
+                        }`}
+                      >
+                        {/* Order + Up/Down arrows */}
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="font-mono font-bold text-dark-deepblue w-6 text-center">
+                              {item.display_order ?? 0}
+                            </span>
+                            <div className="flex flex-col gap-0.5">
                               <button
-                                key={r.id}
-                                onClick={() => handleToggleRolePermission(item, r.id)}
-                                title={`Click to ${isGranted ? 'revoke' : 'grant'} ${r.label}`}
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
-                                  isGranted
-                                    ? r.color + ' shadow-xs'
-                                    : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
-                                }`}
+                                onClick={() => handleMoveOrder(index, 'up')}
+                                disabled={index === 0}
+                                className="text-gray-400 hover:text-purple-600 disabled:opacity-20 leading-none text-[10px]"
+                                title="Move Up"
                               >
-                                {isGranted ? (
-                                  <i className="fas fa-check mr-1 text-[8px]"></i>
-                                ) : (
-                                  <i className="fas fa-plus mr-1 text-[8px] opacity-40"></i>
-                                )}
-                                {r.label}
+                                ▲
                               </button>
-                            );
-                          })}
-                        </div>
-                      </td>
+                              <button
+                                onClick={() => handleMoveOrder(index, 'down')}
+                                disabled={index === filteredConfigs.length - 1}
+                                className="text-gray-400 hover:text-purple-600 disabled:opacity-20 leading-none text-[10px]"
+                                title="Move Down"
+                              >
+                                ▼
+                              </button>
+                            </div>
+                          </div>
+                        </td>
 
-                      {/* Active switch */}
-                      <td className="py-3 px-3 text-center">
-                        <button
-                          onClick={() => handleToggleActive(item)}
-                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            item.is_active ? 'bg-green-500' : 'bg-gray-300'
-                          }`}
-                          title={item.is_active ? 'Click to hide/deactivate' : 'Click to activate'}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                              item.is_active ? 'translate-x-4' : 'translate-x-0'
+                        {/* Component preview & Title */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shadow-sm shrink-0 ${
+                                item.theme || meta.buttonColor || 'bg-purple-600 text-white'
+                              }`}
+                            >
+                              <i className={`fas ${item.icon || meta.icon || 'fa-cubes'}`}></i>
+                            </div>
+                            <div className="max-w-xs">
+                              <p className="font-bold text-dark-deepblue text-xs leading-tight">
+                                {item.display_name || meta.title || item.component_name}
+                              </p>
+                              <p className="font-mono text-[10px] text-purple-700 truncate mt-0.5">
+                                {item.component_name}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Component Type */}
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold text-[10px] uppercase">
+                            {item.type}
+                          </span>
+                        </td>
+
+                        {/* Group */}
+                        <td className="py-3 px-3">
+                          <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-dark-muted font-medium text-[11px]">
+                            {item.parent_name || 'general'}
+                          </span>
+                        </td>
+
+                        {/* Access roles with instant in-place toggle */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {roles.map((r) => {
+                              const isGranted = (item.valid_access_roles || []).includes(r.id);
+                              return (
+                                <button
+                                  key={r.id}
+                                  onClick={() => handleToggleRolePermission(item, r.id)}
+                                  title={`Click to ${isGranted ? 'revoke' : 'grant'} ${r.label}`}
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                                    isGranted
+                                      ? r.color + ' shadow-xs'
+                                      : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400'
+                                  }`}
+                                >
+                                  {isGranted ? (
+                                    <i className="fas fa-check mr-1 text-[8px]"></i>
+                                  ) : (
+                                    <i className="fas fa-plus mr-1 text-[8px] opacity-40"></i>
+                                  )}
+                                  {r.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </td>
+
+                        {/* Active switch */}
+                        <td className="py-3 px-3 text-center">
+                          <button
+                            onClick={() => handleToggleActive(item)}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              item.is_active ? 'bg-green-500' : 'bg-gray-300'
                             }`}
-                          />
-                        </button>
-                      </td>
+                            title={
+                              item.is_active ? 'Click to hide/deactivate' : 'Click to activate'
+                            }
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                item.is_active ? 'translate-x-4' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </td>
 
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center justify-center transition-colors"
-                            title="Edit Component Details"
-                          >
-                            <i className="fas fa-pencil-alt text-xs"></i>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteComponent(item)}
-                            className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors"
-                            title="Delete Component"
-                          >
-                            <i className="fas fa-trash text-xs"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }))}
+                        {/* Actions */}
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditModal(item)}
+                              className="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 flex items-center justify-center transition-colors"
+                              title="Edit Component Details"
+                            >
+                              <i className="fas fa-pencil-alt text-xs"></i>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteComponent(item)}
+                              className="w-7 h-7 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 flex items-center justify-center transition-colors"
+                              title="Delete Component"
+                            >
+                              <i className="fas fa-trash text-xs"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -1102,12 +1201,10 @@ export const ViewControllerManager = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-dark-deepblue mb-1">
-                    Component Type
-                  </label>
+                  <label className="block text-xs font-bold text-dark-deepblue mb-1">Type</label>
                   <select
-                    value={formData.component_type}
-                    onChange={(e) => setFormData({ ...formData, component_type: e.target.value })}
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                     className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs bg-white focus:outline-none focus:border-purple-500"
                   >
                     {COMPONENT_TYPES.map((t) => (
@@ -1134,12 +1231,12 @@ export const ViewControllerManager = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-dark-deepblue mb-1">
-                    Group Name
+                    Parent Name
                   </label>
                   <input
                     type="text"
-                    value={formData.group_name}
-                    onChange={(e) => setFormData({ ...formData, group_name: e.target.value })}
+                    value={formData.parent_name}
+                    onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
                     placeholder="e.g. timetable, syllabus"
                     className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs focus:outline-none focus:border-purple-500"
                   />
@@ -1157,6 +1254,43 @@ export const ViewControllerManager = () => {
                     <option value="none">None (Roles Required)</option>
                     <option value="all">All (Public / All Roles)</option>
                   </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-dark-deepblue mb-1">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.display_name}
+                  onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                  placeholder="Label shown on the tile"
+                  className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-dark-deepblue mb-1">Icon</label>
+                  <input
+                    type="text"
+                    value={formData.icon}
+                    onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                    placeholder="e.g. fa-users"
+                    className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs font-mono focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-dark-deepblue mb-1">Theme</label>
+                  <input
+                    type="text"
+                    value={formData.theme}
+                    onChange={(e) => setFormData({ ...formData, theme: e.target.value })}
+                    placeholder="e.g. bg-blue-600 text-white"
+                    className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs font-mono focus:outline-none focus:border-purple-500"
+                  />
                 </div>
               </div>
 
@@ -1185,7 +1319,9 @@ export const ViewControllerManager = () => {
                             : 'bg-white text-dark-muted border-light-border hover:border-purple-300'
                         }`}
                       >
-                        <i className={`fas ${isSelected ? 'fa-check-circle' : 'fa-circle'} mr-1.5`}></i>
+                        <i
+                          className={`fas ${isSelected ? 'fa-check-circle' : 'fa-circle'} mr-1.5`}
+                        ></i>
                         {r.label}
                       </button>
                     );
@@ -1255,7 +1391,8 @@ export const ViewControllerManager = () => {
                   <h3 className="text-lg font-black text-dark-deepblue">Role Management</h3>
                 </div>
                 <p className="text-xs text-dark-muted mt-1">
-                  Manage existing user roles and configure new custom roles for view controller access control
+                  Manage existing user roles and configure new custom roles for view controller
+                  access control
                 </p>
               </div>
               <button
@@ -1287,7 +1424,9 @@ export const ViewControllerManager = () => {
                   >
                     <div className="space-y-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${r.color}`}>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${r.color}`}
+                        >
                           {r.label}
                         </span>
                         {r.is_system_role ? (
@@ -1304,7 +1443,9 @@ export const ViewControllerManager = () => {
                         key: <span className="font-bold text-dark-deepblue">{r.id}</span>
                       </p>
                       {r.description && (
-                        <p className="text-[11px] text-dark-muted/80 line-clamp-1">{r.description}</p>
+                        <p className="text-[11px] text-dark-muted/80 line-clamp-1">
+                          {r.description}
+                        </p>
                       )}
                     </div>
 
@@ -1331,7 +1472,10 @@ export const ViewControllerManager = () => {
                 </h4>
               </div>
 
-              <form onSubmit={handleCreateRole} className="space-y-4 bg-purple-50/40 p-4 rounded-2xl border border-purple-100">
+              <form
+                onSubmit={handleCreateRole}
+                className="space-y-4 bg-purple-50/40 p-4 rounded-2xl border border-purple-100"
+              >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-dark-deepblue mb-1">
@@ -1359,7 +1503,9 @@ export const ViewControllerManager = () => {
                     <input
                       type="text"
                       value={newRoleForm.role_name}
-                      onChange={(e) => setNewRoleForm({ ...newRoleForm, role_name: e.target.value })}
+                      onChange={(e) =>
+                        setNewRoleForm({ ...newRoleForm, role_name: e.target.value })
+                      }
                       placeholder="e.g. Librarian, Academic Coordinator"
                       className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs bg-white focus:outline-none focus:border-purple-500"
                       required
@@ -1374,7 +1520,9 @@ export const ViewControllerManager = () => {
                   <input
                     type="text"
                     value={newRoleForm.description}
-                    onChange={(e) => setNewRoleForm({ ...newRoleForm, description: e.target.value })}
+                    onChange={(e) =>
+                      setNewRoleForm({ ...newRoleForm, description: e.target.value })
+                    }
                     placeholder="Briefly describe the responsibilities or permissions of this role..."
                     className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs bg-white focus:outline-none focus:border-purple-500"
                   />
