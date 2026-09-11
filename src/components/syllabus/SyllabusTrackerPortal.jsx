@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { supabase, fetchAllPages } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
@@ -12,9 +12,10 @@ import AddWorkModalCompleteView from './lesson-manager/AddWorkModalCompleteView'
 import AddWorkExceptionsModal from './AddWorkExceptionsModal';
 import LessonManager from './lesson-manager/LessonManager';
 import UpcomingLessonsGrid from './UpcomingLessonsGrid';
-import SyllabusOverviewDashboard from './SyllabusOverviewDashboard';
-
 import SyllabusTeacherAdherence from './SyllabusTeacherAdherence';
+import SyllabusOverviewDashboard from './SyllabusOverviewDashboard';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
+
 let syllabusTrackerPortalCache = {
   data: null,
   loadingPromise: null,
@@ -332,7 +333,20 @@ const UpcomingDateRangePicker = ({
   );
 };
 
-const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOnly = false }) => {
+const SyllabusTrackerPortal = ({
+  role,
+  user,
+  student,
+  teacherRecord,
+  dashboardOnly = false,
+  userRoles = [],
+  initialTab = null,
+  singleTab = null,
+}) => {
+  const effectiveRoles =
+    Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
+  const canAccess = useCanAccess(effectiveRoles);
+
   const [loading, setLoading] = useState(true);
 
   // Reference data lists
@@ -358,10 +372,20 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
 
   // Active Tab
   const [activeTab, setActiveTab] = useState(() => {
-    if (role === 'parent') return 'two-weeks-class';
-    if (role === 'teacher') return 'upcoming-lessons';
-    return 'teacher-activity';
+    if (singleTab) return singleTab;
+    if (initialTab) return initialTab;
+    if (effectiveRoles.includes('parent') && effectiveRoles.length === 1) return 'two-weeks-class';
+    if (effectiveRoles.includes('teacher')) return 'my-activity';
+    return 'syllabus-progress';
   });
+
+  useEffect(() => {
+    if (singleTab) {
+      setActiveTab(singleTab);
+    } else if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [singleTab, initialTab]);
 
   // Shared teacher filters used by Lesson Planner tab
   const [lpShowAllClasses, setLpShowAllClasses] = useState(false);
@@ -748,7 +772,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   // ─── Initialize Teacher Specific Record & Favorites ───
   useEffect(() => {
     const initTeacher = async () => {
-      if (role !== 'teacher' || !user?.id) return;
+      if (!effectiveRoles.includes('teacher') || !user?.id) return;
       const teacherKey = `${user.id}-${teacherRecord?.id || ''}`;
       if (teacherInitDoneRef.current === teacherKey && teacher) return;
 
@@ -778,7 +802,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       }
     };
     initTeacher();
-  }, [role, user?.id, teacherRecord?.id]);
+  }, [effectiveRoles, user?.id, teacherRecord?.id]);
 
   useEffect(() => {
     loadData();
@@ -800,6 +824,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   const fetchDailyEntries = useCallback(
     async (options = {}) => {
       const force = options?.force === true;
+      const targetTab = options?.tab || activeTab;
       const now = Date.now();
       if (!force && now - lastDailyFetchTimeRef.current < 3000) {
         return;
@@ -812,8 +837,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         let startBound = null;
         let endBound = null;
 
-        if (role === 'parent') {
-          if (activeTab === 'two-weeks-class') {
+        if (role === 'parent' || targetTab === 'two-weeks-class') {
+          if (targetTab === 'two-weeks-class') {
             startBound = getLocalDateStr(14);
             endBound = getLocalDateStr(0);
           }
@@ -861,7 +886,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             return;
           }
           query = query.in('progress_id', progressIds);
-        } else if (role === 'teacher') {
+        } else if (targetTab === 'my-activity') {
+          // My Activity: ALWAYS filter to the currently logged in person/teacher!
           const currentTeacherId =
             teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
           if (!currentTeacherId) {
@@ -870,6 +896,14 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             return;
           }
           query = query.eq('teacher_id', currentTeacherId);
+        } else if (targetTab === 'teacher-activity') {
+          // Teacher Activity: displays the activity of ALL the teachers (no single teacher_id filter)
+        } else if (role === 'teacher') {
+          const currentTeacherId =
+            teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
+          if (currentTeacherId) {
+            query = query.eq('teacher_id', currentTeacherId);
+          }
         }
 
         if (startBound && endBound) {
@@ -1057,8 +1091,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
   // ─── Fetch Daily Entries on Tab Selection ───
   useEffect(() => {
     if (dashboardOnly) return;
-    if (activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') {
-      fetchDailyEntries();
+    if (activeTab === 'teacher-activity' || activeTab === 'my-activity' || activeTab === 'two-weeks-class') {
+      fetchDailyEntries({ force: true, tab: activeTab });
     }
   }, [dashboardOnly, activeTab, fetchDailyEntries]);
 
@@ -1249,8 +1283,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
 
   const handleTabChange = async (tabKey) => {
     setActiveTab(tabKey);
-    if (tabKey === 'teacher-activity' || tabKey === 'two-weeks-class') {
-      await fetchDailyEntries();
+    if (tabKey === 'teacher-activity' || tabKey === 'my-activity' || tabKey === 'two-weeks-class') {
+      await fetchDailyEntries({ force: true, tab: tabKey });
     } else if (role === 'teacher' && tabKey === 'syllabus-progress') {
       await fetchTeacherProgressData();
       setProgressExpandedBook(null);
@@ -1262,7 +1296,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
     syllabusTrackerPortalCache.data = null;
     syllabusTrackerPortalCache.loadingPromise = null;
     await loadData();
-    await fetchDailyEntries();
+    await fetchDailyEntries({ force: true, tab: activeTab });
     if (role === 'teacher') {
       await fetchTeacherProgressData();
     }
@@ -1296,7 +1330,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
 
     return dailyEntries.filter((entry) => {
-      if (role === 'teacher' && currentTeacherId) {
+      if (activeTab === 'my-activity' && currentTeacherId) {
         if (String(entry.teacher_id) !== String(currentTeacherId)) {
           return false;
         }
@@ -1748,6 +1782,89 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
     };
   }, [lpFilterBookId, allLessons]);
 
+  const currentTabs = useMemo(() => {
+    if (singleTab) {
+      if (singleTab === 'teacher-activity') {
+        return [
+          {
+            key: 'teacher-activity',
+            componentName: 'syl-tab-teacher-activity',
+            label: 'Teacher Activity',
+            shortLabel: 'Teacher Activity',
+            icon: 'fa-chalkboard-user',
+          },
+        ];
+      }
+      return [
+        {
+          key: singleTab,
+          componentName: `syl-tab-${singleTab}`,
+          label: singleTab.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          shortLabel: singleTab,
+          icon: 'fa-circle-dot',
+        },
+      ];
+    }
+
+    const isTeacherUser = effectiveRoles.includes('teacher');
+
+    const ALL_TRACKER_TABS = [
+      ...(isTeacherUser
+        ? [
+            {
+              key: 'my-activity',
+              componentName: 'syl-tab-my-activity',
+              label: 'My Activity',
+              shortLabel: 'My Activity',
+              icon: 'fa-user-clock',
+            },
+          ]
+        : []),
+      // Note: Teacher Activity is removed from syllabus progress tracker per Requirement 5
+      {
+        key: 'syllabus-progress',
+        componentName: 'syl-tab-syllabus-progress',
+        label: 'Syllabus Progress',
+        shortLabel: 'Progress',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'upcoming-lessons',
+        componentName: 'syl-tab-upcoming-lessons',
+        label: 'Upcoming Lessons',
+        shortLabel: 'Upcoming',
+        icon: 'fa-calendar-alt',
+      },
+      {
+        key: 'teacher-adherence',
+        componentName: 'syl-tab-teacher-adherence',
+        label: 'Planning Adherence',
+        shortLabel: 'Adherence',
+        icon: 'fa-clipboard-check',
+      },
+      {
+        key: 'two-weeks-class',
+        componentName: 'syl-tab-parent-recent',
+        label: 'Last 2 Weeks Classes',
+        shortLabel: '2 Weeks',
+        icon: 'fa-calendar-week',
+      },
+    ];
+
+    return ALL_TRACKER_TABS.filter((tab) => {
+      if (effectiveRoles.includes('parent') && effectiveRoles.length === 1) {
+        return tab.key === 'two-weeks-class' || tab.key === 'syllabus-progress';
+      }
+      return canAccess(tab.componentName);
+    });
+  }, [canAccess, effectiveRoles, singleTab]);
+
+  useEffect(() => {
+    if (currentTabs.length > 0 && !currentTabs.some((t) => t.key === activeTab)) {
+      setActiveTab(currentTabs[0].key);
+    }
+  }, [currentTabs, activeTab]);
+
   if (loading) {
     return (
       <div className="p-8 text-center bg-light-bg min-h-screen flex items-center justify-center font-bold text-dark-primary">
@@ -1756,109 +1873,6 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
       </div>
     );
   }
-
-  const roleTabs = {
-    parent: [
-      {
-        key: 'two-weeks-class',
-        label: 'Last 2 Weeks Classes',
-        shortLabel: '2 Weeks',
-        icon: 'fa-calendar-week',
-      },
-      {
-        key: 'syllabus-progress',
-        label: 'Syllabus Progress',
-        shortLabel: 'Progress',
-        icon: 'fa-chart-pie',
-      },
-      {
-        key: 'upcoming-lessons',
-        label: 'Upcoming Lessons',
-        shortLabel: 'Upcoming',
-        icon: 'fa-calendar-alt',
-      },
-    ],
-    teacher: [
-      {
-        key: 'lesson-planner',
-        label: 'Lesson Planner',
-        shortLabel: 'Planner',
-        icon: 'fa-calendar-check',
-      },
-      {
-        key: 'syllabus-progress',
-        label: 'Syllabus Progress',
-        shortLabel: 'Progress',
-        icon: 'fa-chart-pie',
-      },
-      {
-        key: 'upcoming-lessons',
-        label: 'Upcoming Lessons',
-        shortLabel: 'Upcoming',
-        icon: 'fa-calendar-alt',
-      },
-      {
-        key: 'teacher-activity',
-        label: 'My Activity',
-        shortLabel: 'Activity',
-        icon: 'fa-list-check',
-      },
-    ],
-    admin: [
-      {
-        key: 'teacher-activity',
-        label: 'Teacher Activity',
-        shortLabel: 'Activity',
-        icon: 'fa-list-check',
-      },
-      {
-        key: 'syllabus-progress',
-        label: 'Syllabus Progress',
-        shortLabel: 'Progress',
-        icon: 'fa-chart-pie',
-      },
-      {
-        key: 'upcoming-lessons',
-        label: 'Upcoming Lessons',
-        shortLabel: 'Upcoming',
-        icon: 'fa-calendar-alt',
-      },
-      {
-        key: 'teacher-adherence',
-        label: 'Planning Adherence',
-        shortLabel: 'Adherence',
-        icon: 'fa-clipboard-check',
-      },
-    ],
-    management: [
-      {
-        key: 'teacher-activity',
-        label: 'Teacher Activity',
-        shortLabel: 'Activity',
-        icon: 'fa-list-check',
-      },
-      {
-        key: 'syllabus-progress',
-        label: 'Syllabus Progress',
-        shortLabel: 'Progress',
-        icon: 'fa-chart-pie',
-      },
-      {
-        key: 'upcoming-lessons',
-        label: 'Upcoming Lessons',
-        shortLabel: 'Upcoming',
-        icon: 'fa-calendar-alt',
-      },
-      {
-        key: 'teacher-adherence',
-        label: 'Planning Adherence',
-        shortLabel: 'Adherence',
-        icon: 'fa-clipboard-check',
-      },
-    ],
-  };
-
-  const currentTabs = roleTabs[role] || roleTabs.admin;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
@@ -1872,25 +1886,38 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
               className="flex gap-4 items-center flex-wrap w-full sm:w-auto"
               data-feature="navigation-tabs"
             >
-              <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
-                {currentTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    onClick={() => handleTabChange(tab.key)}
-                    className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
-                      activeTab === tab.key
-                        ? 'bg-brand-primary text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                    }`}
-                  >
-                    <i className={`fas ${tab.icon} text-[10px] sm:text-xs`}></i>
-                    <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
-                    <span className="hidden sm:inline">{tab.label}</span>
-                  </button>
-                ))}
-              </div>
+              {!singleTab && currentTabs.length > 1 && (
+                <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+                  {currentTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => handleTabChange(tab.key)}
+                      className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
+                        activeTab === tab.key
+                          ? 'bg-brand-primary text-white shadow-sm'
+                          : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                      }`}
+                    >
+                      <i className={`fas ${tab.icon} text-[10px] sm:text-xs`}></i>
+                      <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
+                      <span className="hidden sm:inline">{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-              {role !== 'parent' && activeTab === 'teacher-activity' && (
+              {singleTab && (
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-xs">
+                    <i className="fas fa-chalkboard-user text-sm"></i>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-dark-primary tracking-tight">
+                    Teacher Activity
+                  </h2>
+                </div>
+              )}
+
+              {role !== 'parent' && (activeTab === 'teacher-activity' || activeTab === 'my-activity') && (
                 <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
                   Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
                 </span>
@@ -1903,10 +1930,10 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
             </div>
 
             {/* Inline Daily Activity Filters */}
-            {(activeTab === 'teacher-activity' || activeTab === 'two-weeks-class') && (
+            {(activeTab === 'teacher-activity' || activeTab === 'my-activity' || activeTab === 'two-weeks-class') && (
               <div
                 className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
-                data-feature-filter="teacher-activity"
+                data-feature-filter={activeTab}
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
                   {role !== 'parent' && (
@@ -1935,27 +1962,29 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                     selected={filterBooks}
                     onChange={setFilterBooks}
                   />
-                  {role !== 'parent' && role !== 'teacher' && (
-                    <MultiSelectDropdown
-                      label=""
-                      placeholder="Teacher"
-                      options={teachers.map((t) => {
-                        const isFemale =
-                          t.is_female === true || t.gender === 'female' || t.is_male === false;
-                        return {
-                          id: String(t.id || t.teacher_id),
-                          label: t.name || t.full_name || t.employee_name,
-                          is_male: t.is_male,
-                          is_female: isFemale,
-                          prefix: isFemale ? 'fa-female' : 'fa-male',
-                          prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
-                        };
-                      })}
-                      selected={filterTeachers}
-                      onChange={setFilterTeachers}
-                      genderFilter={teacherGenderFilter}
-                      onGenderChange={setTeacherGenderFilter}
-                    />
+                  {activeTab === 'teacher-activity' && (
+                    <ConditionalBlock name="syl-teacher-filter" roles={effectiveRoles}>
+                      <MultiSelectDropdown
+                        label=""
+                        placeholder="Teacher"
+                        options={teachers.map((t) => {
+                          const isFemale =
+                            t.is_female === true || t.gender === 'female' || t.is_male === false;
+                          return {
+                            id: String(t.id || t.teacher_id),
+                            label: t.name || t.full_name || t.employee_name,
+                            is_male: t.is_male,
+                            is_female: isFemale,
+                            prefix: isFemale ? 'fa-female' : 'fa-male',
+                            prefixStyle: { color: isFemale ? '#F472B6' : '#3B82F6' },
+                          };
+                        })}
+                        selected={filterTeachers}
+                        onChange={setFilterTeachers}
+                        genderFilter={teacherGenderFilter}
+                        onGenderChange={setTeacherGenderFilter}
+                      />
+                    </ConditionalBlock>
                   )}
                   <select
                     value={filterStatus}
@@ -2008,9 +2037,9 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                   </button>
 
                   {/* Time Sort Filter integrated inside the grid on mobile, floats to sm:ml-auto on desktop */}
-                  {activeTab === 'teacher-activity' && (
+                  {(activeTab === 'teacher-activity' || activeTab === 'my-activity') && (
                     <FeatureSortDropdown
-                      featureName="teacher-activity"
+                      featureName={activeTab}
                       value={timeFilter}
                       onChange={setTimeFilter}
                       className="col-span-1 sm:ml-auto"
@@ -2056,7 +2085,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                 </div>
 
                 {/* Custom range date inputs if active */}
-                {activeTab === 'teacher-activity' && timeFilter === 'range' && (
+                {(activeTab === 'teacher-activity' || activeTab === 'my-activity') && timeFilter === 'range' && (
                   <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 md:mt-0">
                     <input
                       type="date"
@@ -2100,117 +2129,6 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                     )}
                   </div>
                 )}
-              </div>
-            )}
-
-            {activeTab === 'lesson-planner' && role === 'teacher' && (
-              <div
-                className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
-                data-feature-filter="lesson-planner"
-              >
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
-                  <select
-                    value={lpFilterClassId}
-                    onChange={(e) => {
-                      setLpFilterClassId(e.target.value);
-                      setLpFilterClassificationId('');
-                      setLpFilterSubjectId('');
-                      setLpFilterBookId('');
-                    }}
-                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600"
-                  >
-                    <option value="">Class</option>
-                    {lpAvailableClasses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name || c.class_name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={lpFilterClassificationId}
-                    onChange={(e) => {
-                      setLpFilterClassificationId(e.target.value);
-                      setLpFilterSubjectId('');
-                      setLpFilterBookId('');
-                    }}
-                    disabled={!lpFilterClassId || lpAvailableClassifications.length === 0}
-                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
-                  >
-                    <option value="">Classification</option>
-                    {lpAvailableClassifications.map((cl) => (
-                      <option key={cl.id} value={cl.id}>
-                        {cl.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={lpFilterSubjectId}
-                    onChange={(e) => {
-                      setLpFilterSubjectId(e.target.value);
-                      setLpFilterBookId('');
-                    }}
-                    disabled={!lpFilterClassId}
-                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
-                  >
-                    <option value="">Subject</option>
-                    {lpVisibleSubjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={lpFilterBookId}
-                    onChange={(e) => setLpFilterBookId(e.target.value)}
-                    disabled={!lpFilterSubjectId}
-                    className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-gray-600 disabled:opacity-50"
-                  >
-                    <option value="">Book</option>
-                    {lpAvailableBooks.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setLpShowAllClasses((prev) => !prev)}
-                    title={lpShowAllClasses ? 'Show All Classes' : 'Show My Classes Only'}
-                    aria-label="Show All Classes"
-                    className={`h-9 sm:h-8 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer items-center justify-center gap-1.5 select-none w-full sm:w-auto active:scale-95 flex ${
-                      lpShowAllClasses
-                        ? 'bg-white text-gray-600 border-gray-250 hover:bg-gray-50'
-                        : 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-300/40'
-                    }`}
-                  >
-                    <i
-                      className={`fas fa-user-check text-xs ${
-                        lpShowAllClasses ? 'text-gray-600' : 'text-white'
-                      }`}
-                    ></i>
-                    <span>Mine Only</span>
-                  </button>
-
-                  {(lpFilterClassId ||
-                    lpFilterClassificationId ||
-                    lpFilterSubjectId ||
-                    lpFilterBookId) && (
-                    <button
-                      onClick={() => {
-                        setLpFilterClassId('');
-                        setLpFilterClassificationId('');
-                        setLpFilterSubjectId('');
-                        setLpFilterBookId('');
-                      }}
-                      className="w-full sm:w-auto border border-gray-250 px-2.5 py-1.5 sm:py-1 rounded-xl font-bold text-xs outline-none focus:ring-1 focus:ring-brand-primary bg-white h-9 sm:h-8 cursor-pointer text-red-600 disabled:opacity-50"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
               </div>
             )}
 
@@ -2260,7 +2178,7 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       setProgressExpandedClass(null);
                     }}
                   />
-                  {(role === 'admin' || role === 'management') && (
+                  <ConditionalBlock name="syl-teacher-filter" roles={effectiveRoles}>
                     <MultiSelectDropdown
                       label=""
                       placeholder="Teacher"
@@ -2285,8 +2203,8 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                       genderFilter={teacherGenderFilter}
                       onGenderChange={setTeacherGenderFilter}
                     />
-                  )}
-                  {role === 'teacher' && (
+                  </ConditionalBlock>
+                  {effectiveRoles.includes('teacher') && (
                     <button
                       type="button"
                       onClick={() => setCpTeacherShowMineOnly((prev) => !prev)}
@@ -2514,55 +2432,11 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
           </div>
         )}
 
-        {/* Tab Contents */}
-        {!dashboardOnly && activeTab === 'lesson-planner' && role === 'teacher' && (
-          <div data-feature="lesson-planner">
-            <LessonManager
-              user={user}
-              teacherRecord={teacherRecord}
-              role="teacher"
-              hideFilterHeader={true}
-              externalFilters={{
-                classId: lpFilterClassId,
-                classificationId: lpFilterClassificationId,
-                subjectId: lpFilterSubjectId,
-                bookId: lpFilterBookId,
-                showAllClasses: lpShowAllClasses,
-              }}
-              onExternalFiltersChange={(next) => {
-                setLpFilterClassId(next.classId || '');
-                setLpFilterClassificationId(next.classificationId || '');
-                setLpFilterSubjectId(next.subjectId || '');
-                setLpFilterBookId(next.bookId || '');
-                setLpShowAllClasses(Boolean(next.showAllClasses));
-              }}
-            />
-          </div>
-        )}
-
-        {!dashboardOnly && activeTab === 'teacher-activity' && role === 'teacher' && (
-          <div data-feature="teacher-activity">
-            <DailyActivityTable
-              role="teacher"
-              activeTab={activeTab}
-              dailyEntries={dailyEntries}
-              dailyLoading={dailyLoading}
-              classes={classes}
-              subjects={subjects}
-              books={books}
-              filteredDailyEntries={filteredDailyEntries}
-              handleDeleteClick={role === 'management' ? handleDeleteClick : undefined}
-              isCreatedToday={isCreatedToday}
-            />
-          </div>
-        )}
-
-        {!dashboardOnly &&
-          ((activeTab === 'teacher-activity' && role !== 'teacher') ||
-            activeTab === 'two-weeks-class') && (
-            <div data-feature={activeTab}>
+        {!dashboardOnly && activeTab === 'my-activity' && (
+          <ConditionalBlock name="syl-tab-my-activity" roles={effectiveRoles}>
+            <div data-feature="my-activity">
               <DailyActivityTable
-                role={role}
+                role="teacher"
                 student={student}
                 activeTab={activeTab}
                 dailyEntries={dailyEntries}
@@ -2586,47 +2460,135 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
                 filterStatus={filterStatus}
                 setFilterStatus={setFilterStatus}
                 clearDailyFilters={clearDailyFilters}
-                handleDeleteClick={role === 'management' ? handleDeleteClick : undefined}
-                isCreatedToday={role === 'teacher' ? isCreatedToday : undefined}
+                handleDeleteClick={
+                  canAccess('syl-delete-log-entry') ? handleDeleteClick : undefined
+                }
+                isCreatedToday={isCreatedToday}
               />
             </div>
-          )}
+          </ConditionalBlock>
+        )}
+
+        {!dashboardOnly && activeTab === 'teacher-activity' && (
+          <ConditionalBlock name="syl-tab-teacher-activity" roles={effectiveRoles}>
+            <div data-feature="teacher-activity">
+              <DailyActivityTable
+                role={
+                  effectiveRoles.includes('admin')
+                    ? 'admin'
+                    : 'management'
+                }
+                student={student}
+                activeTab={activeTab}
+                dailyEntries={dailyEntries}
+                dailyLoading={dailyLoading}
+                classes={classes}
+                subjects={subjects}
+                books={books}
+                teachers={teachers}
+                classifications={classifications}
+                filteredDailyEntries={filteredDailyEntries}
+                filterClasses={filterClasses}
+                setFilterClasses={setFilterClasses}
+                filterSubjects={filterSubjects}
+                setFilterSubjects={setFilterSubjects}
+                filterBooks={filterBooks}
+                setFilterBooks={setFilterBooks}
+                filterTeachers={filterTeachers}
+                setFilterTeachers={setFilterTeachers}
+                filterTopic={filterTopic}
+                setFilterTopic={setFilterTopic}
+                filterStatus={filterStatus}
+                setFilterStatus={setFilterStatus}
+                clearDailyFilters={clearDailyFilters}
+                handleDeleteClick={
+                  canAccess('syl-delete-log-entry') ? handleDeleteClick : undefined
+                }
+                isCreatedToday={effectiveRoles.includes('teacher') ? isCreatedToday : undefined}
+              />
+            </div>
+          </ConditionalBlock>
+        )}
+
+        {!dashboardOnly && activeTab === 'two-weeks-class' && (
+          <ConditionalBlock name="syl-tab-parent-recent" roles={effectiveRoles}>
+            <div data-feature="two-weeks-class">
+              <DailyActivityTable
+                role="parent"
+                student={student}
+                activeTab={activeTab}
+                dailyEntries={dailyEntries}
+                dailyLoading={dailyLoading}
+                classes={classes}
+                subjects={subjects}
+                books={books}
+                teachers={teachers}
+                classifications={classifications}
+                filteredDailyEntries={filteredDailyEntries}
+                filterClasses={filterClasses}
+                setFilterClasses={setFilterClasses}
+                filterSubjects={filterSubjects}
+                setFilterSubjects={setFilterSubjects}
+                filterBooks={filterBooks}
+                setFilterBooks={setFilterBooks}
+                filterTeachers={filterTeachers}
+                setFilterTeachers={setFilterTeachers}
+                filterTopic={filterTopic}
+                setFilterTopic={setFilterTopic}
+                filterStatus={filterStatus}
+                setFilterStatus={setFilterStatus}
+                clearDailyFilters={clearDailyFilters}
+              />
+            </div>
+          </ConditionalBlock>
+        )}
 
         {!dashboardOnly && activeTab === 'upcoming-lessons' && (
-          <div data-feature="upcoming-lessons">
-            <UpcomingLessonsGrid
-              role={role}
-              student={student}
-              teacher={teacher}
-              upcomingGroupingMode={upcomingGroupingMode}
-              upcomingStartDate={upcomingStartDate}
-              upcomingEndDate={upcomingEndDate}
-              upFilterTeachers={upFilterTeachers}
-              upFilterClasses={upFilterClasses}
-              upFilterClassifications={upFilterClassifications}
-              upFilterSubjects={upFilterSubjects}
-              upFilterBooks={upFilterBooks}
-              lessonPlans={lessonPlans}
-              classifications={classifications}
-              teachers={teachers}
-              assignments={assignments}
-              subjects={subjects}
-              handleSubmitPlannedLesson={handleSubmitPlannedLesson}
-              handleCarryForward={handleCarryForward}
-            />
-          </div>
+          <ConditionalBlock name="syl-tab-upcoming-lessons" roles={effectiveRoles}>
+            <div data-feature="upcoming-lessons">
+              <UpcomingLessonsGrid
+                role={
+                  effectiveRoles.includes('teacher')
+                    ? 'teacher'
+                    : effectiveRoles.includes('parent')
+                      ? 'parent'
+                      : 'management'
+                }
+                userRoles={effectiveRoles}
+                student={student}
+                teacher={teacher}
+                upcomingGroupingMode={upcomingGroupingMode}
+                upcomingStartDate={upcomingStartDate}
+                upcomingEndDate={upcomingEndDate}
+                upFilterTeachers={upFilterTeachers}
+                upFilterClasses={upFilterClasses}
+                upFilterClassifications={upFilterClassifications}
+                upFilterSubjects={upFilterSubjects}
+                upFilterBooks={upFilterBooks}
+                lessonPlans={lessonPlans}
+                classifications={classifications}
+                teachers={teachers}
+                assignments={assignments}
+                subjects={subjects}
+                handleSubmitPlannedLesson={handleSubmitPlannedLesson}
+                handleCarryForward={handleCarryForward}
+              />
+            </div>
+          </ConditionalBlock>
         )}
 
         {!dashboardOnly && activeTab === 'teacher-adherence' && (
-          <div data-feature="teacher-adherence">
-            <SyllabusTeacherAdherence
-              teachers={teachers}
-              lessonPlans={lessonPlans}
-              assignments={assignments}
-              books={books}
-              subjects={subjects}
-            />
-          </div>
+          <ConditionalBlock name="syl-tab-teacher-adherence" roles={effectiveRoles}>
+            <div data-feature="teacher-adherence">
+              <SyllabusTeacherAdherence
+                teachers={teachers}
+                lessonPlans={lessonPlans}
+                assignments={assignments}
+                books={books}
+                subjects={subjects}
+              />
+            </div>
+          </ConditionalBlock>
         )}
 
         {dashboardOnly && (
@@ -2669,41 +2631,51 @@ const SyllabusTrackerPortal = ({ role, user, student, teacherRecord, dashboardOn
         )}
 
         {!dashboardOnly && activeTab === 'syllabus-progress' && (
-          <div data-feature="syllabus-progress">
-            <SyllabusProgressGrid
-              role={role}
-              student={student}
-              classesToRender={getClassesToRender()}
-              books={books}
-              bookClasses={bookClasses}
-              subjects={subjects}
-              classifications={classifications}
-              teachers={teachers}
-              assignments={assignments}
-              currentTeacherId={teacher?.id || teacherRecord?.id}
-              cpFilterTeachers={cpFilterTeachers}
-              cpTeacherShowMineOnly={cpTeacherShowMineOnly}
-              allTrackers={bookTrackers}
-              allLogs={allLogs}
-              allLessons={allLessons}
-              cpGroupingMode={cpGroupingMode}
-              cpFilterBooks={cpFilterBooks}
-              cpFilterSubjects={cpFilterSubjects}
-              cpFilterClassifications={cpFilterClassifications}
-              progressExpandedBook={progressExpandedBook}
-              progressExpandedClass={progressExpandedClass}
-              handleProgressBookClick={handleProgressBookClick}
-              progressLoading={progressLoading || detailsLoading}
-              progressBookLessons={progressBookLessons}
-              progressBookLogs={progressBookLogs}
-              showNotStarted={showNotStarted}
-              setShowNotStarted={setShowNotStarted}
-              expandedLogIds={expandedLogIds}
-              toggleLogExpand={toggleLogExpand}
-              logItemsMap={logItemsMap}
-              handleDeleteClick={role === 'management' ? handleDeleteClick : undefined}
-            />
-          </div>
+          <ConditionalBlock name="syl-tab-syllabus-progress" roles={effectiveRoles}>
+            <div data-feature="syllabus-progress">
+              <SyllabusProgressGrid
+                role={
+                  effectiveRoles.includes('teacher')
+                    ? 'teacher'
+                    : effectiveRoles.includes('parent')
+                      ? 'parent'
+                      : 'management'
+                }
+                student={student}
+                classesToRender={getClassesToRender()}
+                books={books}
+                bookClasses={bookClasses}
+                subjects={subjects}
+                classifications={classifications}
+                teachers={teachers}
+                assignments={assignments}
+                currentTeacherId={teacher?.id || teacherRecord?.id}
+                cpFilterTeachers={cpFilterTeachers}
+                cpTeacherShowMineOnly={cpTeacherShowMineOnly}
+                allTrackers={bookTrackers}
+                allLogs={allLogs}
+                allLessons={allLessons}
+                cpGroupingMode={cpGroupingMode}
+                cpFilterBooks={cpFilterBooks}
+                cpFilterSubjects={cpFilterSubjects}
+                cpFilterClassifications={cpFilterClassifications}
+                progressExpandedBook={progressExpandedBook}
+                progressExpandedClass={progressExpandedClass}
+                handleProgressBookClick={handleProgressBookClick}
+                progressLoading={progressLoading || detailsLoading}
+                progressBookLessons={progressBookLessons}
+                progressBookLogs={progressBookLogs}
+                showNotStarted={showNotStarted}
+                setShowNotStarted={setShowNotStarted}
+                expandedLogIds={expandedLogIds}
+                toggleLogExpand={toggleLogExpand}
+                logItemsMap={logItemsMap}
+                handleDeleteClick={
+                  canAccess('syl-delete-log-entry') ? handleDeleteClick : undefined
+                }
+              />
+            </div>
+          </ConditionalBlock>
         )}
       </div>
 

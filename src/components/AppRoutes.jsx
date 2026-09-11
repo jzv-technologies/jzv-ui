@@ -45,13 +45,6 @@ export const AppRoutes = ({
       <Route path="/portal" element={renderUnifiedPortal()} />
       <Route path="/portal/v2" element={renderUnifiedPortal()} />
 
-      {/* Phase 5 Cutover Redirects: All legacy portal routes redirect to Unified Portal */}
-      <Route path="/portal/admin" element={<Navigate to="/portal" replace />} />
-      <Route path="/portal/management" element={<Navigate to="/portal" replace />} />
-      <Route path="/portal/parent" element={<Navigate to="/portal" replace />} />
-      <Route path="/portal/teacher" element={<Navigate to="/portal" replace />} />
-      <Route path="/portal/candidate" element={<Navigate to="/portal" replace />} />
-
       {/* Standalone Display Board & Career Pages */}
       <Route path="/portal/display" element={<TVDisplayDashboard />} />
       <Route

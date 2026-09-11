@@ -14,8 +14,30 @@ const STUDENTS_STORAGE_KEY = 'jzv_students_local_data';
 const TIMETABLE_STORAGE_KEY = 'jzv_timetable_local_data';
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-const AdminStudentsView = () => {
-  const [activeTab, setActiveTab] = useState('records'); // "records" | "fees"
+const AdminStudentsView = ({
+  initialTab = 'records',
+  mode = null, // 'records' | 'fees' | null
+  userRoles = [],
+  role = null,
+}) => {
+  const canManage = useMemo(() => {
+    const roles = (userRoles || []).map((r) => String(r).toLowerCase().trim());
+    if (roles.includes('admin') || roles.includes('management')) return true;
+    if (role === 'admin' || role === 'management') return true;
+    return false;
+  }, [userRoles, role]);
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (mode === 'fees') return 'fees';
+    if (mode === 'records') return 'records';
+    return initialTab || 'records';
+  }); // "records" | "fees"
+
+  useEffect(() => {
+    if (mode === 'fees') setActiveTab('fees');
+    else if (mode === 'records') setActiveTab('records');
+    else if (initialTab) setActiveTab(initialTab);
+  }, [mode, initialTab]);
   const [feesControls, setFeesControls] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [recordsSearchQuery, setRecordsSearchQuery] = useState('');
@@ -141,6 +163,10 @@ const AdminStudentsView = () => {
   // Sync state & save locally/remotely
   const handleSaveStudent = async (e) => {
     e.preventDefault();
+    if (!canManage) {
+      showToast('You do not have permission to modify student records.', 'error');
+      return;
+    }
     if (!formData.admission_no.trim() || !formData.student_name.trim()) {
       showToast('Admission Number and Student Name are required.', 'error');
       return;
@@ -249,6 +275,10 @@ const AdminStudentsView = () => {
   };
 
   const handleDeleteStudent = (studentId) => {
+    if (!canManage) {
+      showToast('You do not have permission to delete student records.', 'error');
+      return;
+    }
     setConfirmConfig({
       title: 'Delete Student',
       message: 'Are you sure you want to delete this student record?',
@@ -290,6 +320,10 @@ const AdminStudentsView = () => {
 
   // Bulk Import Handler
   const handleBulkImportStudents = async ({ rows, updateMode, selectedColumns }) => {
+    if (!canManage) {
+      showToast('You do not have permission to import student records.', 'error');
+      return;
+    }
     let insertedCount = 0;
     let updatedCount = 0;
     const errors = [];
@@ -623,11 +657,13 @@ const AdminStudentsView = () => {
           {/* Main Title & Subtitle */}
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-dark-primary flex items-center gap-2">
-              <i className="fas fa-graduation-cap text-green-dark"></i>
-              Student Portal
+              <i className={`fas ${mode === 'fees' ? 'fa-receipt text-teal-600' : 'fa-graduation-cap text-green-dark'}`}></i>
+              {mode === 'fees' ? 'Student Fees' : mode === 'records' ? 'Student Management' : 'Student Portal'}
             </h2>
             <p className="text-xs text-dark-muted font-semibold mt-0.5">
-              Manage admission database, student profiles, and fee allocations.
+              {mode === 'fees'
+                ? 'Track student fee allocations, sponsorships, payments, and balances.'
+                : 'Manage admission database, student profiles, and class enrollments.'}
               {!isSupabaseMode && (
                 <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                   <i className="fas fa-wifi-slash text-[9px]"></i> Offline Mode
@@ -636,32 +672,34 @@ const AdminStudentsView = () => {
             </p>
           </div>
 
-          {/* Navigation Pill Tabs */}
-          <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
-            <button
-              onClick={() => setActiveTab('records')}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
-                activeTab === 'records'
-                  ? 'bg-green-dark text-white shadow-sm'
-                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-              }`}
-            >
-              <i className="fas fa-user-graduate"></i>
-              Students Record
-            </button>
+          {/* Navigation Pill Tabs - Only when not locked into a specific mode */}
+          {mode === null && (
+            <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab('records')}
+                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                  activeTab === 'records'
+                    ? 'bg-green-dark text-white shadow-sm'
+                    : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                }`}
+              >
+                <i className="fas fa-user-graduate"></i>
+                Students Record
+              </button>
 
-            <button
-              onClick={() => setActiveTab('fees')}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
-                activeTab === 'fees'
-                  ? 'bg-green-dark text-white shadow-sm'
-                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-              }`}
-            >
-              <i className="fas fa-file-invoice-dollar"></i>
-              Student Fees
-            </button>
-          </div>
+              <button
+                onClick={() => setActiveTab('fees')}
+                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
+                  activeTab === 'fees'
+                    ? 'bg-green-dark text-white shadow-sm'
+                    : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                }`}
+              >
+                <i className="fas fa-file-invoice-dollar"></i>
+                Student Fees
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Action Controls Bar for Student Records tab */}
@@ -699,42 +737,46 @@ const AdminStudentsView = () => {
                 </select>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  onClick={() => loadStudents(classes)}
-                  disabled={loading}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                  title="Refresh database"
-                >
-                  <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
-                  Refresh
-                </button>
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => loadStudents(classes)}
+                    disabled={loading}
+                    className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    title="Refresh database"
+                  >
+                    <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
+                    Refresh
+                  </button>
 
-                <button
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                >
-                  <i className="fas fa-file-import text-indigo-600"></i>
-                  Import Students
-                </button>
+                  {canManage && (
+                    <button
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="flex-1 sm:flex-none px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <i className="fas fa-file-import text-indigo-600"></i>
+                      Import Students
+                    </button>
+                  )}
 
-                <button
-                  onClick={handleExportRecordsExcel}
-                  className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                >
-                  <i className="fas fa-file-excel text-emerald-600"></i>
-                  Download
-                </button>
+                  <button
+                    onClick={handleExportRecordsExcel}
+                    className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                  >
+                    <i className="fas fa-file-excel text-emerald-600"></i>
+                    Download
+                  </button>
 
-                <button
-                  onClick={openAddModal}
-                  className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                >
-                  <i className="fas fa-user-plus"></i>
-                  Add Student
-                </button>
-              </div>
+                  {canManage && (
+                    <button
+                      onClick={openAddModal}
+                      className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <i className="fas fa-user-plus"></i>
+                      Add Student
+                    </button>
+                  )}
+                </div>
             </div>
 
             {/* ── Class Summary Tiles ── */}
@@ -922,14 +964,14 @@ const AdminStudentsView = () => {
             loading={loading}
             error={error}
             onRetry={() => loadStudents(classes)}
-            onRowClick={openEditModal}
+            onRowClick={canManage ? openEditModal : undefined}
             excludeColumns={['id', 'class_id']}
           />
         </div>
       )}
 
       {/* Custom Modal for Add / Edit */}
-      {isModalOpen && (
+      {canManage && isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 text-left">
             {/* Modal Header */}
@@ -1225,14 +1267,16 @@ const AdminStudentsView = () => {
       )}
 
       {/* Bulk Import Modal */}
-      <StudentBulkImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        existingStudents={students}
-        classes={classes}
-        onImportSuccess={handleBulkImportStudents}
-        isSupabaseMode={isSupabaseMode}
-      />
+      {canManage && (
+        <StudentBulkImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          existingStudents={students}
+          classes={classes}
+          onImportSuccess={handleBulkImportStudents}
+          isSupabaseMode={isSupabaseMode}
+        />
+      )}
 
       {/* Confirm Modal */}
       <ConfirmModal

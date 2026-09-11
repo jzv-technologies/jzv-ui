@@ -15,7 +15,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-sliders-h',
     buttonColor: 'bg-blue-600 text-white',
     shadow: 'shadow-blue-200',
-    group: 'admin-only',
+    group: 'Administration',
     action: 'subview',
   },
   'timetable-planner': {
@@ -24,7 +24,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-calendar-alt',
     buttonColor: 'bg-brand-primary text-white',
     shadow: 'shadow-brand-lbg',
-    group: 'timetable',
+    group: 'Calendar and Schedules',
     action: 'subview',
   },
   'avc-admin-manager': {
@@ -33,28 +33,61 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-cubes',
     buttonColor: 'bg-purple-700 text-white',
     shadow: 'shadow-purple-200',
-    group: 'admin-only',
+    group: 'Administration',
     action: 'subview',
+  },
+  'manage-user-roles': {
+    title: 'Manage Portal User Roles',
+    description: 'Manage authentication accounts, link employees, and assign system & portal roles.',
+    icon: 'fa-user-shield',
+    buttonColor: 'bg-purple-700 text-white',
+    shadow: 'shadow-purple-200',
+    group: 'Administration',
+    action: 'subview',
+    valid_access_roles: ['admin'],
+    display_order: 35,
   },
 
   // ── Shared admin + management components ───────────────────────────
   'employee-management': {
     title: 'Employee Management',
-    description: 'Manage employee records, roles, designations, salaries, and bulk imports.',
+    description: 'Manage employee records, roles, designations, and profile details.',
     icon: 'fa-users-gear',
     buttonColor: 'bg-orange-primary text-white',
     shadow: 'shadow-orange-200',
-    group: 'employees',
+    group: 'Staff & Students',
+    action: 'subview',
+  },
+  'salary-tracker': {
+    title: 'Salary Tracker',
+    description: 'Salary Credit Dashboard and Salary List View for staff and teacher compensation.',
+    icon: 'fa-money-bill-wave',
+    buttonColor: 'bg-emerald-600 text-white',
+    shadow: 'shadow-emerald-200',
+    group: 'Staff & Students',
     action: 'subview',
   },
   'student-records': {
-    title: 'Students Management',
-    description: 'View and manage student records. Admins have full CRUD; management has read access.',
+    title: 'Student Management',
+    description: 'Manage student admission database, student records, and class enrollments.',
     icon: 'fa-user-graduate',
     buttonColor: 'bg-green-dark text-white',
     shadow: 'shadow-green-200',
-    group: 'students',
+    group: 'Staff & Students',
     action: 'subview',
+    valid_access_roles: ['admin', 'management', 'teacher'],
+    display_order: 50,
+  },
+  'student-fees': {
+    title: 'Student Fees',
+    description: 'Track student fee allocations, sponsorships, payments, and balances.',
+    icon: 'fa-receipt',
+    buttonColor: 'bg-teal-600 text-white',
+    shadow: 'shadow-teal-200',
+    group: 'Staff & Students',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'accountant'],
+    display_order: 56,
   },
   'tv-display': {
     title: 'TV Display Board',
@@ -62,20 +95,39 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-tv',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
-    group: 'display',
+    group: 'Administration',
     action: 'open_window',
     actionTarget: '/portal/display',
   },
 
   // ── Management components ──────────────────────────────────────────
-  'registered-complaints': {
-    title: 'Registered Complaints',
+  'view-complaints': {
+    title: 'View Complaints',
     description: 'Track and review user complaints and feedback submitted through the portal.',
     icon: 'fa-comments',
     buttonColor: 'bg-amber-600 text-white',
     shadow: 'shadow-amber-200',
-    group: 'complaints',
+    group: 'General',
     action: 'subview',
+  },
+  'registered-complaints': {
+    title: 'View Complaints',
+    description: 'Track and review user complaints and feedback submitted through the portal.',
+    icon: 'fa-comments',
+    buttonColor: 'bg-amber-600 text-white',
+    shadow: 'shadow-amber-200',
+    group: 'General',
+    action: 'subview',
+  },
+  'complaint': {
+    title: 'Register Feedback',
+    description: 'Submit and track your requests or complaints online.',
+    icon: 'fa-hand-point-up',
+    buttonColor: 'bg-teal-600 text-white',
+    shadow: 'shadow-teal-200',
+    group: 'General',
+    action: 'open_modal',
+    actionTarget: 'complaint',
   },
   'timetable-viewer': {
     title: 'Timetable Viewer',
@@ -84,7 +136,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-calendar-alt',
     buttonColor: 'bg-brand-primary text-white',
     shadow: 'shadow-brand-lbg',
-    group: 'timetable',
+    group: 'Calendar and Schedules',
     action: 'subview',
   },
   'job-applications': {
@@ -93,7 +145,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-file-signature',
     buttonColor: 'bg-red-600 text-white',
     shadow: 'shadow-red-200',
-    group: 'hr',
+    group: 'HR',
     action: 'subview',
   },
   'take-test-management': {
@@ -102,7 +154,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-vial',
     buttonColor: 'bg-teal-600 text-white',
     shadow: 'shadow-teal-200',
-    group: 'testing',
+    group: 'Testing',
     action: 'subview',
   },
   'requests-exceptions': {
@@ -111,7 +163,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-comment-dots',
     buttonColor: 'bg-rose-600 text-white',
     shadow: 'shadow-rose-200',
-    group: 'approvals',
+    group: 'Administration',
     action: 'open_modal',
     actionTarget: 'requests-exceptions',
   },
@@ -123,16 +175,46 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-book-open',
     buttonColor: 'bg-purple-600 text-white',
     shadow: 'shadow-purple-200',
-    group: 'syllabus',
+    group: 'Academics',
     action: 'subview',
   },
-  'lesson-planner-tracker': {
-    title: 'Lesson Planner & Tracker',
+  'syllabus-progress-tracker': {
+    title: 'Syllabus Progress',
     description: 'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
     icon: 'fa-chart-line',
     buttonColor: 'bg-blue-600 text-white',
     shadow: 'shadow-blue-200',
-    group: 'syllabus',
+    group: 'Academics',
+    action: 'subview',
+  },
+  'my-activity': {
+    title: 'My Activity',
+    description: 'Log and monitor your personal daily classroom teaching activity, chapter completion, and topic logs.',
+    icon: 'fa-user-clock',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Academics',
+    action: 'subview',
+    // Not a standalone tile - accessed within Syllabus Progress
+  },
+  'teacher-activity': {
+    title: 'Teacher Activity',
+    description: 'Monitor daily classroom teaching activity, chapter completions, and topic logs across all teachers.',
+    icon: 'fa-chalkboard-user',
+    buttonColor: 'bg-blue-600 text-white',
+    shadow: 'shadow-blue-200',
+    group: 'Academics',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'teacher'],
+    display_order: 82,
+  },
+  'lesson-planner': {
+    title: 'Lesson Planner',
+    description: 'Plan daily lessons, track lesson milestones, and organize curriculum plans.',
+    icon: 'fa-calendar-check',
+    buttonColor: 'bg-blue-600 text-white',
+    shadow: 'shadow-blue-200',
+    group: 'Academics',
     action: 'subview',
   },
 
@@ -143,7 +225,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-calendar-days',
     buttonColor: 'bg-teal-600 text-white',
     shadow: 'shadow-teal-200',
-    group: 'calendar',
+    group: 'Calendar and Schedules',
     action: 'subview',
   },
   'dashboard': {
@@ -152,7 +234,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-gauge-high',
     buttonColor: 'bg-indigo-600 text-white',
     shadow: 'shadow-indigo-200',
-    group: 'dashboard',
+    group: 'Academics',
     action: 'subview',
   },
 
@@ -163,16 +245,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-id-card',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
-    group: 'employee',
-    action: 'subview',
-  },
-  'students-viewer': {
-    title: 'Students Record',
-    description: 'Browse student list and search details (teacher read-only view).',
-    icon: 'fa-user-graduate',
-    buttonColor: 'bg-brand-primary text-white',
-    shadow: 'shadow-brand-lbg',
-    group: 'students',
+    group: 'Personal',
     action: 'subview',
   },
 
@@ -183,7 +256,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-comments',
     buttonColor: 'bg-red-600 text-white',
     shadow: 'shadow-red-200',
-    group: 'tickets',
+    group: 'Complaints & Support',
     action: 'subview',
   },
 
@@ -196,7 +269,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-calendar-alt',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
-    group: 'timetable',
+    group: 'Calendar and Schedules',
     action: 'subview',
   },
 
@@ -207,7 +280,7 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-vial',
     buttonColor: 'bg-teal-600 text-white',
     shadow: 'shadow-teal-200',
-    group: 'testing',
+    group: 'Testing',
     action: 'subview',
   },
 };
@@ -234,288 +307,186 @@ export const COMPONENT_GROUPS = {
 };
 
 /**
- * Fallback configuration matching Phase 1 seed rows.
- * Used if `app_view_controller` table has not yet been executed in Supabase SQL editor.
+ * Standard group configurations with display metadata, icons, and theme badges.
  */
-export const FALLBACK_VIEW_CONFIGS = [
-  {
-    component_name: 'form-configurations',
-    component_type: 'tile',
-    group_name: 'admin-only',
-    is_active: true,
-    default_access: 'none',
-    description: 'Configure fields, validation, and overrides for dynamic forms in the database.',
-    valid_access_roles: ['admin'],
-    display_order: 10,
+export const GROUP_CONFIGS = {
+  Academics: {
+    label: 'Academic & Curriculum',
+    icon: 'fa-graduation-cap',
+    color: 'text-blue-600',
+    badgeBg: 'bg-blue-50 text-blue-700 border border-blue-200',
+    order: 10,
   },
-  {
-    component_name: 'timetable-planner',
-    component_type: 'tile',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'View class and teacher schedules, manage classes, subjects, and schedule conflict-free timetables.',
-    valid_access_roles: ['admin', 'management', 'teacher', 'staff'],
-    display_order: 20,
+  'Staff & Students': {
+    label: 'Staff & Students',
+    icon: 'fa-users',
+    color: 'text-indigo-600',
+    badgeBg: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    order: 20,
   },
-  {
-    component_name: 'timetable-viewer',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Timetable View tab (read-only view for class and teacher schedules).',
-    valid_access_roles: ['admin', 'management', 'teacher', 'staff'],
-    display_order: 21,
+  'Calendar and Schedules': {
+    label: 'Calendar & Schedules',
+    icon: 'fa-calendar-days',
+    color: 'text-teal-600',
+    badgeBg: 'bg-teal-50 text-teal-700 border border-teal-200',
+    order: 30,
   },
-  {
-    component_name: 'scheduler-setup',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Scheduler Setup tab in Timetable Planner.',
-    valid_access_roles: ['admin', 'management', 'staff'],
-    display_order: 22,
+  Administration: {
+    label: 'Administration & System',
+    icon: 'fa-shield-halved',
+    color: 'text-purple-600',
+    badgeBg: 'bg-purple-50 text-purple-700 border border-purple-200',
+    order: 40,
   },
-  {
-    component_name: 'teachers-mapping',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Teacher Mapping tab in Timetable Planner.',
-    valid_access_roles: ['admin', 'management', 'staff'],
-    display_order: 23,
+  General: {
+    label: 'General',
+    icon: 'fa-cubes',
+    color: 'text-slate-600',
+    badgeBg: 'bg-slate-50 text-slate-700 border border-slate-200',
+    order: 50,
   },
-  {
-    component_name: 'classes-setup',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Classes Setup tab in Timetable Planner.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 24,
+  Testing: {
+    label: 'Evaluations & Tests',
+    icon: 'fa-vial',
+    color: 'text-teal-600',
+    badgeBg: 'bg-teal-50 text-teal-700 border border-teal-200',
+    order: 60,
   },
-  {
-    component_name: 'season-setup',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Season Setup tab in Timetable Planner.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 25,
+  'Complaints & Support': {
+    label: 'Complaints & Support',
+    icon: 'fa-headset',
+    color: 'text-rose-600',
+    badgeBg: 'bg-rose-50 text-rose-700 border border-rose-200',
+    order: 70,
   },
-  {
-    component_name: 'switch-teachers',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Switch Teacher tab in Timetable Planner.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 26,
+  Dashboard: {
+    label: 'Dashboard & Overview',
+    icon: 'fa-chart-pie',
+    color: 'text-amber-600',
+    badgeBg: 'bg-amber-50 text-amber-700 border border-amber-200',
+    order: 5,
   },
-  {
-    component_name: 'timetable-sync',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Database Settings & Sync Cog in Timetable Planner.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 27,
+  HR: {
+    label: 'Recruitment & HR',
+    icon: 'fa-user-tie',
+    color: 'text-sky-600',
+    badgeBg: 'bg-sky-50 text-sky-700 border border-sky-200',
+    order: 80,
   },
-  {
-    component_name: 'timetable-json-config',
-    component_type: 'component',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'Import / Export Timetable JSON Configuration.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 28,
+  Personal: {
+    label: 'Personal Information',
+    icon: 'fa-user-circle',
+    color: 'text-cyan-600',
+    badgeBg: 'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    order: 90,
   },
-  {
-    component_name: 'employee-management',
-    component_type: 'tile',
-    group_name: 'employees',
-    is_active: true,
-    default_access: 'none',
-    description: 'Manage employee records, roles, designations, salaries, and bulk imports.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 10,
+  Display: {
+    label: 'Display Systems',
+    icon: 'fa-tv',
+    color: 'text-violet-600',
+    badgeBg: 'bg-violet-50 text-violet-700 border border-violet-200',
+    order: 100,
   },
-  {
-    component_name: 'student-records',
-    component_type: 'tile',
-    group_name: 'students',
-    is_active: true,
-    default_access: 'none',
-    description: 'View and manage student records. Admins have full CRUD; management has read access.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 20,
+  'Custom Forms': {
+    label: 'Custom Forms',
+    icon: 'fa-clipboard-list',
+    color: 'text-orange-600',
+    badgeBg: 'bg-orange-50 text-orange-700 border border-orange-200',
+    order: 110,
   },
-  {
-    component_name: 'tv-display',
-    component_type: 'tile',
-    group_name: 'display',
-    is_active: true,
-    default_access: 'none',
-    description: 'Open the full-screen auto-navigating TV display dashboard.',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 90,
-  },
-  {
-    component_name: 'registered-complaints',
-    component_type: 'tile',
-    group_name: 'complaints',
-    is_active: true,
-    default_access: 'none',
-    description: 'Track and review user complaints and feedback submitted through the portal.',
-    valid_access_roles: ['management'],
-    display_order: 30,
-  },
-  {
-    component_name: 'timetable-viewer',
-    component_type: 'tile',
-    group_name: 'timetable',
-    is_active: false,
-    default_access: 'none',
-    description: 'Legacy Timetable Viewer tile (merged into Timetable tile).',
-    valid_access_roles: ['management', 'teacher'],
-    display_order: 30,
-  },
-  {
-    component_name: 'job-applications',
-    component_type: 'tile',
-    group_name: 'hr',
-    is_active: true,
-    default_access: 'none',
-    description: 'View and review submitted teacher and staff resumes.',
-    valid_access_roles: ['management'],
-    display_order: 40,
-  },
-  {
-    component_name: 'take-test-management',
-    component_type: 'tile',
-    group_name: 'testing',
-    is_active: true,
-    default_access: 'none',
-    description: 'Enable/disable test access per candidate mobile number and configure available tests.',
-    valid_access_roles: ['management'],
-    display_order: 50,
-  },
-  {
-    component_name: 'requests-exceptions',
-    component_type: 'tile',
-    group_name: 'approvals',
-    is_active: true,
-    default_access: 'none',
-    description: 'Review teacher permission requests, exceptions, and track approvals.',
-    valid_access_roles: ['management'],
-    display_order: 60,
-  },
-  {
-    component_name: 'syllabus-manager',
-    component_type: 'tile',
-    group_name: 'syllabus',
-    is_active: true,
-    default_access: 'none',
-    description: 'Manage curriculum nodes, subjects, books, units, chapters, and lessons.',
-    valid_access_roles: ['admin', 'management', 'teacher'],
-    display_order: 10,
-  },
-  {
-    component_name: 'lesson-planner-tracker',
-    component_type: 'tile',
-    group_name: 'syllabus',
-    is_active: true,
-    default_access: 'none',
-    description: 'Log daily teaching progress, track syllabus completion, and carry forward lessons.',
-    valid_access_roles: ['admin', 'management', 'teacher', 'parent'],
-    display_order: 20,
-  },
-  {
-    component_name: 'academic-calendar',
-    component_type: 'tile',
-    group_name: 'calendar',
-    is_active: true,
-    default_access: 'none',
-    description: 'View or manage holidays, examinations, preparation days, and teaching days.',
-    valid_access_roles: ['management', 'teacher', 'parent'],
-    display_order: 10,
-  },
-  {
-    component_name: 'dashboard',
-    component_type: 'tile',
-    group_name: 'dashboard',
-    is_active: true,
-    default_access: 'none',
-    description: 'View syllabus progress, activity, and attention-required insights.',
-    valid_access_roles: ['management', 'teacher'],
-    display_order: 10,
-  },
-  {
-    component_name: 'personal-info',
-    component_type: 'tile',
-    group_name: 'employee',
-    is_active: true,
-    default_access: 'none',
-    description: 'View your employee profile, designation, and update contact information.',
-    valid_access_roles: ['teacher'],
-    display_order: 10,
-  },
-  {
-    component_name: 'students-viewer',
-    component_type: 'tile',
-    group_name: 'students',
-    is_active: true,
-    default_access: 'none',
-    description: 'Browse student list and search details (teacher read-only view).',
-    valid_access_roles: ['teacher'],
-    display_order: 20,
-  },
-  {
-    component_name: 'my-tickets',
-    component_type: 'tile',
-    group_name: 'tickets',
-    is_active: true,
-    default_access: 'none',
-    description: 'View status and update comments on your submitted support tickets.',
-    valid_access_roles: ['teacher', 'parent'],
-    display_order: 10,
-  },
-  {
-    component_name: 'class-schedule',
-    component_type: 'tile',
-    group_name: 'timetable',
-    is_active: true,
-    default_access: 'none',
-    description: 'View the weekly class schedule and timetable for your child.',
-    valid_access_roles: ['parent'],
-    display_order: 10,
-  },
-  {
-    component_name: 'take-test',
-    component_type: 'tile',
-    group_name: 'testing',
-    is_active: true,
-    default_access: 'none',
-    description: 'Take the online entrance/evaluation test enabled for your mobile number.',
-    valid_access_roles: ['candidate'],
-    display_order: 10,
-  },
-  {
-    component_name: 'avc-admin-manager',
-    component_type: 'tile',
-    group_name: 'admin-only',
-    is_active: true,
-    default_access: 'none',
-    description: 'Admin UI to manage the app_view_controller table — tile visibility, ordering, and access roles.',
-    valid_access_roles: ['admin'],
-    display_order: 80,
-  },
-];
+};
+
+/**
+ * Resolves raw group_name from database or tile metadata into a canonical group descriptor.
+ * Handles case differences, aliases, and trailing newlines.
+ */
+export const resolveGroupInfo = (rawGroupName) => {
+  if (!rawGroupName) {
+    return {
+      key: 'General',
+      label: 'General',
+      icon: 'fa-cubes',
+      color: 'text-gray-600',
+      badgeBg: 'bg-gray-50 text-gray-700 border border-gray-200',
+      order: 999,
+    };
+  }
+
+  // Strip whitespace, carriage returns, and newlines
+  const cleaned = String(rawGroupName).replace(/[\r\n]+/g, ' ').trim();
+  const lower = cleaned.toLowerCase();
+
+  let canonicalKey = cleaned;
+
+  if (lower === 'admin-only' || lower === 'administration' || lower === 'approvals') {
+    canonicalKey = 'Administration';
+  } else if (
+    lower === 'syllabus' ||
+    lower === 'academics' ||
+    lower === 'curriculum' ||
+    lower === 'academic & curriculam' ||
+    lower === 'academic & curriculum'
+  ) {
+    canonicalKey = 'Academics';
+  } else if (
+    lower === 'calendar and schedules' ||
+    lower === 'schedules' ||
+    lower === 'timetable' ||
+    lower === 'calendar'
+  ) {
+    canonicalKey = 'Calendar and Schedules';
+  } else if (
+    lower === 'staff & students' ||
+    lower === 'staff and students' ||
+    lower === 'employees' ||
+    lower === 'employee' ||
+    lower === 'staff' ||
+    lower === 'fees and salary' ||
+    lower === 'records' ||
+    lower === 'students' ||
+    lower === 'student'
+  ) {
+    canonicalKey = 'Staff & Students';
+  } else if (lower === 'testing' || lower === 'evaluations') {
+    canonicalKey = 'Testing';
+  } else if (
+    lower === 'general' ||
+    lower === 'complaints' ||
+    lower === 'feedback & complaint' ||
+    lower === 'feedback & complaints' ||
+    lower === 'feedback and complaints' ||
+    lower === 'registered complaints'
+  ) {
+    canonicalKey = 'General';
+  } else if (lower === 'support' || lower === 'tickets' || lower === 'complaints & support') {
+    canonicalKey = 'Complaints & Support';
+  } else if (lower === 'dashboard') {
+    canonicalKey = 'Dashboard';
+  } else if (lower === 'hr' || lower === 'recruitment') {
+    canonicalKey = 'HR';
+  } else if (lower === 'personal') {
+    canonicalKey = 'Personal';
+  } else if (lower === 'display') {
+    canonicalKey = 'Display';
+  } else if (lower === 'dynamic-form' || lower === 'custom forms' || lower === 'custom-forms') {
+    canonicalKey = 'Custom Forms';
+  }
+
+  if (GROUP_CONFIGS[canonicalKey]) {
+    return {
+      key: canonicalKey,
+      ...GROUP_CONFIGS[canonicalKey],
+    };
+  }
+
+  return {
+    key: cleaned,
+    label: cleaned.charAt(0).toUpperCase() + cleaned.slice(1),
+    icon: 'fa-folder-open',
+    color: 'text-slate-600',
+    badgeBg: 'bg-slate-50 text-slate-700 border border-slate-200',
+    order: 500,
+  };
+};
+
+

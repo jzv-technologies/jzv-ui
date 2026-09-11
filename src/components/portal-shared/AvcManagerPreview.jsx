@@ -1,7 +1,7 @@
 // src/components/portal-shared/AvcManagerPreview.jsx
 import React, { useState, useMemo } from 'react';
 
-export const AvcManagerPreview = ({ viewConfigs = [], loading, tableMissing, onRefresh }) => {
+export const AvcManagerPreview = ({ viewConfigs = [], loading, onRefresh }) => {
   const [filterGroup, setFilterGroup] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -52,16 +52,6 @@ export const AvcManagerPreview = ({ viewConfigs = [], loading, tableMissing, onR
         </div>
       </div>
 
-      {tableMissing && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-3">
-          <i className="fas fa-exclamation-triangle text-amber-500 text-base"></i>
-          <div>
-            <strong>Table Not Found:</strong> The database table{' '}
-            <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">app_view_controller</code>{' '}
-            has not been created yet or is empty. Falling back to local default configuration.
-          </div>
-        </div>
-      )}
 
       {/* Filter / Search Bar */}
       <div className="bg-white border border-light-border rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { CARD_THEMES } from '../../utils/cardTheme';
+import { ConditionalBlock } from '../portal-shared/ConditionalBlock';
 
 const UpcomingLessonsGrid = ({
   role,
+  userRoles = [],
   student,
   teacher,
   upcomingGroupingMode = 'subject_date',
@@ -267,55 +269,59 @@ const UpcomingLessonsGrid = ({
               </div>
             ) : (
               <div className="flex gap-2 mt-auto pt-3 border-t border-gray-100">
-                {plan.status === 'planned' && (
-                  <button
-                    onClick={() => handleSubmitPlannedLesson(plan)}
-                    className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-750 transition-colors cursor-pointer text-center"
-                  >
-                    <i className="fas fa-check mr-1"></i> Add Progress
-                  </button>
-                )}
-                {plan.status === 'in_progress' && (
-                  <button
-                    onClick={() => handleSubmitPlannedLesson(plan)}
-                    className="flex-1 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-750 transition-colors cursor-pointer text-center"
-                  >
-                    <i className="fas fa-check mr-1"></i> Update Progress
-                  </button>
-                )}
-                {plan.status === 'completed' && (
-                  <button
-                    onClick={() => handleSubmitPlannedLesson(plan)}
-                    className="flex-1 py-1.5 bg-purple-600 text-white text-[10px] font-bold rounded-lg hover:bg-purple-750 transition-colors cursor-pointer text-center"
-                  >
-                    <i className="fas fa-history mr-1"></i> Add Revision
-                  </button>
-                )}
-                {plan.status === 'planned' ? (
-                  <button
-                    onClick={() => {
-                      setEditingPlanId(plan.id);
-                      setNewDate(plan.target_date || new Date().toISOString().split('T')[0]);
-                    }}
-                    className="flex-1 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors cursor-pointer text-center"
-                  >
-                    <i className="fas fa-edit mr-1"></i> Change Plan
-                  </button>
-                ) : plan.status === 'in_progress' ? (
-                  <button
-                    onClick={() => {
-                      setEditingPlanId(plan.id);
-                      setNewDate(
-                        plan.target_end_date ||
-                          plan.target_start_date ||
-                          new Date().toISOString().split('T')[0]
-                      );
-                    }}
-                    className="flex-1 py-1.5 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg hover:bg-pink-100 transition-colors cursor-pointer text-center"
-                  >
-                    <i className="fas fa-edit mr-1"></i> Change End Date
-                  </button>
-                ) : null}
+                <ConditionalBlock name="syl-add-daily-work" roles={userRoles}>
+                  {plan.status === 'planned' && (
+                    <button
+                      onClick={() => handleSubmitPlannedLesson(plan)}
+                      className="flex-1 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-750 transition-colors cursor-pointer text-center"
+                    >
+                      <i className="fas fa-check mr-1"></i> Add Progress
+                    </button>
+                  )}
+                  {plan.status === 'in_progress' && (
+                    <button
+                      onClick={() => handleSubmitPlannedLesson(plan)}
+                      className="flex-1 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-750 transition-colors cursor-pointer text-center"
+                    >
+                      <i className="fas fa-check mr-1"></i> Update Progress
+                    </button>
+                  )}
+                  {plan.status === 'completed' && (
+                    <button
+                      onClick={() => handleSubmitPlannedLesson(plan)}
+                      className="flex-1 py-1.5 bg-purple-600 text-white text-[10px] font-bold rounded-lg hover:bg-purple-750 transition-colors cursor-pointer text-center"
+                    >
+                      <i className="fas fa-history mr-1"></i> Add Revision
+                    </button>
+                  )}
+                </ConditionalBlock>
+                <ConditionalBlock name="syl-carry-forward-action" roles={userRoles}>
+                  {plan.status === 'planned' ? (
+                    <button
+                      onClick={() => {
+                        setEditingPlanId(plan.id);
+                        setNewDate(plan.target_date || new Date().toISOString().split('T')[0]);
+                      }}
+                      className="flex-1 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors cursor-pointer text-center"
+                    >
+                      <i className="fas fa-edit mr-1"></i> Change Plan
+                    </button>
+                  ) : plan.status === 'in_progress' ? (
+                    <button
+                      onClick={() => {
+                        setEditingPlanId(plan.id);
+                        setNewDate(
+                          plan.target_end_date ||
+                            plan.target_start_date ||
+                            new Date().toISOString().split('T')[0]
+                        );
+                      }}
+                      className="flex-1 py-1.5 bg-pink-50 text-pink-700 border border-pink-200 text-[10px] font-bold rounded-lg hover:bg-pink-100 transition-colors cursor-pointer text-center"
+                    >
+                      <i className="fas fa-edit mr-1"></i> Change End Date
+                    </button>
+                  ) : null}
+                </ConditionalBlock>
               </div>
             ))}
         </div>

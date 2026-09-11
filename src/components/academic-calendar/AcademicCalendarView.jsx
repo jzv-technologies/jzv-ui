@@ -6,6 +6,7 @@ import AcademicCalendarEventModal, {
   CALENDAR_EVENT_TYPES,
 } from './AcademicCalendarEventModal';
 import ConfirmModal from '../ConfirmModal';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 
 const formatDate = (value) =>
   new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
@@ -161,7 +162,10 @@ export const computeMonthSummary = (
   };
 };
 
-const AcademicCalendarView = ({ canEdit = false }) => {
+const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
+  const canAccess = useCanAccess(userRoles);
+  const effectiveCanEdit = canEdit || canAccess('calendar-manage-events');
+
   const [events, setEvents] = useState(() => {
     try {
       const cached = localStorage.getItem('jzv_academic_events_cache');
@@ -605,7 +609,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
 
   // ----- Date click handler for quick event creation -----
   const handleDateClick = (date) => {
-    if (!canEdit || !date) return;
+    if (!effectiveCanEdit || !date) return;
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -800,7 +804,7 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                       key={event.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (canEdit) setEditingEvent(event);
+                        if (effectiveCanEdit) setEditingEvent(event);
                       }}
                       className="truncate rounded-sm px-1 py-0.5 text-[8px] font-bold text-white leading-tight cursor-pointer hover:opacity-90 transition-opacity"
                       style={{ backgroundColor: event.color_code || '#2563eb' }}
@@ -1059,25 +1063,27 @@ const AcademicCalendarView = ({ canEdit = false }) => {
                               </p>
                             </div>
 
-                            {canEdit && (
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingEvent(event)}
-                                  title="Edit event"
-                                  className="w-7 h-7 rounded-lg text-blue-600 hover:bg-blue-50 transition cursor-pointer flex items-center justify-center"
-                                >
-                                  <i className="fas fa-edit text-xs" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteEvent(event)}
-                                  title="Delete event"
-                                  className="w-7 h-7 rounded-lg text-red-600 hover:bg-red-50 transition cursor-pointer flex items-center justify-center"
-                                >
-                                  <i className="fas fa-trash text-xs" />
-                                </button>
-                              </div>
+                            {effectiveCanEdit && (
+                              <ConditionalBlock name="calendar-manage-events" roles={userRoles}>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingEvent(event)}
+                                    title="Edit event"
+                                    className="w-7 h-7 rounded-lg text-blue-600 hover:bg-blue-50 transition cursor-pointer flex items-center justify-center"
+                                  >
+                                    <i className="fas fa-edit text-xs" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteEvent(event)}
+                                    title="Delete event"
+                                    className="w-7 h-7 rounded-lg text-red-600 hover:bg-red-50 transition cursor-pointer flex items-center justify-center"
+                                  >
+                                    <i className="fas fa-trash text-xs" />
+                                  </button>
+                                </div>
+                              </ConditionalBlock>
                             )}
                           </div>
 
@@ -1203,27 +1209,31 @@ const AcademicCalendarView = ({ canEdit = false }) => {
             </select>
 
             {/* Settings Icon / Calendar Rules Modal Trigger */}
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setShowRulesModal(true)}
-                title="Calendar Rules & Day Matrix"
-                className="h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <i className="fas fa-gear text-xs text-brand-primary" />
-                <span className="hidden sm:inline">Rules</span>
-              </button>
+            {effectiveCanEdit && (
+              <ConditionalBlock name="calendar-manage-events" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={() => setShowRulesModal(true)}
+                  title="Calendar Rules & Day Matrix"
+                  className="h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <i className="fas fa-gear text-xs text-brand-primary" />
+                  <span className="hidden sm:inline">Rules</span>
+                </button>
+              </ConditionalBlock>
             )}
 
             {/* Add Event Button */}
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setEditingEvent({})}
-                className="h-9 px-3.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer ml-auto sm:ml-0"
-              >
-                <i className="fas fa-plus text-xs" /> <span>Add Event</span>
-              </button>
+            {effectiveCanEdit && (
+              <ConditionalBlock name="calendar-manage-events" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={() => setEditingEvent({})}
+                  className="h-9 px-3.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer ml-auto sm:ml-0"
+                >
+                  <i className="fas fa-plus text-xs" /> <span>Add Event</span>
+                </button>
+              </ConditionalBlock>
             )}
           </div>
         </div>

@@ -1,14 +1,111 @@
-// src/components/admin-settings/ViewControllerManager.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import {
   TILE_METADATA_REGISTRY,
-  FALLBACK_VIEW_CONFIGS,
 } from '../../utils/tileRegistry';
 import { invalidateViewConfigCache } from '../../hooks/useViewConfig';
 import ConfirmModal from '../ConfirmModal';
 import Translate from '../Translate';
+
+const HeaderMultiSelectFilter = ({
+  label,
+  options = [],
+  selected = [],
+  onChange,
+  placeholder = 'All',
+}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const count = selected.length;
+
+  const toggleOption = (id) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((x) => x !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  const selectAll = () => onChange(options.map((o) => (typeof o === 'string' ? o : o.id)));
+  const clearAll = () => onChange([]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full px-2 py-1 rounded-lg border text-[11px] font-bold flex items-center justify-between gap-1 transition-all cursor-pointer ${
+          count > 0
+            ? 'bg-purple-50 border-purple-300 text-purple-800'
+            : 'bg-white border-light-border text-dark-muted hover:border-gray-400'
+        }`}
+      >
+        <span className="truncate">
+          {count === 0 ? placeholder : `${count} selected`}
+        </span>
+        <i
+          className={`fas fa-chevron-down text-[8px] text-gray-400 transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
+        ></i>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full mt-1 w-48 bg-white border border-light-border rounded-xl shadow-xl z-50 p-2 text-xs animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-light-border/60 text-[10px] font-bold text-purple-700">
+            <span>{label}</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={selectAll} className="hover:underline cursor-pointer">
+                All
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="hover:underline text-gray-500 cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-0.5">
+            {options.map((opt) => {
+              const id = typeof opt === 'string' ? opt : opt.id;
+              const text = typeof opt === 'string' ? opt : opt.label;
+              const isChecked = selected.includes(id);
+              return (
+                <label
+                  key={id}
+                  className="flex items-center gap-2 px-1.5 py-1 rounded-md hover:bg-purple-50/60 cursor-pointer select-none"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleOption(id)}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span className="truncate text-dark-primary text-[11px] font-medium">{text}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const DEFAULT_ROLES = [
   { id: 'admin', label: 'Admin', color: 'bg-orange-100 text-orange-800 border-orange-200', is_system_role: true },
@@ -57,13 +154,17 @@ const getRoleBadgeClasses = (colorName) => {
 
 const COMPONENT_TYPES = ['tile', 'component', 'subview', 'variable'];
 
-export const ViewControllerManager = ({ onBack }) => {
+export const ViewControllerManager = () => {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Column-level filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGroup, setSelectedGroup] = useState('all');
-  const [selectedType, setSelectedType] = useState('all');
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [selectedRoles, setSelectedRoles] = useState([]);
+  const [selectedActive, setSelectedActive] = useState('all'); // 'all' | 'active' | 'inactive'
 
   // Dynamic Roles state loaded from app_roles
   const [roles, setRoles] = useState(DEFAULT_ROLES);
@@ -234,21 +335,58 @@ export const ViewControllerManager = ({ onBack }) => {
     });
   };
 
-  // Filtered configs for table
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    selectedTypes.length > 0 ||
+    selectedGroups.length > 0 ||
+    selectedRoles.length > 0 ||
+    selectedActive !== 'all';
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedTypes([]);
+    setSelectedGroups([]);
+    setSelectedRoles([]);
+    setSelectedActive('all');
+  };
+
+  // Filtered configs for table with column header filters
   const filteredConfigs = useMemo(() => {
     return configs.filter((item) => {
-      if (selectedGroup !== 'all' && item.group_name !== selectedGroup) return false;
-      if (selectedType !== 'all' && item.component_type !== selectedType) return false;
+      // 1. Filter by Types (if any selected)
+      if (selectedTypes.length > 0 && !selectedTypes.includes(item.component_type)) {
+        return false;
+      }
+
+      // 2. Filter by Groups (if any selected)
+      if (selectedGroups.length > 0 && !selectedGroups.includes(item.group_name)) {
+        return false;
+      }
+
+      // 3. Filter by Roles (if any selected)
+      if (selectedRoles.length > 0) {
+        const itemRoles = item.valid_access_roles || [];
+        const hasRole = selectedRoles.some((r) => itemRoles.includes(r));
+        if (!hasRole) return false;
+      }
+
+      // 4. Filter by Active status
+      if (selectedActive === 'active' && !item.is_active) return false;
+      if (selectedActive === 'inactive' && item.is_active) return false;
+
+      // 5. Search component name / description / title
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
+        const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
+        const titleMatch = meta.title?.toLowerCase().includes(q);
         const nameMatch = item.component_name?.toLowerCase().includes(q);
         const descMatch = item.description?.toLowerCase().includes(q);
-        const groupMatch = item.group_name?.toLowerCase().includes(q);
-        if (!nameMatch && !descMatch && !groupMatch) return false;
+        if (!titleMatch && !nameMatch && !descMatch) return false;
       }
+
       return true;
     });
-  }, [configs, selectedGroup, selectedType, searchQuery]);
+  }, [configs, selectedTypes, selectedGroups, selectedRoles, selectedActive, searchQuery]);
 
   // Available groups for filter
   const allGroups = useMemo(() => {
@@ -501,131 +639,91 @@ export const ViewControllerManager = ({ onBack }) => {
   }, [configs, simulatorRole]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      {/* Header bar */}
-      <div className="bg-white border border-light-border rounded-[2rem] p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-2xl shadow-lg shadow-purple-200">
-              <i className="fas fa-sliders-h"></i>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-extrabold uppercase tracking-wide">
-                  Admin System View
-                </span>
-                <span className="text-xs text-dark-muted">•</span>
-                <span className="text-xs font-semibold text-purple-700 font-mono">
-                  app_view_controller
-                </span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-black text-dark-deepblue mt-0.5">
-                View Controller & Tile Management
-              </h1>
-              <p className="text-xs text-dark-muted">
-                Control active tiles, role access, ordering, and feature visibility without redeployment
-              </p>
-            </div>
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-4 animate-in fade-in duration-300">
+      {/* Compact Top Action Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
+            <i className="fas fa-sliders-h"></i>
           </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {onBack && (
-              <button
-                onClick={onBack}
-                className="px-4 py-2.5 rounded-xl border border-light-border bg-white hover:bg-gray-50 text-dark-deepblue text-xs font-bold transition-all flex items-center gap-1.5"
-              >
-                <i className="fas fa-arrow-left"></i>
-                <span>Back</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setSimulatorRole(simulatorRole ? null : 'teacher')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
-                simulatorRole
-                  ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-200'
-                  : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'
-              }`}
-            >
-              <i className="fas fa-eye"></i>
-              <span>{simulatorRole ? 'Exit Role Simulator' : 'Role Simulator'}</span>
-            </button>
-
-            <button
-              onClick={handleReindexOrders}
-              disabled={saving}
-              title="Clean up display order numbers to 10, 20, 30..."
-              className="px-3 py-2.5 rounded-xl border border-light-border bg-white hover:bg-gray-50 text-dark-muted hover:text-dark-deepblue text-xs font-semibold transition-all"
-            >
-              <i className="fas fa-sort-numeric-down mr-1"></i>
-              Re-index
-            </button>
-
-            <button
-              onClick={fetchConfigs}
-              disabled={loading}
-              className="px-3.5 py-2.5 rounded-xl border border-light-border bg-white hover:bg-gray-50 text-dark-deepblue text-xs font-semibold transition-all flex items-center gap-1.5"
-            >
-              <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-              Refresh
-            </button>
-
-            <button
-              onClick={() => setIsRoleModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-              title="Manage System & Custom Roles"
-            >
-              <i className="fas fa-user-shield"></i>
-              <span>Manage Roles</span>
-            </button>
-
-            <button
-              onClick={() => handleOpenEditModal(null)}
-              className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-md shadow-purple-200 transition-all flex items-center gap-2"
-            >
-              <i className="fas fa-plus"></i>
-              <span>Add Component</span>
-            </button>
+          <div>
+            <h1 className="text-sm sm:text-base font-black text-dark-primary tracking-tight">
+              View Controller & Tile Management
+            </h1>
+            <p className="text-[11px] text-dark-muted font-medium">
+              Showing <span className="font-bold text-purple-700">{filteredConfigs.length}</span> of{' '}
+              <span className="font-bold">{configs.length}</span> components
+            </p>
           </div>
         </div>
 
-        {/* Stats strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-light-border/60">
-          <div className="bg-gray-50 rounded-2xl p-3.5 text-center">
-            <p className="text-[11px] font-semibold text-dark-muted">Total Components</p>
-            <p className="text-xl font-extrabold text-dark-deepblue mt-0.5">{configs.length}</p>
-          </div>
-          <div className="bg-green-50 rounded-2xl p-3.5 text-center">
-            <p className="text-[11px] font-semibold text-green-800">Active Tiles</p>
-            <p className="text-xl font-extrabold text-green-700 mt-0.5">
-              {configs.filter((c) => c.is_active && c.component_type === 'tile').length}
-            </p>
-          </div>
-          <div className="bg-purple-50 rounded-2xl p-3.5 text-center">
-            <p className="text-[11px] font-semibold text-purple-800">Feature Groups</p>
-            <p className="text-xl font-extrabold text-purple-700 mt-0.5">{allGroups.length}</p>
-          </div>
-          <div className="bg-gray-50 rounded-2xl p-3.5 text-center">
-            <p className="text-[11px] font-semibold text-dark-muted">Hidden / Disabled</p>
-            <p className="text-xl font-extrabold text-dark-muted mt-0.5">
-              {configs.filter((c) => !c.is_active).length}
-            </p>
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSimulatorRole(simulatorRole ? null : 'teacher')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+              simulatorRole
+                ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50'
+            }`}
+          >
+            <i className="fas fa-eye text-[11px]"></i>
+            <span>{simulatorRole ? 'Exit Simulator' : 'Role Simulator'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsRoleModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Manage System & Custom Roles"
+          >
+            <i className="fas fa-user-shield text-[11px]"></i>
+            <span>Manage Roles</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleReindexOrders}
+            disabled={saving}
+            title="Clean up display order numbers to 10, 20, 30..."
+            className="px-2.5 py-1.5 rounded-xl border border-light-border bg-white hover:bg-gray-50 text-dark-muted hover:text-dark-deepblue text-xs font-semibold transition-all cursor-pointer"
+          >
+            <i className="fas fa-sort-numeric-down mr-1 text-[11px]"></i>
+            <span>Re-index</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={fetchConfigs}
+            disabled={loading}
+            className="px-2.5 py-1.5 rounded-xl border border-light-border bg-white hover:bg-gray-50 text-dark-deepblue text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer"
+          >
+            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''} text-[11px]`}></i>
+            <span>Refresh</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleOpenEditModal(null)}
+            className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <i className="fas fa-plus text-[11px]"></i>
+            <span>Add Component</span>
+          </button>
         </div>
       </div>
 
       {/* Role Simulator Panel (if open) */}
       {simulatorRole && (
-        <div className="bg-gradient-to-br from-purple-900 to-indigo-950 rounded-[2rem] p-6 text-white shadow-xl animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-purple-800/60">
+        <div className="bg-gradient-to-br from-purple-900 to-indigo-950 rounded-2xl sm:rounded-3xl p-5 text-white shadow-xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-3 border-b border-purple-800/60">
             <div>
               <div className="flex items-center gap-2">
                 <i className="fas fa-magic text-amber-400"></i>
-                <h3 className="text-base font-bold">Role View Simulator</h3>
+                <h3 className="text-sm font-bold">Role View Simulator</h3>
               </div>
-              <p className="text-xs text-purple-200 mt-0.5">
-                Simulate how the portal dashboard will look for different roles in real-time
+              <p className="text-[11px] text-purple-200 mt-0.5">
+                Simulate visible dashboard tiles for selected roles
               </p>
             </div>
 
@@ -635,7 +733,7 @@ export const ViewControllerManager = ({ onBack }) => {
                 <button
                   key={r.id}
                   onClick={() => setSimulatorRole(r.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     simulatorRole === r.id
                       ? 'bg-amber-400 text-purple-950 shadow-md font-extrabold'
                       : 'bg-purple-800/70 text-purple-100 hover:bg-purple-700'
@@ -648,22 +746,22 @@ export const ViewControllerManager = ({ onBack }) => {
           </div>
 
           {/* Miniature simulator grid */}
-          <div className="mb-2">
-            <p className="text-xs font-semibold text-purple-300 mb-3">
+          <div>
+            <p className="text-xs font-semibold text-purple-300 mb-2">
               Visible Tiles for <span className="font-extrabold text-amber-300 uppercase tracking-wide">[{simulatorRole}]</span> ({simulatedTiles.length} tiles):
             </p>
             {simulatedTiles.length === 0 ? (
-              <p className="text-xs text-purple-300 py-6 text-center">No tiles currently permitted for this role.</p>
+              <p className="text-xs text-purple-300 py-4 text-center">No tiles currently permitted for this role.</p>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
                 {simulatedTiles.map((tile) => {
                   const meta = TILE_METADATA_REGISTRY[tile.component_name] || {};
                   return (
                     <div
                       key={tile.id}
-                      className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/15 flex items-center gap-3 relative overflow-hidden"
+                      className="bg-white/10 backdrop-blur-md rounded-xl p-2.5 border border-white/15 flex items-center gap-2.5 relative overflow-hidden"
                     >
-                      <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center text-sm shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-amber-400/20 text-amber-300 flex items-center justify-center text-xs shrink-0">
                         <i className={`fas ${meta.icon || 'fa-cubes'}`}></i>
                       </div>
                       <div className="overflow-hidden">
@@ -683,98 +781,150 @@ export const ViewControllerManager = ({ onBack }) => {
         </div>
       )}
 
-      {/* Filter and search toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
-        {/* Group selector */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setSelectedGroup('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-              selectedGroup === 'all'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'bg-white text-dark-muted border border-light-border hover:bg-gray-50'
-            }`}
-          >
-            All Groups ({configs.length})
-          </button>
-          {allGroups.map((grp) => {
-            const count = configs.filter((c) => c.group_name === grp).length;
-            return (
-              <button
-                key={grp}
-                onClick={() => setSelectedGroup(grp)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
-                  selectedGroup === grp
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'bg-white text-dark-muted border border-light-border hover:bg-gray-50'
-                }`}
-              >
-                {grp} ({count})
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search & Type filter */}
-        <div className="flex items-center gap-2 shrink-0">
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-semibold text-dark-deepblue focus:outline-none focus:border-purple-500"
-          >
-            <option value="all">All Types</option>
-            {COMPONENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                Type: {t}
-              </option>
-            ))}
-          </select>
-
-          <div className="relative w-48 sm:w-56">
-            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-light-border bg-white text-xs focus:outline-none focus:border-purple-500"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main Table */}
-      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+      {/* Main Table Card */}
+      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs">
         {loading ? (
           <div className="py-20 text-center">
             <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs text-dark-muted font-semibold">Loading view controller data...</p>
           </div>
-        ) : filteredConfigs.length === 0 ? (
-          <div className="py-16 text-center text-dark-muted text-xs">
-            <i className="fas fa-search text-2xl mb-2 text-gray-300"></i>
-            <p className="font-bold text-dark-deepblue">No matching components found</p>
-            <p className="mt-1">Try clearing filters or search query.</p>
-          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
+                {/* Header Labels Row */}
                 <tr className="border-b border-light-border bg-gray-50/80 text-dark-muted font-bold">
-                  <th className="py-3 px-3 w-16 text-center">Order</th>
-                  <th className="py-3 px-4">Component & Preview</th>
-                  <th className="py-3 px-3">Type</th>
-                  <th className="py-3 px-3">Group</th>
-                  <th className="py-3 px-4">
+                  <th className="py-2.5 px-3 w-20 text-center">Order</th>
+                  <th className="py-2.5 px-3 min-w-[200px]">Component & Preview</th>
+                  <th className="py-2.5 px-3 w-32">Type</th>
+                  <th className="py-2.5 px-3 w-40">Group</th>
+                  <th className="py-2.5 px-3 min-w-[220px]">
                     <span>Valid Access Roles</span>
-                    <span className="ml-1.5 text-[10px] font-normal text-purple-600">(Click chip to toggle)</span>
+                    <span className="ml-1 text-[10px] font-normal text-purple-600">(Toggle)</span>
                   </th>
-                  <th className="py-3 px-3 text-center">Active</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-2.5 px-3 w-28 text-center">Active</th>
+                  <th className="py-2.5 px-3 text-right w-24">Actions</th>
+                </tr>
+
+                {/* Column Filter Row */}
+                <tr className="border-b border-light-border bg-purple-50/20 text-xs">
+                  {/* Order column filter / Clear All */}
+                  <th className="p-2 text-center">
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        title="Clear all filters"
+                        className="px-1.5 py-1 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-md border border-red-200 transition-all cursor-pointer"
+                      >
+                        <i className="fas fa-times mr-0.5"></i> Clear
+                      </button>
+                    )}
+                  </th>
+
+                  {/* Component search */}
+                  <th className="p-2">
+                    <div className="relative">
+                      <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]"></i>
+                      <input
+                        type="text"
+                        placeholder="Search component..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-7 pr-6 py-1 bg-white border border-light-border rounded-lg text-xs font-medium focus:ring-1 focus:ring-purple-400 outline-none"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-[10px] cursor-pointer"
+                        >
+                          <i className="fas fa-times"></i>
+                        </button>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* Type multi-select */}
+                  <th className="p-2">
+                    <HeaderMultiSelectFilter
+                      label="Filter by Type"
+                      options={COMPONENT_TYPES}
+                      selected={selectedTypes}
+                      onChange={setSelectedTypes}
+                      placeholder="All Types"
+                    />
+                  </th>
+
+                  {/* Group multi-select */}
+                  <th className="p-2">
+                    <HeaderMultiSelectFilter
+                      label="Filter by Group"
+                      options={allGroups}
+                      selected={selectedGroups}
+                      onChange={setSelectedGroups}
+                      placeholder="All Groups"
+                    />
+                  </th>
+
+                  {/* Access Roles multi-select */}
+                  <th className="p-2">
+                    <HeaderMultiSelectFilter
+                      label="Filter by Role"
+                      options={roles.map((r) => ({ id: r.id, label: r.label }))}
+                      selected={selectedRoles}
+                      onChange={setSelectedRoles}
+                      placeholder="All Roles"
+                    />
+                  </th>
+
+                  {/* Active status dropdown */}
+                  <th className="p-2">
+                    <select
+                      value={selectedActive}
+                      onChange={(e) => setSelectedActive(e.target.value)}
+                      className="w-full px-2 py-1 rounded-lg border border-light-border bg-white text-[11px] font-bold text-dark-deepblue outline-none cursor-pointer"
+                    >
+                      <option value="all">All</option>
+                      <option value="active">Active Only</option>
+                      <option value="inactive">Inactive Only</option>
+                    </select>
+                  </th>
+
+                  {/* Actions column reset */}
+                  <th className="p-2 text-right">
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={handleResetFilters}
+                        className="text-[11px] font-bold text-red-600 hover:underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {filteredConfigs.map((item, index) => {
+                {filteredConfigs.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="py-16 text-center text-dark-muted text-xs">
+                      <i className="fas fa-search text-2xl mb-2 text-gray-300 block"></i>
+                      <p className="font-bold text-dark-deepblue">No matching components found</p>
+                      <p className="mt-1 text-gray-400">Try clearing or adjusting your column filters.</p>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="mt-3 px-3 py-1.5 rounded-xl bg-purple-100 text-purple-800 text-xs font-bold hover:bg-purple-200 transition-all cursor-pointer"
+                        >
+                          Clear All Filters
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredConfigs.map((item, index) => {
                   const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
                   return (
                     <tr
@@ -911,7 +1061,7 @@ export const ViewControllerManager = ({ onBack }) => {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>

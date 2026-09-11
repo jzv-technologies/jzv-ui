@@ -340,7 +340,7 @@ const DataGrid = ({
                   <tr
                     key={idx}
                     onClick={() => onRowClick && onRowClick(item)}
-                    className={`border-b border-light-border last:border-0 transition-colors cursor-pointer ${rowClass}`}
+                    className={`border-b border-light-border last:border-0 transition-colors ${onRowClick ? 'cursor-pointer hover:bg-gray-50/50' : 'cursor-default'} ${rowClass}`}
                     title={onRowClick ? "Click to view details" : ""}
                   >
                     {visibleHeaders.map((h) => {

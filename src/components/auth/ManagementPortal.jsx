@@ -613,7 +613,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     {
       id: 'timetable-planner',
       title: 'Timetable',
-      description: 'View schedules, manage classes, teachers, subjects, and plan conflict-free timetables.',
+      description:
+        'View schedules, manage classes, teachers, subjects, and plan conflict-free timetables.',
       icon: 'fa-calendar-alt',
       buttonColor: 'bg-brand-primary text-white',
       shadow: 'shadow-brand-lbg',
@@ -621,13 +622,13 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
     },
 
     {
-      id: 'lesson-planner-tracker',
+      id: 'syllabus-progress-tracker',
       title: 'Lesson Planner & Tracker',
       description: 'View syllabus coverage, time spent on chapters/lessons, and revisions.',
       icon: 'fa-chart-line',
       buttonColor: 'bg-blue-600 text-white',
       shadow: 'shadow-blue-200',
-      onClick: () => onSetSubView('lesson-planner-tracker'),
+      onClick: () => onSetSubView('syllabus-progress-tracker'),
     },
     {
       id: 'syllabus-manager',
@@ -1510,22 +1511,26 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       onSetSubView={onSetSubView}
     >
       {subView === 'job-applications' || subView === 'registered-complaints' ? (
-        <div data-feature={subView}>
-          {renderTableView()}
-        </div>
+        <div data-feature={subView}>{renderTableView()}</div>
       ) : null}
       {subView === 'student-records' && (
         <div data-feature="student-records">
-          <AdminStudentsView role="management" user={user} />
+          <AdminStudentsView role="management" user={user} mode="records" initialTab="records" />
         </div>
       )}
-      {subView === 'employee-records' && (
+      {subView === 'student-fees' && (
+        <div data-feature="student-fees">
+          <AdminStudentsView role="management" user={user} mode="fees" initialTab="fees" />
+        </div>
+      )}
+      {(subView === 'employee-records' || subView === 'employee-management') && (
         <div data-feature="employee-records">
           <EmployeeRecordsView
             role="management"
             user={user}
             userRoles={userRoles}
             initialTab="records"
+            mode="records"
           />
         </div>
       )}
@@ -1535,14 +1540,25 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
             role="management"
             user={user}
             userRoles={userRoles}
-            initialTab="salary"
+            initialTab="salary_dashboard"
+            mode="salary"
           />
         </div>
       )}
       {subView === 'take-test' ? <div data-feature="take-test">{renderTakeTestView()}</div> : null}
-      {subView === 'lesson-planner-tracker' && (
-        <div data-feature="lesson-planner-tracker">
-          <SyllabusTrackerPortal role="management" />
+      {subView === 'my-activity' && (
+        <div data-feature="my-activity">
+          <SyllabusTrackerPortal role="teacher" initialTab="my-activity" user={user} userRoles={userRoles} />
+        </div>
+      )}
+      {subView === 'teacher-activity' && (
+        <div data-feature="teacher-activity">
+          <SyllabusTrackerPortal role="management" initialTab="teacher-activity" user={user} userRoles={userRoles} />
+        </div>
+      )}
+      {subView === 'syllabus-progress-tracker' && (
+        <div data-feature="syllabus-progress-tracker">
+          <SyllabusTrackerPortal role="management" initialTab="syllabus-progress" user={user} userRoles={userRoles} />
         </div>
       )}
       {subView === 'dashboard' && (

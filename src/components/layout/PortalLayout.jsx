@@ -57,12 +57,28 @@ const defaultStyles = {
   borderColor: 'border-gray-200',
 };
 
-const PortalLayout = ({ children, userRoles, roleName, subView, onSetSubView, subViewTitle }) => {
+const PortalLayout = ({
+  children,
+  userRoles,
+  roleName,
+  subView,
+  onSetSubView,
+  subViewTitle,
+  activeGroup,
+  onSetActiveGroup,
+  activeGroupTitle,
+  groups = [],
+}) => {
   const navigate = useNavigate();
 
   const handlePortalClick = () => {
     if (onSetSubView) onSetSubView(null);
+    if (onSetActiveGroup) onSetActiveGroup(null);
     navigate('/portal');
+  };
+
+  const handleGroupClick = () => {
+    if (onSetSubView) onSetSubView(null);
   };
 
   const styles = roleStyles[roleName] || defaultStyles;
@@ -71,30 +87,114 @@ const PortalLayout = ({ children, userRoles, roleName, subView, onSetSubView, su
     subViewTitle ||
     (subView ? subView.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 
+  const isAtRoot = !subView && !activeGroup;
+
   const Breadcrumbs = () => (
     <div
       className={`
         w-full bg-gradient-to-r ${styles.bgGradient}
         border-b ${styles.borderColor}
-        px-6 py-3.5 flex items-center text-sm
-        shadow-md sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95 print:hidden
+        px-3 sm:px-4 py-1 sm:py-1.5 flex items-center text-xs sm:text-sm
+        shadow-xs sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95 print:hidden
       `}
     >
-      <div className="max-w-7xl mx-auto w-full flex items-center gap-2 ml-2">
-        <button
-          onClick={handlePortalClick}
-          className={`${
-            subView ? styles.textColor : `${styles.activeTextColor} font-bold`
-          } ${styles.hoverColor} flex items-center gap-1.5 transition-colors font-semibold`}
-        >
-          <i className="fas fa-th-large text-xs"></i>
-          <span>Portal</span>
-        </button>
-        {subView && (
-          <>
-            <span className="text-gray-400 font-semibold select-none">\</span>
-            <span className={`${styles.activeTextColor} font-bold`}>{displayTitle}</span>
-          </>
+      <div className="w-full flex items-center justify-between gap-2">
+        {/* Left: Breadcrumbs Navigation */}
+        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-wrap">
+          <button
+            onClick={handlePortalClick}
+            className={`${
+              !isAtRoot ? styles.textColor : `${styles.activeTextColor} font-bold`
+            } ${styles.hoverColor} flex items-center gap-1 transition-colors font-semibold cursor-pointer shrink-0 text-xs sm:text-sm`}
+          >
+            <i className="fas fa-th-large text-[11px]"></i>
+            <span>Portal</span>
+          </button>
+
+          {/* Group Level (when in group drill-down or inside a subview belonging to a group) */}
+          {activeGroupTitle && (
+            <>
+              <span className="text-gray-400 font-semibold select-none text-xs">\</span>
+              {subView ? (
+                <button
+                  onClick={handleGroupClick}
+                  className={`${styles.textColor} ${styles.hoverColor} transition-colors font-semibold cursor-pointer truncate max-w-[130px] sm:max-w-xs text-xs sm:text-sm`}
+                >
+                  {activeGroupTitle}
+                </button>
+              ) : (
+                <span className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}>
+                  {activeGroupTitle}
+                </span>
+              )}
+            </>
+          )}
+
+          {/* Subview Level */}
+          {subView && (
+            <>
+              <span className="text-gray-400 font-semibold select-none text-xs">\</span>
+              <span className={`${styles.activeTextColor} font-bold truncate max-w-[150px] sm:max-w-xs text-xs sm:text-sm`}>
+                {displayTitle}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Right: Category Switch Options */}
+        {groups && groups.length > 0 && (
+          <div className="flex items-center shrink-0">
+            {/* Desktop View: Icons only, no description */}
+            <div className="hidden md:flex items-center gap-1 bg-white/70 backdrop-blur-xs border border-light-border/70 rounded-lg p-0.5 shadow-2xs">
+              {groups.map((g) => {
+                const isCurrent = activeGroup === g.info.key;
+                return (
+                  <button
+                    key={g.info.key}
+                    type="button"
+                    title={g.info.label}
+                    onClick={() => {
+                      if (onSetSubView) onSetSubView(null);
+                      if (onSetActiveGroup) onSetActiveGroup(g.info.key);
+                    }}
+                    className={`w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-orange-primary text-white shadow-xs font-bold scale-105'
+                        : 'text-dark-muted hover:text-dark-deepblue hover:bg-white/90 active:scale-95'
+                    }`}
+                  >
+                    <i className={`fas ${g.info.icon}`}></i>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mobile View: Dropdown */}
+            <div className="md:hidden relative">
+              <select
+                value={activeGroup || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (!val) {
+                    if (onSetSubView) onSetSubView(null);
+                    if (onSetActiveGroup) onSetActiveGroup(null);
+                  } else {
+                    if (onSetSubView) onSetSubView(null);
+                    if (onSetActiveGroup) onSetActiveGroup(val);
+                  }
+                }}
+                className="appearance-none text-[11px] font-semibold bg-white/90 border border-light-border/90 rounded-md pl-2 pr-6 py-1 text-dark-deepblue focus:outline-none focus:ring-1 focus:ring-orange-primary shadow-2xs max-w-[130px] truncate cursor-pointer"
+              >
+                <option value="">All Categories</option>
+                {groups.map((g) => (
+                  <option key={g.info.key} value={g.info.key}>
+                    {g.info.label}
+                  </option>
+                ))}
+              </select>
+              <i className="fas fa-chevron-down absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] text-dark-muted pointer-events-none" />
+            </div>
+          </div>
         )}
       </div>
     </div>

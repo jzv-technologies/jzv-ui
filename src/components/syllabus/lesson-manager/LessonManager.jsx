@@ -40,11 +40,14 @@ const LessonManager = ({
   user,
   teacherRecord,
   role = 'teacher',
+  userRoles = [],
   externalFilters = null,
   onExternalFiltersChange = null,
   hideFilterHeader = false,
 }) => {
-  const isAdminView = role === 'admin' || role === 'management';
+  const isTeacher =
+    (Array.isArray(userRoles) && userRoles.includes('teacher')) || role === 'teacher';
+  const isAdminView = !isTeacher && (role === 'admin' || role === 'management');
 
   const [initialized, setInitialized] = useState(false);
   const [loading, setLoading] = useState(true);

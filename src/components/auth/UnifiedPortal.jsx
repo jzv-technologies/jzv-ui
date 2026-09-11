@@ -3,11 +3,11 @@ import React, { useState, useMemo } from 'react';
 import useViewConfig from '../../hooks/useViewConfig';
 import PortalLayout from '../layout/PortalLayout';
 import Translate from '../Translate';
+import { resolveGroupInfo, TILE_METADATA_REGISTRY } from '../../utils/tileRegistry';
 
 // Subview components
 import EmployeeRecordsView from '../employees/EmployeeRecordsView';
 import AdminStudentsView from '../students/AdminStudentsView';
-import TeacherStudentsViewer from '../students/TeacherStudentsViewer';
 import TimetableManager from '../timetable/TimetableManager';
 import TeacherTimetableViewer from '../timetable/TeacherTimetableViewer';
 import ParentTimetableViewer from '../timetable/ParentTimetableViewer';
@@ -19,6 +19,7 @@ import DynamicForm from '../DynamicForm';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
+import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 
 // Shared subview containers
 import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewContainer';
@@ -39,14 +40,7 @@ export const UnifiedPortal = ({
   const [subView, setSubView] = useState(initialSubView);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
 
-  const {
-    viewConfigs,
-    loading,
-    error,
-    tableMissing,
-    refreshConfigs,
-    getVisibleTiles,
-  } = useViewConfig();
+  const { viewConfigs, loading, error, refreshConfigs, getVisibleTiles } = useViewConfig();
 
   // Determine effective primary role for portal theming
   const effectiveRole = useMemo(() => {
@@ -66,14 +60,88 @@ export const UnifiedPortal = ({
 
   const displayedTiles = allPermittedTiles;
 
+  // Nested navigation states
+  const [activeGroup, setActiveGroup] = useState(null);
+
+  // Group tiles by their group_name
+  // Requirement 2: If the group has only one tile inside, then direct tile to be displayed
+  const { multiTileGroups, directTiles } = useMemo(() => {
+    if (!displayedTiles || displayedTiles.length === 0) {
+      return { multiTileGroups: [], directTiles: [] };
+    }
+
+    const groupMap = new Map();
+
+    displayedTiles.forEach((tile) => {
+      const groupInfo = resolveGroupInfo(tile.group_name);
+      const groupKey = groupInfo.key;
+
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          info: groupInfo,
+          tiles: [],
+          minDisplayOrder: tile.display_order ?? 50,
+        });
+      }
+
+      const entry = groupMap.get(groupKey);
+      entry.tiles.push(tile);
+      if ((tile.display_order ?? 50) < entry.minDisplayOrder) {
+        entry.minDisplayOrder = tile.display_order ?? 50;
+      }
+    });
+
+    const multi = [];
+    const direct = [];
+
+    // Separate multi-tile groups from single-tile groups
+    groupMap.forEach((entry) => {
+      entry.tiles.sort((a, b) => (a.display_order ?? 50) - (b.display_order ?? 50));
+
+      if (entry.tiles.length > 1) {
+        multi.push(entry);
+      } else {
+        // Only 1 tile inside this group -> direct tile to be displayed
+        direct.push(entry.tiles[0]);
+      }
+    });
+
+    // Sort multi-tile groups by configured group order or min display_order
+    multi.sort((a, b) => (a.info.order ?? a.minDisplayOrder) - (b.info.order ?? b.minDisplayOrder));
+
+    // Sort direct tiles by display_order
+    direct.sort((a, b) => (a.display_order ?? 50) - (b.display_order ?? 50));
+
+    return { multiTileGroups: multi, directTiles: direct };
+  }, [displayedTiles]);
+
+  // Active Group Info for current drill-down
+  const currentGroupEntry = useMemo(() => {
+    if (!activeGroup) return null;
+    return multiTileGroups.find((g) => g.info.key === activeGroup) || null;
+  }, [activeGroup, multiTileGroups]);
+
   const activeTile = useMemo(() => {
-    return allPermittedTiles.find(
-      (t) => t.id === subView || t.component_name === subView
-    );
+    return allPermittedTiles.find((t) => t.id === subView || t.component_name === subView);
   }, [allPermittedTiles, subView]);
+
+  // Derived active group title for breadcrumbs
+  const activeGroupTitle = useMemo(() => {
+    if (currentGroupEntry) {
+      return currentGroupEntry.info.label;
+    }
+    if (subView && activeTile?.group_name) {
+      const gInfo = resolveGroupInfo(activeTile.group_name);
+      if (multiTileGroups.some((g) => g.info.key === gInfo.key)) {
+        return gInfo.label;
+      }
+    }
+    return null;
+  }, [currentGroupEntry, subView, activeTile, multiTileGroups]);
 
   const subViewTitle =
     activeTile?.title ||
+    TILE_METADATA_REGISTRY[subView]?.title ||
     (subView ? subView.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 
   // Tile click handler
@@ -93,7 +161,56 @@ export const UnifiedPortal = ({
     }
 
     // Default: switch subview
+    const groupInfo = resolveGroupInfo(tile.group_name);
+    if (groupInfo && multiTileGroups.some((g) => g.info.key === groupInfo.key)) {
+      setActiveGroup(groupInfo.key);
+    }
     setSubView(tile.id);
+  };
+
+  // Helper to render an individual feature tile button
+  const renderTileButton = (tile) => {
+    const topBarClass =
+      (tile.buttonColor && tile.buttonColor.split(' ').find((c) => c.startsWith('bg-'))) ||
+      'bg-orange-primary';
+
+    const hoverBorderClass = topBarClass
+      ? topBarClass.replace('bg-', 'hover:border-')
+      : 'hover:border-orange-primary';
+
+    return (
+      <button
+        key={tile.id}
+        onClick={() => handleTileClick(tile)}
+        className={`group pt-5 pb-3.5 px-3.5 sm:pt-7 sm:pb-5 sm:px-5 lg:pt-8 lg:pb-6 lg:px-6 bg-white border border-light-border rounded-2xl sm:rounded-[1.75rem] ${hoverBorderClass} hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer flex flex-col sm:flex-row items-center sm:items-center gap-2.5 sm:gap-3.5 text-center sm:text-left w-full shadow-sm relative overflow-hidden`}
+      >
+        <div className={`absolute top-0 left-0 right-0 h-1.5 sm:h-2 ${topBarClass}`} />
+        <div
+          className={`w-10 h-10 sm:w-14 lg:w-16 sm:h-14 lg:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-xl lg:text-2xl shadow-md sm:shadow-lg ${tile.shadow || ''} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0 ${tile.buttonColor || 'bg-orange-primary text-white'}`}
+        >
+          <i className={`fas ${tile.icon}`}></i>
+        </div>
+        <div className="w-full">
+          <div className="flex items-center justify-center sm:justify-start gap-1.5">
+            <h5 className="font-bold text-xs sm:text-base lg:text-xl text-dark-deepblue sm:mb-1 group-hover:text-orange-primary transition-colors leading-tight">
+              {tile.titleKey ? <Translate id={tile.titleKey}>{tile.title}</Translate> : tile.title}
+            </h5>
+            {tile.isDynamic && (
+              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-extrabold uppercase">
+                Form
+              </span>
+            )}
+          </div>
+          <p className="hidden sm:block text-dark-muted text-xs lg:text-sm leading-relaxed">
+            {tile.descriptionKey ? (
+              <Translate id={tile.descriptionKey}>{tile.description}</Translate>
+            ) : (
+              tile.description
+            )}
+          </p>
+        </div>
+      </button>
+    );
   };
 
   // Subview component registry
@@ -110,6 +227,7 @@ export const UnifiedPortal = ({
               userRoles={userRoles}
               teacherRecord={teacherRecord}
               initialTab="records"
+              mode="records"
             />
           </div>
         );
@@ -121,7 +239,8 @@ export const UnifiedPortal = ({
               role={isAdmin ? 'admin' : 'management'}
               user={user}
               userRoles={userRoles}
-              initialTab="salary"
+              initialTab="salary_dashboard"
+              mode="salary"
             />
           </div>
         );
@@ -130,7 +249,8 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="personal-info">
             <EmployeeRecordsView
-              role="employee"
+              role="self"
+              mode="self"
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
@@ -142,16 +262,25 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="student-records">
             <AdminStudentsView
-              role={isManagement && !isAdmin ? 'management' : 'admin'}
+              role={isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'viewer'}
               user={user}
+              userRoles={userRoles}
+              mode="records"
+              initialTab="records"
             />
           </div>
         );
 
-      case 'students-viewer':
+      case 'student-fees':
         return (
-          <div data-feature="students-viewer">
-            <TeacherStudentsViewer />
+          <div data-feature="student-fees">
+            <AdminStudentsView
+              role={isManagement && !isAdmin ? 'management' : 'admin'}
+              user={user}
+              userRoles={userRoles}
+              mode="fees"
+              initialTab="fees"
+            />
           </div>
         );
 
@@ -184,28 +313,58 @@ export const UnifiedPortal = ({
             <SyllabusManager
               role={isAdmin ? 'admin' : isManagement ? 'management' : 'teacher'}
               user={user}
+              userRoles={userRoles}
               teacherRecord={teacherRecord}
             />
           </div>
         );
 
-      case 'lesson-planner-tracker':
-      case 'syllabus-progress':
+      case 'my-activity':
         return (
-          <div data-feature="lesson-planner-tracker">
+          <div data-feature="my-activity">
             <SyllabusTrackerPortal
               role={
-                isAdmin
-                  ? 'admin'
-                  : isManagement
-                    ? 'management'
-                    : isTeacher
-                      ? 'teacher'
-                      : 'parent'
+                isTeacher ? 'teacher' : isAdmin ? 'admin' : isManagement ? 'management' : 'parent'
               }
               user={user}
+              userRoles={userRoles}
               teacherRecord={teacherRecord}
               student={user?.student}
+              initialTab="my-activity"
+            />
+          </div>
+        );
+
+      case 'teacher-activity':
+        return (
+          <div data-feature="teacher-activity">
+            <SyllabusTrackerPortal
+              role={
+                isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'parent'
+              }
+              user={user}
+              userRoles={userRoles}
+              teacherRecord={teacherRecord}
+              student={user?.student}
+              initialTab="teacher-activity"
+              singleTab="teacher-activity"
+            />
+          </div>
+        );
+
+      case 'syllabus-progress-tracker':
+      case 'syllabus-progress':
+        return (
+          <div data-feature="syllabus-progress-tracker">
+            <SyllabusTrackerPortal
+              role={
+                isTeacher ? 'teacher' : isAdmin ? 'admin' : isManagement ? 'management' : 'parent'
+              }
+              user={user}
+              userRoles={userRoles}
+              teacherRecord={teacherRecord}
+              student={user?.student}
+              initialTab={isTeacher ? 'my-activity' : 'syllabus-progress'}
             />
           </div>
         );
@@ -216,6 +375,7 @@ export const UnifiedPortal = ({
             <SyllabusTrackerPortal
               role={isAdmin ? 'admin' : isManagement ? 'management' : 'teacher'}
               user={user}
+              userRoles={userRoles}
               teacherRecord={teacherRecord}
               dashboardOnly
             />
@@ -225,7 +385,7 @@ export const UnifiedPortal = ({
       case 'academic-calendar':
         return (
           <div data-feature="academic-calendar">
-            <AcademicCalendarView canEdit={isAdmin || isManagement} />
+            <AcademicCalendarView canEdit={isAdmin || isManagement} userRoles={userRoles} />
           </div>
         );
 
@@ -266,12 +426,13 @@ export const UnifiedPortal = ({
           </div>
         );
 
+      case 'view-complaints':
       case 'registered-complaints':
         return (
-          <div data-feature="registered-complaints">
+          <div data-feature="view-complaints">
             <SubmissionsTableView
               formUuid="complaint"
-              title="Complaint Details"
+              title="View Complaints"
               user={user}
               fullName={fullName}
               userRoles={userRoles}
@@ -283,8 +444,9 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="lesson-planner">
             <LessonManager
-              role={isAdmin ? 'admin' : isManagement ? 'management' : 'teacher'}
+              role={isTeacher ? 'teacher' : isAdmin ? 'admin' : 'management'}
               user={user}
+              userRoles={userRoles}
               teacherRecord={teacherRecord}
             />
           </div>
@@ -295,6 +457,14 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="avc-admin-manager">
             <ViewControllerManager onBack={() => setSubView(null)} />
+          </div>
+        );
+
+      case 'manage-user-roles':
+      case 'portal-user-roles':
+        return (
+          <div data-feature="manage-user-roles">
+            <ManagePortalUserRolesView currentUser={user} />
           </div>
         );
 
@@ -328,6 +498,10 @@ export const UnifiedPortal = ({
       subView={subView}
       onSetSubView={setSubView}
       subViewTitle={subViewTitle}
+      activeGroup={activeGroup}
+      onSetActiveGroup={setActiveGroup}
+      activeGroupTitle={activeGroupTitle}
+      groups={multiTileGroups}
     >
       <div className="w-full">
         {/* Active SubView Content */}
@@ -336,12 +510,27 @@ export const UnifiedPortal = ({
             {renderSubViewContent()}
           </div>
         ) : (
-          /* Dashboard Tiles View */
+          /* Dashboard View */
           <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 animate-in fade-in duration-300">
-            {/* Tiles Grid */}
             {loading ? (
               <div className="flex items-center justify-center py-24">
                 <div className="w-10 h-10 border-4 border-orange-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-16 bg-white rounded-3xl border border-red-200 p-8 max-w-xl mx-auto">
+                <i className="fas fa-triangle-exclamation text-3xl text-red-500 mb-3"></i>
+                <p className="text-sm font-bold text-dark-deepblue">
+                  Failed to Load View Configuration
+                </p>
+                <p className="text-xs text-red-600 mt-1">
+                  {error.message || 'Unable to load app_view_controller from database.'}
+                </p>
+                <button
+                  onClick={() => refreshConfigs()}
+                  className="mt-4 px-4 py-2 rounded-xl bg-orange-primary text-white text-xs font-bold hover:bg-orange-dark transition-all"
+                >
+                  <i className="fas fa-sync-alt mr-2"></i>Retry
+                </button>
               </div>
             ) : displayedTiles.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-3xl border border-light-border p-8">
@@ -352,60 +541,95 @@ export const UnifiedPortal = ({
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 animate-in fade-in duration-300">
-                {displayedTiles.map((tile) => {
-                  const topBarClass =
-                    (tile.buttonColor &&
-                      tile.buttonColor.split(' ').find((c) => c.startsWith('bg-'))) ||
-                    'bg-orange-primary';
+              <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+                {/* ── Level 2: Group Drill-down View (when activeGroup is selected) ── */}
+                {activeGroup && currentGroupEntry ? (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* Tiles Grid for this group */}
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+                      {currentGroupEntry.tiles.map((tile) => renderTileButton(tile))}
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Level 1: Landing Page (Group Cards + Standalone Direct Tiles) ── */
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* 1. Group Cards Grid (Nesting Level 1) */}
+                    {multiTileGroups.length > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                        {multiTileGroups.map((group) => {
+                          const accentBarClass = group.info.color
+                            ? group.info.color.replace('text-', 'bg-')
+                            : 'bg-orange-primary';
 
-                  const hoverBorderClass = topBarClass
-                    ? topBarClass.replace('bg-', 'hover:border-')
-                    : 'hover:border-orange-primary';
+                          return (
+                            <div
+                              key={group.info.key}
+                              onClick={() => setActiveGroup(group.info.key)}
+                              className="group relative bg-white border border-light-border hover:border-orange-primary/60 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-left shadow-xs hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
+                            >
+                              {/* Top accent bar */}
+                              <div
+                                className={`absolute top-0 left-0 right-0 h-1.5 sm:h-2 ${accentBarClass}`}
+                              />
 
-                  return (
-                    <button
-                      key={tile.id}
-                      onClick={() => handleTileClick(tile)}
-                      className={`group pt-5 pb-3.5 px-3.5 sm:pt-7 sm:pb-5 sm:px-5 lg:pt-8 lg:pb-6 lg:px-6 bg-white border border-light-border rounded-2xl sm:rounded-[1.75rem] ${hoverBorderClass} hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer flex flex-col sm:flex-row items-center sm:items-center gap-2.5 sm:gap-3.5 text-center sm:text-left w-full shadow-sm relative overflow-hidden`}
-                    >
-                      {/* Top colored accent bar */}
-                      <div className={`absolute top-0 left-0 right-0 h-1.5 sm:h-2 ${topBarClass}`} />
+                              <div>
+                                {/* Icon + Feature Count */}
+                                <div className="flex items-center justify-between mb-4">
+                                  <div
+                                    className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-xl sm:text-2xl shadow-xs ${group.info.badgeBg} group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}
+                                  >
+                                    <i
+                                      className={`fas ${group.info.icon} ${group.info.color}`}
+                                    ></i>
+                                  </div>
+                                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                                    {group.tiles.length} features
+                                  </span>
+                                </div>
 
-                      {/* Icon badge */}
-                      <div
-                        className={`w-10 h-10 sm:w-14 lg:w-16 sm:h-14 lg:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-xl lg:text-2xl shadow-md sm:shadow-lg ${tile.shadow || ''} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0 ${tile.buttonColor || 'bg-orange-primary text-white'}`}
-                      >
-                        <i className={`fas ${tile.icon}`}></i>
+                                {/* Title */}
+                                <h3 className="text-base sm:text-lg lg:text-xl font-extrabold text-dark-deepblue group-hover:text-orange-primary transition-colors tracking-tight mb-2">
+                                  {group.info.label}
+                                </h3>
+
+                                {/* Feature Previews */}
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                  {group.tiles.slice(0, 4).map((tile) => (
+                                    <span
+                                      key={tile.id}
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-dark-slate bg-gray-50 group-hover:bg-orange-50/50 px-2 py-0.5 rounded-md border border-gray-200/70 transition-colors"
+                                    >
+                                      <i
+                                        className={`fas ${tile.icon} text-[9px] opacity-70`}
+                                      ></i>
+                                      <span className="truncate max-w-[130px]">
+                                        {tile.title}
+                                      </span>
+                                    </span>
+                                  ))}
+                                  {group.tiles.length > 4 && (
+                                    <span className="inline-flex items-center text-[10px] font-bold text-dark-muted px-1.5 py-0.5">
+                                      +{group.tiles.length - 4} more
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                    )}
 
-                      {/* Title & Description */}
-                      <div className="w-full">
-                        <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                          <h5 className="font-bold text-xs sm:text-base lg:text-xl text-dark-deepblue sm:mb-1 group-hover:text-orange-primary transition-colors leading-tight">
-                            {tile.titleKey ? (
-                              <Translate id={tile.titleKey}>{tile.title}</Translate>
-                            ) : (
-                              tile.title
-                            )}
-                          </h5>
-                          {tile.isDynamic && (
-                            <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-extrabold uppercase">
-                              Form
-                            </span>
-                          )}
+                    {/* 2. Direct Tiles (Standalone Features from single-tile groups) */}
+                    {directTiles.length > 0 && (
+                      <div className="pt-2 sm:pt-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+                          {directTiles.map((tile) => renderTileButton(tile))}
                         </div>
-                        <p className="hidden sm:block text-dark-muted text-xs lg:text-sm leading-relaxed">
-                          {tile.descriptionKey ? (
-                            <Translate id={tile.descriptionKey}>{tile.description}</Translate>
-                          ) : (
-                            tile.description
-                          )}
-                        </p>
                       </div>
-                    </button>
-                  );
-                })}
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

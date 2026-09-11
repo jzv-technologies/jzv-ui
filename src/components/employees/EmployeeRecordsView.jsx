@@ -9,7 +9,6 @@ import EmployeeRecordsTable from './employee-records/EmployeeRecordsTable';
 import EmployeeSelfProfileCard from './employee-records/EmployeeSelfProfileCard';
 import EmployeeEditModal from './employee-records/EmployeeEditModal';
 import BulkImportModal from './employee-records/BulkImportModal';
-import UserRolesManagementModal from './employee-records/UserRolesManagementModal';
 import BulkIncrementApplyModal from './employee-records/BulkIncrementApplyModal';
 import ConfirmModal from '../ConfirmModal';
 
@@ -19,6 +18,7 @@ import {
   normalizeRoles,
   fetchAllAppRoles,
 } from '../../utils/roleUtils';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 
 const DEFAULT_ROLES = [
   'Teacher',
@@ -37,11 +37,26 @@ const EmployeeRecordsView = ({
   userRoles = [],
   teacherRecord = null,
   initialTab = 'records',
+  mode = null, // 'records' | 'salary' | null
 }) => {
-  const isAdmin = role === 'admin';
-  const isManagement = role === 'management';
-  const isEmployeeSelf = role === 'employee' || role === 'teacher';
+  const effectiveRoles =
+    Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
+  const canAccess = useCanAccess(effectiveRoles);
+
+  const isAdmin = effectiveRoles.includes('admin') || role === 'admin';
+  const isManagement = effectiveRoles.includes('management') || role === 'management';
+  const isEmployeeSelf =
+    mode === 'self' ||
+    role === 'self' ||
+    (!isAdmin &&
+      !isManagement &&
+      (effectiveRoles.includes('employee') ||
+        effectiveRoles.includes('teacher') ||
+        role === 'employee' ||
+        role === 'teacher'));
   const [activeTab, setActiveTab] = useState(() => {
+    if (mode === 'salary') return 'salary_dashboard';
+    if (mode === 'records') return 'records';
     if (
       initialTab === 'salary' ||
       initialTab === 'salary_dashboard' ||
@@ -52,6 +67,18 @@ const EmployeeRecordsView = ({
     if (initialTab === 'salary_list') return 'salary_list';
     return 'records';
   }); // 'records' | 'salary_dashboard' | 'salary_list'
+
+  useEffect(() => {
+    if (activeTab === 'records' && !canAccess('emp-tab-records') && canAccess('emp-tab-salary')) {
+      setActiveTab('salary_dashboard');
+    } else if (
+      (activeTab === 'salary_dashboard' || activeTab === 'salary_list') &&
+      !canAccess('emp-tab-salary') &&
+      canAccess('emp-tab-records')
+    ) {
+      setActiveTab('records');
+    }
+  }, [canAccess, activeTab]);
   const [salaryControls, setSalaryControls] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [authUsers, setAuthUsers] = useState([]);
@@ -70,10 +97,6 @@ const EmployeeRecordsView = ({
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [csvPreviewRows, setCsvPreviewRows] = useState([]);
-  const [isUserRolesModalOpen, setIsUserRolesModalOpen] = useState(false);
-  const [userRolesSearch, setUserRolesSearch] = useState('');
-  const [editingAuthUser, setEditingAuthUser] = useState(null);
-  const [editingEmpId, setEditingEmpId] = useState('');
 
   // Bulk Apply Increments State
   const [isBulkApplyModalOpen, setIsBulkApplyModalOpen] = useState(false);
@@ -102,12 +125,11 @@ const EmployeeRecordsView = ({
       if (e.key === 'Escape') {
         if (modalMode) setModalMode(null);
         if (isCsvImportOpen) setIsCsvImportOpen(false);
-        if (isUserRolesModalOpen) setIsUserRolesModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [modalMode, isCsvImportOpen, isUserRolesModalOpen]);
+  }, [modalMode, isCsvImportOpen]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -182,7 +204,55 @@ const EmployeeRecordsView = ({
         } else if (teacherRecord) {
           setEmployees([teacherRecord]);
         } else {
-          setEmployees([]);
+          let fallbackEmp = null;
+          if (user?.id) {
+            const { data: empById } = await supabase
+              .from('employees')
+              .select('*')
+              .eq('auth_id', user.id)
+              .maybeSingle();
+            if (empById) fallbackEmp = empById;
+          }
+          if (!fallbackEmp && user?.email) {
+            const { data: empByEmail } = await supabase
+              .from('employees')
+              .select('*')
+              .ilike('email', user.email)
+              .maybeSingle();
+            if (empByEmail) fallbackEmp = empByEmail;
+          }
+          if (!fallbackEmp && user?.id) {
+            const { data: teacherById } = await supabase
+              .from('teachers')
+              .select('*')
+              .eq('auth_id', user.id)
+              .maybeSingle();
+            if (teacherById) fallbackEmp = teacherById;
+          }
+          if (!fallbackEmp && user?.email) {
+            const { data: teacherByEmail } = await supabase
+              .from('teachers')
+              .select('*')
+              .ilike('email', user.email)
+              .maybeSingle();
+            if (teacherByEmail) fallbackEmp = teacherByEmail;
+          }
+          if (fallbackEmp) {
+            setEmployees([fallbackEmp]);
+            localStorage.setItem('jzv_employees_local_data', JSON.stringify([fallbackEmp]));
+          } else {
+            const virtualEmp = {
+              id: user?.id || 'self',
+              auth_id: user?.id,
+              name: user?.user_metadata?.full_name || user?.name || user?.email?.split('@')[0] || 'User Profile',
+              email: user?.email || '',
+              designation: effectiveRoles.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join(', ') || 'Staff',
+              organization: 'Jamia Zaytoonah',
+              is_active: true,
+              mapped_roles: effectiveRoles,
+            };
+            setEmployees([virtualEmp]);
+          }
         }
 
         setAuthUsers([]);
@@ -1310,98 +1380,6 @@ const EmployeeRecordsView = ({
     }
   };
 
-  const handleSaveUserRoleDirect = async (
-    targetUserId,
-    newRoles,
-    targetEmpId
-  ) => {
-    setSaving(true);
-    try {
-      const finalRoles = Array.isArray(newRoles) ? newRoles : normalizeRoles(newRoles);
-      const targetAuth = authUsers.find((u) => String(u.user_id) === String(targetUserId));
-      const email = targetAuth?.email || null;
-
-      await saveUserRoleToDb(targetUserId, finalRoles, email);
-
-      const prevEmpLinked = employees.find((e) => String(e.auth_id) === String(targetUserId));
-      if (prevEmpLinked && String(prevEmpLinked.id) !== String(targetEmpId)) {
-        await supabase.from('employees').update({ auth_id: null }).eq('id', prevEmpLinked.id);
-      }
-
-      if (targetEmpId) {
-        await supabase
-          .from('employees')
-          .update({
-            auth_id: targetUserId,
-            login_allowed: true,
-            mapped_roles: finalRoles,
-          })
-          .eq('id', targetEmpId);
-      }
-
-      setAuthUsers((prev) =>
-        prev.map((u) =>
-          String(u.user_id) === String(targetUserId)
-            ? { ...u, roles: finalRoles }
-            : u
-        )
-      );
-
-      setEditingAuthUser(null);
-      await fetchEmployees();
-      showToast('Portal User role permissions updated successfully!', 'success');
-    } catch (err) {
-      console.error('Error updating user role direct:', err);
-      showToast('Error updating role: ' + err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAutoLinkAuthAccounts = async () => {
-    setSaving(true);
-    try {
-      let linkedCount = 0;
-      for (const emp of employees) {
-        if (!emp.auth_id && (emp.email || emp.name)) {
-          const matchedAuth = authUsers.find((u) => {
-            if (emp.email && u.email && emp.email.toLowerCase() === u.email.toLowerCase()) {
-              return true;
-            }
-            if (
-              emp.name &&
-              u.full_name &&
-              emp.name.toLowerCase().trim() === u.full_name.toLowerCase().trim()
-            ) {
-              return true;
-            }
-            return false;
-          });
-
-          if (matchedAuth) {
-            await supabase
-              .from('employees')
-              .update({ auth_id: matchedAuth.user_id, login_allowed: true })
-              .eq('id', emp.id);
-            linkedCount++;
-          }
-        }
-      }
-
-      await fetchEmployees();
-      showToast(
-        linkedCount > 0
-          ? `Auto-linked ${linkedCount} employee account(s) to auth users!`
-          : 'No unlinked matching auth users found.',
-        linkedCount > 0 ? 'success' : 'info'
-      );
-    } catch (err) {
-      showToast('Auto-link error: ' + err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const matchingBulkIncrements = useMemo(() => {
     if (!bulkApplyDateValue) return [];
 
@@ -1541,61 +1519,79 @@ const EmployeeRecordsView = ({
             </h1>
           </div>
 
-          {/* Navigation Pill Tabs */}
-          {/* Mobile view (< md): Dropdown */}
-          <div className="md:hidden w-full">
-            <div className="relative">
-              <select
-                value={activeTab}
-                onChange={(e) => setActiveTab(e.target.value)}
-                className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2.5 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
-              >
-                <option value="records">Employee Records</option>
-                <option value="salary_dashboard">Salary Credit Dashboard</option>
-                <option value="salary_list">Salary List View</option>
-              </select>
-              <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+          {/* Navigation Pill */}
+          {/* Mobile dropdown (< md) */}
+          {mode !== 'records' && (
+            <div className="md:hidden w-full">
+              <div className="relative">
+                <select
+                  value={activeTab}
+                  onChange={(e) => setActiveTab(e.target.value)}
+                  className="w-full appearance-none bg-light-lbg border border-light-border px-4 py-2.5 rounded-xl font-bold text-xs text-dark-primary outline-none focus:ring-2 focus:ring-green-500/20"
+                >
+                  {mode !== 'salary' && canAccess('emp-tab-records') && (
+                    <option value="records">Employee Records</option>
+                  )}
+                  {mode !== 'records' && canAccess('emp-tab-salary') && (
+                    <>
+                      <option value="salary_dashboard">Salary Credit Dashboard</option>
+                      <option value="salary_list">Salary List View</option>
+                    </>
+                  )}
+                </select>
+                <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Desktop view (>= md): Pill tabs */}
-          <div className="hidden md:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center gap-1 shrink-0 w-auto">
-            <button
-              onClick={() => setActiveTab('records')}
-              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                activeTab === 'records'
-                  ? 'bg-green-dark text-white shadow-sm'
-                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-              }`}
-            >
-              <i className="fas fa-users-gear text-xs"></i>
-              <span>Employee Records</span>
-            </button>
+          {mode !== 'records' && (
+            <div className="hidden md:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center gap-1 shrink-0 w-auto">
+              {mode !== 'salary' && (
+                <ConditionalBlock name="emp-tab-records" roles={effectiveRoles}>
+                  <button
+                    onClick={() => setActiveTab('records')}
+                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+                      activeTab === 'records'
+                        ? 'bg-green-dark text-white shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                    }`}
+                  >
+                    <i className="fas fa-users-gear text-xs"></i>
+                    <span>Employee Records</span>
+                  </button>
+                </ConditionalBlock>
+              )}
 
-            <button
-              onClick={() => setActiveTab('salary_dashboard')}
-              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                activeTab === 'salary_dashboard'
-                  ? 'bg-green-dark text-white shadow-sm'
-                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-              }`}
-            >
-              <i className="fas fa-table-cells text-xs"></i>
-              <span>Salary Credit Dashboard</span>
-            </button>
+              {mode !== 'records' && (
+                <ConditionalBlock name="emp-tab-salary" roles={effectiveRoles}>
+                  <button
+                    onClick={() => setActiveTab('salary_dashboard')}
+                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+                      activeTab === 'salary_dashboard'
+                        ? 'bg-green-dark text-white shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                    }`}
+                  >
+                    <i className="fas fa-table-cells text-xs"></i>
+                    <span>Salary Credit Dashboard</span>
+                  </button>
 
-            <button
-              onClick={() => setActiveTab('salary_list')}
-              className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                activeTab === 'salary_list'
-                  ? 'bg-green-dark text-white shadow-sm'
-                  : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-              }`}
-            >
-              <i className="fas fa-list-check text-xs"></i>
-              <span>Salary List View</span>
-            </button>
-          </div>
+                  <button
+                    onClick={() => setActiveTab('salary_list')}
+                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+                      activeTab === 'salary_list'
+                        ? 'bg-green-dark text-white shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                    }`}
+                  >
+                    <i className="fas fa-list-check text-xs"></i>
+                    <span>Salary List View</span>
+                  </button>
+                </ConditionalBlock>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Search, Filter & Action Controls for Employee Records tab */}
@@ -1669,31 +1665,24 @@ const EmployeeRecordsView = ({
                 <i className="fas fa-download text-blue-600 text-base"></i>
               </button>
 
-              {(isAdmin || isManagement) && (
-                <>
-                  <button
-                    onClick={() => setIsUserRolesModalOpen(true)}
-                    className="w-10 h-10 bg-purple-50 text-purple-800 hover:bg-purple-100 rounded-xl text-sm font-bold border border-purple-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                    title="Manage Portal User Roles"
-                  >
-                    <i className="fas fa-link text-purple-600 text-base"></i>
-                  </button>
-                  <button
-                    onClick={() => setIsCsvImportOpen(true)}
-                    className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                    title="Bulk Import Employees"
-                  >
-                    <i className="fas fa-file-arrow-up text-emerald-600 text-base"></i>
-                  </button>
-                  <button
-                    onClick={() => handleOpenModal('add')}
-                    className="w-10 h-10 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-sm font-extrabold shadow-md transition-all flex items-center justify-center active:scale-95 shrink-0"
-                    title="Add Employee"
-                  >
-                    <i className="fas fa-plus text-base"></i>
-                  </button>
-                </>
-              )}
+              <ConditionalBlock name="emp-bulk-import" roles={effectiveRoles}>
+                <button
+                  onClick={() => setIsCsvImportOpen(true)}
+                  className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                  title="Bulk Import Employees"
+                >
+                  <i className="fas fa-file-arrow-up text-emerald-600 text-base"></i>
+                </button>
+              </ConditionalBlock>
+              <ConditionalBlock name="emp-add-record" roles={effectiveRoles}>
+                <button
+                  onClick={() => handleOpenModal('add')}
+                  className="w-10 h-10 bg-brand-primary hover:bg-brand-primary/90 text-white rounded-xl text-sm font-extrabold shadow-md transition-all flex items-center justify-center active:scale-95 shrink-0"
+                  title="Add Employee"
+                >
+                  <i className="fas fa-plus text-base"></i>
+                </button>
+              </ConditionalBlock>
             </div>
           </div>
         )}
@@ -1785,68 +1774,74 @@ const EmployeeRecordsView = ({
                 <i className="fas fa-download text-blue-600 text-base"></i>
               </button>
 
-              {(isAdmin || isManagement) && (
-                <>
-                  {activeTab === 'salary_list' && salaryControls.onOpenBulkIncrement && (
-                    <button
-                      onClick={salaryControls.onOpenBulkIncrement}
-                      className="w-10 h-10 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-xl text-sm font-bold border border-amber-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                      title="Apply Increment to Current Salary"
-                    >
-                      <i className="fas fa-arrow-up-right-dots text-amber-600 text-base"></i>
-                    </button>
-                  )}
+              <ConditionalBlock name="emp-salary-increment" roles={effectiveRoles}>
+                {activeTab === 'salary_list' && salaryControls.onOpenBulkIncrement && (
+                  <button
+                    onClick={salaryControls.onOpenBulkIncrement}
+                    className="w-10 h-10 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-xl text-sm font-bold border border-amber-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                    title="Apply Increment to Current Salary"
+                  >
+                    <i className="fas fa-arrow-up-right-dots text-amber-600 text-base"></i>
+                  </button>
+                )}
+              </ConditionalBlock>
 
-                  {activeTab === 'salary_dashboard' && (
-                    <button
-                      onClick={salaryControls.onOpenUpload}
-                      className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
-                      title="Update Monthly Salary Tracker"
-                    >
-                      <i className="fas fa-sack-dollar text-emerald-600 text-base"></i>
-                    </button>
-                  )}
-                </>
-              )}
+              <ConditionalBlock name="emp-tab-salary" roles={effectiveRoles}>
+                {activeTab === 'salary_dashboard' && (
+                  <button
+                    onClick={salaryControls.onOpenUpload}
+                    className="w-10 h-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-sm font-bold border border-emerald-200 transition-all flex items-center justify-center shadow-sm active:scale-95 shrink-0"
+                    title="Update Monthly Salary Tracker"
+                  >
+                    <i className="fas fa-sack-dollar text-emerald-600 text-base"></i>
+                  </button>
+                )}
+              </ConditionalBlock>
             </div>
           </div>
         )}
       </div>
 
       {activeTab === 'salary_dashboard' && (
-        <SalaryTrackerView
-          user={user}
-          userRoles={userRoles}
-          viewMode="matrix"
-          onRegisterControls={setSalaryControls}
-          hideHeaderTopRow={true}
-        />
+        <ConditionalBlock name="emp-tab-salary" roles={effectiveRoles}>
+          <SalaryTrackerView
+            user={user}
+            userRoles={effectiveRoles}
+            viewMode="matrix"
+            onRegisterControls={setSalaryControls}
+            hideHeaderTopRow={true}
+          />
+        </ConditionalBlock>
       )}
 
       {activeTab === 'salary_list' && (
-        <SalaryTrackerView
-          user={user}
-          userRoles={userRoles}
-          viewMode="monthly"
-          onRegisterControls={setSalaryControls}
-          hideHeaderTopRow={true}
-        />
+        <ConditionalBlock name="emp-tab-salary" roles={effectiveRoles}>
+          <SalaryTrackerView
+            user={user}
+            userRoles={effectiveRoles}
+            viewMode="monthly"
+            onRegisterControls={setSalaryControls}
+            hideHeaderTopRow={true}
+          />
+        </ConditionalBlock>
       )}
 
       {activeTab === 'records' && (
-        /* Employees Table */
-        <EmployeeRecordsTable
-          filteredEmployees={filteredEmployees}
-          loading={loading}
-          sortField={sortField}
-          sortOrder={sortOrder}
-          handleSort={handleSort}
-          handleOpenModal={handleOpenModal}
-          handleDeleteEmployee={handleDeleteEmployee}
-          isAdmin={isAdmin}
-          isManagement={isManagement}
-          authUsers={authUsers}
-        />
+        <ConditionalBlock name="emp-tab-records" roles={effectiveRoles}>
+          {/* Employees Table */}
+          <EmployeeRecordsTable
+            filteredEmployees={filteredEmployees}
+            loading={loading}
+            sortField={sortField}
+            sortOrder={sortOrder}
+            handleSort={handleSort}
+            handleOpenModal={handleOpenModal}
+            handleDeleteEmployee={handleDeleteEmployee}
+            isAdmin={isAdmin}
+            isManagement={isManagement}
+            authUsers={authUsers}
+          />
+        </ConditionalBlock>
       )}
 
       {/* Add / Edit Employee Modal */}
@@ -1874,24 +1869,6 @@ const EmployeeRecordsView = ({
         setNavConfirmModal={setNavConfirmModal}
         switchRecordDirect={switchRecordDirect}
         showToast={showToast}
-      />
-
-      {/* User Roles Management Modal */}
-      <UserRolesManagementModal
-        isUserRolesModalOpen={isUserRolesModalOpen}
-        setIsUserRolesModalOpen={setIsUserRolesModalOpen}
-        handleAutoLinkAuthAccounts={handleAutoLinkAuthAccounts}
-        userRolesSearch={userRolesSearch}
-        setUserRolesSearch={setUserRolesSearch}
-        authUsers={authUsers}
-        mappedAuthUserMap={mappedAuthUserMap}
-        editingAuthUser={editingAuthUser}
-        setEditingAuthUser={setEditingAuthUser}
-        editingEmpId={editingEmpId}
-        setEditingEmpId={setEditingEmpId}
-        employees={employees}
-        handleSaveUserRoleDirect={handleSaveUserRoleDirect}
-        saving={saving}
       />
 
       {/* Bulk CSV Import Modal */}

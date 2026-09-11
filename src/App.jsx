@@ -23,11 +23,6 @@ const App = () => {
     useAuth();
 
   const [showLoginPortal, setShowLoginPortal] = useState(false);
-  const [adminSubView, setAdminSubView] = useState(null);
-  const [managementSubView, setManagementSubView] = useState(null);
-  const [teacherSubView, setTeacherSubView] = useState(null);
-  const [parentSubView, setParentSubView] = useState(null);
-  const [candidateSubView, setCandidateSubView] = useState(null);
 
   const {
     cards,
@@ -82,18 +77,6 @@ const App = () => {
       hasRedirectedRef.current = false;
     }
   }, [user]);
-
-
-
-  // Reset portal subview states when navigating to main selection portal or homepage
-  useEffect(() => {
-    if (location.pathname === "/portal" || location.pathname === "/") {
-      setAdminSubView(null);
-      setManagementSubView(null);
-      setTeacherSubView(null);
-      setParentSubView(null);
-    }
-  }, [location.pathname]);
 
   // Custom handler for card clicks (fixes "My Portal" navigation)
   const handleCardClick = (id) => {
@@ -150,10 +133,6 @@ const App = () => {
           onLoginClick={() => setShowLoginPortal(true)}
           onLogoClick={() => {
             navigate("/");
-            setAdminSubView(null);
-            setManagementSubView(null);
-            setTeacherSubView(null);
-            setParentSubView(null);
           }}
           switchParentStudent={switchParentStudent}
         />
@@ -168,16 +147,6 @@ const App = () => {
           rolesLoading={rolesLoading}
           gridCards={gridCards}
           openModal={handleCardClick}
-          adminSubView={adminSubView}
-          setAdminSubView={setAdminSubView}
-          managementSubView={managementSubView}
-          setManagementSubView={setManagementSubView}
-          teacherSubView={teacherSubView}
-          setTeacherSubView={setTeacherSubView}
-          parentSubView={parentSubView}
-          setParentSubView={setParentSubView}
-          candidateSubView={candidateSubView}
-          setCandidateSubView={setCandidateSubView}
           teacherRecord={teacherRecord}
         />
       </main>

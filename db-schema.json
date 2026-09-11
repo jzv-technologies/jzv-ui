@@ -241,10 +241,122 @@
           "nullable": "YES"
         },
         {
-          "type": "smallint",
-          "column": "role",
+          "type": "ARRAY",
+          "column": "roles",
           "default": null,
           "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "app_roles",
+      "columns": [
+        {
+          "type": "text",
+          "column": "role_key",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "role_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "description",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "color",
+          "default": "'purple'::text",
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_system_role",
+          "default": "false",
+          "nullable": "YES"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "now()",
+          "nullable": "YES"
+        }
+      ]
+    },
+    {
+      "table": "app_view_controller",
+      "columns": [
+        {
+          "type": "bigint",
+          "column": "id",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "component_name",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "component_type",
+          "default": null,
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "group_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "boolean",
+          "column": "is_active",
+          "default": "true",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "default_access",
+          "default": "'none'::text",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "description",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "ARRAY",
+          "column": "valid_access_roles",
+          "default": "'{}'::text[]",
+          "nullable": "NO"
+        },
+        {
+          "type": "integer",
+          "column": "display_order",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "created_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "NO"
+        },
+        {
+          "type": "timestamp with time zone",
+          "column": "updated_at",
+          "default": "timezone('utc'::text, now())",
+          "nullable": "NO"
         }
       ]
     },
@@ -1989,8 +2101,14 @@
           "nullable": "NO"
         },
         {
-          "type": "smallint",
-          "column": "role",
+          "type": "ARRAY",
+          "column": "roles",
+          "default": "'{}'::text[]",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "email",
           "default": null,
           "nullable": "YES"
         }
@@ -2003,27 +2121,18 @@
         "authenticated"
       ],
       "table": "academic_calendar",
-      "using": "has_role_above(16)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "has_role_above(16)"
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "academic_calendar",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "academic_calendar",
-      "using": "has_role_above(2)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2033,27 +2142,18 @@
         "authenticated"
       ],
       "table": "academic_events",
-      "using": "has_role_above(16)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "has_role_above(16)"
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])"
     },
     {
       "roles": [
-        "public"
-      ],
-      "table": "academic_events",
-      "using": "has_role_above(2)",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "academic_events",
-      "using": "true",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2063,18 +2163,19 @@
         "authenticated"
       ],
       "table": "admin_configruation",
-      "using": "true",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "true"
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "admin_configruation",
-      "using": "has_role_above(16)",
-      "command": "ALL",
+      "using": "true",
+      "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
@@ -2082,8 +2183,40 @@
       "roles": [
         "authenticated"
       ],
-      "table": "admin_configruation",
+      "table": "app_roles",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR is_portal_admin())",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR is_portal_admin())"
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "app_roles",
       "using": "true",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "app_view_controller",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text])",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text])"
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "app_view_controller",
+      "using": "((is_active = true) OR has_any_role(VARIADIC ARRAY['admin'::text]))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2123,14 +2256,15 @@
         "authenticated"
       ],
       "table": "class_assignments",
-      "using": "has_role_above(16)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))"
     },
     {
       "roles": [
-        "public"
+        "anon",
+        "authenticated"
       ],
       "table": "class_assignments",
       "using": "true",
@@ -2143,27 +2277,18 @@
         "authenticated"
       ],
       "table": "classes",
-      "using": "has_role_above(16)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('classes-setup'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('classes-setup'::text))"
     },
     {
       "roles": [
-        "public"
-      ],
-      "table": "classes",
-      "using": "(has_any_role(56) OR (has_role_above(2) AND is_parent_of_class(id)))",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "classes",
-      "using": "has_any_role(((8 | 16) | 32))",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2173,10 +2298,10 @@
         "authenticated"
       ],
       "table": "dynamic_form_configs",
-      "using": "has_role_above(32)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "(auth.role() = 'authenticated'::text)"
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text])"
     },
     {
       "roles": [
@@ -2193,13 +2318,14 @@
         "authenticated"
       ],
       "table": "employees",
-      "using": "((auth.uid() = auth_id) OR has_role_above(16))",
+      "using": "((auth.uid() = auth_id) OR has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "((auth.uid() = auth_id) OR has_role_above(16))"
+      "with_check": "((auth.uid() = auth_id) OR has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]))"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "employees",
@@ -2207,36 +2333,16 @@
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "employees",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "employees",
-      "using": "((auth.uid() = auth_id) OR has_role_above(16))",
-      "command": "UPDATE",
-      "permissive": "PERMISSIVE",
-      "with_check": "((auth.uid() = auth_id) OR has_role_above(16))"
     },
     {
       "roles": [
         "authenticated"
       ],
       "table": "google_sheet_mappings",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text])"
     },
     {
       "roles": [
@@ -2253,8 +2359,19 @@
         "authenticated"
       ],
       "table": "lesson_plan_carry_forwards",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
+    },
+    {
+      "roles": [
+        "anon",
+        "authenticated"
+      ],
+      "table": "lesson_plan_carry_forwards",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
+      "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
@@ -2263,10 +2380,10 @@
         "authenticated"
       ],
       "table": "map_class_books",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
     },
     {
       "roles": [
@@ -2283,13 +2400,14 @@
         "authenticated"
       ],
       "table": "map_teacher_subject",
-      "using": "has_role_above(16)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('teachers-mapping'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('teachers-mapping'::text))"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "map_teacher_subject",
@@ -2303,17 +2421,18 @@
         "authenticated"
       ],
       "table": "periods",
-      "using": "has_role_above(8)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('season-setup'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('season-setup'::text))"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "periods",
-      "using": "true",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2323,10 +2442,10 @@
         "authenticated"
       ],
       "table": "request_tracker",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text])"
     },
     {
       "roles": [
@@ -2393,10 +2512,20 @@
         "authenticated"
       ],
       "table": "students",
-      "using": "has_role_above(16)",
-      "command": "ALL",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
+      "command": "DELETE",
       "permissive": "PERMISSIVE",
       "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "students",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
     },
     {
       "roles": [
@@ -2414,7 +2543,7 @@
         "authenticated"
       ],
       "table": "students",
-      "using": "has_role_above(2)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR is_parent_of_student((admission_no)::text))",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2423,35 +2552,37 @@
       "roles": [
         "authenticated"
       ],
+      "table": "students",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))",
+      "command": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
       "table": "syl_books",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
     },
     {
       "roles": [
-        "public"
-      ],
-      "table": "syl_books",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM map_class_books sbc\n  WHERE ((sbc.book_id = syl_books.id) AND is_parent_of_class(sbc.class_id))))))",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
+        "anon",
         "authenticated"
       ],
-      "table": "syl_classifications",
-      "using": "true",
+      "table": "syl_books",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
-        "public"
+        "anon",
+        "authenticated"
       ],
       "table": "syl_classifications",
       "using": "true",
@@ -2471,26 +2602,18 @@
     },
     {
       "roles": [
-        "public"
+        "anon",
+        "authenticated"
       ],
       "table": "syl_lessons",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM map_class_books sbc\n  WHERE ((sbc.book_id = syl_lessons.book_id) AND is_parent_of_class(sbc.class_id))))))",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
     },
     {
       "roles": [
-        "public"
-      ],
-      "table": "syl_subjects",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "syl_subjects",
@@ -2504,10 +2627,10 @@
         "authenticated"
       ],
       "table": "teacher_availability",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
     },
     {
       "roles": [
@@ -2524,20 +2647,20 @@
         "authenticated"
       ],
       "table": "teacher_cache",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
     },
     {
       "roles": [
         "authenticated"
       ],
       "table": "timetable_slots",
-      "using": "has_role_above(32)",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('timetable-planner'::text) OR can_access_component('scheduler-setup'::text))"
     },
     {
       "roles": [
@@ -2545,17 +2668,7 @@
         "authenticated"
       ],
       "table": "timetable_slots",
-      "using": "is_parent_of_class(class_id)",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
-      "table": "timetable_slots",
-      "using": "true",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2572,20 +2685,11 @@
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "trk_book_level_progress",
-      "using": "true",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "trk_book_level_progress",
-      "using": "(has_role_above(8) OR (has_role_above(2) AND is_parent_of_class(class_id)))",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2602,20 +2706,11 @@
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "trk_daily_teacher_progress",
-      "using": "has_role_above(8)",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "trk_daily_teacher_progress",
-      "using": "(has_role_above(2) AND (EXISTS ( SELECT 1\n   FROM trk_lesson_level_progress l\n  WHERE ((l.id = trk_daily_teacher_progress.progress_id) AND is_parent_of_class(l.class_id)))))",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2625,10 +2720,10 @@
         "authenticated"
       ],
       "table": "trk_emp_salary",
-      "using": null,
-      "command": "INSERT",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
+      "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "has_role_above(16)"
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])"
     },
     {
       "roles": [
@@ -2644,38 +2739,19 @@
       "roles": [
         "authenticated"
       ],
-      "table": "trk_emp_salary",
-      "using": "has_role_above(16)",
-      "command": "UPDATE",
-      "permissive": "PERMISSIVE",
-      "with_check": "has_role_above(16)"
-    },
-    {
-      "roles": [
-        "authenticated"
-      ],
       "table": "trk_lesson_level_progress",
-      "using": "has_role_above(8)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
     },
     {
       "roles": [
+        "anon",
         "authenticated"
       ],
       "table": "trk_lesson_level_progress",
-      "using": "has_role_above(16)",
-      "command": "SELECT",
-      "permissive": "PERMISSIVE",
-      "with_check": null
-    },
-    {
-      "roles": [
-        "public"
-      ],
-      "table": "trk_lesson_level_progress",
-      "using": "(has_role_above(2) AND is_parent_of_class(class_id))",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR has_parent_role())",
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
@@ -2685,10 +2761,10 @@
         "authenticated"
       ],
       "table": "trk_student_fees",
-      "using": "has_role_above(16)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": "has_role_above(16)"
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text])"
     },
     {
       "roles": [
@@ -2705,10 +2781,10 @@
         "authenticated"
       ],
       "table": "useful_links",
-      "using": "has_role_above(32)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text])"
     },
     {
       "roles": [
@@ -2725,10 +2801,10 @@
         "authenticated"
       ],
       "table": "user_roles",
-      "using": "has_role_above(16)",
+      "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])"
     },
     {
       "roles": [
@@ -2753,6 +2829,11 @@
       "definition": "CREATE TRIGGER academic_events_refresh_calendar_summary AFTER INSERT OR DELETE OR UPDATE ON academic_events FOR EACH ROW EXECUTE FUNCTION trigger_refresh_academic_calendar_summary()"
     },
     {
+      "table": "app_view_controller",
+      "function": "update_app_view_controller_updated_at",
+      "definition": "CREATE TRIGGER trg_app_view_controller_updated_at BEFORE UPDATE ON app_view_controller FOR EACH ROW EXECUTE FUNCTION update_app_view_controller_updated_at()"
+    },
+    {
       "table": "syl_books",
       "function": "fn_auto_create_revision_lessons",
       "definition": "CREATE TRIGGER trg_auto_create_revision_lessons AFTER INSERT ON syl_books FOR EACH ROW EXECUTE FUNCTION fn_auto_create_revision_lessons()"
@@ -2774,13 +2855,13 @@
     },
     {
       "table": "trk_daily_teacher_progress",
-      "function": "fn_set_late_reporting",
-      "definition": "CREATE TRIGGER trg_set_late_reporting BEFORE INSERT ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_set_late_reporting()"
+      "function": "fn_update_lesson_tracker_log",
+      "definition": "CREATE TRIGGER trg_update_lesson_tracker_log AFTER INSERT OR DELETE OR UPDATE ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_update_lesson_tracker_log()"
     },
     {
       "table": "trk_daily_teacher_progress",
-      "function": "fn_update_lesson_tracker_log",
-      "definition": "CREATE TRIGGER trg_update_lesson_tracker_log AFTER INSERT OR DELETE OR UPDATE ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_update_lesson_tracker_log()"
+      "function": "fn_set_late_reporting",
+      "definition": "CREATE TRIGGER trg_set_late_reporting BEFORE INSERT ON trk_daily_teacher_progress FOR EACH ROW EXECUTE FUNCTION fn_set_late_reporting()"
     },
     {
       "table": "trk_emp_salary",
@@ -2801,9 +2882,19 @@
       "table": "trk_lesson_level_progress",
       "function": "fn_update_book_tracker_on_log_change",
       "definition": "CREATE TRIGGER trg_update_book_tracker_on_log AFTER INSERT OR DELETE OR UPDATE ON trk_lesson_level_progress FOR EACH ROW EXECUTE FUNCTION fn_update_book_tracker_on_log_change()"
+    },
+    {
+      "table": "user_roles",
+      "function": "sync_user_roles_fields",
+      "definition": "CREATE TRIGGER trg_sync_user_roles BEFORE INSERT OR UPDATE ON user_roles FOR EACH ROW EXECUTE FUNCTION sync_user_roles_fields()"
     }
   ],
   "functions": [
+    {
+      "name": "can_access_component",
+      "returns": "boolean",
+      "arguments": "comp_name text"
+    },
     {
       "name": "create_default_book_revision",
       "returns": "trigger",
@@ -2850,13 +2941,8 @@
       "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
     },
     {
-      "name": "get_active_teachers",
-      "returns": "TABLE(id bigint, name text, auth_id uuid)",
-      "arguments": ""
-    },
-    {
       "name": "get_auth_users_with_roles_secure",
-      "returns": "TABLE(user_id uuid, email character varying, full_name text, role smallint)",
+      "returns": "TABLE(user_id uuid, email character varying, full_name text, roles text[])",
       "arguments": "p_auth_id uuid DEFAULT NULL::uuid"
     },
     {
@@ -2915,34 +3001,14 @@
       "arguments": ""
     },
     {
-      "name": "get_user_role",
-      "returns": "text",
-      "arguments": "p_user_id uuid DEFAULT NULL::uuid"
-    },
-    {
-      "name": "has_all_roles",
-      "returns": "boolean",
-      "arguments": "required_role smallint"
-    },
-    {
       "name": "has_any_role",
       "returns": "boolean",
-      "arguments": "required_role integer"
+      "arguments": "VARIADIC check_roles text[]"
     },
     {
-      "name": "has_role_above",
-      "returns": "boolean",
-      "arguments": "required_role integer"
-    },
-    {
-      "name": "is_admin",
+      "name": "has_parent_role",
       "returns": "boolean",
       "arguments": ""
-    },
-    {
-      "name": "is_management_or_above",
-      "returns": "boolean",
-      "arguments": "p_user_id uuid DEFAULT NULL::uuid"
     },
     {
       "name": "is_parent_of_class",
@@ -2955,6 +3021,16 @@
       "arguments": "p_admission_no text"
     },
     {
+      "name": "is_portal_admin",
+      "returns": "boolean",
+      "arguments": "p_uid uuid DEFAULT auth.uid()"
+    },
+    {
+      "name": "is_portal_admin_or_management",
+      "returns": "boolean",
+      "arguments": "p_uid uuid DEFAULT auth.uid()"
+    },
+    {
       "name": "is_teacher",
       "returns": "boolean",
       "arguments": ""
@@ -2963,11 +3039,6 @@
       "name": "refresh_academic_calendar_summary",
       "returns": "void",
       "arguments": "p_ac_id bigint"
-    },
-    {
-      "name": "refresh_all_academic_calendar_summaries",
-      "returns": "void",
-      "arguments": ""
     },
     {
       "name": "set_current_timestamp_updated_at",
@@ -2985,12 +3056,12 @@
       "arguments": ""
     },
     {
-      "name": "trg_fn_set_book_expected_start_date",
+      "name": "sync_user_roles_fields",
       "returns": "trigger",
       "arguments": ""
     },
     {
-      "name": "trg_fn_set_book_expected_start_month",
+      "name": "trg_fn_set_book_expected_start_date",
       "returns": "trigger",
       "arguments": ""
     },
@@ -3001,6 +3072,11 @@
     },
     {
       "name": "trigger_refresh_calendar_rules",
+      "returns": "trigger",
+      "arguments": ""
+    },
+    {
+      "name": "update_app_view_controller_updated_at",
       "returns": "trigger",
       "arguments": ""
     },
@@ -3022,7 +3098,7 @@
     {
       "name": "update_user_role_admin",
       "returns": "void",
-      "arguments": "p_user_id uuid, p_role integer"
+      "arguments": "p_user_id uuid, p_roles text[], p_email text DEFAULT NULL::text"
     },
     {
       "name": "verify_parent_login",

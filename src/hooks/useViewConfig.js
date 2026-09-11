@@ -1,7 +1,7 @@
 // src/hooks/useViewConfig.js
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../utils/supabase';
-import { TILE_METADATA_REGISTRY, FALLBACK_VIEW_CONFIGS } from '../utils/tileRegistry';
+import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
 // Module-level cache to prevent repeated queries across renders and sub-components
@@ -30,7 +30,6 @@ export const useViewConfig = () => {
   const [dynamicConfigs, setDynamicConfigs] = useState(() => cachedDynamicConfigs || []);
   const [loading, setLoading] = useState(!cachedViewConfig);
   const [error, setError] = useState(null);
-  const [tableMissing, setTableMissing] = useState(false);
 
   const fetchConfigs = useCallback(async (forceRefresh = false) => {
     const isCacheValid =
@@ -56,25 +55,14 @@ export const useViewConfig = () => {
         .eq('is_active', true)
         .order('display_order', { ascending: true });
 
-      let resolvedConfigs = [];
-
       if (avcError) {
-        if (avcError.code === '42P01' || avcError.message?.includes('does not exist')) {
-          console.warn(
-            '[useViewConfig] app_view_controller table does not exist in Supabase. ' +
-              'Using fallback configuration. Please execute debug-files/execute-query.sql in Supabase SQL editor.'
-          );
-          setTableMissing(true);
-          resolvedConfigs = FALLBACK_VIEW_CONFIGS.filter((c) => c.is_active);
-        } else {
-          console.error('[useViewConfig] Error fetching app_view_controller:', avcError);
-          setError(avcError);
-          resolvedConfigs = FALLBACK_VIEW_CONFIGS.filter((c) => c.is_active);
-        }
-      } else {
-        setTableMissing(false);
-        resolvedConfigs = avcData || [];
+        console.error('[useViewConfig] Error fetching app_view_controller:', avcError);
+        setError(avcError);
+        setViewConfigs([]);
+        return;
       }
+
+      const resolvedConfigs = avcData || [];
 
       // 2. Fetch dynamic_form_configs
       let formsData = [];
@@ -98,7 +86,7 @@ export const useViewConfig = () => {
     } catch (err) {
       console.error('[useViewConfig] Unexpected fetch error:', err);
       setError(err);
-      setViewConfigs(FALLBACK_VIEW_CONFIGS.filter((c) => c.is_active));
+      setViewConfigs([]);
     } finally {
       setLoading(false);
     }
@@ -126,20 +114,43 @@ export const useViewConfig = () => {
       if (!userRoles || userRoles.length === 0) return [];
 
       // Filter active tile entries permitted for userRoles
-      const activeTiles = viewConfigs.filter(
-        (item) =>
-          item.component_type === 'tile' &&
-          hasAccess(item.valid_access_roles, item.default_access, userRoles)
-      );
+      const activeTiles = viewConfigs.filter((item) => {
+        if (item.component_type !== 'tile') return false;
+        const meta = TILE_METADATA_REGISTRY[item.component_name];
+        const combinedRoles = Array.from(
+          new Set([...(item.valid_access_roles || []), ...(meta?.valid_access_roles || [])])
+        );
+        return hasAccess(combinedRoles, item.default_access, userRoles);
+      });
+
+      // Include fallback tiles from TILE_METADATA_REGISTRY if not yet registered in app_view_controller
+      const dbTileNames = new Set(viewConfigs.map((c) => c.component_name));
+      const fallbackRegistryTiles = Object.entries(TILE_METADATA_REGISTRY)
+        .filter(([key, meta]) => {
+          if (dbTileNames.has(key)) return false;
+          if (!meta.valid_access_roles) return false;
+          return hasAccess(meta.valid_access_roles, 'none', userRoles);
+        })
+        .map(([key, meta]) => ({
+          component_name: key,
+          component_type: 'tile',
+          group_name: meta.group || 'General',
+          valid_access_roles: meta.valid_access_roles,
+          display_order: meta.display_order ?? 50,
+          is_active: true,
+          default_access: 'none',
+        }));
+
+      const allActiveTiles = [...activeTiles, ...fallbackRegistryTiles];
 
       // Merge with UI metadata
-      const standardTiles = activeTiles.map((item) => {
+      const standardTiles = allActiveTiles.map((item) => {
         const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
         return {
           id: item.component_name,
           component_name: item.component_name,
           component_type: item.component_type,
-          group_name: item.group_name || meta.group || 'general',
+          group_name: (item.group_name ? String(item.group_name).replace(/[\r\n]+/g, ' ').trim() : null) || meta.group || 'general',
           title: meta.title || item.component_name,
           titleKey: meta.titleKey || null,
           description: item.description || meta.description || '',
@@ -177,11 +188,18 @@ export const useViewConfig = () => {
           else if (themeKey === 'dark' || themeKey === 'charcoal')
             shadowClass = 'shadow-gray-200';
 
+          const meta = TILE_METADATA_REGISTRY[config.form_name] || {};
+          const groupName =
+            meta.group ||
+            (config.form_name === 'complaint' || config.display_name === 'Register Feedback'
+              ? 'General'
+              : 'dynamic-form');
+
           return {
             id: config.form_name,
             component_name: config.form_name,
             component_type: 'tile',
-            group_name: 'dynamic-form',
+            group_name: groupName,
             title: config.display_name || config.form_name,
             titleKey: null,
             description:
@@ -221,13 +239,7 @@ export const useViewConfig = () => {
         if (!config.is_active) return false;
         return hasAccess(config.valid_access_roles, config.default_access, userRoles);
       }
-      // 2. Check fallback registry
-      const fallbackConfig = FALLBACK_VIEW_CONFIGS.find((c) => c.component_name === componentName);
-      if (fallbackConfig) {
-        if (!fallbackConfig.is_active) return false;
-        return hasAccess(fallbackConfig.valid_access_roles, fallbackConfig.default_access, userRoles);
-      }
-      // 3. If unmanaged/not registered in view controller, allow by default
+      // 2. If unmanaged/not registered in view controller, allow by default
       return true;
     },
     [viewConfigs, hasAccess]
@@ -250,7 +262,6 @@ export const useViewConfig = () => {
     dynamicConfigs,
     loading,
     error,
-    tableMissing,
     refreshConfigs: () => fetchConfigs(true),
     getVisibleTiles,
     isFeatureEnabled,

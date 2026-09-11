@@ -62,9 +62,13 @@ const DailyActivityTable = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredDailyEntries.length === 0 ? (
           <div className="col-span-full text-center py-12 bg-white border border-dashed rounded-2xl text-gray-500 font-semibold text-sm">
-            {activeTab === 'today-class'
-              ? 'No class logs recorded for today.'
-              : 'No class logs recorded for the last 2 weeks.'}
+            {activeTab === 'my-activity'
+              ? 'No activity logs recorded for your account in this time period.'
+              : activeTab === 'teacher-activity'
+                ? 'No teacher activity logs found for the selected filters.'
+                : activeTab === 'two-weeks-class'
+                  ? 'No class logs recorded for the last 2 weeks.'
+                  : 'No class logs recorded for the selected period.'}
           </div>
         ) : (
           filteredDailyEntries.map((entry) => {
