@@ -1091,7 +1091,11 @@ const SyllabusTrackerPortal = ({
   // ─── Fetch Daily Entries on Tab Selection ───
   useEffect(() => {
     if (dashboardOnly) return;
-    if (activeTab === 'teacher-activity' || activeTab === 'my-activity' || activeTab === 'two-weeks-class') {
+    if (
+      activeTab === 'teacher-activity' ||
+      activeTab === 'my-activity' ||
+      activeTab === 'two-weeks-class'
+    ) {
       fetchDailyEntries({ force: true, tab: activeTab });
     }
   }, [dashboardOnly, activeTab, fetchDailyEntries]);
@@ -1887,23 +1891,39 @@ const SyllabusTrackerPortal = ({
               data-feature="navigation-tabs"
             >
               {!singleTab && currentTabs.length > 1 && (
-                <div className="bg-light-lbg border border-light-border p-0.5 sm:p-1 rounded-2xl flex items-center justify-between gap-0.5 sm:gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
-                  {currentTabs.map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => handleTabChange(tab.key)}
-                      className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
-                        activeTab === tab.key
-                          ? 'bg-brand-primary text-white shadow-sm'
-                          : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                      }`}
+                <>
+                  <div className="sm:hidden relative w-full">
+                    <select
+                      value={activeTab}
+                      onChange={(event) => handleTabChange(event.target.value)}
+                      className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
                     >
-                      <i className={`fas ${tab.icon} text-[10px] sm:text-xs`}></i>
-                      <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
-                      <span className="hidden sm:inline">{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
+                      {currentTabs.map((tab) => (
+                        <option key={tab.key} value={tab.key}>
+                          {tab.label}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+                  </div>
+
+                  <div className="hidden sm:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center justify-between gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
+                    {currentTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => handleTabChange(tab.key)}
+                        className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
+                          activeTab === tab.key
+                            ? 'bg-brand-primary text-white shadow-sm'
+                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                        }`}
+                      >
+                        <i className={`fas ${tab.icon} text-xs`}></i>
+                        <span>{tab.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
 
               {singleTab && (
@@ -1917,11 +1937,12 @@ const SyllabusTrackerPortal = ({
                 </div>
               )}
 
-              {role !== 'parent' && (activeTab === 'teacher-activity' || activeTab === 'my-activity') && (
-                <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
-                  Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
-                </span>
-              )}
+              {role !== 'parent' &&
+                (activeTab === 'teacher-activity' || activeTab === 'my-activity') && (
+                  <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
+                    Showing {filteredDailyEntries.length} of {dailyEntries.length} entries
+                  </span>
+                )}
               {role === 'parent' && activeTab === 'two-weeks-class' && (
                 <span className="hidden sm:inline-block text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-2.5 py-1 rounded-full select-none">
                   Showing {filteredDailyEntries.length} entries
@@ -1930,7 +1951,9 @@ const SyllabusTrackerPortal = ({
             </div>
 
             {/* Inline Daily Activity Filters */}
-            {(activeTab === 'teacher-activity' || activeTab === 'my-activity' || activeTab === 'two-weeks-class') && (
+            {(activeTab === 'teacher-activity' ||
+              activeTab === 'my-activity' ||
+              activeTab === 'two-weeks-class') && (
               <div
                 className="w-full flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 mt-2"
                 data-feature-filter={activeTab}
@@ -2085,23 +2108,24 @@ const SyllabusTrackerPortal = ({
                 </div>
 
                 {/* Custom range date inputs if active */}
-                {(activeTab === 'teacher-activity' || activeTab === 'my-activity') && timeFilter === 'range' && (
-                  <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 md:mt-0">
-                    <input
-                      type="date"
-                      value={dateRange.start}
-                      onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                      className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
-                    />
-                    <span className="text-gray-400 font-bold text-xs">-</span>
-                    <input
-                      type="date"
-                      value={dateRange.end}
-                      onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                      className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
-                    />
-                  </div>
-                )}
+                {(activeTab === 'teacher-activity' || activeTab === 'my-activity') &&
+                  timeFilter === 'range' && (
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto mt-1 md:mt-0">
+                      <input
+                        type="date"
+                        value={dateRange.start}
+                        onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                        className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
+                      />
+                      <span className="text-gray-400 font-bold text-xs">-</span>
+                      <input
+                        type="date"
+                        value={dateRange.end}
+                        onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                        className="border border-gray-250 rounded-xl px-2 py-1 text-xs font-bold text-gray-700 bg-white h-9 sm:h-8 outline-none focus:ring-1 focus:ring-brand-primary flex-1 sm:flex-initial"
+                      />
+                    </div>
+                  )}
 
                 {/* Mobile view expandable topic search input */}
                 {(isMobileTopicSearchOpen || filterTopic) && (
@@ -2473,11 +2497,7 @@ const SyllabusTrackerPortal = ({
           <ConditionalBlock name="syl-tab-teacher-activity" roles={effectiveRoles}>
             <div data-feature="teacher-activity">
               <DailyActivityTable
-                role={
-                  effectiveRoles.includes('admin')
-                    ? 'admin'
-                    : 'management'
-                }
+                role={effectiveRoles.includes('admin') ? 'admin' : 'management'}
                 student={student}
                 activeTab={activeTab}
                 dailyEntries={dailyEntries}

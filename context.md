@@ -31,21 +31,18 @@ Hosted at [https://jzv.mrqu.in](https://jzv.mrqu.in) via GitHub Pages.
 
 ```
 src/main.jsx → BrowserRouter → App.jsx
-                                  ├── useAuth()          (auth/session/role state)
+                                  ├── useAuth()            (auth/session/role state)
                                   ├── useGoogleTranslate() (i18n widget)
-                                  ├── useModal()          (cards/modal state)
-                                  ├── Header              (navigation, login, student switching)
-                                  ├── AppRoutes           (route definitions + role guards)
-                                  │     ├── HomeGrid      (public card grid)
-                                  │     ├── RoleSelectionDashboard
-                                  │     ├── AdminPortal → admin subviews
-                                  │     ├── ManagementPortal → management subviews
-                                  │     ├── RolePortal (teacher) → teacher subviews
-                                  │     ├── RolePortal (parent) → parent subviews
-                                  │     ├── CandidatePortal → take-test subview
-                                  │     └── /career (standalone DynamicForm route)
-                                  ├── LoginPortal         (auth modal)
-                                  └── ModalContainer      (tabbed/accordion content modals)
+                                  ├── useModal()            (cards/modal state)
+                                  ├── Header                (navigation, login, student switching)
+                                  ├── AppRoutes             (route definitions + role guards)
+                                  │     ├── HomeGrid        (public card grid)
+                                  │     ├── UnifiedPortal   (dynamic portal governed by app_view_controller)
+                                  │     │     └── dynamic subviews (employees, students, syllabus, timetable, etc.)
+                                  │     ├── TVDisplayDashboard (/portal/display)
+                                  │     └── DynamicForm     (/career)
+                                  ├── LoginPortal           (auth modal)
+                                  └── ModalContainer        (tabbed/accordion content modals)
 ```
 
 ---
@@ -416,16 +413,12 @@ The `ReporterTicketsView` and `DetailModal` components implement a ticket tracki
 
 ## Portal Navigation
 
-| Route                | Role Required | Component                                        |
-| -------------------- | ------------- | ------------------------------------------------ |
-| `/`                  | None          | `HomeGrid` (public homepage)                     |
-| `/portal`            | Authenticated | `RoleSelectionDashboard` (multi-role users)      |
-| `/portal/admin`      | `admin`       | `AdminPortal`                                    |
-| `/portal/management` | `management`  | `ManagementPortal`                               |
-| `/portal/teacher`    | `teacher`     | `RolePortal` (teacher tiles)                     |
-| `/portal/parent`     | `parent`      | `RolePortal` (parent tiles)                      |
-| `/portal/candidate`  | `candidate`   | `CandidatePortal`                                |
-| `/career`            | None          | Standalone `DynamicForm` for career applications |
+| Route             | Role Required | Component                                         |
+| ----------------- | ------------- | ------------------------------------------------- |
+| `/`               | None          | `HomeGrid` (public homepage)                      |
+| `/portal`         | Authenticated | `UnifiedPortal` (governed by app_view_controller) |
+| `/portal/display` | Staff / Admin | `TVDisplayDashboard` (TV announcement screen)     |
+| `/career`         | None          | Standalone `DynamicForm` for career applications  |
 
 ---
 
@@ -566,11 +559,10 @@ User's roles → Map to bitmask (e.g. teacher=8, admin=32)
 
 ### Portal Components
 
-- `src/components/portals/RolePortal.jsx` — generic portal wrapper with dashboard tiles and child content
-- `src/components/portals/AdminPortal.jsx` — admin portal entry, user/config management, subview coordinator (518 lines)
-- `src/components/portals/ManagementPortal.jsx` — management portal with submissions, tickets, timetable, test management (1338 lines)
-- `src/components/portals/CandidatePortal.jsx` — candidate portal for taking enabled tests
-- `src/components/portals/ReporterTicketsView.jsx` — ticket dashboard with conversation UI (370 lines)
+- `src/components/auth/UnifiedPortal.jsx` — single dynamic portal component rendering role-permitted tiles and subviews driven by `app_view_controller` and `tileRegistry.js`
+- `src/components/layout/PortalLayout.jsx` — shared layout header, back navigation, and user role branding
+- `src/components/admin-settings/ViewControllerManager.jsx` — UI for managing tile visibility, ordering, and permissions in `app_view_controller`
+- `src/components/tickets/ReporterTicketsView.jsx` — ticket dashboard with conversation UI
 
 ### Admin Subpages
 

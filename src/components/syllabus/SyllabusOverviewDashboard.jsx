@@ -514,8 +514,38 @@ const SyllabusOverviewDashboard = ({
         </div>
       )}
 
-      {/* Sub-Views Tabs Bar */}
-      <div className="bg-white border border-light-border p-1.5 sm:p-2 rounded-2xl shadow-sm flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
+      {/* Mobile sub-view selector */}
+      <div className="md:hidden flex items-center gap-2">
+        <div className="relative flex-1">
+          <select
+            value={activeSubTab}
+            onChange={(event) => setActiveSubTab(event.target.value)}
+            className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
+          >
+            {subTabs.map((tab) => (
+              <option key={tab.key} value={tab.key}>
+                {tab.label}
+                {tab.badge ? ` (${tab.badge})` : ''}
+              </option>
+            ))}
+          </select>
+          <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+        </div>
+        {role === 'management' && (
+          <button
+            type="button"
+            onClick={() => setIsSettingsOpen(true)}
+            title="Academic Calendar and Book Targets"
+            aria-label="Academic Calendar and Book Targets"
+            className="shrink-0 w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:bg-light-bg transition-colors inline-flex items-center justify-center"
+          >
+            <i className="fas fa-gear text-sm"></i>
+          </button>
+        )}
+      </div>
+
+      {/* Desktop sub-view tabs */}
+      <div className="hidden md:flex bg-white border border-light-border p-1.5 sm:p-2 rounded-2xl shadow-sm items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
         {subTabs.map((tab) => (
           <button
             key={tab.key}
@@ -528,8 +558,7 @@ const SyllabusOverviewDashboard = ({
             }`}
           >
             <i className={`fas ${tab.icon} text-xs`}></i>
-            <span className="hidden sm:inline">{tab.label}</span>
-            <span className="sm:hidden">{tab.shortLabel}</span>
+            <span>{tab.label}</span>
             {tab.badge && (
               <span
                 className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${

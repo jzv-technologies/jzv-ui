@@ -299,6 +299,12 @@
           "nullable": "NO"
         },
         {
+          "type": "integer",
+          "column": "display_order",
+          "default": "0",
+          "nullable": "NO"
+        },
+        {
           "type": "text",
           "column": "component_name",
           "default": null,
@@ -306,13 +312,31 @@
         },
         {
           "type": "text",
-          "column": "component_type",
+          "column": "type",
           "default": null,
           "nullable": "NO"
         },
         {
           "type": "text",
-          "column": "group_name",
+          "column": "display_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "text",
+          "column": "parent_name",
+          "default": null,
+          "nullable": "YES"
+        },
+        {
+          "type": "ARRAY",
+          "column": "valid_access_roles",
+          "default": "'{}'::text[]",
+          "nullable": "NO"
+        },
+        {
+          "type": "text",
+          "column": "description",
           "default": null,
           "nullable": "YES"
         },
@@ -330,33 +354,15 @@
         },
         {
           "type": "text",
-          "column": "description",
+          "column": "icon",
           "default": null,
           "nullable": "YES"
         },
         {
-          "type": "ARRAY",
-          "column": "valid_access_roles",
-          "default": "'{}'::text[]",
-          "nullable": "NO"
-        },
-        {
-          "type": "integer",
-          "column": "display_order",
-          "default": "0",
-          "nullable": "NO"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "created_at",
-          "default": "timezone('utc'::text, now())",
-          "nullable": "NO"
-        },
-        {
-          "type": "timestamp with time zone",
-          "column": "updated_at",
-          "default": "timezone('utc'::text, now())",
-          "nullable": "NO"
+          "type": "text",
+          "column": "theme",
+          "default": null,
+          "nullable": "YES"
         }
       ]
     },
@@ -2121,6 +2127,16 @@
         "authenticated"
       ],
       "table": "academic_calendar",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('academic-calendar'::text) OR can_access_component('calendar-manage-events'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('academic-calendar'::text) OR can_access_component('calendar-manage-events'::text))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "academic_calendar",
       "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
@@ -2146,6 +2162,16 @@
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "academic_events",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('academic-calendar'::text) OR can_access_component('calendar-manage-events'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('academic-calendar'::text) OR can_access_component('calendar-manage-events'::text))"
     },
     {
       "roles": [
@@ -2305,6 +2331,16 @@
     },
     {
       "roles": [
+        "authenticated"
+      ],
+      "table": "dynamic_form_configs",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text]) OR can_access_component('form-configurations'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text]) OR can_access_component('form-configurations'::text))"
+    },
+    {
+      "roles": [
         "public"
       ],
       "table": "dynamic_form_configs",
@@ -2322,6 +2358,16 @@
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": "((auth.uid() = auth_id) OR has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "employees",
+      "using": "((auth.uid() = auth_id) OR has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('employee-management'::text) OR can_access_component('emp-tab-records'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "((auth.uid() = auth_id) OR has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('employee-management'::text) OR can_access_component('emp-tab-records'::text))"
     },
     {
       "roles": [
@@ -2366,6 +2412,16 @@
     },
     {
       "roles": [
+        "authenticated"
+      ],
+      "table": "lesson_plan_carry_forwards",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('lesson-planner-tracker'::text) OR can_access_component('syl-carry-forward-action'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('lesson-planner-tracker'::text) OR can_access_component('syl-carry-forward-action'::text))"
+    },
+    {
+      "roles": [
         "anon",
         "authenticated"
       ],
@@ -2384,6 +2440,16 @@
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "map_class_books",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('syllabus-manager'::text) OR can_access_component('classes-setup'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('syllabus-manager'::text) OR can_access_component('classes-setup'::text))"
     },
     {
       "roles": [
@@ -2449,7 +2515,7 @@
     },
     {
       "roles": [
-        "authenticated"
+        "anon"
       ],
       "table": "request_tracker",
       "using": null,
@@ -2459,7 +2525,7 @@
     },
     {
       "roles": [
-        "anon"
+        "authenticated"
       ],
       "table": "request_tracker",
       "using": null,
@@ -2522,10 +2588,40 @@
         "authenticated"
       ],
       "table": "students",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('student-records'::text))",
+      "command": "DELETE",
+      "permissive": "PERMISSIVE",
+      "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "students",
       "using": null,
       "command": "INSERT",
       "permissive": "PERMISSIVE",
       "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "students",
+      "using": null,
+      "command": "INSERT",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "students",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR is_parent_of_student((admission_no)::text))",
+      "command": "SELECT",
+      "permissive": "PERMISSIVE",
+      "with_check": null
     },
     {
       "roles": [
@@ -2543,10 +2639,10 @@
         "authenticated"
       ],
       "table": "students",
-      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text, 'staff'::text]) OR is_parent_of_student((admission_no)::text))",
-      "command": "SELECT",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))",
+      "command": "UPDATE",
       "permissive": "PERMISSIVE",
-      "with_check": null
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
     },
     {
       "roles": [
@@ -2567,6 +2663,16 @@
       "command": "ALL",
       "permissive": "PERMISSIVE",
       "with_check": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text])"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "syl_books",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('syllabus-manager'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('syllabus-manager'::text))"
     },
     {
       "roles": [
@@ -2720,6 +2826,16 @@
         "authenticated"
       ],
       "table": "trk_emp_salary",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('salary-tracker'::text) OR can_access_component('emp-tab-salary'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text]) OR can_access_component('salary-tracker'::text) OR can_access_component('emp-tab-salary'::text))"
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_emp_salary",
       "using": "has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text])",
       "command": "ALL",
       "permissive": "PERMISSIVE",
@@ -2747,6 +2863,16 @@
     },
     {
       "roles": [
+        "authenticated"
+      ],
+      "table": "trk_lesson_level_progress",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('lesson-planner-tracker'::text) OR can_access_component('syl-tab-lesson-planner'::text) OR can_access_component('syl-add-daily-work'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'teacher'::text]) OR can_access_component('lesson-planner-tracker'::text) OR can_access_component('syl-tab-lesson-planner'::text) OR can_access_component('syl-add-daily-work'::text))"
+    },
+    {
+      "roles": [
         "anon",
         "authenticated"
       ],
@@ -2755,6 +2881,16 @@
       "command": "SELECT",
       "permissive": "PERMISSIVE",
       "with_check": null
+    },
+    {
+      "roles": [
+        "authenticated"
+      ],
+      "table": "trk_student_fees",
+      "using": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))",
+      "command": "ALL",
+      "permissive": "PERMISSIVE",
+      "with_check": "(has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'staff'::text]) OR can_access_component('student-records'::text))"
     },
     {
       "roles": [
@@ -2827,11 +2963,6 @@
       "table": "academic_events",
       "function": "trigger_refresh_academic_calendar_summary",
       "definition": "CREATE TRIGGER academic_events_refresh_calendar_summary AFTER INSERT OR DELETE OR UPDATE ON academic_events FOR EACH ROW EXECUTE FUNCTION trigger_refresh_academic_calendar_summary()"
-    },
-    {
-      "table": "app_view_controller",
-      "function": "update_app_view_controller_updated_at",
-      "definition": "CREATE TRIGGER trg_app_view_controller_updated_at BEFORE UPDATE ON app_view_controller FOR EACH ROW EXECUTE FUNCTION update_app_view_controller_updated_at()"
     },
     {
       "table": "syl_books",
@@ -3072,11 +3203,6 @@
     },
     {
       "name": "trigger_refresh_calendar_rules",
-      "returns": "trigger",
-      "arguments": ""
-    },
-    {
-      "name": "update_app_view_controller_updated_at",
       "returns": "trigger",
       "arguments": ""
     },

@@ -14,10 +14,7 @@ import ConfirmModal from '../ConfirmModal';
 
 import SalaryTrackerView from './SalaryTrackerView';
 import MonthSwatches from './salary-tracker/MonthSwatches';
-import {
-  normalizeRoles,
-  fetchAllAppRoles,
-} from '../../utils/roleUtils';
+import { normalizeRoles, fetchAllAppRoles } from '../../utils/roleUtils';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 
 const DEFAULT_ROLES = [
@@ -244,9 +241,15 @@ const EmployeeRecordsView = ({
             const virtualEmp = {
               id: user?.id || 'self',
               auth_id: user?.id,
-              name: user?.user_metadata?.full_name || user?.name || user?.email?.split('@')[0] || 'User Profile',
+              name:
+                user?.user_metadata?.full_name ||
+                user?.name ||
+                user?.email?.split('@')[0] ||
+                'User Profile',
               email: user?.email || '',
-              designation: effectiveRoles.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join(', ') || 'Staff',
+              designation:
+                effectiveRoles.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join(', ') ||
+                'Staff',
               organization: 'Jamia Zaytoonah',
               is_active: true,
               mapped_roles: effectiveRoles,
@@ -338,9 +341,10 @@ const EmployeeRecordsView = ({
             localEmps.forEach((e) => {
               if (e.auth_id || e.email) {
                 const uid = e.auth_id || `local_user_${e.id}`;
-                const userRoles = Array.isArray(e.mapped_roles) && e.mapped_roles.length > 0
-                  ? e.mapped_roles
-                  : normalizeRoles(e.mapped_roles_sum || ['teacher']);
+                const userRoles =
+                  Array.isArray(e.mapped_roles) && e.mapped_roles.length > 0
+                    ? e.mapped_roles
+                    : normalizeRoles(e.mapped_roles_sum || ['teacher']);
                 constructedMap.set(uid, {
                   user_id: uid,
                   email:
@@ -503,7 +507,11 @@ const EmployeeRecordsView = ({
         const initialRoles =
           Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
             ? matchedAuth.roles
-            : normalizeRoles(targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']);
+            : normalizeRoles(
+                targetEmp.mapped_roles ||
+                  targetEmp.mapped_roles_sum ||
+                  matchedAuth?.role || ['teacher']
+              );
 
         const nextData = {
           name: targetEmp.name || '',
@@ -569,7 +577,9 @@ const EmployeeRecordsView = ({
     const initialRoles =
       Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
         ? matchedAuth.roles
-        : normalizeRoles(targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']);
+        : normalizeRoles(
+            targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']
+          );
 
     const nextData = {
       name: targetEmp.name || '',
@@ -783,10 +793,9 @@ const EmployeeRecordsView = ({
       };
       if (email) upsertPayload.email = email;
 
-      const { error: upsertErr } = await supabase.from('user_roles').upsert(
-        upsertPayload,
-        { onConflict: 'user_id' }
-      );
+      const { error: upsertErr } = await supabase
+        .from('user_roles')
+        .upsert(upsertPayload, { onConflict: 'user_id' });
 
       if (!upsertErr) {
         success = true;
@@ -1523,24 +1532,51 @@ const EmployeeRecordsView = ({
           {/* Mobile dropdown (< md) */}
           {mode !== 'records' && (
             <div className="md:hidden w-full">
-              <div className="relative">
-                <select
-                  value={activeTab}
-                  onChange={(e) => setActiveTab(e.target.value)}
-                  className="w-full appearance-none bg-light-lbg border border-light-border px-4 py-2.5 rounded-xl font-bold text-xs text-dark-primary outline-none focus:ring-2 focus:ring-green-500/20"
-                >
-                  {mode !== 'salary' && canAccess('emp-tab-records') && (
-                    <option value="records">Employee Records</option>
-                  )}
-                  {mode !== 'records' && canAccess('emp-tab-salary') && (
-                    <>
-                      <option value="salary_dashboard">Salary Credit Dashboard</option>
-                      <option value="salary_list">Salary List View</option>
-                    </>
-                  )}
-                </select>
-                <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
-              </div>
+              {mode === 'salary' ? (
+                <div className="inline-flex w-full p-1 bg-light-lbg border border-light-border rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('salary_dashboard')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
+                      activeTab === 'salary_dashboard'
+                        ? 'bg-green-dark text-white shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary'
+                    }`}
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('salary_list')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
+                      activeTab === 'salary_list'
+                        ? 'bg-green-dark text-white shadow-sm'
+                        : 'text-dark-soft hover:text-dark-primary'
+                    }`}
+                  >
+                    List View
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={activeTab}
+                    onChange={(e) => setActiveTab(e.target.value)}
+                    className="w-full appearance-none bg-light-lbg border border-light-border px-4 py-2.5 rounded-xl font-bold text-xs text-dark-primary outline-none focus:ring-2 focus:ring-green-500/20"
+                  >
+                    {canAccess('emp-tab-records') && (
+                      <option value="records">Employee Records</option>
+                    )}
+                    {canAccess('emp-tab-salary') && (
+                      <>
+                        <option value="salary_dashboard">Salary Credit Dashboard</option>
+                        <option value="salary_list">Salary List View</option>
+                      </>
+                    )}
+                  </select>
+                  <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+                </div>
+              )}
             </div>
           )}
 

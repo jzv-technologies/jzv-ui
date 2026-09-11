@@ -1156,13 +1156,13 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
             </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3 w-full sm:w-auto">
             {/* View Mode Toggle (Monthly / Yearly / Events Only) */}
-            <div className="flex rounded-xl border border-light-border bg-gray-50/80 p-0.5">
+            <div className="col-span-2 grid grid-cols-3 sm:flex rounded-xl border border-light-border bg-gray-50/80 p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode('month')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   viewMode === 'month'
                     ? 'bg-brand-primary text-white shadow-xs'
                     : 'text-dark-soft hover:text-dark-primary'
@@ -1173,7 +1173,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
               <button
                 type="button"
                 onClick={() => setViewMode('year')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   viewMode === 'year'
                     ? 'bg-brand-primary text-white shadow-xs'
                     : 'text-dark-soft hover:text-dark-primary'
@@ -1184,7 +1184,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
               <button
                 type="button"
                 onClick={() => setViewMode('events')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   viewMode === 'events'
                     ? 'bg-brand-primary text-white shadow-xs'
                     : 'text-dark-soft hover:text-dark-primary'
@@ -1198,7 +1198,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-9 px-3 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:border-brand-primary outline-none cursor-pointer"
+              className="w-full sm:w-auto h-9 px-3 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:border-brand-primary outline-none cursor-pointer"
             >
               <option value="all">All Event Types</option>
               {CALENDAR_EVENT_TYPES.map((type) => (
@@ -1215,7 +1215,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
                   type="button"
                   onClick={() => setShowRulesModal(true)}
                   title="Calendar Rules & Day Matrix"
-                  className="h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                  className="w-full sm:w-auto h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
                   <i className="fas fa-gear text-xs text-brand-primary" />
                   <span className="hidden sm:inline">Rules</span>
@@ -1229,7 +1229,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
                 <button
                   type="button"
                   onClick={() => setEditingEvent({})}
-                  className="h-9 px-3.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer ml-auto sm:ml-0"
+                  className="col-span-2 sm:col-auto w-full sm:w-auto h-9 px-3.5 rounded-xl bg-brand-primary text-white text-xs font-black inline-flex items-center justify-center gap-1.5 shadow-xs hover:bg-brand-primary/90 transition cursor-pointer"
                 >
                   <i className="fas fa-plus text-xs" /> <span>Add Event</span>
                 </button>

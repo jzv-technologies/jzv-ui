@@ -41,6 +41,7 @@ const AdminStudentsView = ({
   const [feesControls, setFeesControls] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [recordsSearchQuery, setRecordsSearchQuery] = useState('');
+  const [mobileRecordsView, setMobileRecordsView] = useState('summary');
   const [students, setStudents] = useState([]);
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -205,7 +206,9 @@ const AdminStudentsView = ({
             .select();
           if (dbErr) throw dbErr;
           if (!updatedRows || updatedRows.length === 0) {
-            throw new Error('Update failed: 0 rows affected. Your account role does not have database permission (RLS) to modify student records.');
+            throw new Error(
+              'Update failed: 0 rows affected. Your account role does not have database permission (RLS) to modify student records.'
+            );
           }
           showToast('Student profile updated successfully!', 'success');
         } else {
@@ -216,7 +219,9 @@ const AdminStudentsView = ({
             .select();
           if (dbErr) throw dbErr;
           if (!insertedRows || insertedRows.length === 0) {
-            throw new Error('Insert failed: 0 rows affected. Your account role does not have database permission (RLS) to create student records.');
+            throw new Error(
+              'Insert failed: 0 rows affected. Your account role does not have database permission (RLS) to create student records.'
+            );
           }
           showToast('New student added successfully!', 'success');
         }
@@ -296,7 +301,9 @@ const AdminStudentsView = ({
               .select();
             if (dbErr) throw dbErr;
             if (!deletedRows || deletedRows.length === 0) {
-              throw new Error('Delete failed: 0 rows affected. Your account role does not have database permission (RLS) to delete student records.');
+              throw new Error(
+                'Delete failed: 0 rows affected. Your account role does not have database permission (RLS) to delete student records.'
+              );
             }
             showToast('Student deleted successfully', 'success');
             setIsModalOpen(false);
@@ -364,13 +371,19 @@ const AdminStudentsView = ({
 
           const query = r.existingId
             ? supabase.from('students').update(updatePayload).eq('id', r.existingId).select()
-            : supabase.from('students').update(updatePayload).eq('admission_no', r.admission_no).select();
+            : supabase
+                .from('students')
+                .update(updatePayload)
+                .eq('admission_no', r.admission_no)
+                .select();
 
           const { data: upData, error: upErr } = await query;
           if (upErr) {
             errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${upErr.message}`);
           } else if (!upData || upData.length === 0) {
-            errors.push(`Row ${r.rowIndex} (${r.admission_no}): 0 rows updated — RLS permission denied`);
+            errors.push(
+              `Row ${r.rowIndex} (${r.admission_no}): 0 rows updated — RLS permission denied`
+            );
           } else {
             updatedCount++;
           }
@@ -392,11 +405,16 @@ const AdminStudentsView = ({
             hostel: r.hostel || 'No',
           };
 
-          const { data: inData, error: inErr } = await supabase.from('students').insert([insertPayload]).select();
+          const { data: inData, error: inErr } = await supabase
+            .from('students')
+            .insert([insertPayload])
+            .select();
           if (inErr) {
             errors.push(`Row ${r.rowIndex} (${r.admission_no}): ${inErr.message}`);
           } else if (!inData || inData.length === 0) {
-            errors.push(`Row ${r.rowIndex} (${r.admission_no}): 0 rows inserted — RLS permission denied`);
+            errors.push(
+              `Row ${r.rowIndex} (${r.admission_no}): 0 rows inserted — RLS permission denied`
+            );
           } else {
             insertedCount++;
           }
@@ -650,15 +668,21 @@ const AdminStudentsView = ({
   };
 
   return (
-    <div className="flex flex-col min-h-[500px] space-y-6">
+    <div className="flex flex-col min-h-[500px] space-y-6 pb-16 md:pb-0">
       {/* ── Unified Responsive Top Header ── */}
       <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
           {/* Main Title & Subtitle */}
           <div>
             <h2 className="text-xl sm:text-2xl font-black text-dark-primary flex items-center gap-2">
-              <i className={`fas ${mode === 'fees' ? 'fa-receipt text-teal-600' : 'fa-graduation-cap text-green-dark'}`}></i>
-              {mode === 'fees' ? 'Student Fees' : mode === 'records' ? 'Student Management' : 'Student Portal'}
+              <i
+                className={`fas ${mode === 'fees' ? 'fa-receipt text-teal-600' : 'fa-graduation-cap text-green-dark'}`}
+              ></i>
+              {mode === 'fees'
+                ? 'Student Fees'
+                : mode === 'records'
+                  ? 'Student Management'
+                  : 'Student Portal'}
             </h2>
             <p className="text-xs text-dark-muted font-semibold mt-0.5">
               {mode === 'fees'
@@ -705,10 +729,14 @@ const AdminStudentsView = ({
         {/* Action Controls Bar for Student Records tab */}
         {activeTab === 'records' && (
           <div className="space-y-3 pt-1">
-            <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
+            <div
+              className={`flex-col md:flex-row justify-between items-stretch md:items-center gap-3 ${
+                mobileRecordsView === 'details' ? 'flex' : 'hidden md:flex'
+              }`}
+            >
+              <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] sm:flex sm:items-center gap-2.5 flex-1">
                 {/* Search Input */}
-                <div className="relative flex-1 min-w-[200px]">
+                <div className="relative flex-1 min-w-0">
                   <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
                   <input
                     type="text"
@@ -723,7 +751,7 @@ const AdminStudentsView = ({
                 <select
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-3 py-2 bg-gray-50/70 focus:bg-white border border-light-border rounded-xl text-xs font-extrabold text-dark-primary outline-none focus:border-brand-primary transition-all cursor-pointer"
                 >
                   <option value="all">All Classes</option>
                   {classes
@@ -737,50 +765,54 @@ const AdminStudentsView = ({
                 </select>
               </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 shrink-0 sm:flex sm:flex-wrap sm:items-center">
+                <button
+                  onClick={() => loadStudents(classes)}
+                  disabled={loading}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                  title="Refresh database"
+                >
+                  <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
+                  Refresh
+                </button>
+
+                {canManage && (
                   <button
-                    onClick={() => loadStudents(classes)}
-                    disabled={loading}
-                    className="flex-1 sm:flex-none px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                    title="Refresh database"
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="w-full sm:w-auto px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                   >
-                    <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
-                    Refresh
+                    <i className="fas fa-file-import text-indigo-600"></i>
+                    Import Students
                   </button>
+                )}
 
-                  {canManage && (
-                    <button
-                      onClick={() => setIsImportModalOpen(true)}
-                      className="flex-1 sm:flex-none px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                    >
-                      <i className="fas fa-file-import text-indigo-600"></i>
-                      Import Students
-                    </button>
-                  )}
+                <button
+                  onClick={handleExportRecordsExcel}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <i className="fas fa-file-excel text-emerald-600"></i>
+                  Download
+                </button>
 
+                {canManage && (
                   <button
-                    onClick={handleExportRecordsExcel}
-                    className="flex-1 sm:flex-none px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
+                    onClick={openAddModal}
+                    className="w-full sm:w-auto px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
                   >
-                    <i className="fas fa-file-excel text-emerald-600"></i>
-                    Download
+                    <i className="fas fa-user-plus"></i>
+                    Add Student
                   </button>
-
-                  {canManage && (
-                    <button
-                      onClick={openAddModal}
-                      className="flex-1 sm:flex-none px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
-                    >
-                      <i className="fas fa-user-plus"></i>
-                      Add Student
-                    </button>
-                  )}
-                </div>
+                )}
+              </div>
             </div>
 
             {/* ── Class Summary Tiles ── */}
-            <div className="pt-3 border-t border-light-border/60">
+            <div
+              className={`pt-3 border-t border-light-border/60 ${
+                mobileRecordsView === 'summary' ? 'block' : 'hidden md:block'
+              }`}
+            >
               <div className="flex items-center justify-between gap-2 mb-2">
                 {selectedClassId !== 'all' && (
                   <button
@@ -793,11 +825,11 @@ const AdminStudentsView = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
+              <div className="grid grid-cols-2 gap-2 w-full md:flex md:items-center md:gap-2 md:overflow-x-auto md:scrollbar-hide md:pb-1">
                 <button
                   type="button"
                   onClick={() => setSelectedClassId('all')}
-                  className={`flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer shrink-0 min-w-[115px] flex-1 active:scale-95 ${
+                  className={`col-span-2 md:col-auto flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 md:shrink-0 md:min-w-[115px] flex-1 active:scale-95 ${
                     selectedClassId === 'all'
                       ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
                       : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
@@ -840,7 +872,7 @@ const AdminStudentsView = ({
                     key={cls.id}
                     type="button"
                     onClick={() => setSelectedClassId(selectedClassId === cls.id ? 'all' : cls.id)}
-                    className={`flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer shrink-0 min-w-[115px] flex-1 active:scale-95 ${
+                    className={`flex flex-col p-2.5 rounded-2xl border text-left transition-all cursor-pointer min-w-0 md:shrink-0 md:min-w-[115px] flex-1 active:scale-95 ${
                       selectedClassId === cls.id
                         ? 'bg-green-dark text-white border-green-dark shadow-sm ring-2 ring-emerald-300/40'
                         : 'bg-light-lbg/60 hover:bg-white border-light-border text-dark-primary hover:border-brand-primary/50'
@@ -958,7 +990,11 @@ const AdminStudentsView = ({
         />
       ) : (
         /* Main Student Records Grid */
-        <div className="flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+        <div
+          className={`flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm ${
+            mobileRecordsView === 'details' ? 'block' : 'hidden md:block'
+          }`}
+        >
           <DataGrid
             data={displayData}
             loading={loading}
@@ -967,6 +1003,35 @@ const AdminStudentsView = ({
             onRowClick={canManage ? openEditModal : undefined}
             excludeColumns={['id', 'class_id']}
           />
+        </div>
+      )}
+
+      {activeTab === 'records' && (
+        <div className="md:hidden fixed inset-x-0 bottom-0 z-30 bg-white border-t border-light-border px-3 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.08)]">
+          <div className="inline-flex w-full p-1 bg-light-lbg border border-light-border rounded-xl">
+            <button
+              type="button"
+              onClick={() => setMobileRecordsView('summary')}
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
+                mobileRecordsView === 'summary'
+                  ? 'bg-green-dark text-white shadow-sm'
+                  : 'text-dark-soft hover:text-dark-primary'
+              }`}
+            >
+              Summary Grid
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileRecordsView('details')}
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
+                mobileRecordsView === 'details'
+                  ? 'bg-green-dark text-white shadow-sm'
+                  : 'text-dark-soft hover:text-dark-primary'
+              }`}
+            >
+              Details List
+            </button>
+          </div>
         </div>
       )}
 
