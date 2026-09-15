@@ -57,6 +57,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   const [adHocMaxMarks, setAdHocMaxMarks] = useState('100');
   const [adHocPassMarks, setAdHocPassMarks] = useState('');
   const [savingAdHoc, setSavingAdHoc] = useState(false);
+  const [showSchemeEdit, setShowSchemeEdit] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -344,6 +345,65 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     });
   }, [allSubjectsToShow, statusFilter, classResultsIndex]);
 
+  // Auto-select preferred or first subject whenever class or subject list changes
+  useEffect(() => {
+    if (!selectedClassId || allSubjectsToShow.length === 0) {
+      setActiveResultId(null);
+      return;
+    }
+
+    const currentSubjectIsValid =
+      activeResult && allSubjectsToShow.some((s) => String(s.id) === String(activeResult.subject_id));
+    if (currentSubjectIsValid) return;
+
+    // Prefer subject where logged-in user is invigilator
+    let preferredSubject = null;
+    if (teacherRecord?.id) {
+      const mySlot = slots.find(
+        (s) =>
+          String(s.schedule_id) === String(selectedScheduleId) &&
+          String(s.class_id) === String(selectedClassId) &&
+          String(s.teacher_id) === String(teacherRecord.id)
+      );
+      if (mySlot) {
+        preferredSubject = allSubjectsToShow.find((s) => String(s.id) === String(mySlot.subject_id));
+      }
+    }
+
+    // Otherwise prefer first pending subject, then first subject
+    if (!preferredSubject) {
+      preferredSubject =
+        allSubjectsToShow.find((s) => classResultsIndex[String(s.id)]?.entry_status === 'pending') ||
+        allSubjectsToShow[0];
+    }
+
+    if (preferredSubject) {
+      handleSubjectSelect(preferredSubject.id);
+    }
+  }, [selectedClassId, allSubjectsToShow, teacherRecord?.id, slots, selectedScheduleId]);
+
+  const currentSubjectIndex = useMemo(() => {
+    if (!activeResult) return -1;
+    return allSubjectsToShow.findIndex((s) => String(s.id) === String(activeResult.subject_id));
+  }, [activeResult, allSubjectsToShow]);
+
+  const hasPrevSubject = currentSubjectIndex > 0;
+  const hasNextSubject =
+    currentSubjectIndex >= 0 && currentSubjectIndex < allSubjectsToShow.length - 1;
+  const nextSubjectName = hasNextSubject ? allSubjectsToShow[currentSubjectIndex + 1]?.name : '';
+
+  const handlePrevSubject = () => {
+    if (hasPrevSubject) {
+      handleSubjectSelect(allSubjectsToShow[currentSubjectIndex - 1].id);
+    }
+  };
+
+  const handleNextSubject = () => {
+    if (hasNextSubject) {
+      handleSubjectSelect(allSubjectsToShow[currentSubjectIndex + 1].id);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -353,396 +413,477 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   }
 
   return (
-    <div className="animate-in fade-in duration-300">
-      {/* Top Header Card (Book Manager Aligned) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 border border-light-border shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shadow-2xs">
-            <i className="fas fa-clipboard-check" />
+    <div className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300">
+      {/* ── 1. Top Header Block (Full width, flush to breadcrumbs, no rounded corners, responsive) ── */}
+      <div className="w-full bg-white border-b border-light-border rounded-none px-4 sm:px-6 py-3 print:hidden shadow-2xs space-y-3">
+        {/* Row 1: Title, Active Status, Exam Selector, and Refresh */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base shadow-2xs shrink-0">
+              <i className="fas fa-clipboard-check" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-base sm:text-lg font-black text-dark-primary tracking-tight">
+                  Exam Results Entry
+                </h1>
+                {selectedSchedule && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      selectedSchedule.status === 'published'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : selectedSchedule.status === 'finished'
+                          ? 'bg-slate-100 text-slate-700 border-slate-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}
+                  >
+                    <i
+                      className={`fas ${
+                        selectedSchedule.status === 'published'
+                          ? 'fa-circle-check'
+                          : selectedSchedule.status === 'finished'
+                            ? 'fa-flag-checkered'
+                            : 'fa-pen-ruler'
+                      } text-[8px]`}
+                    />
+                    {selectedSchedule.status}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
+                {isCoordinator
+                  ? 'Academic Coordinator / Admin view — enter, review, or override marks for any subject'
+                  : teacherRecord?.name
+                    ? `Teacher view (${teacherRecord.name}) — enter marks for assigned invigilation subjects`
+                    : 'Enter and manage examination marks per subject and class'}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg sm:text-xl font-black text-dark-primary tracking-tight">
-              Exam Results Entry
-            </h1>
-            <p className="text-xs font-bold text-dark-muted">
-              {isCoordinator
-                ? 'Academic Coordinator / Admin view — enter, review, or override marks for any subject'
-                : teacherRecord?.name
-                  ? `Teacher view (${teacherRecord.name}) — enter marks for assigned invigilation subjects`
-                  : 'Enter and manage examination marks per subject and class'}
-            </p>
-          </div>
-        </div>
 
-        {selectedSchedule && (
-          <div className="flex items-center gap-2.5">
-            <div className="text-right">
-              <span
-                className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                  selectedSchedule.status === 'published'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : selectedSchedule.status === 'finished'
-                      ? 'bg-slate-100 text-slate-700 border-slate-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                }`}
-              >
-                <i
-                  className={`fas ${
-                    selectedSchedule.status === 'published'
-                      ? 'fa-circle-check'
-                      : selectedSchedule.status === 'finished'
-                        ? 'fa-flag-checkered'
-                        : 'fa-pen-ruler'
-                  } text-[9px]`}
-                />
-                {selectedSchedule.status}
-              </span>
-            </div>
-            <div className="flex-1 min-w-[200px]">
-              <select
-                value={selectedScheduleId}
-                onChange={(e) => {
-                  setSelectedScheduleId(e.target.value);
-                  setSelectedClassId('');
-                  setActiveResultId(null);
-                }}
-                className="w-full px-3 py-2 text-xs font-bold border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300"
-              >
-                <option value="">— Select schedule —</option>
-                {schedules.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.status})
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+            {schedules.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
+                <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">Exam:</span>
+                <select
+                  value={selectedScheduleId || ''}
+                  onChange={(e) => {
+                    setSelectedScheduleId(e.target.value);
+                    setSelectedClassId('');
+                    setActiveResultId(null);
+                  }}
+                  className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer max-w-[180px] sm:max-w-xs truncate"
+                >
+                  <option value="">— Select Schedule —</option>
+                  {schedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
-              onClick={refreshResults}
-              className="w-9 h-9 flex items-center justify-center rounded-xl border border-light-border text-dark-muted hover:bg-slate-50 transition-all shadow-2xs"
+              onClick={async () => {
+                await refreshResults();
+                showToast('Results refreshed', 'success');
+              }}
+              className="w-8 h-8 flex items-center justify-center rounded-xl border border-light-border text-dark-muted hover:bg-slate-50 hover:text-dark-primary transition-all shadow-2xs cursor-pointer shrink-0"
               title="Refresh Results"
             >
               <i className="fas fa-sync-alt text-xs" />
             </button>
           </div>
-        )}
-      </div>
-
-      {/* Selectors Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white border border-light-border rounded-2xl p-4 shadow-xs">
-        <div className="flex-1 min-w-[160px]">
-          <label className="block text-[10px] font-bold text-dark-slate mb-1 uppercase tracking-wide">
-            Class
-          </label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => {
-              setSelectedClassId(e.target.value);
-              setActiveResultId(null);
-            }}
-            disabled={!selectedScheduleId}
-            className="w-full px-3 py-2 text-xs font-bold border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 disabled:opacity-50"
-          >
-            <option value="">— Select class —</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
         </div>
 
-        {/* Completion summary badges */}
-        {selectedClassId && allSubjectsToShow.length > 0 && (
-          <div className="flex items-center gap-2 mt-4 sm:mt-0 sm:ml-auto">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold text-emerald-700 bg-emerald-50 border-emerald-200">
-              <span>{completionStats.completed}</span>
-              <span className="font-normal text-[11px]">Completed</span>
+        {/* Row 2: Consolidated Filters (Class selector, Status Pills, Ad-hoc button, Completion Stats) */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Class Selector Dropdown */}
+            <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
+              <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">Class:</span>
+              <select
+                value={selectedClassId || ''}
+                onChange={(e) => {
+                  setSelectedClassId(e.target.value);
+                  setActiveResultId(null);
+                }}
+                disabled={!selectedScheduleId}
+                className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer disabled:opacity-50 min-w-[130px] max-w-[200px] truncate"
+              >
+                <option value="">— Select Class —</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold text-amber-700 bg-amber-50 border-amber-200">
-              <span>{completionStats.inProgress}</span>
-              <span className="font-normal text-[11px]">In Progress</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold text-slate-700 bg-slate-50 border-slate-200">
-              <span>{completionStats.pending}</span>
-              <span className="font-normal text-[11px]">Pending</span>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Yet to Get Results Alert Banner */}
-      {selectedScheduleId && selectedClassId && completionStats.pending > 0 && (
-        <div className="bg-amber-50/90 border border-amber-200 px-4 py-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 font-medium shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-sm font-bold shrink-0">
-              <i className="fas fa-hourglass-half" />
-            </div>
-            <div>
-              <p className="font-bold text-dark-primary">
-                {completionStats.pending} {completionStats.pending === 1 ? 'Subject' : 'Subjects'}{' '}
-                Yet to Get Results
-              </p>
-              <p className="text-[11px] text-amber-800">
-                Examination results have not been submitted for these papers yet. Invigilators can
-                enter marks or Academic Coordinators can override.
-              </p>
-            </div>
-          </div>
-          {statusFilter !== 'pending' && (
-            <button
-              type="button"
-              onClick={() => setStatusFilter('pending')}
-              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all shrink-0 cursor-pointer self-start sm:self-auto"
-            >
-              Filter Pending Papers
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Two-Panel Layout */}
-      {selectedScheduleId && selectedClassId ? (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-          {/* Left: Subject list with Status Filter Bar */}
-          <div className="lg:col-span-1 space-y-3">
-            <div className="bg-white border border-light-border rounded-2xl overflow-hidden shadow-xs">
-              <div className="p-3 border-b border-light-border bg-slate-50 flex items-center justify-between">
-                <h3 className="text-xs font-black text-dark-primary uppercase tracking-wide">
-                  Subjects
-                </h3>
-                {isCoordinator && (
-                  <button
-                    onClick={() => setShowAdHocForm(true)}
-                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
-                    title="Add ad-hoc subject not in exam schedule"
-                  >
-                    <i className="fas fa-plus text-[9px]" />
-                    <span>Ad-hoc</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Status Filter Pills */}
-              <div className="p-2 border-b border-light-border bg-slate-50/50 flex flex-wrap gap-1">
-                {[
-                  { id: 'all', label: 'All', count: completionStats.total },
-                  { id: 'pending', label: 'Pending', count: completionStats.pending },
-                  { id: 'in_progress', label: 'In Progress', count: completionStats.inProgress },
-                  { id: 'completed', label: 'Done', count: completionStats.completed },
-                ].map((pill) => (
-                  <button
-                    key={pill.id}
-                    type="button"
-                    onClick={() => setStatusFilter(pill.id)}
-                    className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full">
+              {[
+                { id: 'all', label: 'All', count: completionStats.total },
+                { id: 'pending', label: 'Pending', count: completionStats.pending },
+                { id: 'in_progress', label: 'In Progress', count: completionStats.inProgress },
+                { id: 'completed', label: 'Done', count: completionStats.completed },
+              ].map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setStatusFilter(pill.id)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    statusFilter === pill.id
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-dark-muted hover:text-dark-primary'
+                  }`}
+                >
+                  <span>{pill.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                       statusFilter === pill.id
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'bg-white text-dark-muted hover:text-dark-primary border border-light-border'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-slate-200/70 text-dark-muted'
                     }`}
                   >
-                    <span>{pill.label}</span>
-                    <span
-                      className={`px-1 py-0.2 rounded-full text-[9px] ${
-                        statusFilter === pill.id
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-slate-100 text-dark-muted'
-                      }`}
-                    >
-                      {pill.count}
-                    </span>
-                  </button>
-                ))}
+                    {pill.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Coordinator Add Ad-hoc Subject Button */}
+            {isCoordinator && selectedScheduleId && selectedClassId && (
+              <button
+                type="button"
+                onClick={() => setShowAdHocForm(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Add ad-hoc subject not in exam schedule"
+              >
+                <i className="fas fa-plus text-[10px]" />
+                <span>Ad-Hoc Subject</span>
+              </button>
+            )}
+          </div>
+
+          {/* Right: Quick Summary Counts */}
+          {selectedClassId && allSubjectsToShow.length > 0 && (
+            <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold text-emerald-700 bg-emerald-50 border-emerald-200">
+                <span>{completionStats.completed}/{completionStats.total}</span>
+                <span className="font-normal text-[11px] hidden sm:inline">Completed</span>
               </div>
-
-              {filteredSubjects.length === 0 ? (
-                <div className="text-center py-8 text-xs text-dark-muted">
-                  <i className="fas fa-book-open text-2xl mb-2 block opacity-20" />
-                  No subjects match the "{statusFilter}" filter.
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
-                  {filteredSubjects.map((sub) => {
-                    const res = classResultsIndex[String(sub.id)];
-                    const cfg = ENTRY_STATUS_CONFIG[res?.entry_status || 'pending'];
-                    const isActive = String(res?.id) === String(activeResultId);
-
-                    // Find invigilator for this subject
-                    const slot = slots.find(
-                      (s) =>
-                        String(s.schedule_id) === String(selectedScheduleId) &&
-                        String(s.class_id) === String(selectedClassId) &&
-                        String(s.subject_id) === String(sub.id)
-                    );
-                    const invName = slot?.teacher_id ? teacherMap[String(slot.teacher_id)] : null;
-                    const isMyDuty =
-                      teacherRecord?.id &&
-                      slot?.teacher_id &&
-                      String(teacherRecord.id) === String(slot.teacher_id);
-
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => handleSubjectSelect(sub.id)}
-                        className={`w-full text-left px-3.5 py-3 transition-all cursor-pointer flex items-start gap-2.5 ${
-                          isActive
-                            ? 'bg-emerald-50 border-l-4 border-emerald-500'
-                            : 'hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <p
-                              className={`text-xs font-bold truncate ${
-                                isActive ? 'text-emerald-700' : 'text-dark-deepblue'
-                              }`}
-                            >
-                              {sub.name}
-                            </p>
-                            {sub.isAdHoc && (
-                              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                                Ad-hoc
-                              </span>
-                            )}
-                            {isMyDuty && (
-                              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
-                                You
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-dark-muted truncate mt-0.5">
-                            Inv:{' '}
-                            <span className="font-semibold text-dark-slate">
-                              {invName || 'Unassigned'}
-                            </span>
-                          </p>
-                        </div>
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${cfg.color}`}
-                        >
-                          <i className={`fas ${cfg.icon} mr-1 text-[8px]`} />
-                          {cfg.label}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {completionStats.pending > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold text-amber-700 bg-amber-50 border-amber-200">
+                  <i className="fas fa-hourglass-half text-[10px]" />
+                  <span>{completionStats.pending}</span>
+                  <span className="font-normal text-[11px] hidden sm:inline">Pending</span>
                 </div>
               )}
             </div>
+          )}
+        </div>
+      </div>
 
-            {/* Marking Scheme Config Card */}
-            {activeResult && (
-              <div className="bg-white border border-light-border rounded-2xl p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-dark-primary uppercase tracking-wide">
-                    Marking Scheme
-                  </h4>
-                  {!canEditMarks && (
-                    <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                      Locked
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-[10px] font-bold text-dark-slate mb-1">
-                      Max Marks
-                    </label>
-                    <input
-                      type="number"
-                      disabled={!canEditMarks}
-                      value={activeResult.max_marks}
-                      onChange={(e) => handleMaxMarksChange(activeResult.id, e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs font-bold border border-light-border rounded-xl bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-[10px] font-bold text-dark-slate mb-1">
-                      Pass Marks
-                    </label>
-                    <input
-                      type="number"
-                      disabled={!canEditMarks}
-                      value={activeResult.pass_marks || ''}
-                      onChange={(e) =>
-                        supabase
-                          .from('exam_results')
-                          .update({ pass_marks: e.target.value ? Number(e.target.value) : null })
-                          .eq('id', activeResult.id)
-                          .then(() => refreshResults())
-                      }
-                      className="w-full px-3 py-1.5 text-xs font-bold border border-light-border rounded-xl bg-white disabled:bg-slate-50 disabled:cursor-not-allowed"
-                      placeholder="Optional"
-                    />
-                  </div>
-                </div>
+      {/* ── 2. Data Table / Register Area (Full width container with rounded cards) ── */}
+      <div className="w-full p-4 sm:p-6 space-y-4">
+        {/* Pending Notice Alert Banner */}
+        {selectedScheduleId && selectedClassId && completionStats.pending > 0 && (
+          <div className="bg-amber-50/90 border border-amber-200 px-4 py-2.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 font-medium shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <i className="fas fa-hourglass-half text-amber-700 text-sm shrink-0" />
+              <div>
+                <span className="font-bold text-dark-primary">
+                  {completionStats.pending} {completionStats.pending === 1 ? 'Subject' : 'Subjects'} Pending Results
+                </span>
+                <span className="text-[11px] text-amber-800 ml-1.5 hidden md:inline">
+                  — Marks have not been submitted for these papers yet.
+                </span>
               </div>
+            </div>
+            {statusFilter !== 'pending' && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter('pending')}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all shrink-0 cursor-pointer self-start sm:self-auto"
+              >
+                Filter Pending Only
+              </button>
             )}
           </div>
+        )}
 
-          {/* Right: Mark Entry Grid */}
-          <div className="lg:col-span-3">
-            {activeResult ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-light-border shadow-xs">
-                  <div>
-                    <h2 className="text-base font-black text-dark-primary tracking-tight">
-                      {activeSubject?.name}
-                      <span className="ml-2 text-xs font-normal text-dark-muted">
-                        · {classStudents.length} students · Max Marks: {activeResult.max_marks}
-                      </span>
-                    </h2>
-                    {activeInvigilatorName && (
-                      <p className="text-xs text-dark-muted mt-0.5">
-                        Assigned Invigilator:{' '}
-                        <strong className="text-dark-primary">{activeInvigilatorName}</strong>
-                      </p>
+        {/* Two-Panel Layout */}
+        {selectedScheduleId && selectedClassId ? (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+            {/* Left: Subject list */}
+            <div className="lg:col-span-1 space-y-3">
+              <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs">
+                <div className="p-3.5 border-b border-light-border bg-slate-50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-book text-xs text-dark-muted" />
+                    <h3 className="text-xs font-black text-dark-primary uppercase tracking-wide">
+                      Subjects ({filteredSubjects.length})
+                    </h3>
+                  </div>
+                </div>
+
+                {filteredSubjects.length === 0 ? (
+                  <div className="text-center py-8 text-xs text-dark-muted px-4">
+                    <i className="fas fa-book-open text-2xl mb-2 block opacity-20" />
+                    No subjects match the "{statusFilter}" filter.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto">
+                    {filteredSubjects.map((sub) => {
+                      const res = classResultsIndex[String(sub.id)];
+                      const cfg = ENTRY_STATUS_CONFIG[res?.entry_status || 'pending'];
+                      const isActive = String(res?.id) === String(activeResultId);
+
+                      const slot = slots.find(
+                        (s) =>
+                          String(s.schedule_id) === String(selectedScheduleId) &&
+                          String(s.class_id) === String(selectedClassId) &&
+                          String(s.subject_id) === String(sub.id)
+                      );
+                      const invName = slot?.teacher_id ? teacherMap[String(slot.teacher_id)] : null;
+                      const isMyDuty =
+                        teacherRecord?.id &&
+                        slot?.teacher_id &&
+                        String(teacherRecord.id) === String(slot.teacher_id);
+
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleSubjectSelect(sub.id)}
+                          className={`w-full text-left px-3.5 py-3 transition-all cursor-pointer flex items-start gap-2.5 ${
+                            isActive
+                              ? 'bg-emerald-50 border-l-4 border-emerald-500'
+                              : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p
+                                className={`text-xs font-bold truncate ${
+                                  isActive ? 'text-emerald-700' : 'text-dark-deepblue'
+                                }`}
+                              >
+                                {sub.name}
+                              </p>
+                              {sub.isAdHoc && (
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                                  Ad-hoc
+                                </span>
+                              )}
+                              {isMyDuty && (
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-dark-muted truncate mt-0.5">
+                              Inv:{' '}
+                              <span className="font-semibold text-dark-slate">
+                                {invName || 'Unassigned'}
+                              </span>
+                            </p>
+                          </div>
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${cfg.color}`}
+                          >
+                            <i className={`fas ${cfg.icon} mr-1 text-[8px]`} />
+                            {cfg.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Subject Switcher & Results Entry Grid */}
+            <div className="lg:col-span-3 space-y-4">
+              {activeResult ? (
+                <>
+                  {/* Subject Header & Quick Navigation Bar */}
+                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                          <i className="fas fa-book-open" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h2 className="text-base font-black text-dark-primary tracking-tight">
+                              {activeSubject?.name}
+                            </h2>
+                            {currentSubjectIndex >= 0 && (
+                              <span className="text-[11px] font-bold text-dark-muted bg-slate-100 px-2 py-0.5 rounded-full">
+                                Subject {currentSubjectIndex + 1} of {allSubjectsToShow.length}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                                ENTRY_STATUS_CONFIG[activeResult.entry_status]?.color
+                              }`}
+                            >
+                              {ENTRY_STATUS_CONFIG[activeResult.entry_status]?.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 text-xs text-dark-muted mt-0.5 flex-wrap">
+                            <span>{classStudents.length} Students</span>
+                            <span>·</span>
+                            <span>Max Marks: <strong>{activeResult.max_marks}</strong></span>
+                            {activeResult.pass_marks && (
+                              <>
+                                <span>·</span>
+                                <span>Pass Marks: <strong>{activeResult.pass_marks}</strong></span>
+                              </>
+                            )}
+                            {activeInvigilatorName && (
+                              <>
+                                <span>·</span>
+                                <span>Invigilator: <strong className="text-dark-primary">{activeInvigilatorName}</strong></span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Subject Navigation Buttons & Mobile Dropdown */}
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                        {/* Mobile Subject Dropdown Picker */}
+                        <div className="sm:hidden">
+                          <select
+                            value={activeSubject?.id || ''}
+                            onChange={(e) => handleSubjectSelect(e.target.value)}
+                            className="text-xs font-bold border border-light-border rounded-xl px-2 py-1.5 bg-slate-50"
+                          >
+                            {allSubjectsToShow.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {canEditMarks && isCoordinator && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSchemeEdit(!showSchemeEdit)}
+                            className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              showSchemeEdit
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                : 'border-light-border text-dark-slate hover:bg-slate-50'
+                            }`}
+                            title="Edit Max Marks and Pass Marks"
+                          >
+                            <i className="fas fa-sliders text-[10px]" />
+                            <span className="hidden sm:inline">Marking Scheme</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={!hasPrevSubject}
+                          onClick={handlePrevSubject}
+                          className="px-2.5 py-1.5 rounded-xl border border-light-border text-xs font-bold text-dark-slate hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Go to previous subject"
+                        >
+                          <i className="fas fa-chevron-left text-[10px]" />
+                          <span className="hidden sm:inline">Prev</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={!hasNextSubject}
+                          onClick={handleNextSubject}
+                          className="px-2.5 py-1.5 rounded-xl border border-light-border text-xs font-bold text-dark-slate hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
+                          title="Go to next subject"
+                        >
+                          <span className="hidden sm:inline">Next</span>
+                          <i className="fas fa-chevron-right text-[10px]" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expandable Marking Scheme Editor for Coordinators */}
+                    {showSchemeEdit && canEditMarks && (
+                      <div className="bg-slate-50/80 p-3 rounded-2xl border border-light-border flex flex-wrap items-center gap-4 text-xs font-bold animate-in fade-in duration-150">
+                        <div className="flex items-center gap-2">
+                          <span className="text-dark-muted">Max Marks:</span>
+                          <input
+                            type="number"
+                            value={activeResult.max_marks}
+                            onChange={(e) => handleMaxMarksChange(activeResult.id, e.target.value)}
+                            className="w-20 px-2.5 py-1 border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-dark-muted">Pass Marks:</span>
+                          <input
+                            type="number"
+                            value={activeResult.pass_marks || ''}
+                            placeholder="Optional"
+                            onChange={(e) =>
+                              supabase
+                                .from('exam_results')
+                                .update({ pass_marks: e.target.value ? Number(e.target.value) : null })
+                                .eq('id', activeResult.id)
+                                .then(() => refreshResults())
+                            }
+                            className="w-24 px-2.5 py-1 border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                          />
+                        </div>
+                        <span className="text-[11px] text-dark-muted font-normal ml-auto">
+                          Changes update in real-time.
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <span
-                    className={`text-[11px] font-bold px-3 py-1 rounded-full border ${
-                      ENTRY_STATUS_CONFIG[activeResult.entry_status]?.color
-                    }`}
-                  >
-                    {ENTRY_STATUS_CONFIG[activeResult.entry_status]?.label}
-                  </span>
-                </div>
 
-                <ExamResultsEntryGrid
-                  result={activeResult}
-                  students={classStudents}
-                  onStatusUpdate={handleStatusUpdate}
-                  canEdit={canEditMarks}
-                  invigilatorName={activeInvigilatorName}
-                  isCoordinator={isCoordinator}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl p-8 shadow-xs">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
-                  <i className="fas fa-hand-pointer" />
+                  {/* Mark Entry Register Grid */}
+                  <ExamResultsEntryGrid
+                    result={activeResult}
+                    students={classStudents}
+                    onStatusUpdate={handleStatusUpdate}
+                    canEdit={canEditMarks}
+                    invigilatorName={activeInvigilatorName}
+                    isCoordinator={isCoordinator}
+                    onNextSubject={handleNextSubject}
+                    hasNextSubject={hasNextSubject}
+                    nextSubjectName={nextSubjectName}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
+                    <i className="fas fa-hand-pointer" />
+                  </div>
+                  <p className="text-sm font-bold text-dark-primary">
+                    Select a Subject to Enter Marks
+                  </p>
+                  <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
+                    Click any subject from the list on the left to view the student register and
+                    record examination marks.
+                  </p>
                 </div>
-                <p className="text-sm font-bold text-dark-primary">
-                  Select a Subject to Enter Marks
-                </p>
-                <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
-                  Click any subject from the list on the left to view the student register and
-                  record examination marks.
-                </p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="text-center py-20 bg-white border border-light-border rounded-2xl shadow-sm p-8">
-          <i className="fas fa-clipboard-list text-4xl text-slate-300 mb-4 block" />
-          <p className="text-base font-bold text-dark-primary">Select an Exam Schedule and Class</p>
-          <p className="text-xs text-dark-muted mt-1 max-w-md mx-auto">
-            Choose an examination event and class section from the dropdowns above to view scheduled
-            subjects and record student marks.
-          </p>
-        </div>
-      )}
+        ) : (
+          <div className="text-center py-20 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm p-8">
+            <i className="fas fa-clipboard-list text-4xl text-slate-300 mb-4 block" />
+            <p className="text-base font-bold text-dark-primary">Select an Exam Schedule and Class</p>
+            <p className="text-xs text-dark-muted mt-1 max-w-md mx-auto">
+              Choose an examination event and class section from the dropdowns above to view scheduled
+              subjects and record student marks.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Ad-hoc Subject Modal */}
       {showAdHocForm && (
