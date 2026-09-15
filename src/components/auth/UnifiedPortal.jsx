@@ -20,6 +20,8 @@ import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
+import ExamTimetableManager from '../examinations/ExamTimetableManager';
+import ExamResultsManager from '../examinations/ExamResultsManager';
 
 // Shared subview containers
 import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewContainer';
@@ -476,6 +478,20 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="manage-user-roles">
             <ManagePortalUserRolesView currentUser={user} />
+          </div>
+        );
+
+      case 'exam-timetable':
+        return (
+          <div data-feature="exam-timetable">
+            <ExamTimetableManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
+          </div>
+        );
+
+      case 'exam-results':
+        return (
+          <div data-feature="exam-results">
+            <ExamResultsManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
           </div>
         );
 

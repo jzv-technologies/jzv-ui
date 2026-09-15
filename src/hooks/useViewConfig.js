@@ -4,14 +4,21 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v2';
 
 const readSessionCache = () => {
   try {
+    sessionStorage.removeItem('jzv_view_config_cache'); // Clear legacy cache
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
     if (!Array.isArray(cachedData.viewConfigs) || !Array.isArray(cachedData.dynamicConfigs)) {
+      return null;
+    }
+    // Auto-invalidate if new core tiles are not yet in the cached list
+    const names = new Set(cachedData.viewConfigs.map((c) => c.component_name));
+    if (!names.has('exam-timetable') || !names.has('exam-results')) {
+      sessionStorage.removeItem(VIEW_CONFIG_SESSION_KEY);
       return null;
     }
     return cachedData;

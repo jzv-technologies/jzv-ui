@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ConfirmModal from '../ConfirmModal';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import { showToast } from '../../utils/toast';
+import ClassSubjectsManager from './ClassSubjectsManager';
 
 // Helper to generate UUIDs locally when offline
 export const generateLocalId = () => {
@@ -1470,6 +1471,14 @@ export const ClassesSetup = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Class Subjects Manager — formal subject list for exams & tracking */}
+            <ClassSubjectsManager
+              classId={activeClass.id}
+              className={activeClass.name}
+              subjects={subjects}
+              classifications={classifications}
+            />
           </>
         ) : (
           <div className="text-center py-16 bg-light-bg/10 border border-dashed border-light-border rounded-xl">
