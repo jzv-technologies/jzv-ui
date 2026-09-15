@@ -17,7 +17,7 @@ const readSessionCache = () => {
     }
     // Auto-invalidate if new core tiles are not yet in the cached list
     const names = new Set(cachedData.viewConfigs.map((c) => c.component_name));
-    if (!names.has('exam-timetable') || !names.has('exam-results')) {
+    if (!names.has('exam-schedule') || !names.has('exam-results')) {
       sessionStorage.removeItem(VIEW_CONFIG_SESSION_KEY);
       return null;
     }

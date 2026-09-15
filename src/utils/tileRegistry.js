@@ -234,7 +234,7 @@ export const TILE_METADATA_REGISTRY = {
     group: 'Calendar and Schedules',
     action: 'subview',
   },
-  'exam-timetable': {
+  'exam-schedule': {
     title: 'Exam Schedule',
     description: 'Schedule examinations, assign invigilators, and manage Exam Schedules across all classes.',
     icon: 'fa-file-circle-check',

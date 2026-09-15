@@ -481,9 +481,9 @@ export const UnifiedPortal = ({
           </div>
         );
 
-      case 'exam-timetable':
+      case 'exam-schedule':
         return (
-          <div data-feature="exam-timetable">
+          <div data-feature="exam-schedule">
             <ExamTimetableManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
           </div>
         );

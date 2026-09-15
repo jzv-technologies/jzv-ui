@@ -5,8 +5,21 @@ import React, { useMemo, useState } from 'react';
  * Teacher-centric view of exam assignments.
  * Shows one teacher's full schedule across all classes for the selected exam.
  */
-const ExamTeacherView = ({ schedule, sessions, classes, subjects, teachers, slots }) => {
-  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+const ExamTeacherView = ({
+  schedule,
+  sessions,
+  classes,
+  subjects,
+  teachers,
+  slots,
+  selectedTeacherId: externalSelectedTeacherId,
+  onSelectTeacher: externalOnSelectTeacher,
+  hideTeacherSelector = false,
+}) => {
+  const [internalSelectedTeacherId, setInternalSelectedTeacherId] = useState('');
+  const selectedTeacherId =
+    externalSelectedTeacherId !== undefined ? externalSelectedTeacherId : internalSelectedTeacherId;
+  const setSelectedTeacherId = externalOnSelectTeacher || setInternalSelectedTeacherId;
 
   const sortedSessions = useMemo(
     () => [...sessions].sort((a, b) => a.session_order - b.session_order),
@@ -69,51 +82,53 @@ const ExamTeacherView = ({ schedule, sessions, classes, subjects, teachers, slot
     new Date(d + 'T00:00').toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Teacher selector */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-bold text-dark-slate whitespace-nowrap">View teacher:</label>
-          <select
-            value={selectedTeacherId}
-            onChange={(e) => setSelectedTeacherId(e.target.value)}
-            className="px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-rose-300 min-w-[180px]"
-          >
-            <option value="">— Select teacher —</option>
-            {activeTeachers.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {selectedTeacherId && (
-          <div className="flex gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-xl border border-blue-200">
-              <i className="fas fa-calendar-check text-blue-500 text-xs" />
-              <span className="text-xs font-bold text-blue-700">{totalAssignments} assignments</span>
-            </div>
-            {conflicts.size > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-xl border border-red-200">
-                <i className="fas fa-triangle-exclamation text-red-500 text-xs" />
-                <span className="text-xs font-bold text-red-700">{conflicts.size} conflict{conflicts.size > 1 ? 's' : ''}</span>
-              </div>
-            )}
+      {!hideTeacherSelector && (
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-bold text-dark-slate whitespace-nowrap">View teacher:</label>
+            <select
+              value={selectedTeacherId}
+              onChange={(e) => setSelectedTeacherId(e.target.value)}
+              className="px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-rose-300 min-w-[180px]"
+            >
+              <option value="">— Select teacher —</option>
+              {activeTeachers.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
           </div>
-        )}
-      </div>
+
+          {selectedTeacherId && (
+            <div className="flex gap-3">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-xl border border-blue-200">
+                <i className="fas fa-calendar-check text-blue-500 text-xs" />
+                <span className="text-xs font-bold text-blue-700">{totalAssignments} assignments</span>
+              </div>
+              {conflicts.size > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 rounded-xl border border-red-200">
+                  <i className="fas fa-triangle-exclamation text-red-500 text-xs" />
+                  <span className="text-xs font-bold text-red-700">{conflicts.size} conflict{conflicts.size > 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid */}
       {!selectedTeacherId ? (
-        <div className="text-center py-16 bg-white border border-light-border rounded-2xl">
+        <div className="text-center py-16 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm">
           <i className="fas fa-user-tie text-3xl text-slate-300 mb-3 block" />
           <p className="text-sm font-bold text-dark-deepblue">Select a teacher to view their exam schedule</p>
         </div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-12 bg-white border border-light-border rounded-2xl">
+        <div className="text-center py-12 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm">
           <p className="text-sm text-dark-muted">No sessions defined for this exam.</p>
         </div>
       ) : (
-        <div className="bg-white border border-light-border rounded-2xl overflow-hidden">
+        <div className="w-full bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead>
