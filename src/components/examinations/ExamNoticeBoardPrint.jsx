@@ -1,5 +1,6 @@
 // src/components/examinations/ExamNoticeBoardPrint.jsx
 import React, { useState, useMemo } from 'react';
+import { formatDateDisplay } from '../../utils/dateUtils';
 
 /**
  * Notice Board Printable View
@@ -50,7 +51,7 @@ const ExamNoticeBoardPrint = ({
     slots.forEach((s) => {
       if (s.exam_date) dates.add(s.exam_date);
     });
-    return Array.from(dates).sort((a, b) => new Date(a) - new Date(b));
+    return Array.from(dates).sort((a, b) => a.localeCompare(b));
   }, [slots]);
 
   // Lookup maps
@@ -240,9 +241,8 @@ const ExamNoticeBoardPrint = ({
               </thead>
               <tbody>
                 {examDates.map((dateStr) => {
-                  const dateObj = new Date(dateStr);
-                  const dayName = dateObj.toLocaleDateString(undefined, { weekday: 'short' });
-                  const formattedDate = dateObj.toLocaleDateString(undefined, {
+                  const dayName = formatDateDisplay(dateStr, { weekday: 'short' });
+                  const formattedDate = formatDateDisplay(dateStr, {
                     month: 'short',
                     day: 'numeric',
                   });
@@ -321,7 +321,7 @@ const ExamNoticeBoardPrint = ({
             {selectedClassesList.map((cls) => {
               const classSlots = slots
                 .filter((s) => String(s.class_id) === String(cls.id))
-                .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
+                .sort((a, b) => (a.exam_date || '').localeCompare(b.exam_date || ''));
 
               return (
                 <div
@@ -346,8 +346,7 @@ const ExamNoticeBoardPrint = ({
                         const subName =
                           subjectMap[String(slot.subject_id)] || `Subject #${slot.subject_id}`;
                         const teacherName = teacherMap[String(slot.teacher_id)];
-                        const dateObj = new Date(slot.exam_date);
-                        const formatted = dateObj.toLocaleDateString(undefined, {
+                        const formatted = formatDateDisplay(slot.exam_date, {
                           weekday: 'short',
                           month: 'short',
                           day: 'numeric',

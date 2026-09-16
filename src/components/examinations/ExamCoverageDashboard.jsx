@@ -47,19 +47,19 @@ const ExamCoverageDashboard = ({ classes, subjects, slots, classSubjects }) => {
   return (
     <div className="space-y-5">
       {/* Overall stat */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white border border-light-border rounded-2xl p-5 text-center">
-          <p className="text-3xl font-extrabold text-dark-deepblue">{overall}%</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white border border-light-border rounded-2xl p-4 sm:p-5 text-center shadow-2xs">
+          <p className="text-2xl sm:text-3xl font-extrabold text-dark-deepblue">{overall}%</p>
           <p className="text-xs text-dark-muted mt-1">Overall Coverage</p>
         </div>
-        <div className="bg-white border border-light-border rounded-2xl p-5 text-center">
-          <p className="text-3xl font-extrabold text-emerald-600">
+        <div className="bg-white border border-light-border rounded-2xl p-4 sm:p-5 text-center shadow-2xs">
+          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
             {coverageData.filter((c) => c.pct === 100).length}
           </p>
           <p className="text-xs text-dark-muted mt-1">Classes Fully Scheduled</p>
         </div>
-        <div className="bg-white border border-light-border rounded-2xl p-5 text-center">
-          <p className="text-3xl font-extrabold text-red-500">
+        <div className="bg-white border border-light-border rounded-2xl p-4 sm:p-5 text-center shadow-2xs">
+          <p className="text-2xl sm:text-3xl font-extrabold text-red-500">
             {coverageData.filter((c) => c.pending > 0).length}
           </p>
           <p className="text-xs text-dark-muted mt-1">Classes with Gaps</p>

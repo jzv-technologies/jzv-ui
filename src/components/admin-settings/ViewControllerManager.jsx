@@ -233,7 +233,7 @@ const getRoleBadgeClasses = (colorName) => {
   return ROLE_COLOR_MAP[colorName.toLowerCase()] || ROLE_COLOR_MAP.purple;
 };
 
-const COMPONENT_TYPES = ['tile', 'component', 'subview', 'variable'];
+const COMPONENT_TYPES = ['tile', 'tab', 'subview', 'variable'];
 
 export const ViewControllerManager = () => {
   const [configs, setConfigs] = useState([]);

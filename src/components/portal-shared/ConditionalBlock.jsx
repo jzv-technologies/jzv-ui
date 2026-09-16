@@ -15,7 +15,9 @@ export const useCanAccess = (overrideRoles) => {
   const { isFeatureEnabled } = useViewConfig();
 
   const effectiveRoles = useMemo(() => {
-    return Array.isArray(overrideRoles) ? overrideRoles : authUserRoles || [];
+    return Array.isArray(overrideRoles) && overrideRoles.length > 0
+      ? overrideRoles
+      : authUserRoles || [];
   }, [overrideRoles, authUserRoles]);
 
   return useCallback(

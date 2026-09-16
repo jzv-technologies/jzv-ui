@@ -20,7 +20,7 @@ import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
-import ExamTimetableManager from '../examinations/ExamTimetableManager';
+import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
 
 // Shared subview containers
@@ -484,7 +484,7 @@ export const UnifiedPortal = ({
       case 'exam-schedule':
         return (
           <div data-feature="exam-schedule">
-            <ExamTimetableManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
+            <ExamScheduleManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
           </div>
         );
 

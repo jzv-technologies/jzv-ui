@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
+import { ConditionalBlock } from '../portal-shared/ConditionalBlock';
 
 /**
  * Enhanced Mark Entry Grid for a single subject.
@@ -24,6 +25,7 @@ const ExamResultsEntryGrid = ({
   onNextSubject = null,
   hasNextSubject = false,
   nextSubjectName = '',
+  userRoles = [],
 }) => {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -399,28 +401,28 @@ const ExamResultsEntryGrid = ({
           </div>
 
           {/* Quick Metrics */}
-          <div className="flex items-center gap-3 text-xs text-dark-muted font-bold flex-wrap">
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl">
+          <div className="flex items-center gap-2 text-xs text-dark-muted font-bold flex-wrap">
+            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
               Avg: <strong className="text-dark-primary">{avg}</strong>
             </span>
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl">
+            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
               High: <strong className="text-emerald-700">{highest}</strong>
             </span>
             {result.pass_marks && (
-              <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl">
+              <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
                 Passed: <strong className="text-emerald-700">{passCount}/{marks.length}</strong>
               </span>
             )}
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl">
+            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
               Absent: <strong className="text-red-600">{absentCount}</strong>
             </span>
           </div>
         </div>
 
         {/* Bottom Toolbar: Student Search + Quick Fill Tools */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100">
           {/* Student Search */}
-          <div className="relative flex-1 max-w-xs">
+          <div className="relative flex-1 w-full sm:max-w-xs">
             <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
             <input
               type="text"
@@ -447,27 +449,29 @@ const ExamResultsEntryGrid = ({
             </span>
 
             {canEdit && (
-              <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickFillModal(true)}
-                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Fill all empty student scores at once"
-                >
-                  <i className="fas fa-magic text-[10px]" />
-                  <span>Quick Fill</span>
-                </button>
+              <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
+                <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickFillModal(true)}
+                    className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    title="Fill all empty student scores at once"
+                  >
+                    <i className="fas fa-magic text-[10px]" />
+                    <span>Quick Fill</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleMarkRemainingAbsent}
-                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                  title="Mark all unfilled students as absent"
-                >
-                  <i className="fas fa-user-slash text-[10px]" />
-                  <span>Mark Rest Absent</span>
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={handleMarkRemainingAbsent}
+                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    title="Mark all unfilled students as absent"
+                  >
+                    <i className="fas fa-user-slash text-[10px]" />
+                    <span>Mark Rest Absent</span>
+                  </button>
+                </div>
+              </ConditionalBlock>
             )}
 
             {hasNextSubject && onNextSubject && (
@@ -487,18 +491,20 @@ const ExamResultsEntryGrid = ({
 
       {/* Table Container */}
       <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
+        <div className="overflow-x-auto relative max-h-[650px] overflow-y-auto">
           <table className="w-full text-xs border-collapse">
-            <thead className="sticky top-0 bg-slate-50 z-10 shadow-2xs">
+            <thead className="sticky top-0 bg-slate-50 z-20 shadow-2xs">
               <tr className="border-b border-light-border bg-slate-50 text-dark-slate font-bold">
-                <th className="py-3 px-3.5 text-left w-10">#</th>
-                <th className="py-3 px-4 text-left">Student Name & Admission</th>
-                <th className="py-3 px-3 text-center w-36">
-                  Marks Obtained <span className="text-dark-muted font-normal">/ {result.max_marks}</span>
+                <th className="py-3 px-3 text-left w-8 sm:w-10">#</th>
+                <th className="py-3 px-3 sm:px-4 text-left sticky left-0 bg-slate-50 z-30 border-r border-light-border shadow-xs min-w-[130px] sm:min-w-[180px]">
+                  Student
                 </th>
-                <th className="py-3 px-3 text-center w-24">Status</th>
-                <th className="py-3 px-3 text-center w-20">Absent</th>
-                <th className="py-3 px-4 text-left min-w-[140px]">Teacher Remarks</th>
+                <th className="py-3 px-3 text-center w-28 sm:w-36 min-w-[100px]">
+                  Marks <span className="text-dark-muted font-normal">/ {result.max_marks}</span>
+                </th>
+                <th className="py-3 px-2 sm:px-3 text-center w-20 sm:w-24">Status</th>
+                <th className="py-3 px-2 sm:px-3 text-center w-16 sm:w-20">Absent</th>
+                <th className="py-3 px-3 sm:px-4 text-left min-w-[130px] sm:min-w-[160px]">Teacher Remarks</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-light-border">
@@ -543,14 +549,14 @@ const ExamResultsEntryGrid = ({
                           : 'hover:bg-slate-50/60'
                       }`}
                     >
-                      <td className="py-2.5 px-3.5 text-dark-muted text-[11px] font-mono font-bold">
+                      <td className="py-2.5 px-3 text-dark-muted text-[11px] font-mono font-bold">
                         {idx + 1}
                       </td>
-                      <td className="py-2.5 px-4">
-                        <div className="font-bold text-dark-primary text-xs">
+                      <td className="py-2.5 px-3 sm:px-4 sticky left-0 bg-white z-10 border-r border-light-border shadow-xs">
+                        <div className="font-bold text-dark-primary text-xs truncate max-w-[130px] sm:max-w-[200px]">
                           {entry.student_name}
                         </div>
-                        <div className="text-[10px] text-dark-muted font-mono">
+                        <div className="text-[10px] text-dark-muted font-mono truncate">
                           Adm: {entry.admission_no}
                         </div>
                       </td>

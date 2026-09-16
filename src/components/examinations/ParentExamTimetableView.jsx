@@ -1,6 +1,7 @@
 // src/components/examinations/ParentExamTimetableView.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
+import { formatDateDisplay } from '../../utils/dateUtils';
 
 /**
  * Parent view for upcoming published Exam Schedule.
@@ -101,7 +102,7 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
           String(slot.schedule_id) === String(selectedScheduleId) &&
           String(slot.class_id) === String(activeStudent.class_id)
       )
-      .sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date));
+      .sort((a, b) => (a.exam_date || '').localeCompare(b.exam_date || ''));
   }, [slots, selectedScheduleId, activeStudent]);
 
   const sessionMap = useMemo(() => {
@@ -288,9 +289,8 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
                 {wardSlots.map((slot, idx) => {
                   const sess = sessionMap[String(slot.session_id)];
                   const sub = subjectMap[String(slot.subject_id)];
-                  const dateObj = new Date(slot.exam_date);
-                  const dayName = dateObj.toLocaleDateString(undefined, { weekday: 'long' });
-                  const formattedDate = dateObj.toLocaleDateString(undefined, {
+                  const dayName = formatDateDisplay(slot.exam_date, { weekday: 'long' });
+                  const formattedDate = formatDateDisplay(slot.exam_date, {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',

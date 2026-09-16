@@ -4,20 +4,27 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v2';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v4';
 
 const readSessionCache = () => {
   try {
-    sessionStorage.removeItem('jzv_view_config_cache'); // Clear legacy cache
+    sessionStorage.removeItem('jzv_view_config_cache'); // Clear legacy caches
+    sessionStorage.removeItem('jzv_view_config_cache_v2');
+    sessionStorage.removeItem('jzv_view_config_cache_v3');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
     if (!Array.isArray(cachedData.viewConfigs) || !Array.isArray(cachedData.dynamicConfigs)) {
       return null;
     }
-    // Auto-invalidate if new core tiles are not yet in the cached list
+    // Auto-invalidate if new exam tabs or variables are not yet in the cached list
     const names = new Set(cachedData.viewConfigs.map((c) => c.component_name));
-    if (!names.has('exam-schedule') || !names.has('exam-results')) {
+    if (
+      !names.has('exam-schedule') ||
+      !names.has('exam-results') ||
+      !names.has('exam-sched-tab-setup') ||
+      !names.has('exam-sched-slot-edit')
+    ) {
       sessionStorage.removeItem(VIEW_CONFIG_SESSION_KEY);
       return null;
     }
@@ -268,13 +275,29 @@ export const useViewConfig = () => {
    */
   const isFeatureEnabled = useCallback(
     (componentName, userRoles = []) => {
+      // If user has no roles or roles are not given, deny access
+      if (!userRoles || userRoles.length === 0) return false;
+
       // 1. Search in viewConfigs loaded from DB
       const config = viewConfigs.find((c) => c.component_name === componentName);
       if (config) {
         if (!config.is_active) return false;
         return hasAccess(config.valid_access_roles, config.default_access, userRoles);
       }
-      // 2. If unmanaged/not registered in view controller, allow by default
+      // 2. If unmanaged/not registered in view controller:
+      // Fail-closed (deny) for exam components, tabs, setups, admin, and mutation variables
+      if (
+        componentName.startsWith('exam-') ||
+        componentName.includes('tab') ||
+        componentName.includes('setup') ||
+        componentName.includes('admin') ||
+        componentName.includes('edit') ||
+        componentName.includes('publish') ||
+        componentName.includes('delete') ||
+        componentName.includes('action')
+      ) {
+        return false;
+      }
       return true;
     },
     [viewConfigs, hasAccess]

@@ -1,5 +1,6 @@
 // src/components/examinations/ExamTeacherView.jsx
 import React, { useMemo, useState } from 'react';
+import { generateDateRange, formatDateDisplay } from '../../utils/dateUtils';
 
 /**
  * Teacher-centric view of exam assignments.
@@ -26,17 +27,9 @@ const ExamTeacherView = ({
     [sessions]
   );
 
-  // Date range
+  // Date range without timezone clash
   const dateRange = useMemo(() => {
-    if (!schedule?.start_date || !schedule?.end_date) return [];
-    const dates = [];
-    const cur = new Date(schedule.start_date + 'T00:00');
-    const end = new Date(schedule.end_date + 'T00:00');
-    while (cur <= end) {
-      dates.push(cur.toISOString().slice(0, 10));
-      cur.setDate(cur.getDate() + 1);
-    }
-    return dates;
+    return generateDateRange(schedule?.start_date, schedule?.end_date);
   }, [schedule]);
 
   // Teachers who have at least one slot in this schedule
@@ -79,19 +72,19 @@ const ExamTeacherView = ({
   }, [slots, selectedTeacherId]);
 
   const fmtDate = (d) =>
-    new Date(d + 'T00:00').toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    formatDateDisplay(d, { weekday: 'short', day: '2-digit', month: 'short' });
 
   return (
     <div className="space-y-4">
       {/* Teacher selector */}
       {!hideTeacherSelector && (
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-light-border shadow-2xs">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <label className="text-xs font-bold text-dark-slate whitespace-nowrap">View teacher:</label>
             <select
               value={selectedTeacherId}
               onChange={(e) => setSelectedTeacherId(e.target.value)}
-              className="px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-rose-300 min-w-[180px]"
+              className="px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-rose-300 w-full sm:min-w-[180px]"
             >
               <option value="">— Select teacher —</option>
               {activeTeachers.map((t) => (
@@ -129,13 +122,15 @@ const ExamTeacherView = ({
         </div>
       ) : (
         <div className="w-full bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto relative">
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b-2 border-slate-200 bg-slate-50">
-                  <th className="py-3 px-4 text-left font-bold text-dark-deepblue w-28">Date</th>
+                  <th className="py-3 px-3 sm:px-4 text-left font-bold text-dark-deepblue w-28 sm:w-32 whitespace-nowrap sticky left-0 bg-slate-50 z-20 border-r border-light-border shadow-xs">
+                    Date
+                  </th>
                   {sortedSessions.map((sess) => (
-                    <th key={sess.id} className="py-3 px-3 text-center font-bold text-dark-deepblue min-w-[140px]">
+                    <th key={sess.id} className="py-3 px-3 sm:px-4 text-center font-bold text-dark-deepblue min-w-[120px] sm:min-w-[140px]">
                       <div>{sess.name}</div>
                       <div className="font-normal text-[10px] text-dark-muted mt-0.5">
                         {sess.start_time} – {sess.end_time}
@@ -147,7 +142,7 @@ const ExamTeacherView = ({
               <tbody className="divide-y divide-slate-100">
                 {dateRange.map((date) => (
                   <tr key={date} className="hover:bg-slate-50/50">
-                    <td className="py-3 px-4 font-semibold text-dark-deepblue text-[11px] whitespace-nowrap">
+                    <td className="py-3 px-3 sm:px-4 font-semibold text-dark-deepblue text-xs whitespace-nowrap sticky left-0 bg-white z-10 border-r border-light-border shadow-xs">
                       {fmtDate(date)}
                     </td>
                     {sortedSessions.map((sess) => {
