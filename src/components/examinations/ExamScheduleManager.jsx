@@ -10,24 +10,11 @@ import ExamCoverageDashboard from './ExamCoverageDashboard';
 import ExamNoticeBoardPrint from './ExamNoticeBoardPrint';
 import ParentExamTimetableView from './ParentExamTimetableView';
 
-const ExamScheduleManager = ({ userRoles, user, teacherRecord }) => {
+const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   const canAccess = useCanAccess(userRoles);
 
-  // Roles normalization
-  const roles = useMemo(() => {
-    const list = Array.isArray(userRoles) ? userRoles : [];
-    return list.map((r) => String(r).toLowerCase().trim());
-  }, [userRoles]);
-  const isAdmin = roles.includes('admin') || roles.includes('management');
-  const isCoordinator = roles.includes('coordinator') || roles.includes('academic_coordinator');
-  const isParent = roles.includes('parent');
-
-  // Strict check for slot edit permissions: Users without roles or unauthorized roles cannot edit
-  const canEditSchedule = useMemo(() => {
-    if (!roles || roles.length === 0) return false;
-    const hasAuthorizedRole = isAdmin || isCoordinator;
-    return hasAuthorizedRole && canAccess('exam-sched-slot-edit');
-  }, [roles, isAdmin, isCoordinator, canAccess]);
+  // Edit capability driven strictly by component name 'exam-sched-slot-edit' in app_view_controller
+  const canEditSchedule = canAccess('exam-sched-slot-edit');
 
   // Master workspace tabs configured with component names registered in app_view_controller
   const WORKSPACE_TABS = useMemo(
@@ -73,18 +60,14 @@ const ExamScheduleManager = ({ userRoles, user, teacherRecord }) => {
   );
 
   const availableTabs = useMemo(() => {
-    return WORKSPACE_TABS.filter((tab) => {
-      if (tab.id === 'parent_ward' && !isParent) {
-        return false;
-      }
-      return canAccess(tab.componentName);
-    });
-  }, [WORKSPACE_TABS, canAccess, isParent]);
+    return WORKSPACE_TABS.filter((tab) => canAccess(tab.componentName));
+  }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
     if (canAccess('exam-sched-tab-setup')) return 'setup';
     if (canAccess('exam-sched-tab-scheduler')) return 'scheduler';
-    if (isParent && canAccess('exam-sched-tab-parent')) return 'parent_ward';
+    if (canAccess('exam-sched-tab-teacher')) return 'teacher';
+    if (canAccess('exam-sched-tab-parent')) return 'parent_ward';
     return availableTabs[0]?.id || 'scheduler';
   });
 
@@ -339,10 +322,10 @@ const ExamScheduleManager = ({ userRoles, user, teacherRecord }) => {
                 )}
               </div>
               <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
-                {isAdmin
+                {canAccess('exam-sched-tab-setup')
                   ? 'Manage exam sessions, class schedules, invigilation duties, and notice board printouts'
-                  : isCoordinator
-                    ? 'Academic Coordinator view — edit slot assignments, invigilators, and view coverage'
+                  : canAccess('exam-sched-slot-edit')
+                    ? 'Schedule planner — edit slot assignments, invigilators, and view coverage'
                     : 'Browse exam timetables for classes, duty assignments, and notice printout'}
               </p>
             </div>

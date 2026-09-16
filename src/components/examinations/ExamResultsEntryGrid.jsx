@@ -21,12 +21,14 @@ const ExamResultsEntryGrid = ({
   onStatusUpdate,
   canEdit = true,
   invigilatorName = '',
+  canOverrideInvigilator = false,
   isCoordinator = false,
   onNextSubject = null,
   hasNextSubject = false,
   nextSubjectName = '',
   userRoles = [],
 }) => {
+  const hasOverrideAccess = canOverrideInvigilator || isCoordinator;
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(new Set());
@@ -363,11 +365,11 @@ const ExamResultsEntryGrid = ({
             Read-Only
           </span>
         </div>
-      ) : isCoordinator && invigilatorName ? (
+      ) : hasOverrideAccess && invigilatorName ? (
         <div className="bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl flex items-center gap-2 text-xs text-emerald-800 font-medium shadow-2xs">
           <i className="fas fa-user-shield text-emerald-600 text-xs" />
           <span>
-            <strong>Coordinator Access:</strong> You can enter or update marks on behalf of
+            <strong>Coordinator / Admin Access:</strong> You can enter or update marks on behalf of
             invigilator (<strong>{invigilatorName}</strong>).
           </span>
         </div>

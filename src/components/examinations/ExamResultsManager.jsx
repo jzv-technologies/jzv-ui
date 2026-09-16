@@ -26,16 +26,8 @@ const ENTRY_STATUS_CONFIG = {
 const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   const canAccess = useCanAccess(userRoles);
 
-  // Roles normalization
-  const roles = useMemo(
-    () => (userRoles || []).map((r) => String(r).toLowerCase().trim()),
-    [userRoles]
-  );
-  const isCoordinator = useMemo(
-    () =>
-      roles.some((r) => ['coordinator', 'academic_coordinator', 'admin', 'management'].includes(r)),
-    [roles]
-  );
+  // Capability driven strictly by app_view_controller component
+  const canManageAllMarks = canAccess('exam-results-status-override');
 
   // Workspace Tabs registered in app_view_controller
   const WORKSPACE_TABS = useMemo(
@@ -281,7 +273,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
 
   const handleStatusUpdate = useCallback(
     async (resultId, newStatus) => {
-      if (!canAccess('exam-results-status-override') && !isCoordinator) {
+      if (!canAccess('exam-results-status-override')) {
         showToast('Permission required to change result status', 'error');
         return;
       }
@@ -290,7 +282,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
         prev.map((r) => (r.id === resultId ? { ...r, entry_status: newStatus } : r))
       );
     },
-    [canAccess, isCoordinator]
+    [canAccess]
   );
 
   const handleMaxMarksChange = async (resultId, newMax) => {
@@ -366,7 +358,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   }, [teacherRecord, activeSlot]);
 
   // Enforce access control for mark editing
-  const canEditMarks = canAccess('exam-results-edit-marks') && (isCoordinator || isInvigilator);
+  const canEditMarks = canAccess('exam-results-edit-marks') && (canManageAllMarks || isInvigilator);
 
   // All subjects to show in the left panel = scheduledSubjects + ad-hoc
   const adHocResults = useMemo(
@@ -537,8 +529,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                 )}
               </div>
               <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
-                {isCoordinator
-                  ? 'Academic Coordinator / Admin view — enter, review, or override marks for any subject'
+                {canManageAllMarks
+                  ? 'Coordinator / Admin view — enter, review, or override marks for any subject'
                   : teacherRecord?.name
                     ? `Teacher view (${teacherRecord.name}) — enter marks for assigned invigilation subjects`
                     : 'Enter and manage examination marks per subject and class'}
@@ -1012,7 +1004,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                         onStatusUpdate={handleStatusUpdate}
                         canEdit={canEditMarks}
                         invigilatorName={activeInvigilatorName}
-                        isCoordinator={isCoordinator}
+                        canOverrideInvigilator={canManageAllMarks}
                         onNextSubject={handleNextSubject}
                         hasNextSubject={hasNextSubject}
                         nextSubjectName={nextSubjectName}

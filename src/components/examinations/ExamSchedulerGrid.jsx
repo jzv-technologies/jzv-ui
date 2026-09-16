@@ -50,12 +50,8 @@ const ExamSchedulerGrid = ({
   const [conflictWarning, setConflictWarning] = useState(null);
   const [confirmModalData, setConfirmModalData] = useState(null);
 
-  // Strict check: if user has no roles or readOnly is true, editing is forbidden
-  const isEffectivelyReadOnly = useMemo(() => {
-    if (readOnly) return true;
-    if (Array.isArray(userRoles) && userRoles.length === 0) return true;
-    return false;
-  }, [readOnly, userRoles]);
+  // Read-only state driven by prop from parent capability check
+  const isEffectivelyReadOnly = Boolean(readOnly);
 
   // Generate date range without timezone clash
   const dateRange = useMemo(() => {

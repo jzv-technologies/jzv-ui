@@ -4,20 +4,22 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v4';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v6';
 
 const readSessionCache = () => {
   try {
     sessionStorage.removeItem('jzv_view_config_cache'); // Clear legacy caches
     sessionStorage.removeItem('jzv_view_config_cache_v2');
     sessionStorage.removeItem('jzv_view_config_cache_v3');
+    sessionStorage.removeItem('jzv_view_config_cache_v4');
+    sessionStorage.removeItem('jzv_view_config_cache_v5');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
     if (!Array.isArray(cachedData.viewConfigs) || !Array.isArray(cachedData.dynamicConfigs)) {
       return null;
     }
-    // Auto-invalidate if new exam tabs or variables are not yet in the cached list
+    // Auto-invalidate if core exam components are not yet in the cached list
     const names = new Set(cachedData.viewConfigs.map((c) => c.component_name));
     if (
       !names.has('exam-schedule') ||

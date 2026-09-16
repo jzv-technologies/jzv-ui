@@ -1,8 +1,8 @@
-// src/hooks/useAuth.js
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../utils/supabase';
 import { getUserDataCookie, setUserDataCookie, clearUserDataCookie } from '../utils/cookies';
 import { showToast } from '../utils/toast';
+import { invalidateViewConfigCache } from './useViewConfig';
 
 const teacherRecordCache = new Map();
 const teacherRecordFetches = new Map();
@@ -176,17 +176,22 @@ export const useAuth = () => {
   }, []);
 
   const fetchRoles = useCallback(
-    async (userId, authEvent, initialRolesFromCookie = []) => {
+    async (userId, authEvent, initialRolesFromCookie = [], force = false) => {
       // Prevent concurrent fetches
       if (fetchingRef.current) return { success: false, cancelled: true };
-      // Don't fetch if roles already fetched for this user
-      if (rolesFetchedRef.current && currentUserIdRef.current === userId) {
+      // Don't fetch if roles already fetched for this user (unless forced)
+      if (!force && rolesFetchedRef.current && currentUserIdRef.current === userId) {
         return { success: true, roles: userRolesRef.current, studentIds: studentIdsRef.current };
       }
 
       fetchingRef.current = true;
-      setRolesLoading(true);
-      console.log(`[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}`);
+      const hasExistingRoles =
+        (Array.isArray(initialRolesFromCookie) && initialRolesFromCookie.length > 0) ||
+        (Array.isArray(userRolesRef.current) && userRolesRef.current.length > 0);
+      if (!hasExistingRoles) {
+        setRolesLoading(true);
+      }
+      console.log(`[fetchRoles] Fetching roles for user: ${userId}, event: ${authEvent}, force: ${force}`);
 
       try {
         const { data, error } = await supabase
@@ -221,10 +226,10 @@ export const useAuth = () => {
             .filter(Boolean);
         }
 
-        // Save to cookie
+        // Save fresh roles to cookie
         setUserDataCookie(userId, { roles });
 
-        // Validate against initial cookie roles (if provided)
+        // If roles differed from initial cookie roles, smoothly adopt without forcing logout
         if (initialRolesFromCookie.length > 0) {
           const cookieSet = new Set(initialRolesFromCookie);
           const dbSet = new Set(roles);
@@ -232,10 +237,16 @@ export const useAuth = () => {
             initialRolesFromCookie.length === roles.length &&
             [...cookieSet].every((r) => dbSet.has(r));
           if (!isEqual) {
-            await forceLogout(userId, 'Your permissions have changed. Please log in again.');
-            setRolesLoading(false);
-            fetchingRef.current = false;
-            return { success: false, mismatch: true };
+            if (roles.length === 0) {
+              await forceLogout(userId, 'Your permissions have changed. Please log in again.');
+              setRolesLoading(false);
+              fetchingRef.current = false;
+              return { success: false, mismatch: true };
+            }
+            console.log(
+              `[fetchRoles] Synchronized updated roles: [${initialRolesFromCookie.join(', ')}] -> [${roles.join(', ')}]`
+            );
+            invalidateViewConfigCache();
           }
         }
 
@@ -479,14 +490,10 @@ export const useAuth = () => {
         // Hide loading spinner immediately
         setAuthLoading(false);
 
-        // Fetch fresh roles only if:
-        // - New sign in, OR
-        // - No cached roles and INITIAL_SESSION (first load)
-        const shouldFetch =
-          event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && cookieRoles.length === 0);
-
-        if (shouldFetch) {
-          const res = await fetchRoles(currentUser.id, event, cookieRoles);
+        // If no cached roles in cookie, fetch synchronously and block to verify authorization
+        // If cached roles exist, portal loads INSTANTLY (0ms) and revalidates in the background
+        if (cookieRoles.length === 0) {
+          const res = await fetchRoles(currentUser.id, event, cookieRoles, true);
 
           // Allow only existing users added by admin (must have roles)
           if (res && res.success && (!res.roles || res.roles.length === 0)) {
@@ -497,10 +504,21 @@ export const useAuth = () => {
           } else if (
             res &&
             res.success &&
-            res.roles.some((r) => ['teacher', 'admin', 'management', 'staff'].includes(r))
+            res.roles.some((r) => ['teacher', 'coordinator', 'academic_coordinator', 'admin', 'management', 'staff'].includes(r))
           ) {
             fetchTeacherRecord(currentUser.id, currentUser.email);
           }
+        } else {
+          // Stale-While-Revalidate: User already has roles loaded from cookie; portal renders immediately.
+          // Silently re-verify in background without blocking UI or showing fallback spinner.
+          fetchRoles(currentUser.id, event, cookieRoles, true).then((res) => {
+            if (res && res.success && (!res.roles || res.roles.length === 0)) {
+              forceLogout(
+                currentUser.id,
+                'Access Denied: Your account has not been registered by an administrator.'
+              );
+            }
+          });
         }
       } else {
         // No user – reset everything
