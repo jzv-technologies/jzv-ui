@@ -8,6 +8,8 @@ import DataGrid from '../DataGrid';
 import ConfirmModal from '../ConfirmModal';
 import StudentFeesView from './StudentFeesView';
 import StudentBulkImportModal from './StudentBulkImportModal';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
+import { useAuth } from '../../hooks/useAuth';
 import { MOCK_STUDENTS as DEFAULT_MOCK_STUDENTS } from '../../data/mockStudents';
 
 const STUDENTS_STORAGE_KEY = 'jzv_students_local_data';
@@ -24,24 +26,59 @@ const AdminStudentsView = ({
   userRoles = [],
   role = null,
 }) => {
-  const canManage = useMemo(() => {
-    const roles = (userRoles || []).map((r) => String(r).toLowerCase().trim());
-    if (roles.includes('admin') || roles.includes('management')) return true;
-    if (role === 'admin' || role === 'management') return true;
-    return false;
-  }, [userRoles, role]);
+  const { userRoles: authUserRoles } = useAuth();
+  const effectiveRoles = useMemo(() => {
+    if (Array.isArray(userRoles) && userRoles.length > 0) return userRoles;
+    if (Array.isArray(authUserRoles) && authUserRoles.length > 0) return authUserRoles;
+    if (role) return [role];
+    return [];
+  }, [userRoles, authUserRoles, role]);
+
+  const canAccess = useCanAccess(effectiveRoles);
+
+  const TABS = useMemo(
+    () => [
+      {
+        id: 'records',
+        componentName: 'student-tab-records',
+        label: 'Students Record',
+        icon: 'fa-user-graduate',
+      },
+      {
+        id: 'fees',
+        componentName: 'student-tab-fees',
+        label: 'Student Fees',
+        icon: 'fa-file-invoice-dollar',
+      },
+    ],
+    []
+  );
+
+  const availableTabs = useMemo(() => {
+    return TABS.filter((tab) => canAccess(tab.componentName));
+  }, [TABS, canAccess]);
+
+  const canAdd = canAccess('student-add-record');
+  const canEdit = canAccess('student-edit-record');
+  const canDelete = canAccess('student-delete-record');
+  const canManage = canAdd || canEdit;
 
   const [activeTab, setActiveTab] = useState(() => {
     if (mode === 'fees') return 'fees';
     if (mode === 'records') return 'records';
-    return initialTab || 'records';
+    if (initialTab) return initialTab;
+    return availableTabs[0]?.id || 'records';
   }); // "records" | "fees"
 
   useEffect(() => {
     if (mode === 'fees') setActiveTab('fees');
     else if (mode === 'records') setActiveTab('records');
-    else if (initialTab) setActiveTab(initialTab);
-  }, [mode, initialTab]);
+    else if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
+      setActiveTab(availableTabs[0].id);
+    } else if (initialTab && availableTabs.some((t) => t.id === initialTab)) {
+      setActiveTab(initialTab);
+    }
+  }, [mode, initialTab, availableTabs, activeTab]);
   const [feesControls, setFeesControls] = useState(null);
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [recordsSearchQuery, setRecordsSearchQuery] = useState('');
@@ -78,14 +115,14 @@ const AdminStudentsView = ({
 
   // Load classes from Supabase or LocalStorage
   const loadClasses = async (force = false) => {
-    if (!force && studentRecordsCache.classes) {
+    if (!force && Array.isArray(studentRecordsCache.classes) && studentRecordsCache.classes.length > 0) {
       setClasses(studentRecordsCache.classes);
       return studentRecordsCache.classes;
     }
 
     try {
       const { data, error: dbErr } = await supabase.from('classes').select('*');
-      if (!dbErr && data) {
+      if (!dbErr && data && data.length > 0) {
         studentRecordsCache.classes = data;
         setClasses(data);
         return data;
@@ -100,8 +137,11 @@ const AdminStudentsView = ({
       if (raw) {
         const parsed = JSON.parse(raw);
         const localCls = parsed.classes || [];
-        setClasses(localCls);
-        return localCls;
+        if (localCls.length > 0) {
+          studentRecordsCache.classes = localCls;
+          setClasses(localCls);
+          return localCls;
+        }
       }
     } catch (e) {
       console.error('Error reading local classes:', e);
@@ -113,7 +153,7 @@ const AdminStudentsView = ({
   const loadStudents = async (loadedClasses = [], force = false) => {
     setLoading(true);
     setError('');
-    if (!force && studentRecordsCache.students) {
+    if (!force && Array.isArray(studentRecordsCache.students) && studentRecordsCache.students.length > 0) {
       setStudents(studentRecordsCache.students);
       setIsSupabaseMode(true);
       setLoading(false);
@@ -125,9 +165,37 @@ const AdminStudentsView = ({
       if (dbErr) throw dbErr;
 
       const fetchedStudents = data || [];
-      studentRecordsCache.students = fetchedStudents;
-      setStudents(fetchedStudents);
-      setIsSupabaseMode(true);
+      if (fetchedStudents.length > 0) {
+        studentRecordsCache.students = fetchedStudents;
+        setStudents(fetchedStudents);
+        setIsSupabaseMode(true);
+      } else {
+        // If DB has 0 records, fall back to LocalStorage or Mock data
+        const raw = localStorage.getItem(STUDENTS_STORAGE_KEY);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setStudents(parsed);
+              setIsSupabaseMode(false);
+              return;
+            }
+          } catch (err) {
+            console.error('Error parsing local students data:', err);
+          }
+        }
+        // Seed first-time local storage with mock data
+        let seedData = [...DEFAULT_MOCK_STUDENTS];
+        if (loadedClasses.length > 0) {
+          seedData = seedData.map((std, idx) => ({
+            ...std,
+            class_id: loadedClasses[idx % loadedClasses.length]?.id || std.class_id,
+          }));
+        }
+        setStudents(seedData);
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(seedData));
+        setIsSupabaseMode(false);
+      }
     } catch (e) {
       console.warn(
         'Supabase students table not available, falling back to LocalStorage:',
@@ -690,7 +758,7 @@ const AdminStudentsView = ({
   };
 
   return (
-    <div className="flex flex-col min-h-[500px] space-y-6 pb-16 md:pb-0">
+    <div className="flex flex-col min-h-[500px] space-y-6 pb-16 md:pb-0" data-feature="student-records">
       {/* ── Unified Responsive Top Header ── */}
       <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
@@ -719,38 +787,29 @@ const AdminStudentsView = ({
           </div>
 
           {/* Navigation Pill Tabs - Only when not locked into a specific mode */}
-          {mode === null && (
-            <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab('records')}
-                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
-                  activeTab === 'records'
-                    ? 'bg-green-dark text-white shadow-sm'
-                    : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                }`}
-              >
-                <i className="fas fa-user-graduate"></i>
-                Students Record
-              </button>
-
-              <button
-                onClick={() => setActiveTab('fees')}
-                className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial ${
-                  activeTab === 'fees'
-                    ? 'bg-green-dark text-white shadow-sm'
-                    : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                }`}
-              >
-                <i className="fas fa-file-invoice-dollar"></i>
-                Student Fees
-              </button>
+          {mode === null && availableTabs.length > 1 && (
+            <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto" data-feature-tab="student-tabs">
+              {availableTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap flex-1 sm:flex-initial cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'bg-green-dark text-white shadow-sm'
+                      : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon}`}></i>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
 
         {/* Action Controls Bar for Student Records tab */}
         {activeTab === 'records' && (
-          <div className="space-y-3 pt-1">
+          <div className="space-y-3 pt-1" data-feature-filter={activeTab}>
             <div
               className={`flex-col md:flex-row justify-between items-stretch md:items-center gap-3 ${
                 mobileRecordsView === 'details' ? 'flex' : 'hidden md:flex'
@@ -799,7 +858,7 @@ const AdminStudentsView = ({
                   Refresh
                 </button>
 
-                {canManage && (
+                {canAdd && (
                   <button
                     onClick={() => setIsImportModalOpen(true)}
                     className="w-full sm:w-auto px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
@@ -817,7 +876,7 @@ const AdminStudentsView = ({
                   Download
                 </button>
 
-                {canManage && (
+                {canAdd && (
                   <button
                     onClick={openAddModal}
                     className="w-full sm:w-auto px-4 py-2 bg-green-dark hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
@@ -939,7 +998,7 @@ const AdminStudentsView = ({
 
         {/* Action Controls Bar for Student Fees tab */}
         {activeTab === 'fees' && feesControls && (
-          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3" data-feature-filter={activeTab}>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
               {/* Search Input */}
               <div className="relative flex-1 min-w-[200px]">
@@ -1003,29 +1062,35 @@ const AdminStudentsView = ({
         )}
       </div>
 
-      {activeTab === 'fees' ? (
-        <StudentFeesView
-          students={students}
-          classes={classes}
-          onRefreshStudents={() => loadStudents(classes, true)}
-          onRegisterControls={setFeesControls}
-        />
-      ) : (
-        /* Main Student Records Grid */
-        <div
-          className={`flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm ${
-            mobileRecordsView === 'details' ? 'block' : 'hidden md:block'
-          }`}
-        >
-          <DataGrid
-            data={displayData}
-            loading={loading}
-            error={error}
-            onRetry={() => loadStudents(classes, true)}
-            onRowClick={canManage ? openEditModal : undefined}
-            excludeColumns={['id', 'class_id']}
+      {activeTab === 'fees' && (
+        <ConditionalBlock name="student-tab-fees" roles={effectiveRoles}>
+          <StudentFeesView
+            students={students}
+            classes={classes}
+            onRefreshStudents={() => loadStudents(classes, true)}
+            onRegisterControls={setFeesControls}
           />
-        </div>
+        </ConditionalBlock>
+      )}
+
+      {activeTab === 'records' && (
+        <ConditionalBlock name="student-tab-records" roles={effectiveRoles}>
+          {/* Main Student Records Grid */}
+          <div
+            className={`flex-1 bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm ${
+              mobileRecordsView === 'details' ? 'block' : 'hidden md:block'
+            }`}
+          >
+            <DataGrid
+              data={displayData}
+              loading={loading}
+              error={error}
+              onRetry={() => loadStudents(classes, true)}
+              onRowClick={canEdit ? openEditModal : undefined}
+              excludeColumns={['id', 'class_id']}
+            />
+          </div>
+        </ConditionalBlock>
       )}
 
       {activeTab === 'records' && (
@@ -1321,11 +1386,11 @@ const AdminStudentsView = ({
 
               {/* Action Buttons Row */}
               <div className="p-6 border-t border-light-border bg-gray-50 flex justify-between gap-3 shrink-0 rounded-b-[2rem] -mx-8 -mb-8">
-                {editingStudent ? (
+                {editingStudent && canDelete ? (
                   <button
                     type="button"
                     onClick={() => handleDeleteStudent(editingStudent.id)}
-                    className="px-5 py-2.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 rounded-xl font-bold text-sm transition-all flex items-center gap-1.5"
+                    className="px-5 py-2.5 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 rounded-xl font-bold text-sm transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <i className="fas fa-trash-alt"></i> Delete Record
                   </button>
@@ -1336,13 +1401,13 @@ const AdminStudentsView = ({
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-5 py-2.5 bg-white border border-light-border hover:bg-gray-100 text-dark-deepblue rounded-xl font-bold text-sm transition-all"
+                    className="px-5 py-2.5 bg-white border border-light-border hover:bg-gray-100 text-dark-deepblue rounded-xl font-bold text-sm transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 bg-green-dark hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all flex items-center gap-1.5 shadow-lg shadow-green-100"
+                    className="px-5 py-2.5 bg-green-dark hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all flex items-center gap-1.5 shadow-lg shadow-green-100 cursor-pointer"
                   >
                     <i className="fas fa-save"></i> Save Student
                   </button>
@@ -1354,7 +1419,7 @@ const AdminStudentsView = ({
       )}
 
       {/* Bulk Import Modal */}
-      {canManage && (
+      {canAdd && (
         <StudentBulkImportModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}

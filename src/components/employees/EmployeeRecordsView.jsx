@@ -42,17 +42,47 @@ const EmployeeRecordsView = ({
     Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
   const canAccess = useCanAccess(effectiveRoles);
 
-  const isAdmin = effectiveRoles.includes('admin') || role === 'admin';
-  const isManagement = effectiveRoles.includes('management') || role === 'management';
-  const isEmployeeSelf =
-    mode === 'self' ||
-    role === 'self' ||
-    (!isAdmin &&
-      !isManagement &&
-      (effectiveRoles.includes('employee') ||
-        effectiveRoles.includes('teacher') ||
-        role === 'employee' ||
-        role === 'teacher'));
+  const canEdit = canAccess('emp-edit-record');
+  const canDelete = canAccess('emp-delete-record');
+  const canAdd = canAccess('emp-add-record');
+
+  // Self mode remains prop-driven from parent portal
+  const isEmployeeSelf = mode === 'self' || role === 'self';
+
+  const TABS = useMemo(
+    () => [
+      {
+        id: 'records',
+        componentName: 'emp-tab-records',
+        label: 'Employee Records',
+        icon: 'fa-users-gear',
+      },
+      {
+        id: 'salary_dashboard',
+        componentName: 'emp-tab-salary',
+        label: 'Salary Credit Dashboard',
+        icon: 'fa-table-cells',
+      },
+      {
+        id: 'salary_list',
+        componentName: 'emp-tab-salary',
+        label: 'Salary List View',
+        icon: 'fa-list-check',
+      },
+    ],
+    []
+  );
+
+  const availableTabs = useMemo(() => {
+    let tabs = TABS.filter((tab) => canAccess(tab.componentName));
+    if (mode === 'records') {
+      tabs = tabs.filter((t) => t.id === 'records');
+    } else if (mode === 'salary') {
+      tabs = tabs.filter((t) => t.id === 'salary_dashboard' || t.id === 'salary_list');
+    }
+    return tabs;
+  }, [TABS, canAccess, mode]);
+
   const [activeTab, setActiveTab] = useState(() => {
     if (mode === 'salary') return 'salary_dashboard';
     if (mode === 'records') return 'records';
@@ -64,20 +94,17 @@ const EmployeeRecordsView = ({
       return 'salary_dashboard';
     }
     if (initialTab === 'salary_list') return 'salary_list';
+    if (availableTabs.length > 0) return availableTabs[0].id;
     return 'records';
   }); // 'records' | 'salary_dashboard' | 'salary_list'
 
   useEffect(() => {
-    if (activeTab === 'records' && !canAccess('emp-tab-records') && canAccess('emp-tab-salary')) {
-      setActiveTab('salary_dashboard');
-    } else if (
-      (activeTab === 'salary_dashboard' || activeTab === 'salary_list') &&
-      !canAccess('emp-tab-salary') &&
-      canAccess('emp-tab-records')
-    ) {
-      setActiveTab('records');
+    if (mode === 'salary') setActiveTab('salary_dashboard');
+    else if (mode === 'records') setActiveTab('records');
+    else if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
+      setActiveTab(availableTabs[0].id);
     }
-  }, [canAccess, activeTab]);
+  }, [availableTabs, activeTab, mode]);
   const [salaryControls, setSalaryControls] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [authUsers, setAuthUsers] = useState([]);
@@ -1532,7 +1559,7 @@ const EmployeeRecordsView = ({
 
   // Admin & Management View
   return (
-    <div className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300">
+    <div className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300" data-feature="employee-management">
       {/* ── Unified Top Header Panel ── */}
       <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
@@ -1545,111 +1572,54 @@ const EmployeeRecordsView = ({
             </h1>
           </div>
 
-          {/* Navigation Pill */}
-          {/* Mobile dropdown (< md) */}
-          {mode !== 'records' && (
-            <div className="md:hidden w-full">
-              {mode === 'salary' ? (
-                <div className="inline-flex w-full p-1 bg-light-lbg border border-light-border rounded-xl">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('salary_dashboard')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
-                      activeTab === 'salary_dashboard'
-                        ? 'bg-green-dark text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary'
-                    }`}
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('salary_list')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-xs font-extrabold transition-all ${
-                      activeTab === 'salary_list'
-                        ? 'bg-green-dark text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary'
-                    }`}
-                  >
-                    List View
-                  </button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <select
-                    value={activeTab}
-                    onChange={(e) => setActiveTab(e.target.value)}
-                    className="w-full appearance-none bg-light-lbg border border-light-border px-4 py-2.5 rounded-xl font-bold text-xs text-dark-primary outline-none focus:ring-2 focus:ring-green-500/20"
-                  >
-                    {canAccess('emp-tab-records') && (
-                      <option value="records">Employee Records</option>
-                    )}
-                    {canAccess('emp-tab-salary') && (
-                      <>
-                        <option value="salary_dashboard">Salary Credit Dashboard</option>
-                        <option value="salary_list">Salary List View</option>
-                      </>
-                    )}
-                  </select>
-                  <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
-                </div>
-              )}
+          {/* Navigation Pill Tabs */}
+          {/* Mobile dropdown (< sm) */}
+          {mode !== 'records' && availableTabs.length > 1 && (
+            <div className="sm:hidden w-full" data-feature-tab="emp-tabs-mobile">
+              <div className="relative">
+                <select
+                  value={activeTab}
+                  onChange={(e) => setActiveTab(e.target.value)}
+                  className="w-full appearance-none bg-light-lbg border border-light-border px-4 py-2.5 rounded-xl font-bold text-xs text-dark-primary outline-none focus:ring-2 focus:ring-green-500/20 shadow-sm cursor-pointer"
+                >
+                  {availableTabs.map((tab) => (
+                    <option key={tab.id} value={tab.id}>
+                      {tab.label}
+                    </option>
+                  ))}
+                </select>
+                <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+              </div>
             </div>
           )}
 
-          {/* Desktop view (>= md): Pill tabs */}
-          {mode !== 'records' && (
-            <div className="hidden md:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center gap-1 shrink-0 w-auto">
-              {mode !== 'salary' && (
-                <ConditionalBlock name="emp-tab-records" roles={effectiveRoles}>
-                  <button
-                    onClick={() => setActiveTab('records')}
-                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                      activeTab === 'records'
-                        ? 'bg-green-dark text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                    }`}
-                  >
-                    <i className="fas fa-users-gear text-xs"></i>
-                    <span>Employee Records</span>
-                  </button>
-                </ConditionalBlock>
-              )}
-
-              {mode !== 'records' && (
-                <ConditionalBlock name="emp-tab-salary" roles={effectiveRoles}>
-                  <button
-                    onClick={() => setActiveTab('salary_dashboard')}
-                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                      activeTab === 'salary_dashboard'
-                        ? 'bg-green-dark text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                    }`}
-                  >
-                    <i className="fas fa-table-cells text-xs"></i>
-                    <span>Salary Credit Dashboard</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('salary_list')}
-                    className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
-                      activeTab === 'salary_list'
-                        ? 'bg-green-dark text-white shadow-sm'
-                        : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                    }`}
-                  >
-                    <i className="fas fa-list-check text-xs"></i>
-                    <span>Salary List View</span>
-                  </button>
-                </ConditionalBlock>
-              )}
+          {/* Desktop view (>= sm): Pill tabs */}
+          {mode !== 'records' && availableTabs.length > 1 && (
+            <div
+              className="hidden sm:flex bg-light-lbg border border-light-border p-1 rounded-2xl items-center gap-1 shrink-0 w-auto"
+              data-feature-tab="emp-tabs"
+            >
+              {availableTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                    activeTab === tab.id
+                      ? 'bg-green-dark text-white shadow-sm'
+                      : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon} text-xs`}></i>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
             </div>
           )}
         </div>
 
         {/* Search, Filter & Action Controls for Employee Records tab */}
         {activeTab === 'records' && (
-          <div className="flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-2.5 w-full justify-between pt-1">
+          <div className="flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-2.5 w-full justify-between pt-1" data-feature-filter={activeTab}>
             {/* Left section: Search & 50/50 split filters on mobile */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto flex-1">
               {/* Search Input */}
@@ -1742,7 +1712,7 @@ const EmployeeRecordsView = ({
 
         {/* Repurposed Controls Bar for Salary tabs */}
         {(activeTab === 'salary_dashboard' || activeTab === 'salary_list') && salaryControls && (
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1">
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1" data-feature-filter={activeTab}>
             {/* Left section: Search & 50/50 split controls on mobile */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto flex-1">
               {/* Search Input for Salary */}
@@ -1889,9 +1859,12 @@ const EmployeeRecordsView = ({
             sortOrder={sortOrder}
             handleSort={handleSort}
             handleOpenModal={handleOpenModal}
-            handleDeleteEmployee={handleDeleteEmployee}
-            isAdmin={isAdmin}
-            isManagement={isManagement}
+            handleDeleteEmployee={canDelete ? handleDeleteEmployee : undefined}
+            canEdit={canEdit}
+            canDelete={canDelete}
+            readOnly={!canEdit}
+            isAdmin={canEdit}
+            isManagement={canEdit}
             authUsers={authUsers}
           />
         </ConditionalBlock>

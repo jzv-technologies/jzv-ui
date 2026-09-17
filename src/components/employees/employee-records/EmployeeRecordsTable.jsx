@@ -37,10 +37,16 @@ const EmployeeRecordsTable = ({
   handleSort,
   handleOpenModal,
   handleDeleteEmployee,
-  isAdmin,
-  isManagement,
+  canEdit: propCanEdit,
+  canDelete: propCanDelete,
+  readOnly = false,
+  isAdmin = false,
+  isManagement = false,
   authUsers = [],
 }) => {
+  const canEdit = propCanEdit !== undefined ? propCanEdit : !readOnly && (isAdmin || isManagement);
+  const canDelete = propCanDelete !== undefined ? propCanDelete : !readOnly && (isAdmin || isManagement);
+
   // Map auth_id -> user roles from user_roles
   const authUserRoleMap = useMemo(() => {
     const map = new Map();
@@ -227,7 +233,7 @@ const EmployeeRecordsTable = ({
                   return (
                     <tr
                       key={emp.id}
-                      onDoubleClick={() => (isAdmin || isManagement) && handleOpenModal('edit', emp)}
+                      onDoubleClick={() => canEdit && handleOpenModal('edit', emp)}
                       className="hover:bg-blue-50/40 cursor-pointer transition-colors"
                       title="Double-click record to open edit modal"
                     >
@@ -320,10 +326,10 @@ const EmployeeRecordsTable = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              (isAdmin || isManagement) && handleOpenModal('edit', emp);
+                              canEdit && handleOpenModal('edit', emp);
                             }}
-                            className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40"
-                            disabled={!isAdmin && !isManagement}
+                            className="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40 cursor-pointer"
+                            disabled={!canEdit}
                             title="Edit Employee Record"
                           >
                             <i className="fas fa-pen text-xs"></i>
@@ -332,12 +338,12 @@ const EmployeeRecordsTable = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              (isAdmin || isManagement) &&
+                              canDelete &&
                                 handleDeleteEmployee &&
                                 handleDeleteEmployee(emp);
                             }}
-                            className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40"
-                            disabled={!isAdmin && !isManagement}
+                            className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center justify-center transition-all shadow-2xs active:scale-95 disabled:opacity-40 cursor-pointer"
+                            disabled={!canDelete}
                             title="Delete Employee Record"
                           >
                             <i className="fas fa-trash-alt text-xs"></i>

@@ -15,6 +15,7 @@ import {
   formatHierarchyType,
   getLevelsAvailableFromHierarchy,
 } from '../../utils/hierarchyConfig';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 
 const generateLocalId = () => 'local-' + Math.random().toString(36).substr(2, 9);
 
@@ -24,9 +25,15 @@ const getComplexityBadgeClass = (comp) => {
   return 'bg-green-100 text-green-700 border-green-200';
 };
 
-const SyllabusManager = ({ role, user, teacherRecord }) => {
-  const isAdmin = role === 'admin' || role === 'management';
-  const isTeacher = role === 'teacher';
+const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
+  const effectiveRoles = (userRoles && userRoles.length > 0) ? userRoles : (role ? [role] : []);
+  const canAccess = useCanAccess(effectiveRoles);
+  const canEditContent = canAccess('syl-edit-content');
+  const canManageBooks = canAccess('syl-manage-books');
+  const canManageSubjects = canAccess('syl-manage-subjects');
+
+  // Teacher allocation check (query data filtering for teachers without admin/management role)
+  const isTeacherUser = effectiveRoles.includes('teacher') && !effectiveRoles.includes('admin') && !effectiveRoles.includes('management');
 
   const [classifications, setClassifications] = useState([]);
   const [subjects, setSubjects] = useState([]);
@@ -38,6 +45,12 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const [mappingBook, setMappingBook] = useState(null);
   const [tempMappings, setTempMappings] = useState([]);
   const [showAllSubjects, setShowAllSubjects] = useState(false);
+
+  // Table filter, sort & visibility states for curriculum items
+  const [lessonSearchQuery, setLessonSearchQuery] = useState('');
+  const [lessonComplexityFilter, setLessonComplexityFilter] = useState('all');
+  const [lessonSortMode, setLessonSortMode] = useState('sequence'); // 'sequence' | 'name' | 'pages'
+  const [visibleColumns, setVisibleColumns] = useState({ sequence: true, pages: true, complexity: true });
 
   const initiateMapping = (book) => {
     setMappingBook(book);
@@ -105,7 +118,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (isTeacher && !showAllSubjects) {
+    if (isTeacherUser && !showAllSubjects) {
       const activeAllocated = allocatedSubjectIds
         .map((id) => String(id))
         .includes(String(activeSubjectId));
@@ -120,7 +133,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         }
       }
     }
-  }, [showAllSubjects, activeSubjectId, allocatedSubjectIds, subjects, isTeacher]);
+  }, [showAllSubjects, activeSubjectId, allocatedSubjectIds, subjects, isTeacherUser]);
 
   useEffect(() => {
     if (!mappingBook) return;
@@ -297,7 +310,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       }
 
       let teacherAllocatedIds = [];
-      if (isTeacher && user?.id) {
+      if (isTeacherUser && user?.id) {
         const teacherCacheKey = `jzv_session_teacher_allocated_${user.id}`;
         try {
           const cachedAlloc = sessionStorage.getItem(teacherCacheKey);
@@ -351,7 +364,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
       setIsSupabaseMode(true);
 
       let initialSubjectList = dbSubjects || [];
-      if (isTeacher && teacherAllocatedIds.length > 0) {
+      if (isTeacherUser && teacherAllocatedIds.length > 0) {
         initialSubjectList = initialSubjectList.filter((s) =>
           teacherAllocatedIds.includes(String(s.id))
         );
@@ -399,7 +412,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         setSyllabusData(parsed.syllabusData || []);
 
         let teacherAllocatedIds = [];
-        if (isTeacher && user?.id && rawTimetable) {
+        if (isTeacherUser && user?.id && rawTimetable) {
           try {
             const parsedTimetable = JSON.parse(rawTimetable);
             const matchedTeacher = (parsedTimetable.teachers || []).find(
@@ -419,7 +432,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         setAllocatedSubjectIds(teacherAllocatedIds);
 
         let initialSubjectList = parsed.subjects || [];
-        if (isTeacher && teacherAllocatedIds.length > 0) {
+        if (isTeacherUser && teacherAllocatedIds.length > 0) {
           initialSubjectList = initialSubjectList.filter((s) =>
             teacherAllocatedIds.includes(String(s.id))
           );
@@ -464,7 +477,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
     setSyllabusData(mockSyllabusData);
 
     let initialSubjectList = mockSubjects;
-    if (isTeacher && allocatedSubjectIds.length > 0) {
+    if (isTeacherUser && allocatedSubjectIds.length > 0) {
       initialSubjectList = initialSubjectList.filter((s) =>
         allocatedSubjectIds.includes(String(s.id))
       );
@@ -1386,7 +1399,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
   // Grouping subjects by classifications
   const teacherFilteredSubjects =
-    isTeacher && !showAllSubjects
+    isTeacherUser && !showAllSubjects
       ? subjects.filter((s) => allocatedSubjectIds.map((id) => String(id)).includes(String(s.id)))
       : subjects;
 
@@ -1496,7 +1509,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     )}
                   </span>
                   <div className="flex items-center gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity ml-2">
-                    {(isAdmin || isTeacher) && (
+                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1512,8 +1525,8 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       >
                         <i className="fas fa-edit text-[10px]"></i>
                       </button>
-                    )}
-                    {isAdmin && (
+                    </ConditionalBlock>
+                    <ConditionalBlock name="syl-manage-subjects" roles={effectiveRoles}>
                       <div className="flex items-center gap-1">
                         {isSubDeactivated ? (
                           <button
@@ -1542,7 +1555,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                           <i className="fas fa-trash-alt text-[10px]"></i>
                         </button>
                       </div>
-                    )}
+                    </ConditionalBlock>
                   </div>
                   {isSelected && (
                     <span className="group-hover:hidden">
@@ -1627,10 +1640,34 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
   // Build Hierarchical Tree for active book
   const renderTreeForBook = (book) => {
-    const bookData = syllabusData.filter(
+    let bookData = syllabusData.filter(
       (d) => String(d.book_id || '').trim() === String(book.id || '').trim()
     );
+
+    if (lessonSearchQuery.trim()) {
+      const q = lessonSearchQuery.toLowerCase().trim();
+      bookData = bookData.filter(
+        (d) =>
+          (d.level1 || '').toLowerCase().includes(q) ||
+          (d.level2 || '').toLowerCase().includes(q) ||
+          (d.level3 || '').toLowerCase().includes(q)
+      );
+    }
+    if (lessonComplexityFilter !== 'all') {
+      bookData = bookData.filter(
+        (d) => (d.complexity || 'Easy').toLowerCase() === lessonComplexityFilter.toLowerCase()
+      );
+    }
+
     const sortedBookData = [...bookData].sort((a, b) => {
+      if (lessonSortMode === 'name') {
+        const nameA = (a.level3 || a.level2 || a.level1 || '').toLowerCase();
+        const nameB = (b.level3 || b.level2 || b.level1 || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      }
+      if (lessonSortMode === 'pages') {
+        return (Number(b.page_count) || 0) - (Number(a.page_count) || 0);
+      }
       const seqA = a.sequence !== null && a.sequence !== undefined ? Number(a.sequence) : null;
       const seqB = b.sequence !== null && b.sequence !== undefined ? Number(b.sequence) : null;
       if (seqA !== null && seqB !== null) return seqA - seqB;
@@ -1689,7 +1726,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         {Object.keys(grouped).length === 0 ? (
           <div className="text-xs italic text-dark-muted text-center py-6 border border-dashed border-light-border rounded-xl">
             No data added under this book.
-            {(isAdmin || isTeacher) && (
+            <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
               <div className="mt-2.5">
                 <button
                   onClick={() =>
@@ -1706,7 +1743,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   <i className="fas fa-plus"></i> Add {l1Name}
                 </button>
               </div>
-            )}
+            </ConditionalBlock>
           </div>
         ) : (
           Object.keys(grouped).map((l1) => {
@@ -1731,7 +1768,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     <span className="font-extrabold text-xs text-dark-primary truncate">
                       {l1 === '_Revision' ? 'Book Revision' : l1}
                     </span>
-                    {directNode.sequence !== undefined && directNode.sequence !== null && (
+                    {visibleColumns.sequence && directNode.sequence !== undefined && directNode.sequence !== null && (
                       <span
                         className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
                         title="Sequence Number"
@@ -1741,7 +1778,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     )}
                   </div>
                   <div className="flex gap-1.5 items-center shrink-0 justify-end">
-                    {(isAdmin || isTeacher) && (
+                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                       <div className="flex items-center gap-0.5 border rounded bg-white px-1">
                         <button
                           type="button"
@@ -1760,37 +1797,43 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                           <i className="fas fa-arrow-down"></i>
                         </button>
                       </div>
+                    </ConditionalBlock>
+                    {visibleColumns.pages && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                        <i className="far fa-file-lines mr-1" />
+                        {directNode.page_count} pages
+                      </span>
                     )}
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
-                      <i className="far fa-file-lines mr-1" />
-                      {directNode.page_count} pages
-                    </span>
-                    <span
-                      className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(directNode.complexity)}`}
-                    >
-                      {directNode.complexity}
-                    </span>
-                    <button
-                      onClick={() =>
-                        setModal({
-                          type: 'edit',
-                          level: 'level1',
-                          isLeaf: true,
-                          bookId: book.id,
-                          node: directNode,
-                          oldLevel1: l1,
-                          name: l1 === '_Revision' ? 'Book Revision' : l1,
-                          pageCount: directNode.page_count,
-                          complexity: directNode.complexity,
-                          sequence: directNode.sequence,
-                          hierarchy: book.hierarchy_type,
-                        })
-                      }
-                      className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                    >
-                      <i className="fas fa-edit text-xs"></i>
-                    </button>
-                    {(isAdmin || isTeacher) && (
+                    {visibleColumns.complexity && (
+                      <span
+                        className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(directNode.complexity)}`}
+                      >
+                        {directNode.complexity}
+                      </span>
+                    )}
+                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
+                      <button
+                        onClick={() =>
+                          setModal({
+                            type: 'edit',
+                            level: 'level1',
+                            isLeaf: true,
+                            bookId: book.id,
+                            node: directNode,
+                            oldLevel1: l1,
+                            name: l1 === '_Revision' ? 'Book Revision' : l1,
+                            pageCount: directNode.page_count,
+                            complexity: directNode.complexity,
+                            sequence: directNode.sequence,
+                            hierarchy: book.hierarchy_type,
+                          })
+                        }
+                        className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                      >
+                        <i className="fas fa-edit text-xs"></i>
+                      </button>
+                    </ConditionalBlock>
+                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                       <button
                         onClick={() =>
                           handleDeleteNode('level1', null, { bookId: book.id, level1: l1 })
@@ -1799,7 +1842,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
-                    )}
+                    </ConditionalBlock>
                   </div>
                 </div>
               );
@@ -1897,7 +1940,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                     >
                       <i className="fas fa-edit text-xs"></i>
                     </button>
-                    {(isAdmin || isTeacher) && (
+                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                       <button
                         onClick={() =>
                           handleDeleteNode('level1', null, { bookId: book.id, level1: l1 })
@@ -1906,7 +1949,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                       >
                         <i className="fas fa-trash-alt text-xs"></i>
                       </button>
-                    )}
+                    </ConditionalBlock>
                   </div>
                 </div>
 
@@ -1929,7 +1972,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 <span className="truncate">
                                   {node.level3 || node.level2 || node.level1}
                                 </span>
-                                {node.sequence !== undefined && node.sequence !== null && (
+                                {visibleColumns.sequence && node.sequence !== undefined && node.sequence !== null && (
                                   <span
                                     className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
                                     title="Sequence Number"
@@ -1939,7 +1982,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 )}
                               </div>
                               <div className="flex gap-1.5 items-center shrink-0 justify-end">
-                                {(isAdmin || isTeacher) && (
+                                <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                   <div className="flex items-center gap-0.5 border rounded bg-white px-1">
                                     <button
                                       type="button"
@@ -1958,50 +2001,56 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       <i className="fas fa-arrow-down"></i>
                                     </button>
                                   </div>
+                                </ConditionalBlock>
+                                {visibleColumns.pages && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                    <i className="far fa-file-lines mr-1" />
+                                    {node.page_count} pages
+                                  </span>
                                 )}
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
-                                  <i className="far fa-file-lines mr-1" />
-                                  {node.page_count} pages
-                                </span>
-                                <span
-                                  className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
-                                >
-                                  {node.complexity}
-                                </span>
-                                <button
-                                  onClick={() =>
-                                    setModal({
-                                      type: 'edit',
-                                      level: node.level3
-                                        ? 'level3'
-                                        : node.level2
-                                          ? 'level2'
-                                          : 'level1',
-                                      bookId: book.id,
-                                      node: node,
-                                      oldLevel1: l1,
-                                      oldLevel2: node.level2,
-                                      oldLevel3: node.level3,
-                                      name: node.level3 || node.level2 || node.level1,
-                                      pageCount: node.page_count,
-                                      complexity: node.complexity,
-                                      sequence: node.sequence,
-                                      isLeaf: true,
-                                      hierarchy: book.hierarchy_type,
-                                    })
-                                  }
-                                  className="p-1 text-blue-500"
-                                >
-                                  <i className="fas fa-edit text-[10px]"></i>
-                                </button>
-                                {(isAdmin || isTeacher) && (
+                                {visibleColumns.complexity && (
+                                  <span
+                                    className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
+                                  >
+                                    {node.complexity}
+                                  </span>
+                                )}
+                                <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
+                                  <button
+                                    onClick={() =>
+                                      setModal({
+                                        type: 'edit',
+                                        level: node.level3
+                                          ? 'level3'
+                                          : node.level2
+                                            ? 'level2'
+                                            : 'level1',
+                                        bookId: book.id,
+                                        node: node,
+                                        oldLevel1: l1,
+                                        oldLevel2: node.level2,
+                                        oldLevel3: node.level3,
+                                        name: node.level3 || node.level2 || node.level1,
+                                        pageCount: node.page_count,
+                                        complexity: node.complexity,
+                                        sequence: node.sequence,
+                                        isLeaf: true,
+                                        hierarchy: book.hierarchy_type,
+                                      })
+                                    }
+                                    className="p-1 text-blue-500"
+                                  >
+                                    <i className="fas fa-edit text-[10px]"></i>
+                                  </button>
+                                </ConditionalBlock>
+                                <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                   <button
                                     onClick={() => handleDeleteNode('level3', node.id, node)}
                                     className="p-1 text-red-primary"
                                   >
                                     <i className="fas fa-trash-alt text-[10px]"></i>
                                   </button>
-                                )}
+                                </ConditionalBlock>
                               </div>
                             </div>
                           ));
@@ -2033,7 +2082,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                 <span className="font-extrabold text-xs text-dark-primary truncate">
                                   {l2}
                                 </span>
-                                {levelsAvailable < 3 &&
+                                {visibleColumns.sequence && levelsAvailable < 3 &&
                                   l3Nodes.placeholderNode?.sequence !== undefined &&
                                   l3Nodes.placeholderNode?.sequence !== null && (
                                     <span
@@ -2056,9 +2105,8 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
 
                               {l3Nodes.lessons.length === 0 && l3Nodes.hasPlaceholder && (
                                 <div className="flex gap-1.5 items-center shrink-0">
-                                  {levelsAvailable < 3 &&
-                                    (isAdmin || isTeacher) &&
-                                    l3Nodes.placeholderNode && (
+                                  {levelsAvailable < 3 && l3Nodes.placeholderNode && (
+                                    <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                       <div className="flex items-center gap-0.5 border rounded bg-white px-1">
                                         <button
                                           type="button"
@@ -2081,16 +2129,21 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                           <i className="fas fa-arrow-down"></i>
                                         </button>
                                       </div>
-                                    )}
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full bg-white text-dark-soft">
-                                    <i className="far fa-file-lines mr-1" />
-                                    {l3Nodes.page_count} pages
-                                  </span>
-                                  <span
-                                    className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(l3Nodes.complexity)}`}
-                                  >
-                                    {l3Nodes.complexity}
-                                  </span>
+                                    </ConditionalBlock>
+                                  )}
+                                  {visibleColumns.pages && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full bg-white text-dark-soft">
+                                      <i className="far fa-file-lines mr-1" />
+                                      {l3Nodes.page_count} pages
+                                    </span>
+                                  )}
+                                  {visibleColumns.complexity && (
+                                    <span
+                                      className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(l3Nodes.complexity)}`}
+                                    >
+                                      {l3Nodes.complexity}
+                                    </span>
+                                  )}
                                 </div>
                               )}
 
@@ -2115,52 +2168,56 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   </button>
                                 )}
                                 {levelsAvailable >= 3 && (
+                                  <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
+                                    <button
+                                      onClick={() =>
+                                        setModal({
+                                          type: 'add',
+                                          level: 'node',
+                                          bookId: book.id,
+                                          parentLevel: 'level2',
+                                          parent1: l1,
+                                          parent2: l2,
+                                          hierarchy: book.hierarchy_type,
+                                        })
+                                      }
+                                      className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all"
+                                    >
+                                      <i className="fas fa-plus"></i> Add {l3Name}
+                                    </button>
+                                  </ConditionalBlock>
+                                )}
+                                <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                   <button
                                     onClick={() =>
                                       setModal({
-                                        type: 'add',
-                                        level: 'node',
+                                        type: 'edit',
+                                        level: 'level2',
                                         bookId: book.id,
-                                        parentLevel: 'level2',
-                                        parent1: l1,
-                                        parent2: l2,
+                                        oldLevel1: l1,
+                                        oldLevel2: l2,
+                                        name: l2,
                                         hierarchy: book.hierarchy_type,
+                                        pageCount:
+                                          l3Nodes.lessons.length === 0 || levelsAvailable < 3
+                                            ? l3Nodes.page_count
+                                            : null,
+                                        complexity:
+                                          l3Nodes.lessons.length === 0 || levelsAvailable < 3
+                                            ? l3Nodes.complexity
+                                            : null,
+                                        sequence: l3Nodes.placeholderNode?.sequence,
+                                        node: l3Nodes.placeholderNode,
+                                        isLeaf: levelsAvailable < 3,
+                                        placeholderId: l3Nodes.placeholderId,
                                       })
                                     }
-                                    className="px-2 py-0.5 rounded text-[8px] font-bold bg-white border border-light-border hover:bg-emerald-50 transition-all"
+                                    className="p-1 text-blue-500 hover:bg-blue-50 rounded"
                                   >
-                                    <i className="fas fa-plus"></i> Add {l3Name}
+                                    <i className="fas fa-edit text-xs"></i>
                                   </button>
-                                )}
-                                <button
-                                  onClick={() =>
-                                    setModal({
-                                      type: 'edit',
-                                      level: 'level2',
-                                      bookId: book.id,
-                                      oldLevel1: l1,
-                                      oldLevel2: l2,
-                                      name: l2,
-                                      hierarchy: book.hierarchy_type,
-                                      pageCount:
-                                        l3Nodes.lessons.length === 0 || levelsAvailable < 3
-                                          ? l3Nodes.page_count
-                                          : null,
-                                      complexity:
-                                        l3Nodes.lessons.length === 0 || levelsAvailable < 3
-                                          ? l3Nodes.complexity
-                                          : null,
-                                      sequence: l3Nodes.placeholderNode?.sequence,
-                                      node: l3Nodes.placeholderNode,
-                                      isLeaf: levelsAvailable < 3,
-                                      placeholderId: l3Nodes.placeholderId,
-                                    })
-                                  }
-                                  className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                                >
-                                  <i className="fas fa-edit text-xs"></i>
-                                </button>
-                                {(isAdmin || isTeacher) && (
+                                </ConditionalBlock>
+                                <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                   <button
                                     onClick={() =>
                                       handleDeleteNode('level2', l3Nodes.placeholderId, {
@@ -2173,7 +2230,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                   >
                                     <i className="fas fa-trash-alt text-xs"></i>
                                   </button>
-                                )}
+                                </ConditionalBlock>
                               </div>
                             </div>
                             {levelsAvailable >= 3 &&
@@ -2188,7 +2245,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                       <div className="flex items-center gap-2 min-w-0 flex-1">
                                         <i className="fas fa-file-alt text-dark-soft text-[10px] shrink-0" />
                                         <span className="truncate">{node.level3}</span>
-                                        {node.sequence !== undefined && node.sequence !== null && (
+                                        {visibleColumns.sequence && node.sequence !== undefined && node.sequence !== null && (
                                           <span
                                             className="text-[9px] font-bold px-1.5 py-0.5 border rounded bg-amber-50 text-amber-800 shrink-0"
                                             title="Sequence Number"
@@ -2198,7 +2255,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                         )}
                                       </div>
                                       <div className="flex gap-1.5 items-center shrink-0 justify-end">
-                                        {(isAdmin || isTeacher) && (
+                                        <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                           <div className="flex items-center gap-0.5 border rounded bg-white px-1">
                                             <button
                                               type="button"
@@ -2217,38 +2274,44 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                               <i className="fas fa-arrow-down"></i>
                                             </button>
                                           </div>
+                                        </ConditionalBlock>
+                                        {visibleColumns.pages && (
+                                          <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
+                                            <i className="far fa-file-lines mr-1" />
+                                            {node.page_count} pages
+                                          </span>
                                         )}
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 border rounded-full shrink-0">
-                                          <i className="far fa-file-lines mr-1" />
-                                          {node.page_count} pages
-                                        </span>
-                                        <span
-                                          className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
-                                        >
-                                          {node.complexity}
-                                        </span>
-                                        <button
-                                          onClick={() =>
-                                            setModal({
-                                              type: 'edit',
-                                              level: 'level3',
-                                              bookId: book.id,
-                                              node: node,
-                                              oldLevel1: l1,
-                                              oldLevel2: l2,
-                                              oldLevel3: node.level3,
-                                              name: node.level3,
-                                              pageCount: node.page_count,
-                                              complexity: node.complexity,
-                                              sequence: node.sequence,
-                                              hierarchy: book.hierarchy_type,
-                                            })
-                                          }
-                                          className="p-1 text-blue-500"
-                                        >
-                                          <i className="fas fa-edit text-[10px]"></i>
-                                        </button>
-                                        {(isAdmin || isTeacher) && (
+                                        {visibleColumns.complexity && (
+                                          <span
+                                            className={`text-[8px] font-bold px-1.5 py-0.5 border rounded-full shrink-0 ${getComplexityBadgeClass(node.complexity)}`}
+                                          >
+                                            {node.complexity}
+                                          </span>
+                                        )}
+                                        <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
+                                          <button
+                                            onClick={() =>
+                                              setModal({
+                                                type: 'edit',
+                                                level: 'level3',
+                                                bookId: book.id,
+                                                node: node,
+                                                oldLevel1: l1,
+                                                oldLevel2: l2,
+                                                oldLevel3: node.level3,
+                                                name: node.level3,
+                                                pageCount: node.page_count,
+                                                complexity: node.complexity,
+                                                sequence: node.sequence,
+                                                hierarchy: book.hierarchy_type,
+                                              })
+                                            }
+                                            className="p-1 text-blue-500"
+                                          >
+                                            <i className="fas fa-edit text-[10px]"></i>
+                                          </button>
+                                        </ConditionalBlock>
+                                        <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
                                           <button
                                             onClick={() =>
                                               handleDeleteNode('level3', node.id, node)
@@ -2257,7 +2320,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                                           >
                                             <i className="fas fa-trash-alt text-[10px]"></i>
                                           </button>
-                                        )}
+                                        </ConditionalBlock>
                                       </div>
                                     </div>
                                   ))}
@@ -2278,78 +2341,95 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-64px)] bg-light-bg overflow-hidden font-sans relative">
-      {/* Mobile Navigation Header Bar */}
-      <div className="flex md:hidden items-center justify-between p-3 bg-white border-b border-light-border shadow-xs shrink-0 z-20">
-        <button
-          type="button"
-          onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          className="px-3 py-1.5 bg-brand-lbg text-brand-primary border border-brand-primary/20 rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-2xs active:scale-95"
-        >
-          <i className={`fas ${isMobileSidebarOpen ? 'fa-times' : 'fa-layer-group'}`}></i>
-          <span>{isMobileSidebarOpen ? 'Close Curriculum' : 'Curriculum List'}</span>
-        </button>
-        {activeSubject && (
-          <div className="text-right truncate max-w-[180px]">
-            <span className="text-xs font-black text-dark-primary block truncate">
-              {activeSubject.name}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Curriculum Sidebar Container */}
-      <div
-        className={`${
-          isMobileSidebarOpen ? 'flex' : 'hidden'
-        } md:flex w-full md:w-80 bg-white border-r border-light-border flex-col h-full shadow-sm z-30 shrink-0 absolute md:relative inset-0`}
-      >
-        <div className="p-3 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-xl font-black text-brand-primary flex items-center gap-2 tracking-tight">
-              <i className="fas fa-layer-group text-brand-primary"></i> Curriculum
-            </h2>
-            <div className="flex items-center gap-1">
-              {groupedSubjects.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (allClassificationsCollapsed) {
-                      setCollapsedClassifications({});
-                    } else {
-                      const newCollapsed = {};
-                      groupedSubjects.forEach((cls) => {
-                        newCollapsed[cls.name] = true;
-                      });
-                      setCollapsedClassifications(newCollapsed);
-                    }
-                  }}
-                  className="p-1.5 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
-                  title={
-                    allClassificationsCollapsed
-                      ? 'Expand All Classifications'
-                      : 'Collapse All Classifications'
-                  }
-                >
-                  <i
-                    className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
-                  />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 md:hidden rounded-xl"
-                title="Close"
-              >
-                <i className="fas fa-times text-base"></i>
-              </button>
+    <div className="w-full flex flex-col h-[calc(100vh-64px)] bg-light-bg overflow-hidden font-sans relative" data-feature="syllabus-manager">
+      {/* ── HEADER SECTION ── */}
+      <div className="w-full bg-white border-b border-light-border px-3 sm:px-6 py-2.5 print:hidden shadow-2xs shrink-0 z-20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base shadow-2xs shrink-0">
+              <i className="fas fa-book-open" />
+            </div>
+            <div>
+              <h1 className="text-sm sm:text-base font-black text-dark-primary tracking-tight">
+                Curriculum Manager
+              </h1>
+              <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
+                Manage subjects, books, units, chapters, and lesson structures
+              </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              className="md:hidden px-3 py-1.5 bg-brand-lbg text-brand-primary border border-brand-primary/20 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs active:scale-95"
+            >
+              <i className={`fas ${isMobileSidebarOpen ? 'fa-times' : 'fa-layer-group'}`}></i>
+              <span>{isMobileSidebarOpen ? 'Close Curriculum' : 'Curriculum List'}</span>
+            </button>
+            {activeSubject && (
+              <span className="text-xs font-bold text-dark-muted hidden sm:inline-block px-3 py-1 bg-gray-50 border border-light-border rounded-xl">
+                Active: <strong className="text-dark-primary">{activeSubject.name}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
 
-          {(isAdmin || isTeacher) && (
+      {/* ── MAIN CONTENT SECTION ── */}
+      <div className="w-full flex-1 flex flex-col md:flex-row overflow-hidden relative" data-feature="syllabus-manager-content">
+        {/* Curriculum Sidebar Container */}
+        <div
+          data-feature-tab="curriculum-subjects"
+          className={`${
+            isMobileSidebarOpen ? 'flex' : 'hidden'
+          } md:flex w-full md:w-80 bg-white border-r border-light-border flex-col h-full shadow-sm z-30 shrink-0 absolute md:relative inset-0`}
+        >
+          <div className="p-3 border-b border-light-border/50 bg-gradient-to-br from-white to-light-bg/30">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-xl font-black text-brand-primary flex items-center gap-2 tracking-tight">
+                <i className="fas fa-layer-group text-brand-primary"></i> Curriculum
+              </h2>
+              <div className="flex items-center gap-1">
+                {groupedSubjects.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (allClassificationsCollapsed) {
+                        setCollapsedClassifications({});
+                      } else {
+                        const newCollapsed = {};
+                        groupedSubjects.forEach((cls) => {
+                          newCollapsed[cls.name] = true;
+                        });
+                        setCollapsedClassifications(newCollapsed);
+                      }
+                    }}
+                    className="p-1.5 text-gray-400 hover:text-brand-primary hover:bg-light-lbg rounded-xl transition-all"
+                    title={
+                      allClassificationsCollapsed
+                        ? 'Expand All Classifications'
+                        : 'Collapse All Classifications'
+                    }
+                  >
+                    <i
+                      className={`fas ${allClassificationsCollapsed ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-base`}
+                    />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileSidebarOpen(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 md:hidden rounded-xl"
+                  title="Close"
+                >
+                  <i className="fas fa-times text-base"></i>
+                </button>
+              </div>
+            </div>
+
             <div className="flex gap-2 pt-2 border-t border-light-border/50 bg-white">
-              {isAdmin && (
+              <ConditionalBlock name="syl-manage-subjects" roles={effectiveRoles}>
                 <button
                   onClick={() => setIsClassificationsModalOpen(true)}
                   className="flex-1 py-1.5 px-3 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
@@ -2358,92 +2438,169 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                   <i className="fas fa-sliders text-xs"></i>
                   <span>Classifications</span>
                 </button>
-              )}
-              <button
-                onClick={() => setModal({ type: 'add', level: 'subject' })}
-                className="flex-1 py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
-                title="Add New Subject"
-              >
-                <i className="fas fa-book-open text-xs"></i>
-                <span>Add Subject</span>
-              </button>
+              </ConditionalBlock>
+              <ConditionalBlock name="syl-edit-content" roles={effectiveRoles}>
+                <button
+                  onClick={() => setModal({ type: 'add', level: 'subject' })}
+                  className="flex-1 py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs active:scale-95"
+                  title="Add New Subject"
+                >
+                  <i className="fas fa-book-open text-xs"></i>
+                  <span>Add Subject</span>
+                </button>
+              </ConditionalBlock>
             </div>
-          )}
-          {isTeacher && (
-            <div className="flex items-center gap-2 mt-2 px-1 pb-1">
-              <label className="relative inline-flex items-center cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showAllSubjects}
-                  onChange={(e) => setShowAllSubjects(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-soft peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand-primary"></div>
-                <span className="ms-2 text-[9px] font-black text-gray-500 uppercase tracking-wider">
-                  Show All Subjects
-                </span>
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar">
-          {renderSubjectSelector('Unclassified', unclassifiedSubjects, true)}
-          {groupedSubjects.map((cls) => renderSubjectSelector(cls.name, cls.subjects))}
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col min-w-0 bg-light-bg overflow-y-auto custom-scrollbar relative">
-        <div className="mx-auto w-full p-3 sm:p-4 md:p-6 space-y-4">
-          {!activeSubject ? (
-            <div className="text-center py-16 sm:py-20 px-4">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
-                <i className="fas fa-book-open text-3xl sm:text-4xl text-brand-soft/40"></i>
+            {isTeacherUser && (
+              <div className="flex items-center gap-2 mt-2 px-1 pb-1">
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showAllSubjects}
+                    onChange={(e) => setShowAllSubjects(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-soft peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-brand-primary"></div>
+                  <span className="ms-2 text-[9px] font-black text-gray-500 uppercase tracking-wider">
+                    Show All Subjects
+                  </span>
+                </label>
               </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-dark-primary mb-2">
-                No Subject Selected
-              </h3>
-              <p className="text-xs sm:text-sm font-semibold text-dark-muted max-w-sm mx-auto mb-4">
-                Select a subject from the curriculum sidebar or create a new one to begin managing
-                curriculum.
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="md:hidden inline-flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold shadow-md active:scale-95"
-              >
-                <i className="fas fa-layer-group"></i> Open Curriculum List
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-light-border shadow-sm">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h1 className="text-lg sm:text-xl font-black text-dark-primary tracking-tight">
-                      {activeSubject.name}
-                    </h1>
-                  </div>
-                  <p className="text-xs font-bold text-dark-muted">
-                    Syllabus for{' '}
-                    <span className="text-dark-secondary uppercase">
-                      {classifications.find(
-                        (c) => String(c.id) === String(activeSubject.classification_id)
-                      )?.name || 'Unclassified'}
-                    </span>
-                  </p>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar">
+            {renderSubjectSelector('Unclassified', unclassifiedSubjects, true)}
+            {groupedSubjects.map((cls) => renderSubjectSelector(cls.name, cls.subjects))}
+          </div>
+        </div>
+
+        <div
+          data-feature-filter={activeSubject ? String(activeSubject.id) : 'all'}
+          className="flex-1 flex flex-col min-w-0 bg-light-bg overflow-y-auto custom-scrollbar relative"
+        >
+          <div className="mx-auto w-full p-3 sm:p-4 md:p-6 space-y-4">
+            {!activeSubject ? (
+              <div className="text-center py-16 sm:py-20 px-4">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm border border-light-border animate-in zoom-in duration-300">
+                  <i className="fas fa-book-reader text-3xl sm:text-4xl text-brand-primary"></i>
                 </div>
-                {(isAdmin || isTeacher) && (
-                  <button
-                    onClick={() =>
-                      setModal({ type: 'add', level: 'book', parentId: activeSubject.id })
-                    }
-                    className="bg-brand-primary hover:bg-brand-primary/80 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto text-center shrink-0"
-                  >
-                    <i className="fas fa-plus mr-1.5"></i> Add Book
-                  </button>
-                )}
+                <h3 className="text-base sm:text-lg font-black text-dark-primary mb-2">
+                  No Subject Selected
+                </h3>
+                <p className="text-xs font-semibold text-dark-muted max-w-sm mx-auto">
+                  Select a subject from the curriculum sidebar to manage its books and lessons.
+                </p>
               </div>
+            ) : (
+              <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-light-border shadow-sm">
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h1 className="text-lg sm:text-xl font-black text-dark-primary tracking-tight">
+                        {activeSubject.name}
+                      </h1>
+                    </div>
+                    <p className="text-xs font-bold text-dark-muted">
+                      Syllabus for{' '}
+                      <span className="text-dark-secondary uppercase">
+                        {classifications.find(
+                          (c) => String(c.id) === String(activeSubject.classification_id)
+                        )?.name || 'Unclassified'}
+                      </span>
+                    </p>
+                  </div>
+                  <ConditionalBlock name="syl-manage-books" roles={effectiveRoles}>
+                    <button
+                      onClick={() =>
+                        setModal({ type: 'add', level: 'book', parentId: activeSubject.id })
+                      }
+                      className="bg-brand-primary hover:bg-brand-primary/80 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98] w-full sm:w-auto text-center shrink-0"
+                    >
+                      <i className="fas fa-plus mr-1.5"></i> Add Book
+                    </button>
+                  </ConditionalBlock>
+                </div>
+
+                {/* Table Interactivity: Lesson Filter, Sort & Column Badges Bar */}
+                <div className="bg-white p-3 rounded-2xl border border-light-border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1">
+                    <div className="relative flex-1 max-w-sm">
+                      <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                      <input
+                        type="text"
+                        placeholder="Filter lessons by title or keyword..."
+                        value={lessonSearchQuery}
+                        onChange={(e) => setLessonSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-8 py-1.5 bg-gray-50/50 border border-light-border rounded-xl text-xs font-medium focus:ring-2 focus:ring-brand-soft focus:border-brand-primary outline-none"
+                      />
+                      {lessonSearchQuery && (
+                        <button
+                          onClick={() => setLessonSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                        >
+                          <i className="fas fa-times"></i>
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={lessonComplexityFilter}
+                      onChange={(e) => setLessonComplexityFilter(e.target.value)}
+                      className="px-3 py-1.5 bg-gray-50/50 border border-light-border rounded-xl text-xs font-bold text-dark-primary cursor-pointer outline-none"
+                      title="Filter by Complexity"
+                    >
+                      <option value="all">All Complexities</option>
+                      <option value="easy">Easy</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="complex">Complex</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 bg-gray-50 border border-light-border rounded-xl px-2 py-1">
+                      <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider">Sort:</span>
+                      <select
+                        value={lessonSortMode}
+                        onChange={(e) => setLessonSortMode(e.target.value)}
+                        className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer"
+                      >
+                        <option value="sequence">Sequence #</option>
+                        <option value="name">Name A-Z</option>
+                        <option value="pages">Pages Count</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1 border border-light-border rounded-xl p-1 bg-gray-50">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleColumns((p) => ({ ...p, sequence: !p.sequence }))}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                          visibleColumns.sequence ? 'bg-white shadow-2xs text-brand-primary' : 'text-gray-400'
+                        }`}
+                        title="Toggle Sequence Number Badges"
+                      >
+                        # Seq
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisibleColumns((p) => ({ ...p, pages: !p.pages }))}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                          visibleColumns.pages ? 'bg-white shadow-2xs text-brand-primary' : 'text-gray-400'
+                        }`}
+                        title="Toggle Page Badges"
+                      >
+                        Pages
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisibleColumns((p) => ({ ...p, complexity: !p.complexity }))}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                          visibleColumns.complexity ? 'bg-white shadow-2xs text-brand-primary' : 'text-gray-400'
+                        }`}
+                        title="Toggle Complexity Badges"
+                      >
+                        Complexity
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
               <div className="flex justify-between items-center px-2"></div>
 
@@ -2525,101 +2682,99 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                             </div>
                           </button>
                           <div className="flex items-center gap-1.5 flex-wrap w-full xl:w-auto justify-start xl:justify-end border-t xl:border-t-0 pt-2 xl:pt-0">
-                            {(isAdmin || isTeacher) && (
-                              <>
-                                {l1Keys.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const allL1Collapsed = l1Keys.every(
-                                        (l1) => collapsedNodes[`${book.id}-${l1}`]
-                                      );
-                                      setCollapsedNodes((prev) => {
-                                        const next = { ...prev };
-                                        if (allL1Collapsed) {
-                                          delete next[book.id]; // Ensure book itself is expanded
-                                        }
-                                        l1Keys.forEach((l1) => {
-                                          if (allL1Collapsed) {
-                                            delete next[`${book.id}-${l1}`];
-                                          } else {
-                                            next[`${book.id}-${l1}`] = true;
-                                          }
-                                        });
-                                        return next;
-                                      });
-                                    }}
-                                    className="p-1.5 text-dark-soft hover:bg-light-lbg rounded-xl transition-all flex items-center justify-center border border-light-border bg-white"
-                                    title={
-                                      l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`])
-                                        ? `Expand All ${bookL1Name}s`
-                                        : `Collapse All ${bookL1Name}s`
-                                    }
-                                  >
-                                    <i
-                                      className={`fas ${l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`}
-                                    />
-                                  </button>
-                                )}
+                            <ConditionalBlock name="syl-manage-books" roles={effectiveRoles}>
+                              {l1Keys.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    initiateMapping(book);
+                                    const allL1Collapsed = l1Keys.every(
+                                      (l1) => collapsedNodes[`${book.id}-${l1}`]
+                                    );
+                                    setCollapsedNodes((prev) => {
+                                      const next = { ...prev };
+                                      if (allL1Collapsed) {
+                                        delete next[book.id]; // Ensure book itself is expanded
+                                      }
+                                      l1Keys.forEach((l1) => {
+                                        if (allL1Collapsed) {
+                                          delete next[`${book.id}-${l1}`];
+                                        } else {
+                                          next[`${book.id}-${l1}`] = true;
+                                        }
+                                      });
+                                      return next;
+                                    });
                                   }}
-                                  className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 shadow-2xs active:scale-[0.98]"
-                                  title="Map Book to Classes"
-                                >
-                                  <i className="fas fa-graduation-cap text-xs"></i>
-                                  <span>Map to Class</span>
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    setModal({
-                                      type: 'add',
-                                      level: 'node',
-                                      bookId: book.id,
-                                      parentLevel: 'book',
-                                      hierarchy: book.hierarchy_type,
-                                    })
+                                  className="p-1.5 text-dark-soft hover:bg-light-lbg rounded-xl transition-all flex items-center justify-center border border-light-border bg-white"
+                                  title={
+                                    l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`])
+                                      ? `Expand All ${bookL1Name}s`
+                                      : `Collapse All ${bookL1Name}s`
                                   }
-                                  className="px-2.5 py-1.5 bg-blue-primary text-white hover:bg-blue-dark rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
                                 >
-                                  <i className="fas fa-plus"></i> Add {bookL1Name}
+                                  <i
+                                    className={`fas ${l1Keys.every((l1) => collapsedNodes[`${book.id}-${l1}`]) ? 'fa-angle-double-down' : 'fa-angle-double-up'} text-xs`}
+                                  />
                                 </button>
-                                <button
-                                  onClick={() => initiateCsvImport(book.id)}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                  title="Import CSV/Excel"
-                                >
-                                  <i className="fas fa-file-arrow-up text-xl"></i>
-                                </button>
-                                <button
-                                  onClick={() => handleExportExcel(book)}
-                                  className="p-2 text-emerald-700 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                  title="Download Excel"
-                                >
-                                  <i className="fas fa-file-arrow-down text-xl"></i>
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    setModal({
-                                      type: 'edit',
-                                      level: 'book',
-                                      node: book,
-                                      name: book.name,
-                                      subjectId: book.subject_id,
-                                    })
-                                  }
-                                  className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                  title="Edit Book"
-                                >
-                                  <i className="fas fa-edit text-xl"></i>
-                                </button>
-                              </>
-                            )}
-                            {isAdmin && (
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  initiateMapping(book);
+                                }}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 border border-indigo-200 shadow-2xs active:scale-[0.98]"
+                                title="Map Book to Classes"
+                              >
+                                <i className="fas fa-graduation-cap text-xs"></i>
+                                <span>Map to Class</span>
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setModal({
+                                    type: 'add',
+                                    level: 'node',
+                                    bookId: book.id,
+                                    parentLevel: 'book',
+                                    hierarchy: book.hierarchy_type,
+                                  })
+                                }
+                                className="px-2.5 py-1.5 bg-blue-primary text-white hover:bg-blue-dark rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 active:scale-[0.98]"
+                              >
+                                <i className="fas fa-plus"></i> Add {bookL1Name}
+                              </button>
+                              <button
+                                onClick={() => initiateCsvImport(book.id)}
+                                className="p-2 text-emerald-600 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                title="Import CSV/Excel"
+                              >
+                                <i className="fas fa-file-arrow-up text-xl"></i>
+                              </button>
+                              <button
+                                onClick={() => handleExportExcel(book)}
+                                className="p-2 text-emerald-700 hover:bg-emerald-50 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                title="Download Excel"
+                              >
+                                <i className="fas fa-file-arrow-down text-xl"></i>
+                              </button>
+                              <button
+                                onClick={() =>
+                                  setModal({
+                                    type: 'edit',
+                                    level: 'book',
+                                    node: book,
+                                    name: book.name,
+                                    subjectId: book.subject_id,
+                                  })
+                                }
+                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                title="Edit Book"
+                              >
+                                <i className="fas fa-edit text-xl"></i>
+                              </button>
+                            </ConditionalBlock>
+                            <ConditionalBlock name="syl-manage-subjects" roles={effectiveRoles}>
                               <button
                                 onClick={() => handleDeleteNode('book', book.id)}
                                 className="p-2 text-red-600 hover:bg-red-50 hover:border-red-200 bg-white rounded-xl transition-all flex items-center justify-center shadow-sm"
@@ -2627,7 +2782,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
                               >
                                 <i className="fas fa-trash-alt text-xl"></i>
                               </button>
-                            )}
+                            </ConditionalBlock>
                           </div>
                         </div>
                         {!isBookCollapsed &&
@@ -2898,6 +3053,7 @@ const SyllabusManager = ({ role, user, teacherRecord }) => {
         onChange={handleFileChange}
         className="hidden"
       />
+      </div>
     </div>
   );
 };

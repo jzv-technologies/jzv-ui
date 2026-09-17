@@ -727,7 +727,7 @@ export const ViewControllerManager = () => {
   }, [configs, simulatorRole]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-4 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-4 animate-in fade-in duration-300" data-feature="avc-admin-manager">
       {/* Compact Top Action Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs">
         <div className="flex items-center gap-2.5">
@@ -876,7 +876,7 @@ export const ViewControllerManager = () => {
       )}
 
       {/* Main Table Card */}
-      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs">
+      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs" data-feature="avc-admin-manager-content">
         {loading ? (
           <div className="py-20 text-center">
             <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -901,7 +901,7 @@ export const ViewControllerManager = () => {
                 </tr>
 
                 {/* Column Filter Row */}
-                <tr className="border-b border-light-border bg-purple-50/20 text-xs">
+                <tr className="border-b border-light-border bg-purple-50/20 text-xs" data-feature-filter="avc-table">
                   {/* Order column filter / Clear All */}
                   <th className="p-2 text-center">
                     {hasActiveFilters && (

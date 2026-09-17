@@ -89,9 +89,11 @@ const ExamResultsEntryGrid = ({
           student_id: Number(studentId),
           marks_obtained: patch.is_absent
             ? null
-            : patch.marks_obtained !== '' && patch.marks_obtained !== null && patch.marks_obtained !== undefined
-            ? Number(patch.marks_obtained)
-            : null,
+            : patch.marks_obtained !== '' &&
+                patch.marks_obtained !== null &&
+                patch.marks_obtained !== undefined
+              ? Number(patch.marks_obtained)
+              : null,
           is_absent: patch.is_absent ?? existing?.is_absent ?? false,
           remarks: patch.remarks ?? existing?.remarks ?? null,
         };
@@ -172,9 +174,7 @@ const ExamResultsEntryGrid = ({
 
   const handleRemarksChange = (studentId, value) => {
     setEntries((prev) =>
-      prev.map((e) =>
-        String(e.student_id) === String(studentId) ? { ...e, remarks: value } : e
-      )
+      prev.map((e) => (String(e.student_id) === String(studentId) ? { ...e, remarks: value } : e))
     );
     clearTimeout(debounceTimers.current[`remarks_${studentId}`]);
     debounceTimers.current[`remarks_${studentId}`] = setTimeout(() => {
@@ -327,15 +327,13 @@ const ExamResultsEntryGrid = ({
   const marks = entries
     .filter((e) => !e.is_absent && e.marks_obtained !== '' && e.marks_obtained !== null)
     .map((e) => Number(e.marks_obtained));
-  const avg =
-    marks.length > 0 ? (marks.reduce((a, b) => a + b, 0) / marks.length).toFixed(1) : '—';
+  const avg = marks.length > 0 ? (marks.reduce((a, b) => a + b, 0) / marks.length).toFixed(1) : '—';
   const highest = marks.length > 0 ? Math.max(...marks) : '—';
   const lowest = marks.length > 0 ? Math.min(...marks) : '—';
   const passCount = result.pass_marks
     ? marks.filter((m) => m >= Number(result.pass_marks)).length
     : null;
-  const pctRecorded =
-    entries.length > 0 ? Math.round((entered.length / entries.length) * 100) : 0;
+  const pctRecorded = entries.length > 0 ? Math.round((entered.length / entries.length) * 100) : 0;
 
   if (loading) {
     return (
@@ -347,152 +345,86 @@ const ExamResultsEntryGrid = ({
 
   return (
     <div className="space-y-4">
-      {/* Read-Only or Coordinator Access Banner */}
-      {!canEdit ? (
-        <div className="bg-amber-50 border border-amber-200 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs text-amber-900 font-medium shadow-2xs">
-          <div className="flex items-center gap-2.5">
-            <i className="fas fa-lock text-amber-600 text-sm shrink-0" />
-            <div>
-              <p className="font-bold">Read-Only Mark Entry</p>
-              <p className="text-[11px] text-amber-800">
-                Marks for this subject can only be entered by the assigned invigilator
-                {invigilatorName ? ` (${invigilatorName})` : ''} or an Academic Coordinator /
-                Administrator.
-              </p>
-            </div>
-          </div>
-          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-            Read-Only
-          </span>
-        </div>
-      ) : hasOverrideAccess && invigilatorName ? (
-        <div className="bg-emerald-50 border border-emerald-200 px-3.5 py-2 rounded-xl flex items-center gap-2 text-xs text-emerald-800 font-medium shadow-2xs">
-          <i className="fas fa-user-shield text-emerald-600 text-xs" />
-          <span>
-            <strong>Coordinator / Admin Access:</strong> You can enter or update marks on behalf of
-            invigilator (<strong>{invigilatorName}</strong>).
-          </span>
-        </div>
-      ) : null}
-
-      {/* Progress & Quick Entry Toolbar */}
-      <div className="bg-white border border-light-border rounded-2xl p-4 shadow-xs space-y-3">
-        {/* Top: Stats Counter & Progress Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-dark-primary">
-                Progress: {entered.length} of {entries.length} Students
-              </span>
-              <span
-                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  pctRecorded === 100
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {pctRecorded}%
-              </span>
-            </div>
-            <div className="w-48 sm:w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                style={{ width: `${pctRecorded}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="flex items-center gap-2 text-xs text-dark-muted font-bold flex-wrap">
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
-              Avg: <strong className="text-dark-primary">{avg}</strong>
-            </span>
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
-              High: <strong className="text-emerald-700">{highest}</strong>
-            </span>
-            {result.pass_marks && (
-              <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
-                Passed: <strong className="text-emerald-700">{passCount}/{marks.length}</strong>
-              </span>
-            )}
-            <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
-              Absent: <strong className="text-red-600">{absentCount}</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Bottom Toolbar: Student Search + Quick Fill Tools */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100">
-          {/* Student Search */}
-          <div className="relative flex-1 w-full sm:max-w-xs">
-            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search student or admission no..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
-              >
-                <i className="fas fa-times-circle" />
-              </button>
-            )}
-          </div>
-
-          {/* Fast Keyboard Helper note & Quick Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] text-dark-muted hidden md:inline-flex items-center gap-1 font-semibold">
-              <i className="fas fa-keyboard text-slate-400" />
-              <span>Use <strong>Enter/↓</strong> next, <strong>↑</strong> prev, <strong>A</strong> absent</span>
-            </span>
-
-            {canEdit && (
-              <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
-                <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickFillModal(true)}
-                    className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                    title="Fill all empty student scores at once"
-                  >
-                    <i className="fas fa-magic text-[10px]" />
-                    <span>Quick Fill</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleMarkRemainingAbsent}
-                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                    title="Mark all unfilled students as absent"
-                  >
-                    <i className="fas fa-user-slash text-[10px]" />
-                    <span>Mark Rest Absent</span>
-                  </button>
-                </div>
-              </ConditionalBlock>
-            )}
-
-            {hasNextSubject && onNextSubject && (
-              <button
-                type="button"
-                onClick={onNextSubject}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ml-auto sm:ml-2"
-                title={`Advance to next subject: ${nextSubjectName}`}
-              >
-                <span>Next Subject</span>
-                <i className="fas fa-arrow-right text-[10px]" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Table Container */}
       <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+        {/* Progress & Quick Entry Toolbar */}
+        <div className="bg-white border border-light-border rounded-2xl p-4 shadow-xs space-y-3">
+          {/* Top: Stats Counter & Progress Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-dark-primary">
+                  Progress: {entered.length} of {entries.length} Students
+                </span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    pctRecorded === 100
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {pctRecorded}%
+                </span>
+              </div>
+              <div className="w-48 sm:w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                  style={{ width: `${pctRecorded}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Toolbar: Student Search + Quick Fill Tools */}
+            <div className="flex items-center gap-2 text-xs text-dark-muted font-bold flex-wrap">
+              <div className="relative flex-1 w-full sm:max-w-xs">
+                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search student or admission no..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
+                  >
+                    <i className="fas fa-times-circle" />
+                  </button>
+                )}
+              </div>
+              {canEdit && (
+                <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
+                  <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickFillModal(true)}
+                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Fill all empty student scores at once"
+                    >
+                      <i className="fas fa-magic text-[10px]" />
+                      <span>Quick Fill</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleMarkRemainingAbsent}
+                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                      title="Mark all unfilled students as absent"
+                    >
+                      <i className="fas fa-user-slash text-[10px]" />
+                      <span>Mark Rest Absent</span>
+                    </button>
+                  </div>
+                </ConditionalBlock>
+              )}
+              <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
+                Absent: <strong className="text-red-600">{absentCount}</strong>
+              </span>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto relative max-h-[650px] overflow-y-auto">
           <table className="w-full text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50 z-20 shadow-2xs">
@@ -506,13 +438,18 @@ const ExamResultsEntryGrid = ({
                 </th>
                 <th className="py-3 px-2 sm:px-3 text-center w-20 sm:w-24">Status</th>
                 <th className="py-3 px-2 sm:px-3 text-center w-16 sm:w-20">Absent</th>
-                <th className="py-3 px-3 sm:px-4 text-left min-w-[130px] sm:min-w-[160px]">Teacher Remarks</th>
+                <th className="py-3 px-3 sm:px-4 text-left min-w-[130px] sm:min-w-[160px]">
+                  Teacher Remarks
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-light-border">
               {filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-xs text-dark-muted font-semibold">
+                  <td
+                    colSpan={6}
+                    className="text-center py-10 text-xs text-dark-muted font-semibold"
+                  >
                     No students match the search criteria.
                   </td>
                 </tr>
@@ -543,12 +480,12 @@ const ExamResultsEntryGrid = ({
                         entry.is_absent
                           ? 'bg-red-50/30'
                           : isOver
-                          ? 'bg-orange-50/40'
-                          : isPassing
-                          ? 'hover:bg-emerald-50/15'
-                          : isFailing
-                          ? 'hover:bg-rose-50/15'
-                          : 'hover:bg-slate-50/60'
+                            ? 'bg-orange-50/40'
+                            : isPassing
+                              ? 'hover:bg-emerald-50/15'
+                              : isFailing
+                                ? 'hover:bg-rose-50/15'
+                                : 'hover:bg-slate-50/60'
                       }`}
                     >
                       <td className="py-2.5 px-3 text-dark-muted text-[11px] font-mono font-bold">
@@ -588,10 +525,10 @@ const ExamResultsEntryGrid = ({
                                 isOver
                                   ? 'border-orange-400 bg-orange-50 text-orange-800'
                                   : isPassing
-                                  ? 'border-emerald-300 bg-emerald-50/40 text-emerald-900'
-                                  : isFailing
-                                  ? 'border-rose-300 bg-rose-50/40 text-rose-900'
-                                  : 'border-light-border bg-white text-dark-primary'
+                                    ? 'border-emerald-300 bg-emerald-50/40 text-emerald-900'
+                                    : isFailing
+                                      ? 'border-rose-300 bg-rose-50/40 text-rose-900'
+                                      : 'border-light-border bg-white text-dark-primary'
                               } disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-50`}
                             />
                             {isSaving && (

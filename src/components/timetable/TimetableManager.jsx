@@ -1898,7 +1898,7 @@ const TimetableManager = ({ userRoles, user }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-[500px]">
+    <div className="flex flex-col min-h-[500px]" data-feature="timetable-planner">
       {/* Top Banner Control Panel */}
       <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2 print:hidden">
         {/* Title & Actions Row */}
@@ -1920,8 +1920,8 @@ const TimetableManager = ({ userRoles, user }) => {
           </div>
 
           {/* Workspace Tabs (Inside the Top Banner Card) */}
-          {/* Mobile view (< md): Dropdown */}
-          <div className="md:hidden w-full">
+          {/* Mobile view (< sm): Dropdown */}
+          <div className="sm:hidden w-full" data-feature-tab="timetable-tabs-mobile">
             <div className="relative">
               <select
                 value={activeTab}
@@ -1938,8 +1938,8 @@ const TimetableManager = ({ userRoles, user }) => {
             </div>
           </div>
 
-          {/* Desktop view (>= md): Pill tabs */}
-          <div className="hidden md:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-wrap gap-1 w-full md:w-auto">
+          {/* Desktop view (>= sm): Pill tabs */}
+          <div className="hidden sm:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-wrap gap-1 w-full sm:w-auto" data-feature-tab="timetable-tabs">
             {availableTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -2018,7 +2018,7 @@ const TimetableManager = ({ userRoles, user }) => {
           <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="flex-1">
+        <div className="flex-1" data-feature="timetable-content">
           {activeTab === 'viewer' && (
             <ConditionalBlock name="timetable-viewer" roles={userRoles}>
               <TimetableAdminView

@@ -342,8 +342,7 @@ const ExamNoticeBoardPrint = ({
                   viewMode === 'table' ? 'bg-white text-dark-primary shadow-xs' : 'text-dark-muted'
                 }`}
               >
-                <i className="fas fa-table-cells mr-1.5" />
-                Consolidated Table
+                <i className="fas fa-table-cells mr-1.5 text-xl" />
               </button>
               <button
                 type="button"
@@ -354,8 +353,7 @@ const ExamNoticeBoardPrint = ({
                     : 'text-dark-muted'
                 }`}
               >
-                <i className="fas fa-calendar-week mr-1.5" />
-                Scheduler View
+                <i className="fas fa-calendar-week mr-1.5 text-xl" />
               </button>
               <button
                 type="button"
@@ -366,8 +364,7 @@ const ExamNoticeBoardPrint = ({
                     : 'text-dark-muted'
                 }`}
               >
-                <i className="fas fa-id-card mr-1.5" />
-                Class-wise Blocks
+                <i className="fas fa-id-card mr-1.5 text-xl" />
               </button>
             </div>
 

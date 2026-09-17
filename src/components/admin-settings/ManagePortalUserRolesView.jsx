@@ -241,21 +241,52 @@ export const ManagePortalUserRolesView = ({ currentUser }) => {
     }
   };
 
-  // Filter users by search
+  // Sorting state
+  const [sortConfig, setSortConfig] = useState({ key: 'user', direction: 'asc' });
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  // Filter & sort users
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return authUsers;
-    const q = searchQuery.toLowerCase().trim();
-    return authUsers.filter(
-      (u) =>
-        (u.full_name || '').toLowerCase().includes(q) ||
-        (u.email || '').toLowerCase().includes(q)
-    );
-  }, [authUsers, searchQuery]);
+    let result = authUsers;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (u) =>
+          (u.full_name || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q)
+      );
+    }
+    return [...result].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      if (sortConfig.key === 'user') {
+        valA = (a.full_name || a.email || '').toLowerCase();
+        valB = (b.full_name || b.email || '').toLowerCase();
+      } else if (sortConfig.key === 'emp') {
+        const empA = mappedAuthUserMap.get(String(a.user_id));
+        const empB = mappedAuthUserMap.get(String(b.user_id));
+        valA = (empA ? empA.name : '').toLowerCase();
+        valB = (empB ? empB.name : '').toLowerCase();
+      } else if (sortConfig.key === 'roles') {
+        valA = (a.roles || []).join(',').toLowerCase();
+        valB = (b.roles || []).join(',').toLowerCase();
+      }
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [authUsers, searchQuery, sortConfig, mappedAuthUserMap]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6 animate-in fade-in duration-300" data-feature="manage-user-roles">
       {/* Page Header */}
-      <div className="bg-white border border-light-border rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-light-border rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-purple-700 text-white flex items-center justify-center text-xl shadow-md shadow-purple-200 shrink-0">
             <i className="fas fa-user-shield"></i>
@@ -296,9 +327,9 @@ export const ManagePortalUserRolesView = ({ currentUser }) => {
       </div>
 
       {/* Main Table Card */}
-      <div className="bg-white border border-light-border rounded-3xl shadow-xs overflow-hidden">
+      <div className="bg-white border border-light-border rounded-3xl shadow-xs overflow-hidden" data-feature="manage-user-roles-content">
         {/* Search Toolbar */}
-        <div className="p-4 border-b border-light-border bg-gray-50/50 flex items-center justify-between gap-4">
+        <div className="p-4 border-b border-light-border bg-gray-50/50 flex items-center justify-between gap-4" data-feature-filter="user-roles-search">
           <div className="relative w-full max-w-md">
             <i className="fas fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             <input
@@ -352,11 +383,59 @@ export const ManagePortalUserRolesView = ({ currentUser }) => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-semibold">
-              <thead className="bg-gray-50/80 border-b border-light-border text-[10px] uppercase tracking-wider text-dark-muted font-bold">
+              <thead className="bg-gray-50/80 border-b border-light-border text-[10px] uppercase tracking-wider text-dark-muted font-bold select-none">
                 <tr>
-                  <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">Employee Link</th>
-                  <th className="py-3 px-4">Current Portal Roles</th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-purple-700 transition-colors"
+                    onClick={() => handleSort('user')}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      User
+                      <i
+                        className={`fas ${
+                          sortConfig.key === 'user'
+                            ? sortConfig.direction === 'asc'
+                              ? 'fa-sort-up text-purple-600'
+                              : 'fa-sort-down text-purple-600'
+                            : 'fa-sort text-gray-300'
+                        } text-[10px]`}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-purple-700 transition-colors"
+                    onClick={() => handleSort('emp')}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      Employee Link
+                      <i
+                        className={`fas ${
+                          sortConfig.key === 'emp'
+                            ? sortConfig.direction === 'asc'
+                              ? 'fa-sort-up text-purple-600'
+                              : 'fa-sort-down text-purple-600'
+                            : 'fa-sort text-gray-300'
+                        } text-[10px]`}
+                      />
+                    </span>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-purple-700 transition-colors"
+                    onClick={() => handleSort('roles')}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      Current Portal Roles
+                      <i
+                        className={`fas ${
+                          sortConfig.key === 'roles'
+                            ? sortConfig.direction === 'asc'
+                              ? 'fa-sort-up text-purple-600'
+                              : 'fa-sort-down text-purple-600'
+                            : 'fa-sort text-gray-300'
+                        } text-[10px]`}
+                      />
+                    </span>
+                  </th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>

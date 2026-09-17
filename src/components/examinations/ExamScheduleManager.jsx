@@ -284,7 +284,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   }
 
   return (
-    <div className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300">
+    <div className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300" data-feature="exam-schedule">
       {/* ── 1. Top Header (Full width, flush to breadcrumbs, no rounded corners) ── */}
       <div className="w-full bg-white border-b border-light-border rounded-none px-4 sm:px-6 py-3 print:hidden shadow-2xs space-y-3">
         {/* Row 1: Title, Exam Badge, and Active Exam Selector / Refresh */}
@@ -363,7 +363,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
         {/* Row 2: Subview Selectors on the LEFT, Dynamic Selectors on the RIGHT */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-2 border-t border-slate-100">
           {/* Subview Selectors (Tabs) */}
-          <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full shrink-0">
+          <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full shrink-0" data-feature-tab="exam-schedule-tabs">
             {availableTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -381,7 +381,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
           </div>
 
           {/* Dynamic Selectors on the Right Side */}
-          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end">
+          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end" data-feature-filter={activeTab}>
             {activeTab === 'scheduler' && (
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 {/* View Mode Toggle: Selected Class vs All Classes */}
@@ -498,7 +498,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
       </div>
 
       {/* ── 2. Actual Data Table / Subviews governed by ConditionalBlock ── */}
-      <div className="w-full p-4 sm:p-6 flex-1 animate-in fade-in duration-200">
+      <div className="w-full p-4 sm:p-6 flex-1 animate-in fade-in duration-200" data-feature="exam-schedule-content">
         {activeTab === 'setup' && (
           <ConditionalBlock name="exam-sched-tab-setup" roles={userRoles}>
             <ExamScheduleSetup

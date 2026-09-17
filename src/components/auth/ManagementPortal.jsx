@@ -1513,12 +1513,24 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       ) : null}
       {subView === 'student-records' && (
         <div data-feature="student-records">
-          <AdminStudentsView role="management" user={user} mode="records" initialTab="records" />
+          <AdminStudentsView
+            role="management"
+            user={user}
+            userRoles={userRoles}
+            mode="records"
+            initialTab="records"
+          />
         </div>
       )}
       {subView === 'student-fees' && (
         <div data-feature="student-fees">
-          <AdminStudentsView role="management" user={user} mode="fees" initialTab="fees" />
+          <AdminStudentsView
+            role="management"
+            user={user}
+            userRoles={userRoles}
+            mode="fees"
+            initialTab="fees"
+          />
         </div>
       )}
       {(subView === 'employee-records' || subView === 'employee-management') && (

@@ -4,7 +4,7 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v6';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v7';
 
 const readSessionCache = () => {
   try {
@@ -13,19 +13,23 @@ const readSessionCache = () => {
     sessionStorage.removeItem('jzv_view_config_cache_v3');
     sessionStorage.removeItem('jzv_view_config_cache_v4');
     sessionStorage.removeItem('jzv_view_config_cache_v5');
+    sessionStorage.removeItem('jzv_view_config_cache_v6');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
     if (!Array.isArray(cachedData.viewConfigs) || !Array.isArray(cachedData.dynamicConfigs)) {
       return null;
     }
-    // Auto-invalidate if core exam components are not yet in the cached list
+    // Auto-invalidate if core exam, student, and employee components are not yet in the cached list
     const names = new Set(cachedData.viewConfigs.map((c) => c.component_name));
     if (
       !names.has('exam-schedule') ||
       !names.has('exam-results') ||
       !names.has('exam-sched-tab-setup') ||
-      !names.has('exam-sched-slot-edit')
+      !names.has('exam-sched-slot-edit') ||
+      !names.has('student-tab-records') ||
+      !names.has('student-tab-fees') ||
+      !names.has('emp-tab-records')
     ) {
       sessionStorage.removeItem(VIEW_CONFIG_SESSION_KEY);
       return null;

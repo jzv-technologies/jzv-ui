@@ -1877,7 +1877,7 @@ const SyllabusTrackerPortal = ({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-light-bg font-sans" data-feature="syllabus-tracker">
       <div className="p-3 sm:p-6 overflow-y-auto pb-24 flex-1">
         {!dashboardOnly && (
           <div
@@ -1886,7 +1886,7 @@ const SyllabusTrackerPortal = ({
           >
             <div
               className="flex gap-4 items-center flex-wrap w-full sm:w-auto"
-              data-feature="navigation-tabs"
+              data-feature-tab="syllabus-tabs"
             >
               {!singleTab && currentTabs.length > 1 && (
                 <>

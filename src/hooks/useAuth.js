@@ -45,7 +45,7 @@ const fetchCurrentTeacherRecord = async (userId) => {
     teacherRecordFetches.set(
       userId,
       supabase
-        .rpc('get_current_teacher_details')
+        .rpc('get_current_teacher_details', { p_auth_id: userId })
         .then(({ data, error }) => {
           if (error) {
             console.warn('get_current_teacher_details RPC failed:', error);
@@ -170,7 +170,12 @@ export const useAuth = () => {
   };
 
   const forceLogout = useCallback(async (userId, reason) => {
-    if (userId) clearUserDataCookie(userId);
+    if (userId) {
+      clearUserDataCookie(userId);
+      try {
+        sessionStorage.removeItem(`jzv_roles_session_verified_${userId}`);
+      } catch (e) {}
+    }
     await supabase.auth.signOut();
     showToast(reason, 'error');
   }, []);
@@ -179,8 +184,13 @@ export const useAuth = () => {
     async (userId, authEvent, initialRolesFromCookie = [], force = false) => {
       // Prevent concurrent fetches
       if (fetchingRef.current) return { success: false, cancelled: true };
-      // Don't fetch if roles already fetched for this user (unless forced)
-      if (!force && rolesFetchedRef.current && currentUserIdRef.current === userId) {
+
+      const sessionVerifiedKey = `jzv_roles_session_verified_${userId}`;
+      const isSessionVerified =
+        typeof window !== 'undefined' && sessionStorage.getItem(sessionVerifiedKey) === 'true';
+
+      // Don't fetch if roles already verified for this user in this session (unless forced)
+      if (!force && isSessionVerified && rolesFetchedRef.current && currentUserIdRef.current === userId) {
         return { success: true, roles: userRolesRef.current, studentIds: studentIdsRef.current };
       }
 
@@ -252,6 +262,9 @@ export const useAuth = () => {
 
         updateRoles(roles);
         updateStudentIds('');
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(sessionVerifiedKey, 'true');
+        }
         setRolesLoading(false);
         rolesFetchedRef.current = true;
         currentUserIdRef.current = userId;
@@ -281,6 +294,9 @@ export const useAuth = () => {
     if (user && !user.parentMode) {
       clearUserDataCookie(user.id);
       clearCachedTeacherRecord(user.id);
+      try {
+        sessionStorage.removeItem(`jzv_roles_session_verified_${user.id}`);
+      } catch (e) {}
     }
     await supabase.auth.signOut();
     setUser(null);
@@ -458,9 +474,14 @@ export const useAuth = () => {
       }
 
       const currentUser = session?.user ?? null;
+      const sessionVerifiedKey = currentUser ? `jzv_roles_session_verified_${currentUser.id}` : null;
+      const isSessionVerified =
+        sessionVerifiedKey &&
+        typeof window !== 'undefined' &&
+        sessionStorage.getItem(sessionVerifiedKey) === 'true';
 
-      // Avoid duplicate processing if user hasn't changed
-      if (currentUser?.id === currentUserIdRef.current && event !== 'SIGNED_IN') {
+      // Avoid duplicate processing if user hasn't changed and already verified this session
+      if (currentUser?.id === currentUserIdRef.current && isSessionVerified && event !== 'SIGNED_IN') {
         return;
       }
 
@@ -491,7 +512,7 @@ export const useAuth = () => {
         setAuthLoading(false);
 
         // If no cached roles in cookie, fetch synchronously and block to verify authorization
-        // If cached roles exist, portal loads INSTANTLY (0ms) and revalidates in the background
+        // If cached roles exist, verify ONCE per browser session in background
         if (cookieRoles.length === 0) {
           const res = await fetchRoles(currentUser.id, event, cookieRoles, true);
 
@@ -508,10 +529,9 @@ export const useAuth = () => {
           ) {
             fetchTeacherRecord(currentUser.id, currentUser.email);
           }
-        } else {
-          // Stale-While-Revalidate: User already has roles loaded from cookie; portal renders immediately.
-          // Silently re-verify in background without blocking UI or showing fallback spinner.
-          fetchRoles(currentUser.id, event, cookieRoles, true).then((res) => {
+        } else if (!isSessionVerified) {
+          // Stale-While-Revalidate: Verify against admin_users_view strictly ONCE per session
+          fetchRoles(currentUser.id, event, cookieRoles, false).then((res) => {
             if (res && res.success && (!res.roles || res.roles.length === 0)) {
               forceLogout(
                 currentUser.id,

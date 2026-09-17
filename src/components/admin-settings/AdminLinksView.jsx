@@ -1,5 +1,5 @@
 // src/components/portals/admin/AdminLinksView.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
@@ -18,6 +18,14 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = '' }) => {
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const [confirmConfig, setConfirmConfig] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
 
   // Inline editing state
   const [editingId, setEditingId] = useState(null); // 'new' or record id
@@ -195,19 +203,49 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = '' }) => {
     });
   };
 
-  // Filter links for display query search
-  const filteredLinks = links.filter((l) => {
+  // Filter & sort links for display query search
+  const filteredLinks = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return true;
-    return (
-      l.link_name.toLowerCase().includes(query) ||
-      (l.link_description && l.link_description.toLowerCase().includes(query)) ||
-      l.link.toLowerCase().includes(query)
-    );
-  });
+    let result = links;
+    if (query) {
+      result = result.filter(
+        (l) =>
+          (l.link_name || '').toLowerCase().includes(query) ||
+          (l.link_description && l.link_description.toLowerCase().includes(query)) ||
+          (l.link || '').toLowerCase().includes(query)
+      );
+    }
+    return [...result].sort((a, b) => {
+      let valA = '';
+      let valB = '';
+      if (sortConfig.key === 'link_name') {
+        valA = (a.link_name || '').toLowerCase();
+        valB = (b.link_name || '').toLowerCase();
+      } else if (sortConfig.key === 'link_description') {
+        valA = (a.link_description || '').toLowerCase();
+        valB = (b.link_description || '').toLowerCase();
+      } else if (sortConfig.key === 'link') {
+        valA = (a.link || '').toLowerCase();
+        valB = (b.link || '').toLowerCase();
+      } else if (sortConfig.key === 'target') {
+        valA = (a.target || '').toLowerCase();
+        valB = (b.target || '').toLowerCase();
+      } else if (sortConfig.key === 'roles') {
+        valA = Number(a.roles) || 0;
+        valB = Number(b.roles) || 0;
+        return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
+      } else {
+        valA = a.created_at || '';
+        valB = b.created_at || '';
+      }
+      if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [links, searchQuery, sortConfig]);
 
   return (
-    <div className="flex flex-col w-full relative">
+    <div className="flex flex-col w-full relative" data-feature="avc-admin-links">
       {/* Grid Content Table (Borderless card container, matches Google Mappings table styling) */}
       {loading && links.length === 0 ? (
         <div className="p-20 text-center text-dark-muted bg-white border border-light-border rounded-2xl shadow-sm">
@@ -215,15 +253,95 @@ const AdminLinksView = ({ addLinkTrigger = 0, searchQuery = '' }) => {
           <p>Loading links...</p>
         </div>
       ) : (
-        <div className="overflow-x-auto w-full bg-white border border-light-border rounded-2xl shadow-sm">
+        <div className="overflow-x-auto w-full bg-white border border-light-border rounded-2xl shadow-sm" data-feature="avc-admin-links-content">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-gray-50 text-dark-deepblue uppercase text-[11px] font-extrabold tracking-wider border-b border-light-border">
-                <th className="p-5 w-[20%]">Link Name</th>
-                <th className="p-5 w-[25%]">Description</th>
-                <th className="p-5 w-[25%]">Link URL</th>
-                <th className="p-5 w-[10%]">Target</th>
-                <th className="p-5 w-[10%]">Access Roles</th>
+              <tr className="bg-gray-50 text-dark-deepblue uppercase text-[11px] font-extrabold tracking-wider border-b border-light-border select-none">
+                <th
+                  className="p-5 w-[20%] cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleSort('link_name')}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Link Name
+                    <i
+                      className={`fas ${
+                        sortConfig.key === 'link_name'
+                          ? sortConfig.direction === 'asc'
+                            ? 'fa-sort-up text-blue-600'
+                            : 'fa-sort-down text-blue-600'
+                          : 'fa-sort text-gray-300'
+                      } text-[10px]`}
+                    />
+                  </span>
+                </th>
+                <th
+                  className="p-5 w-[25%] cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleSort('link_description')}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Description
+                    <i
+                      className={`fas ${
+                        sortConfig.key === 'link_description'
+                          ? sortConfig.direction === 'asc'
+                            ? 'fa-sort-up text-blue-600'
+                            : 'fa-sort-down text-blue-600'
+                          : 'fa-sort text-gray-300'
+                      } text-[10px]`}
+                    />
+                  </span>
+                </th>
+                <th
+                  className="p-5 w-[25%] cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleSort('link')}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Link URL
+                    <i
+                      className={`fas ${
+                        sortConfig.key === 'link'
+                          ? sortConfig.direction === 'asc'
+                            ? 'fa-sort-up text-blue-600'
+                            : 'fa-sort-down text-blue-600'
+                          : 'fa-sort text-gray-300'
+                      } text-[10px]`}
+                    />
+                  </span>
+                </th>
+                <th
+                  className="p-5 w-[10%] cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleSort('target')}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Target
+                    <i
+                      className={`fas ${
+                        sortConfig.key === 'target'
+                          ? sortConfig.direction === 'asc'
+                            ? 'fa-sort-up text-blue-600'
+                            : 'fa-sort-down text-blue-600'
+                          : 'fa-sort text-gray-300'
+                      } text-[10px]`}
+                    />
+                  </span>
+                </th>
+                <th
+                  className="p-5 w-[10%] cursor-pointer hover:text-blue-600 transition-colors"
+                  onClick={() => handleSort('roles')}
+                >
+                  <span className="flex items-center gap-1.5">
+                    Access Roles
+                    <i
+                      className={`fas ${
+                        sortConfig.key === 'roles'
+                          ? sortConfig.direction === 'asc'
+                            ? 'fa-sort-up text-blue-600'
+                            : 'fa-sort-down text-blue-600'
+                          : 'fa-sort text-gray-300'
+                      } text-[10px]`}
+                    />
+                  </span>
+                </th>
                 <th className="p-5 w-[10%] text-right">Actions</th>
               </tr>
             </thead>
