@@ -29,6 +29,7 @@ const getStatusBadge = (status, isRev = false) => {
 
 const SyllabusProgressGrid = ({
   role,
+  userRoles = [],
   student,
   classesToRender,
   books,
@@ -489,7 +490,7 @@ const SyllabusProgressGrid = ({
                                             </p>
                                           )}
                                         </div>
-                                        {role === 'management' && handleDeleteClick && (
+                                        {(role === 'management' || role === 'admin' || userRoles.includes('admin') || userRoles.includes('management')) && handleDeleteClick && (
                                           <button
                                             onClick={() =>
                                               handleDeleteClick(item, log, node, bookObj)
@@ -561,7 +562,7 @@ const SyllabusProgressGrid = ({
       });
     }
 
-    if (role === 'teacher' && cpTeacherShowMineOnly && currentTeacherId) {
+    if (cpTeacherShowMineOnly && currentTeacherId) {
       filteredBooks = filteredBooks.filter((book) => {
         return assignments.some(
           (a) =>

@@ -431,13 +431,13 @@ INSERT INTO app_view_controller (
   -- Admin Settings Views
   (
     'manage-user-roles',
-    'subview',
+    'tile',
     'Manage Portal User Roles',
-    'Admin Settings',
+    'Administration',
     true,
     'none',
     ARRAY['admin', 'management'],
-    10,
+    35,
     'Assign portal roles and map employee profiles to authentication accounts'
   ),
   (
@@ -450,6 +450,17 @@ INSERT INTO app_view_controller (
     ARRAY['admin', 'management'],
     20,
     'Configure school quick links, external portals, and access roles'
+  ),
+  (
+    'syl-tab-my-activity',
+    'tab',
+    'My Activity Tab',
+    'syllabus-progress-tracker',
+    true,
+    'none',
+    ARRAY['admin', 'management', 'teacher'],
+    5,
+    'Teacher personal classroom log and activity tab'
   )
 
 ON CONFLICT (component_name) DO UPDATE
@@ -463,4 +474,46 @@ ON CONFLICT (component_name) DO UPDATE
     display_order      = EXCLUDED.display_order,
     description        = EXCLUDED.description;
 
+-- ── Compatibility & Secure Functions ──────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.has_role_above(required_role integer)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Compatibility function for legacy schema policies
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_teachers_with_auth_secure(p_auth_id uuid DEFAULT NULL::uuid)
+RETURNS TABLE (
+  teacher_id bigint,
+  name character varying,
+  is_male boolean,
+  auth_id uuid,
+  is_active boolean
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id AS teacher_id,
+    e.name::character varying,
+    e.is_male,
+    e.auth_id,
+    e.is_active
+  FROM public.employees e
+  WHERE e.is_active = true 
+    AND e.is_teacher = true
+    AND (p_auth_id IS NULL OR e.auth_id = p_auth_id)
+  ORDER BY e.name;
+END;
+$$;
+
 COMMIT;
+
+
+

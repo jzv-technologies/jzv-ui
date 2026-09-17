@@ -4,7 +4,7 @@ import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v7';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v9';
 
 const readSessionCache = () => {
   try {
@@ -14,6 +14,8 @@ const readSessionCache = () => {
     sessionStorage.removeItem('jzv_view_config_cache_v4');
     sessionStorage.removeItem('jzv_view_config_cache_v5');
     sessionStorage.removeItem('jzv_view_config_cache_v6');
+    sessionStorage.removeItem('jzv_view_config_cache_v7');
+    sessionStorage.removeItem('jzv_view_config_cache_v8');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
@@ -161,7 +163,8 @@ export const useViewConfig = () => {
 
       // Filter active tile entries permitted for userRoles
       const activeTiles = viewConfigs.filter((item) => {
-        if (item.type !== 'tile') return false;
+        const isTile = item.type === 'tile' || Boolean(TILE_METADATA_REGISTRY[item.component_name]);
+        if (!isTile) return false;
         const meta = TILE_METADATA_REGISTRY[item.component_name];
         const combinedRoles = Array.from(
           new Set([...(item.valid_access_roles || []), ...(meta?.valid_access_roles || [])])
@@ -170,7 +173,11 @@ export const useViewConfig = () => {
       });
 
       // Include fallback tiles from TILE_METADATA_REGISTRY if not yet registered in app_view_controller
-      const dbTileNames = new Set(viewConfigs.map((c) => c.component_name));
+      const dbTileNames = new Set(
+        viewConfigs
+          .filter((c) => c.type === 'tile' || Boolean(TILE_METADATA_REGISTRY[c.component_name]))
+          .map((c) => c.component_name)
+      );
       const fallbackRegistryTiles = Object.entries(TILE_METADATA_REGISTRY)
         .filter(([key, meta]) => {
           if (dbTileNames.has(key)) return false;
@@ -196,15 +203,15 @@ export const useViewConfig = () => {
         return {
           id: item.component_name,
           component_name: item.component_name,
-          type: item.type,
+          type: 'tile',
           parent_name:
-            (item.parent_name
+            (item.parent_name && item.parent_name.toLowerCase() !== 'admin settings'
               ? String(item.parent_name)
                   .replace(/[\r\n]+/g, ' ')
                   .trim()
               : null) ||
             meta.group ||
-            'general',
+            'General',
           title: item.display_name || meta.title || item.component_name,
           titleKey: meta.titleKey || null,
           description: item.description || meta.description || '',
@@ -214,8 +221,8 @@ export const useViewConfig = () => {
           shadow: meta.shadow || 'shadow-brand-lbg',
           action: meta.action || 'subview',
           actionTarget: meta.actionTarget || null,
-          valid_access_roles: item.valid_access_roles || [],
-          display_order: item.display_order ?? 50,
+          valid_access_roles: item.valid_access_roles || meta.valid_access_roles || [],
+          display_order: item.display_order ?? meta.display_order ?? 50,
           isDynamic: false,
         };
       });
@@ -290,6 +297,14 @@ export const useViewConfig = () => {
         if (!config.is_active) return false;
         return hasAccess(config.valid_access_roles, config.default_access, userRoles);
       }
+
+      // Builtin fallback for syl-tab-my-activity if not yet inserted in DB
+      if (componentName === 'syl-tab-my-activity') {
+        return userRoles.some((r) =>
+          ['teacher', 'admin', 'management'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
       // 2. If unmanaged/not registered in view controller:
       // Fail-closed (deny) for exam components, tabs, setups, admin, and mutation variables
       if (

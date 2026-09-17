@@ -217,40 +217,50 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
 
         if (isAdminView) {
           queries.push(
-            supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null })
+            supabase
+              .from('employees')
+              .select('id, name, is_male, is_active, auth_id')
+              .eq('is_active', true)
+              .eq('is_teacher', true)
+              .order('name', { ascending: true })
           );
         } else {
           // Resolve teacher for teacher role
           let teacherData = teacherRecord || null;
           if (!teacherData) {
-            const { data, error: teachErr } = await supabase.rpc('get_teachers_with_auth_secure', {
-              p_auth_id: user?.id || null,
-            });
+            const { data: currentTeacherData, error: currentTeacherErr } = await supabase.rpc(
+              'get_current_teacher_details',
+              user?.id ? { p_auth_id: user.id } : {}
+            );
 
-            if (teachErr) {
-              const { data: currentTeacherData, error: currentTeacherErr } = await supabase.rpc(
-                'get_current_teacher_details'
-              );
-              if (currentTeacherErr) throw currentTeacherErr;
+            if (!currentTeacherErr && currentTeacherData) {
               const currentTeacher = Array.isArray(currentTeacherData)
                 ? currentTeacherData[0]
-                : currentTeacherData || null;
-              teacherData = currentTeacher
-                ? {
-                    id: currentTeacher.id,
-                    teacher_id: currentTeacher.id,
-                    name: currentTeacher.name,
-                    auth_id: user?.id || null,
-                    is_male: currentTeacher.is_male,
-                    is_active: true,
-                  }
-                : null;
-            } else {
-              const teacherRows = Array.isArray(data) ? data : [];
-              teacherData =
-                teacherRows.find((t) => String(t.auth_id || '') === String(user?.id || '')) ||
-                teacherRows[0] ||
-                null;
+                : currentTeacherData;
+              if (currentTeacher) {
+                teacherData = {
+                  id: currentTeacher.id || currentTeacher.teacher_id,
+                  teacher_id: currentTeacher.id || currentTeacher.teacher_id,
+                  name: currentTeacher.name || currentTeacher.full_name || '',
+                  auth_id: user?.id || null,
+                  is_male: currentTeacher.is_male,
+                  is_active: true,
+                };
+              }
+            }
+
+            if (!teacherData && user?.id) {
+              const { data: empData } = await supabase
+                .from('employees')
+                .select('id, name, is_male, is_active, auth_id')
+                .eq('auth_id', user.id)
+                .maybeSingle();
+              if (empData) {
+                teacherData = {
+                  ...empData,
+                  teacher_id: empData.id,
+                };
+              }
             }
           }
           const normalizedTeacher = teacherData

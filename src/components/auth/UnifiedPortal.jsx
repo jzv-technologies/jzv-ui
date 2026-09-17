@@ -371,13 +371,13 @@ export const UnifiedPortal = ({
           <div data-feature="syllabus-progress-tracker">
             <SyllabusTrackerPortal
               role={
-                isTeacher ? 'teacher' : isAdmin ? 'admin' : isManagement ? 'management' : 'parent'
+                isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'parent'
               }
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
               student={user?.student}
-              initialTab={isTeacher ? 'my-activity' : 'syllabus-progress'}
+              initialTab="syllabus-progress"
             />
           </div>
         );
@@ -457,7 +457,7 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="lesson-planner">
             <LessonManager
-              role={isTeacher ? 'teacher' : isAdmin ? 'admin' : 'management'}
+              role={isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'management'}
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
@@ -477,7 +477,7 @@ export const UnifiedPortal = ({
       case 'portal-user-roles':
         return (
           <div data-feature="manage-user-roles">
-            <ManagePortalUserRolesView currentUser={user} />
+            <ManagePortalUserRolesView currentUser={user} onBack={() => setSubView(null)} />
           </div>
         );
 

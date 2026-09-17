@@ -227,7 +227,12 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
-        supabase.rpc('get_teachers_with_auth_secure', { p_auth_id: user?.id || null }),
+        supabase
+          .from('employees')
+          .select('id, name, is_male, is_active, auth_id')
+          .eq('is_active', true)
+          .eq('is_teacher', true)
+          .order('name', { ascending: true }),
         supabase
           .from('admin_configruation')
           .select('*')
@@ -238,8 +243,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       const teacherSubjectMappings = dbTeacherSubjects || [];
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
-      if (secureTeachersErr) {
-        const { data: fallbackTeachers } = await supabase.from('teachers').select('*');
+      if (secureTeachersErr || teacherRows.length === 0) {
+        const { data: fallbackTeachers } = await supabase.from('teachers').select('*').order('name', { ascending: true });
         teacherRows = Array.isArray(fallbackTeachers) ? fallbackTeachers : [];
       }
 

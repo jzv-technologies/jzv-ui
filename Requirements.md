@@ -41,3 +41,19 @@ Results Entry needs complete redesign. Move the subject selection from left navi
 ## Weekly Book Progress Trend
 
 Book dropdown should be changed to MultiSelectDropdown, it should allow to select all, multiple and single
+
+# General
+
+## Role Hierarchy
+
+when user has the multiple roles, it should apply the priority in following sequence admin, management, teacher, staff, <custom role> and finally parent. this needs to be centrally handled instead of every places updating individual role conditions.
+
+when top role is not elible for a feature, it should apply the next role's eligibility and so on. for example if admin cannot view a feature, it should apply the management's eligibility, if management cannot view then teacher's, then staff's, then custom role's, then parent's.
+
+## Cache
+
+whenever new changes are made, it should auto update the cache to deployed version instead of using older cache
+
+## Network Call on Page Activation
+
+Verify if the api are getting called again and aging when the browser gets activated

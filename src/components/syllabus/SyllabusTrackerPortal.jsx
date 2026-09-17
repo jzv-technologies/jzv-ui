@@ -347,6 +347,25 @@ const SyllabusTrackerPortal = ({
     Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
   const canAccess = useCanAccess(effectiveRoles);
 
+  const hasAdminOrManagement = effectiveRoles.some((r) =>
+    ['admin', 'management', 'coordinator', 'academic_coordinator'].includes(
+      String(r).toLowerCase().trim()
+    )
+  );
+  const isTeacher = effectiveRoles.some((r) => String(r).toLowerCase().trim() === 'teacher');
+  const isParent =
+    effectiveRoles.some((r) => String(r).toLowerCase().trim() === 'parent') &&
+    effectiveRoles.length === 1;
+  const effectiveRole = hasAdminOrManagement
+    ? effectiveRoles.includes('admin')
+      ? 'admin'
+      : 'management'
+    : isTeacher
+      ? 'teacher'
+      : isParent
+        ? 'parent'
+        : role || 'management';
+
   const [loading, setLoading] = useState(true);
 
   // Reference data lists
@@ -374,8 +393,8 @@ const SyllabusTrackerPortal = ({
   const [activeTab, setActiveTab] = useState(() => {
     if (singleTab) return singleTab;
     if (initialTab) return initialTab;
-    if (effectiveRoles.includes('parent') && effectiveRoles.length === 1) return 'two-weeks-class';
-    if (effectiveRoles.includes('teacher')) return 'my-activity';
+    if (isParent) return 'two-weeks-class';
+    if (isTeacher && !hasAdminOrManagement) return 'my-activity';
     return 'syllabus-progress';
   });
 
@@ -440,7 +459,9 @@ const SyllabusTrackerPortal = ({
   const [cpFilterBooks, setCpFilterBooks] = useState([]);
   const [cpFilterSubjects, setCpFilterSubjects] = useState([]);
   const [cpFilterTeachers, setCpFilterTeachers] = useState([]);
-  const [cpTeacherShowMineOnly, setCpTeacherShowMineOnly] = useState(true);
+  const [cpTeacherShowMineOnly, setCpTeacherShowMineOnly] = useState(
+    () => isTeacher && !hasAdminOrManagement
+  );
   const [cpGroupingMode, setCpGroupingMode] = useState('none'); // 'classification' | 'subject' | 'none'
   const [progressExpandedBook, setProgressExpandedBook] = useState(null);
   const [progressExpandedClass, setProgressExpandedClass] = useState(null);
@@ -898,7 +919,7 @@ const SyllabusTrackerPortal = ({
           query = query.eq('teacher_id', currentTeacherId);
         } else if (targetTab === 'teacher-activity') {
           // Teacher Activity: displays the activity of ALL the teachers (no single teacher_id filter)
-        } else if (role === 'teacher') {
+        } else if (targetTab === 'my-activity' || (effectiveRole === 'teacher' && !hasAdminOrManagement)) {
           const currentTeacherId =
             teacher?.id || teacherRecord?.id || teacher?.teacher_id || teacherRecord?.teacher_id;
           if (currentTeacherId) {
@@ -1004,7 +1025,7 @@ const SyllabusTrackerPortal = ({
 
   // ─── Fetch Teacher Class Progress Logs & Trackers ───
   const fetchTeacherProgressData = async () => {
-    if (role !== 'teacher') return;
+    if (effectiveRole !== 'teacher' || hasAdminOrManagement) return;
     setProgressLoading(true);
     try {
       const progressClasses =
@@ -1102,7 +1123,7 @@ const SyllabusTrackerPortal = ({
 
   // ─── Delete Actions ───
   const handleDeleteClick = (entry, parentLog = null, lesson = null, book = null) => {
-    if (role !== 'management') return;
+    if (!hasAdminOrManagement && effectiveRole !== 'management' && !canAccess('syl-delete-log-entry')) return;
 
     let className = '—';
     if (entry.class?.name || entry.class?.class_name) {
@@ -1190,7 +1211,7 @@ const SyllabusTrackerPortal = ({
 
       setDeleteModalConfig(null);
       await fetchDailyEntries();
-      if (role === 'teacher') {
+      if (effectiveRole === 'teacher' && !hasAdminOrManagement) {
         await fetchTeacherProgressData();
       }
     } catch (err) {
@@ -1287,7 +1308,7 @@ const SyllabusTrackerPortal = ({
 
   const handleTabChange = async (tabKey) => {
     setActiveTab(tabKey);
-    if (role === 'teacher' && tabKey === 'syllabus-progress') {
+    if (effectiveRole === 'teacher' && !hasAdminOrManagement && tabKey === 'syllabus-progress') {
       await fetchTeacherProgressData();
       setProgressExpandedBook(null);
       setProgressExpandedClass(null);
@@ -1299,7 +1320,7 @@ const SyllabusTrackerPortal = ({
     syllabusTrackerPortalCache.loadingPromise = null;
     await loadData();
     await fetchDailyEntries({ force: true, tab: activeTab });
-    if (role === 'teacher') {
+    if (effectiveRole === 'teacher' && !hasAdminOrManagement) {
       await fetchTeacherProgressData();
     }
   };
@@ -1611,7 +1632,7 @@ const SyllabusTrackerPortal = ({
 
   const getFilteredUpSubjectOpts = () => {
     let filtered = subjects;
-    if (role === 'teacher') {
+    if (effectiveRole === 'teacher' && !hasAdminOrManagement) {
       filtered = filtered.filter((s) =>
         assignments.some((a) => String(a.subject_id) === String(s.id))
       );
@@ -1639,9 +1660,9 @@ const SyllabusTrackerPortal = ({
 
   const getClassesToRender = () => {
     let baseClasses = classes;
-    if (role === 'parent' && student?.class_id) {
+    if (effectiveRole === 'parent' && student?.class_id) {
       baseClasses = classes.filter((c) => String(c.id) === String(student.class_id));
-    } else if (role === 'teacher') {
+    } else if (effectiveRole === 'teacher' && !hasAdminOrManagement) {
       baseClasses =
         assignments.length === 0
           ? classes
@@ -1660,7 +1681,7 @@ const SyllabusTrackerPortal = ({
   );
 
   const lpAvailableClasses =
-    role !== 'teacher' || lpShowAllClasses || !lpTeacherId
+    effectiveRole !== 'teacher' || hasAdminOrManagement || lpShowAllClasses || !lpTeacherId
       ? classes
       : classes.filter((c) => lpTeacherClassIds.has(String(c.id)));
 
@@ -1687,7 +1708,7 @@ const SyllabusTrackerPortal = ({
     ? []
     : subjects.filter((s) => {
         const sId = String(s.id);
-        if (role !== 'teacher' || lpShowAllClasses) {
+        if (effectiveRole !== 'teacher' || hasAdminOrManagement || lpShowAllClasses) {
           return lpMappedSubjectIdsFromBooks.size === 0 || lpMappedSubjectIdsFromBooks.has(sId);
         }
         return lpClassAssignmentSubjectIds.has(sId);
@@ -2310,9 +2331,9 @@ const SyllabusTrackerPortal = ({
                 data-feature-filter="upcoming-lessons"
               >
                 <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 w-full flex-1 min-w-0">
-                  {role === 'parent' ? null : (
+                  {effectiveRole === 'parent' ? null : (
                     <>
-                      {role !== 'teacher' && (
+                      {(effectiveRole !== 'teacher' || hasAdminOrManagement) && (
                         <MultiSelectDropdown
                           label=""
                           placeholder="Teacher"
@@ -2338,7 +2359,7 @@ const SyllabusTrackerPortal = ({
                         label=""
                         placeholder="Class"
                         options={
-                          role === 'teacher'
+                          effectiveRole === 'teacher' && !hasAdminOrManagement
                             ? classes
                                 .filter((c) =>
                                   assignments.some((a) => String(a.class_id) === String(c.id))
@@ -2421,7 +2442,7 @@ const SyllabusTrackerPortal = ({
 
                   {(() => {
                     const hasActiveFilters =
-                      (role !== 'parent' && role !== 'teacher' && upFilterTeachers.length > 0) ||
+                      (effectiveRole !== 'parent' && (effectiveRole !== 'teacher' || hasAdminOrManagement) && upFilterTeachers.length > 0) ||
                       upFilterClasses.length > 0 ||
                       upFilterClassifications.length > 0 ||
                       upFilterSubjects.length > 0 ||
@@ -2434,7 +2455,7 @@ const SyllabusTrackerPortal = ({
                     return (
                       <button
                         onClick={() => {
-                          if (role !== 'teacher') setUpFilterTeachers([]);
+                          if (effectiveRole !== 'teacher' || hasAdminOrManagement) setUpFilterTeachers([]);
                           setUpFilterClasses([]);
                           setUpFilterClassifications([]);
                           setUpFilterSubjects([]);
@@ -2566,11 +2587,13 @@ const SyllabusTrackerPortal = ({
             <div data-feature="upcoming-lessons">
               <UpcomingLessonsGrid
                 role={
-                  effectiveRoles.includes('teacher')
-                    ? 'teacher'
-                    : effectiveRoles.includes('parent')
-                      ? 'parent'
-                      : 'management'
+                  hasAdminOrManagement
+                    ? 'management'
+                    : isTeacher
+                      ? 'teacher'
+                      : isParent
+                        ? 'parent'
+                        : 'management'
                 }
                 userRoles={effectiveRoles}
                 student={student}
@@ -2612,7 +2635,7 @@ const SyllabusTrackerPortal = ({
         {dashboardOnly && (
           <div data-feature="overview">
             <SyllabusOverviewDashboard
-              role={role}
+              role={effectiveRole}
               classes={classes}
               subjects={subjects}
               books={books}
@@ -2653,12 +2676,15 @@ const SyllabusTrackerPortal = ({
             <div data-feature="syllabus-progress">
               <SyllabusProgressGrid
                 role={
-                  effectiveRoles.includes('teacher')
-                    ? 'teacher'
-                    : effectiveRoles.includes('parent')
-                      ? 'parent'
-                      : 'management'
+                  hasAdminOrManagement
+                    ? 'management'
+                    : isTeacher
+                      ? 'teacher'
+                      : isParent
+                        ? 'parent'
+                        : 'management'
                 }
+                userRoles={effectiveRoles}
                 student={student}
                 classesToRender={getClassesToRender()}
                 books={books}

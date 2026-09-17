@@ -33,7 +33,7 @@ const formatPortalRoles = (userOrRoles) => {
   );
 };
 
-export const ManagePortalUserRolesView = ({ currentUser }) => {
+export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
   const [authUsers, setAuthUsers] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -172,7 +172,6 @@ export const ManagePortalUserRolesView = ({ currentUser }) => {
           .update({
             auth_id: targetUserId,
             login_allowed: true,
-            mapped_roles: finalRoles,
           })
           .eq('id', targetEmpId);
       }
@@ -303,6 +302,17 @@ export const ManagePortalUserRolesView = ({ currentUser }) => {
 
         {/* Header Actions */}
         <div className="flex items-center gap-2.5 flex-wrap">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-3.5 py-2 border border-light-border bg-white hover:bg-gray-100 text-dark-primary rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <i className="fas fa-arrow-left"></i>
+              <span>Back to Portal</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleAutoLinkAuthAccounts}

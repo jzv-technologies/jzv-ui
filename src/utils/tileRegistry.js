@@ -46,7 +46,7 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-purple-200',
     group: 'Administration',
     action: 'subview',
-    valid_access_roles: ['admin'],
+    valid_access_roles: ['admin', 'management'],
     display_order: 35,
   },
 
@@ -448,7 +448,13 @@ export const resolveGroupInfo = (rawGroupName) => {
 
   let canonicalKey = cleaned;
 
-  if (lower === 'admin-only' || lower === 'administration' || lower === 'approvals') {
+  if (
+    lower === 'admin-only' ||
+    lower === 'administration' ||
+    lower === 'approvals' ||
+    lower === 'admin settings' ||
+    lower === 'admin-settings'
+  ) {
     canonicalKey = 'Administration';
   } else if (
     lower === 'syllabus' ||
