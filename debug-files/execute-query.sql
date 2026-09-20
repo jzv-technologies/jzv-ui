@@ -461,6 +461,41 @@ INSERT INTO app_view_controller (
     ARRAY['admin', 'management', 'teacher'],
     5,
     'Teacher personal classroom log and activity tab'
+  ),
+
+  -- Examination Views & Progress Report Components
+  (
+    'ward-exam-timetable',
+    'tile',
+    'Exam Timetable',
+    'Parent Portal',
+    true,
+    'readonly',
+    ARRAY['parent'],
+    25,
+    'Ward examination timetable and venue schedule for parents'
+  ),
+  (
+    'exam-results-tab-report',
+    'tab',
+    'Progress Reports Tab',
+    'exam-results',
+    true,
+    'none',
+    ARRAY['admin', 'management', 'coordinator', 'teacher'],
+    3,
+    'Progress report card generation, grade calculation, and print export tab'
+  ),
+  (
+    'exam-progress-report',
+    'tile',
+    'Progress Reports',
+    'Examinations',
+    true,
+    'none',
+    ARRAY['admin', 'management', 'coordinator', 'teacher'],
+    15,
+    'Official student progress report cards with customizable templates and charts'
   )
 
 ON CONFLICT (component_name) DO UPDATE
@@ -513,7 +548,129 @@ BEGIN
 END;
 $$;
 
+-- ============================================================================
+-- Examination System & Parent Portal Schema, RPC and Access Grants
+-- ============================================================================
+
+-- 1. Security Definer RPC for admin_configuration access via service role
+-- Since admin_configuration is a critical configuration table, clients access it exclusively through RPC calls.
+CREATE OR REPLACE FUNCTION public.get_admin_config(p_key text)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_val jsonb;
+BEGIN
+  BEGIN
+    SELECT val INTO v_val FROM public.admin_configuration WHERE key = p_key LIMIT 1;
+  EXCEPTION WHEN undefined_table THEN
+    BEGIN
+      SELECT val INTO v_val FROM public.admin_configruation WHERE key = p_key LIMIT 1;
+    EXCEPTION WHEN undefined_table THEN
+      v_val := NULL;
+    END;
+  END;
+  RETURN v_val;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.save_admin_config(p_key text, p_val jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  BEGIN
+    INSERT INTO public.admin_configuration (key, val, updated_at)
+    VALUES (p_key, p_val, NOW())
+    ON CONFLICT (key) DO UPDATE SET
+      val = EXCLUDED.val,
+      updated_at = NOW();
+  EXCEPTION WHEN undefined_table THEN
+    BEGIN
+      INSERT INTO public.admin_configruation (key, val, updated_at)
+      VALUES (p_key, p_val, NOW())
+      ON CONFLICT (key) DO UPDATE SET
+        val = EXCLUDED.val,
+        updated_at = NOW();
+    EXCEPTION WHEN undefined_table THEN
+      RETURN false;
+    END;
+  END;
+  RETURN true;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_admin_config(text) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.save_admin_config(text, jsonb) TO authenticated, service_role;
+
+-- 2. Row Level Security for Exam Schedules, Sessions, and Slots: Check either staff role or parent
+ALTER TABLE public.exam_schedules ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public view published exam schedules" ON public.exam_schedules;
+DROP POLICY IF EXISTS "exam_schedules_role_or_parent_select" ON public.exam_schedules;
+
+CREATE POLICY "exam_schedules_role_or_parent_select"
+ON public.exam_schedules FOR SELECT
+TO authenticated, anon
+USING (
+  has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'coordinator'::text, 'teacher'::text])
+  OR has_parent_role()
+  OR can_access_component('ward-exam-timetable'::text)
+  OR can_access_component('exam-sched-tab-parent'::text)
+  OR (status ILIKE 'published' AND (has_parent_role() OR can_access_component('ward-exam-timetable'::text)))
+);
+
+ALTER TABLE public.exam_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public view exam sessions" ON public.exam_sessions;
+DROP POLICY IF EXISTS "exam_sessions_role_or_parent_select" ON public.exam_sessions;
+
+CREATE POLICY "exam_sessions_role_or_parent_select"
+ON public.exam_sessions FOR SELECT
+TO authenticated, anon
+USING (
+  has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'coordinator'::text, 'teacher'::text])
+  OR has_parent_role()
+  OR can_access_component('ward-exam-timetable'::text)
+  OR can_access_component('exam-sched-tab-parent'::text)
+  OR can_access_component('exam-schedule'::text)
+);
+
+ALTER TABLE public.exam_schedule_slots ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public view exam slots" ON public.exam_schedule_slots;
+DROP POLICY IF EXISTS "exam_schedule_slots_role_or_parent_select" ON public.exam_schedule_slots;
+
+CREATE POLICY "exam_schedule_slots_role_or_parent_select"
+ON public.exam_schedule_slots FOR SELECT
+TO authenticated, anon
+USING (
+  has_any_role(VARIADIC ARRAY['admin'::text, 'management'::text, 'coordinator'::text, 'teacher'::text])
+  OR has_parent_role()
+  OR can_access_component('ward-exam-timetable'::text)
+  OR can_access_component('exam-sched-tab-parent'::text)
+  OR can_access_component('exam-schedule'::text)
+);
+
+-- 3. Register required view controller tiles for Parent Portal and Examination modules
+INSERT INTO public.app_view_controller (
+  component_name,
+  is_visible,
+  sort_order,
+  portal,
+  valid_access_roles,
+  description,
+  icon,
+  theme
+)
+VALUES 
+  ('ward-exam-timetable', true, 55, 'parent', ARRAY['parent', 'admin', 'management', 'coordinator'], 'Exam Timetable view for parents to track upcoming ward exam dates and sessions', 'fa-calendar-check', 'rose'),
+  ('exam-progress-report', true, 60, 'portal', ARRAY['admin', 'management', 'coordinator', 'teacher'], 'Student Progress Report Card generator with drag-and-drop template designer', 'fa-file-invoice', 'emerald'),
+  ('exam-results-tab-report', true, 70, 'portal', ARRAY['admin', 'management', 'coordinator', 'teacher'], 'Progress Report card generation tab inside Examination Results Manager', 'fa-id-card', 'indigo')
+ON CONFLICT (component_name) DO UPDATE SET
+  is_visible = EXCLUDED.is_visible,
+  valid_access_roles = EXCLUDED.valid_access_roles,
+  description = EXCLUDED.description;
+
 COMMIT;
-
-
-

@@ -4,11 +4,12 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import ConfirmModal from '../ConfirmModal';
 import { generateDateRange, formatDateDisplay } from '../../utils/dateUtils';
+import MultiSelectDropdown from '../MultiSelectDropdown';
 
 /**
  * Grid-based exam slot assignment.
  * Supports:
- * - Single Class view: timetable for selected class
+ * - Single Class view: timetable for selected class(es)
  * - All Classes view: multi-table view with one table per class
  * - Class-aware slot assigning, updating, conflict checks, and clearing
  * - Strict role-based editing enforcement
@@ -24,18 +25,23 @@ const ExamSchedulerGrid = ({
   onRefresh,
   readOnly = false,
   userRoles = [],
-  selectedClassId: externalSelectedClassId,
-  onSelectClass: externalOnSelectClass,
+  selectedClassIds: externalSelectedClassIds = [],
+  onSelectClasses: externalOnSelectClasses,
   hideClassSelector = false,
   viewMode: externalViewMode,
   onViewModeChange: externalOnViewModeChange,
 }) => {
-  const [internalSelectedClassId, setInternalSelectedClassId] = useState('');
-  const selectedClassId =
-    externalSelectedClassId !== undefined ? externalSelectedClassId : internalSelectedClassId;
-  const setSelectedClassId = externalOnSelectClass || setInternalSelectedClassId;
+  const [internalSelectedClassIds, setInternalSelectedClassIds] = useState([]);
+  const selectedClassIds =
+    externalSelectedClassIds && externalSelectedClassIds.length > 0
+      ? externalSelectedClassIds
+      : internalSelectedClassIds;
+  const setSelectedClassIds = externalOnSelectClasses || setInternalSelectedClassIds;
 
-  const [internalViewMode, setInternalViewMode] = useState('single');
+  // For backward compatibility - use first selected class as primary
+  const selectedClassId = selectedClassIds[0] || '';
+
+  const [internalViewMode, setInternalViewMode] = useState('all');
   const viewMode = externalViewMode !== undefined ? externalViewMode : internalViewMode;
   const setViewMode = externalOnViewModeChange || setInternalViewMode;
 
@@ -99,9 +105,7 @@ const ExamSchedulerGrid = ({
         .filter((cs) => String(cs.class_id) === String(classId) && cs.status === 'active')
         .map((cs) => String(cs.subject_id));
       const scheduledIds = new Set(
-        slots
-          .filter((s) => String(s.class_id) === String(classId))
-          .map((s) => String(s.subject_id))
+        slots.filter((s) => String(s.class_id) === String(classId)).map((s) => String(s.subject_id))
       );
       const scheduledCount = activeIds.filter((id) => scheduledIds.has(id)).length;
       return {
@@ -199,7 +203,10 @@ const ExamSchedulerGrid = ({
       };
 
       if (existing) {
-        const { error } = await supabase.from('exam_schedule_slots').update(payload).eq('id', existing.id);
+        const { error } = await supabase
+          .from('exam_schedule_slots')
+          .update(payload)
+          .eq('id', existing.id);
         if (error) throw error;
         showToast('Slot updated', 'success');
       } else {
@@ -356,7 +363,10 @@ const ExamSchedulerGrid = ({
                   Date
                 </th>
                 {sortedSessions.map((s) => (
-                  <th key={s.id} className="py-3 px-3 sm:px-4 text-center min-w-[120px] sm:min-w-[140px]">
+                  <th
+                    key={s.id}
+                    className="py-3 px-3 sm:px-4 text-center min-w-[120px] sm:min-w-[140px]"
+                  >
                     <div>{s.name}</div>
                     {s.start_time && (
                       <div className="text-[10px] font-normal text-dark-muted">
@@ -437,20 +447,8 @@ const ExamSchedulerGrid = ({
       {!hideClassSelector && (
         <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-3 rounded-2xl border border-light-border shadow-2xs">
           <div className="flex items-center gap-2">
-            {/* View toggle */}
+            {/* View toggle - All Classes first, then Selected Class */}
             <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-light-border">
-              <button
-                type="button"
-                onClick={() => setViewMode('single')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  viewMode === 'single'
-                    ? 'bg-white text-rose-700 shadow-xs'
-                    : 'text-dark-muted hover:text-dark-primary'
-                }`}
-              >
-                <i className="fas fa-chalkboard text-[10px]" />
-                <span>Selected Class</span>
-              </button>
               <button
                 type="button"
                 onClick={() => setViewMode('all')}
@@ -463,34 +461,43 @@ const ExamSchedulerGrid = ({
                 <i className="fas fa-layer-group text-[10px]" />
                 <span>All Classes</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('single')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'single'
+                    ? 'bg-white text-rose-700 shadow-xs'
+                    : 'text-dark-muted hover:text-dark-primary'
+                }`}
+              >
+                <i className="fas fa-chalkboard text-[10px]" />
+                <span>Selected Class</span>
+              </button>
             </div>
 
             {viewMode === 'single' && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-bold text-dark-slate whitespace-nowrap">Class:</label>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-rose-300 min-w-[140px]"
-                >
-                  <option value="">— Select class —</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <MultiSelectDropdown
+                label="Classes"
+                options={classes.map((c) => ({ id: c.id, label: c.name }))}
+                selected={selectedClassIds}
+                onChange={setSelectedClassIds}
+                placeholder="Select classes..."
+                fullWidth={false}
+              />
             )}
           </div>
 
-          {viewMode === 'single' && selectedClassId && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 rounded-xl border border-rose-200">
-              <i className="fas fa-chart-pie text-rose-500 text-xs" />
-              <span className="text-xs font-bold text-rose-700">
-                {getClassCoverage(selectedClassId).scheduled} /{' '}
-                {getClassCoverage(selectedClassId).total} subjects scheduled
-              </span>
+          {viewMode === 'single' && selectedClassIds.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 rounded-xl border border-rose-200 flex-wrap">
+              {selectedClassIds.map((classId) => {
+                const cls = classes.find((c) => String(c.id) === String(classId));
+                const coverage = getClassCoverage(classId);
+                return (
+                  <span key={classId} className="text-xs font-bold text-rose-700">
+                    {cls?.name}: {coverage.scheduled} / {coverage.total} subjects
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
@@ -577,11 +584,22 @@ const ExamSchedulerGrid = ({
             filteredClasses.map((cls) => renderGridTable(cls, false))
           )}
         </div>
+      ) : // Single view mode - render tables for all selected classes
+      selectedClassIds.length === 0 ? (
+        <div className="text-center py-12 bg-white border border-light-border rounded-2xl sm:rounded-3xl">
+          <i className="fas fa-chalkboard text-3xl text-slate-300 mb-3 block" />
+          <p className="text-sm font-bold text-dark-deepblue">No class selected</p>
+          <p className="text-xs text-dark-muted mt-1">
+            Please select one or more classes above to view or edit their exam timetable.
+          </p>
+        </div>
       ) : (
-        renderGridTable(
-          classes.find((c) => String(c.id) === String(selectedClassId)),
-          true
-        )
+        <div className="space-y-4">
+          {selectedClassIds.map((classId) => {
+            const cls = classes.find((c) => String(c.id) === String(classId));
+            return renderGridTable(cls, true);
+          })}
+        </div>
       )}
 
       {/* Cell assignment / read-only details modal */}

@@ -25,14 +25,41 @@ export const parseLocalDate = (dateStr) => {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
   const str = String(dateStr).trim();
-  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  // If it's a full ISO timestamp with time component (contains 'T' or space with time):
+  if (str.includes('T') || (str.includes(' ') && str.includes(':'))) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      // Return a date pinned to noon in local time for that exact local calendar date
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+    }
+  }
+
+  // Pure calendar date YYYY-MM-DD
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) {
     const [, y, m, d] = match;
-    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    // Set to 12:00:00 noon local time so timezone fluctuations never cross midnight
+    const date = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0);
     return isNaN(date.getTime()) ? null : date;
   }
-  const fallback = new Date(dateStr);
-  return isNaN(fallback.getTime()) ? null : fallback;
+
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate(), 12, 0, 0);
+  }
+  return null;
+};
+
+/**
+ * Normalizes any date input into a clean YYYY-MM-DD string
+ * @param {string|Date} dateStr
+ * @returns {string}
+ */
+export const normalizeDateStr = (dateStr) => {
+  if (!dateStr) return '';
+  const d = parseLocalDate(dateStr);
+  return d ? formatLocalDateStr(d) : '';
 };
 
 /**

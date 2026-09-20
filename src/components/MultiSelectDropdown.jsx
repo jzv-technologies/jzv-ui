@@ -17,7 +17,8 @@ const useDropdownPortal = () => {
     const viewportW = window.innerWidth;
     const viewportH = window.innerHeight;
 
-    const desiredWidth = Math.max(180, Math.min(280, Math.floor(rect.width)));
+    const naturalWidth = Math.max(Math.floor(rect.width), 320);
+    const desiredWidth = Math.max(240, Math.min(460, naturalWidth));
     const panelWidth = Math.min(desiredWidth, viewportW - 20);
 
     // Calculate left: align with trigger left if possible, but clamp safely
@@ -270,7 +271,8 @@ const MultiSelectDropdown = ({
               return (
                 <label
                   key={val}
-                  className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-all text-xs font-bold hover:bg-brand-primary/5 ${
+                  title={getOptLabel(opt)}
+                  className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-all text-xs font-bold hover:bg-brand-primary/5 ${
                     isChecked ? 'bg-brand-primary/10 text-brand-primary' : 'text-gray-750'
                   }`}
                 >
@@ -278,15 +280,15 @@ const MultiSelectDropdown = ({
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => toggle(val)}
-                    className="rounded text-brand-primary focus:ring-brand-primary/50 w-3.5 h-3.5 shrink-0 cursor-pointer"
+                    className="rounded text-brand-primary focus:ring-brand-primary/50 w-3.5 h-3.5 mt-0.5 shrink-0 cursor-pointer"
                   />
                   {prefixIcon && (
                     <i
-                      className={`fas ${prefixIcon} text-[9px] shrink-0`}
+                      className={`fas ${prefixIcon} text-[9px] mt-1 shrink-0`}
                       style={{ color: prefixColor }}
                     />
                   )}
-                  <span className="truncate">{getOptLabel(opt)}</span>
+                  <span className="break-words leading-tight flex-1 text-left">{getOptLabel(opt)}</span>
                 </label>
               );
             })

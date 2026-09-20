@@ -9,6 +9,7 @@ import ExamTeacherView from './ExamTeacherView';
 import ExamCoverageDashboard from './ExamCoverageDashboard';
 import ExamNoticeBoardPrint from './ExamNoticeBoardPrint';
 import ParentExamTimetableView from './ParentExamTimetableView';
+import MultiSelectDropdown from '../MultiSelectDropdown';
 
 const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   const canAccess = useCanAccess(userRoles);
@@ -73,10 +74,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
 
   // Ensure activeTab is always one of the permitted availableTabs
   useEffect(() => {
-    if (
-      availableTabs.length > 0 &&
-      !availableTabs.some((t) => t.id === activeTab)
-    ) {
+    if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
       setActiveTab(availableTabs[0].id);
     }
   }, [availableTabs, activeTab]);
@@ -94,9 +92,18 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   const [selectedScheduleId, setSelectedScheduleId] = useState(null);
 
   // Dynamic selectors (class & teacher) & view mode
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [selectedTeacherId, setSelectedTeacherId] = useState('');
-  const [schedulerViewMode, setSchedulerViewMode] = useState('single'); // 'single' | 'all'
+  const [selectedClassIds, setSelectedClassIds] = useState([]);
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
+  const [schedulerViewMode, setSchedulerViewMode] = useState('all'); // 'single' | 'all' - default to 'all'
+
+  // Notice board controls state (single line integration)
+  const [noticeBoardViewMode, setNoticeBoardViewMode] = useState('table'); // 'table' | 'scheduler' | 'class-cards'
+  const [noticeBoardOrientation, setNoticeBoardOrientation] = useState('landscape'); // 'landscape' | 'portrait'
+  const [noticeBoardClassIds, setNoticeBoardClassIds] = useState([]);
+  const [showNoticeBoardConfigModal, setShowNoticeBoardConfigModal] = useState(false);
+
+  // For backward compatibility - use first selected class as primary
+  const selectedClassId = selectedClassIds[0] || '';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -146,7 +153,8 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     setClassSubjects(dbClassSubjects);
 
     if (dbClasses.length > 0) {
-      setSelectedClassId((prev) => prev || String(dbClasses[0].id));
+      setSelectedClassIds((prev) => (prev.length > 0 ? prev : [String(dbClasses[0].id)]));
+      setNoticeBoardClassIds((prev) => (prev.length > 0 ? prev : dbClasses.map((c) => String(c.id))));
     }
   }, []);
 
@@ -202,10 +210,10 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   }, [teachers, selectedSlots]);
 
   useEffect(() => {
-    if (!selectedTeacherId && activeTeachersForExam.length > 0) {
-      setSelectedTeacherId(String(activeTeachersForExam[0].id));
+    if (selectedTeacherIds.length === 0 && activeTeachersForExam.length > 0) {
+      setSelectedTeacherIds([String(activeTeachersForExam[0].id)]);
     }
-  }, [activeTeachersForExam, selectedTeacherId]);
+  }, [activeTeachersForExam, selectedTeacherIds]);
 
   // Coverage details for currently selected class in scheduler
   const scheduledSubjectIdsForClass = useMemo(() => {
@@ -228,9 +236,9 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   }, [classSubjects, selectedClassId, subjects]);
 
   const teacherAssignmentsCount = useMemo(() => {
-    if (!selectedTeacherId) return null;
-    return selectedSlots.filter((s) => String(s.teacher_id) === String(selectedTeacherId)).length;
-  }, [selectedSlots, selectedTeacherId]);
+    if (selectedTeacherIds.length === 0) return null;
+    return selectedSlots.filter((s) => selectedTeacherIds.includes(String(s.teacher_id))).length;
+  }, [selectedSlots, selectedTeacherIds]);
 
   const handleRefresh = async () => {
     await loadExamData();
@@ -284,7 +292,10 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   }
 
   return (
-    <div className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300" data-feature="exam-schedule">
+    <div
+      className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300"
+      data-feature="exam-schedule"
+    >
       {/* ── 1. Top Header (Full width, flush to breadcrumbs, no rounded corners) ── */}
       <div className="w-full bg-white border-b border-light-border rounded-none px-4 sm:px-6 py-3 print:hidden shadow-2xs space-y-3">
         {/* Row 1: Title, Exam Badge, and Active Exam Selector / Refresh */}
@@ -363,7 +374,10 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
         {/* Row 2: Subview Selectors on the LEFT, Dynamic Selectors on the RIGHT */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-2 border-t border-slate-100">
           {/* Subview Selectors (Tabs) */}
-          <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full shrink-0" data-feature-tab="exam-schedule-tabs">
+          <div
+            className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full shrink-0"
+            data-feature-tab="exam-schedule-tabs"
+          >
             {availableTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -381,7 +395,10 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
           </div>
 
           {/* Dynamic Selectors on the Right Side */}
-          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end" data-feature-filter={activeTab}>
+          <div
+            className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-start lg:justify-end"
+            data-feature-filter={activeTab}
+          >
             {activeTab === 'scheduler' && (
               <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 {/* View Mode Toggle: Selected Class vs All Classes */}
@@ -418,26 +435,24 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
 
                 {schedulerViewMode === 'single' ? (
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1 rounded-xl shrink-0">
-                      <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                        Class:
-                      </span>
-                      <select
-                        value={selectedClassId}
-                        onChange={(e) => setSelectedClassId(e.target.value)}
-                        className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer min-w-[110px] sm:min-w-[130px]"
-                      >
-                        <option value="">— Select class —</option>
-                        {classes.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedClassId && (
+                    <MultiSelectDropdown
+                      label="Classes"
+                      options={classes.map((c) => ({ id: c.id, label: c.name }))}
+                      selected={selectedClassIds}
+                      onChange={setSelectedClassIds}
+                      placeholder="Select classes..."
+                      fullWidth={false}
+                    />
+                    {selectedClassIds.length > 0 && (
                       <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap shrink-0">
-                        {scheduledSubjectIdsForClass.size} / {subjectsForClass.length} scheduled
+                        {selectedClassIds
+                          .map((id) => {
+                            const cls = classes.find((c) => String(c.id) === String(id));
+                            const scheduled = scheduledSubjectIdsForClass.size; // This is for first class only
+                            const total = subjectsForClass.length; // This is for first class only
+                            return `${cls?.name}: ${scheduled} / ${total}`;
+                          })
+                          .join(', ')}
                       </span>
                     )}
                   </div>
@@ -451,24 +466,15 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
 
             {activeTab === 'teacher' && (
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1 rounded-xl shrink-0">
-                  <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                    Teacher:
-                  </span>
-                  <select
-                    value={selectedTeacherId}
-                    onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer min-w-[140px] sm:min-w-[160px]"
-                  >
-                    <option value="">— Select teacher —</option>
-                    {activeTeachersForExam.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {selectedTeacherId && teacherAssignmentsCount !== null && (
+                <MultiSelectDropdown
+                  label="Teachers"
+                  options={activeTeachersForExam.map((t) => ({ id: t.id, label: t.name }))}
+                  selected={selectedTeacherIds}
+                  onChange={setSelectedTeacherIds}
+                  placeholder="Select teachers..."
+                  fullWidth={false}
+                />
+                {selectedTeacherIds.length > 0 && teacherAssignmentsCount !== null && (
                   <span className="text-xs font-bold text-dark-muted px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
                     {teacherAssignmentsCount} duties assigned
                   </span>
@@ -483,22 +489,127 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
             )}
 
             {activeTab === 'notice_print' && (
-              <span className="text-xs font-bold text-dark-muted">
-                {classes.length} Total Classes Available
-              </span>
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                {/* View Mode Pills */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200/60 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardViewMode('table')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      noticeBoardViewMode === 'table'
+                        ? 'bg-white text-purple-800 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Consolidated Table Matrix"
+                  >
+                    <i className="fas fa-table-cells mr-1 text-[10px]" />
+                    <span>Table</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardViewMode('scheduler')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      noticeBoardViewMode === 'scheduler'
+                        ? 'bg-white text-purple-800 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Schedule Cards View"
+                  >
+                    <i className="fas fa-calendar-alt mr-1 text-[10px]" />
+                    <span>Schedule</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardViewMode('class-cards')}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      noticeBoardViewMode === 'class-cards'
+                        ? 'bg-white text-purple-800 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                    title="Individual Class Cards"
+                  >
+                    <i className="fas fa-id-card mr-1 text-[10px]" />
+                    <span>Cards</span>
+                  </button>
+                </div>
+
+                {/* Class Filter */}
+                <div className="min-w-[140px] max-w-[200px]">
+                  <MultiSelectDropdown
+                    label="Classes"
+                    options={classes.map((c) => ({ id: c.id, label: c.name }))}
+                    selected={noticeBoardClassIds}
+                    onChange={setNoticeBoardClassIds}
+                    placeholder="Select classes..."
+                    fullWidth={false}
+                  />
+                </div>
+
+                {/* Print Orientation Selector */}
+                <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200/60 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardOrientation('landscape')}
+                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                      noticeBoardOrientation === 'landscape'
+                        ? 'bg-white text-purple-800 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                    title="Print Landscape"
+                  >
+                    <i className="fas fa-file-lines text-xs fa-rotate-270" />
+                    <span className="hidden sm:inline">Landscape</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNoticeBoardOrientation('portrait')}
+                    className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
+                      noticeBoardOrientation === 'portrait'
+                        ? 'bg-white text-purple-800 shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                    title="Print Portrait"
+                  >
+                    <i className="fas fa-file-lines text-xs" />
+                    <span className="hidden sm:inline">Portrait</span>
+                  </button>
+                </div>
+
+                {/* Gear Icon for Config */}
+                <button
+                  type="button"
+                  onClick={() => setShowNoticeBoardConfigModal(true)}
+                  className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-all cursor-pointer shadow-2xs shrink-0"
+                  title="Notice Board Design Settings"
+                >
+                  <i className="fas fa-cog text-xs" />
+                </button>
+
+                {/* Print Button */}
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  disabled={noticeBoardClassIds.length === 0}
+                  className="px-3 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                >
+                  <i className="fas fa-print text-xs" />
+                  <span>Print</span>
+                </button>
+              </div>
             )}
 
             {activeTab === 'parent_ward' && (
-              <span className="text-xs font-bold text-dark-muted">
-                Parent Ward Exam Schedule
-              </span>
+              <span className="text-xs font-bold text-dark-muted">Parent Ward Exam Schedule</span>
             )}
           </div>
         </div>
       </div>
 
       {/* ── 2. Actual Data Table / Subviews governed by ConditionalBlock ── */}
-      <div className="w-full p-4 sm:p-6 flex-1 animate-in fade-in duration-200" data-feature="exam-schedule-content">
+      <div
+        className="w-full p-4 sm:p-6 flex-1 animate-in fade-in duration-200"
+        data-feature="exam-schedule-content"
+      >
         {activeTab === 'setup' && (
           <ConditionalBlock name="exam-sched-tab-setup" roles={userRoles}>
             <ExamScheduleSetup
@@ -525,8 +636,8 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 onRefresh={handleRefresh}
                 readOnly={!canEditSchedule}
                 userRoles={userRoles}
-                selectedClassId={selectedClassId}
-                onSelectClass={setSelectedClassId}
+                selectedClassIds={selectedClassIds}
+                onSelectClasses={setSelectedClassIds}
                 hideClassSelector={true}
                 viewMode={schedulerViewMode}
                 onViewModeChange={setSchedulerViewMode}
@@ -555,8 +666,8 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 subjects={subjects}
                 teachers={teachers}
                 slots={selectedSlots}
-                selectedTeacherId={selectedTeacherId}
-                onSelectTeacher={setSelectedTeacherId}
+                selectedTeacherIds={selectedTeacherIds}
+                onSelectTeachers={setSelectedTeacherIds}
                 hideTeacherSelector={true}
               />
             ) : (
@@ -598,6 +709,15 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 subjects={subjects}
                 teachers={teachers}
                 slots={selectedSlots}
+                viewMode={noticeBoardViewMode}
+                onViewModeChange={setNoticeBoardViewMode}
+                printOrientation={noticeBoardOrientation}
+                onPrintOrientationChange={setNoticeBoardOrientation}
+                selectedClassIds={noticeBoardClassIds}
+                onSelectClassIds={setNoticeBoardClassIds}
+                showConfigModal={showNoticeBoardConfigModal}
+                onCloseConfigModal={() => setShowNoticeBoardConfigModal(false)}
+                hideHeader={true}
               />
             ) : (
               <div className="text-center py-16 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm">
@@ -620,4 +740,3 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
 };
 
 export default ExamScheduleManager;
-

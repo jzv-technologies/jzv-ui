@@ -69,3 +69,24 @@ export async function fetchAllPages(tableName, selectFields = '*', configureQuer
   return { data: allData, error: null };
 }
 
+/**
+ * In-flight request deduplication helper.
+ * Prevents identical network calls when page is activated or multiple components mount.
+ */
+const inFlightRequests = new Map();
+
+export function dedupedQuery(queryKey, queryFn, ttlMs = 1500) {
+  if (inFlightRequests.has(queryKey)) {
+    return inFlightRequests.get(queryKey);
+  }
+
+  const promise = queryFn().finally(() => {
+    setTimeout(() => {
+      inFlightRequests.delete(queryKey);
+    }, ttlMs);
+  });
+
+  inFlightRequests.set(queryKey, promise);
+  return promise;
+}
+

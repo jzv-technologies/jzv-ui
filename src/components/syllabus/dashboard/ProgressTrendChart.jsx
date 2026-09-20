@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import MultiSelectDropdown from '../../MultiSelectDropdown';
 import {
   Bar,
   CartesianGrid,
@@ -89,7 +90,7 @@ const ProgressTrendChart = ({
     return classList.length > 0 ? classList[0].id : '';
   });
 
-  const [selectedBookId, setSelectedBookId] = useState('all'); // 'all' | bookId
+  const [selectedBookIds, setSelectedBookIds] = useState([]); // Empty array = all books
 
   // Default metric type: percentage (% Cumulative)
   const [metricType, setMetricType] = useState('percentage'); // 'percentage' | 'lessons'
@@ -104,11 +105,12 @@ const ProgressTrendChart = ({
   const { byClass = {}, weekWindows = [] } = bookWeeklyData;
   const currentClassBooks = byClass[activeClassId] || [];
 
-  // Filter books based on book selector (defaults to 'all')
+  // Filter books based on book selector (defaults to 'all' if empty)
   const filteredBooks = useMemo(() => {
-    if (selectedBookId === 'all') return currentClassBooks;
-    return currentClassBooks.filter((b) => String(b.bookId) === String(selectedBookId));
-  }, [currentClassBooks, selectedBookId]);
+    if (!selectedBookIds || selectedBookIds.length === 0) return currentClassBooks;
+    const idsSet = new Set(selectedBookIds.map(String));
+    return currentClassBooks.filter((b) => idsSet.has(String(b.bookId)));
+  }, [currentClassBooks, selectedBookIds]);
 
   const chartData = useMemo(() => {
     return filteredBooks.map((book) => {
@@ -116,7 +118,7 @@ const ProgressTrendChart = ({
       const sName = book.subjectName || 'Subject';
       const entry = {
         bookId: book.bookId,
-        name: bName.length > 20 ? `${bName.slice(0, 18)}…` : bName,
+        name: bName.length > 32 ? `${bName.slice(0, 30)}…` : bName,
         fullName: `${sName} · ${bName}`,
         subject: sName,
         totalLessons: book.totalLessons || 0,
@@ -217,7 +219,7 @@ const ProgressTrendChart = ({
             value={activeClassId}
             onChange={(e) => {
               setSelectedClassId(e.target.value);
-              setSelectedBookId('all'); // Reset book filter on class change
+              setSelectedBookIds([]); // Reset book filter on class change
             }}
             className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:ring-1 focus:ring-brand-primary"
           >
@@ -228,19 +230,20 @@ const ProgressTrendChart = ({
             ))}
           </select>
 
-          {/* Book Filter Dropdown (Default: All) */}
-          <select
-            value={selectedBookId}
-            onChange={(e) => setSelectedBookId(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary focus:ring-1 focus:ring-brand-primary max-w-[200px] truncate"
-          >
-            <option value="all">All Books ({currentClassBooks.length})</option>
-            {currentClassBooks.map((b) => (
-              <option key={b.bookId} value={b.bookId}>
-                {b.subjectName} · {b.bookName}
-              </option>
-            ))}
-          </select>
+          {/* Book Filter MultiSelectDropdown (Default: All) */}
+          <div className="min-w-[220px] max-w-[340px] sm:max-w-[420px]">
+            <MultiSelectDropdown
+              label="Books"
+              options={currentClassBooks.map((b) => ({
+                id: b.bookId,
+                label: `${b.subjectName} · ${b.bookName}`,
+              }))}
+              selected={selectedBookIds}
+              onChange={setSelectedBookIds}
+              placeholder="All Books"
+              fullWidth={false}
+            />
+          </div>
         </div>
       </div>
 
@@ -250,17 +253,18 @@ const ProgressTrendChart = ({
           No mapped books or progress logs found for this selection.
         </div>
       ) : (
-        <div className="h-[360px] w-full">
+        <div className="h-[390px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 25 }}>
+            <ComposedChart data={chartData} margin={{ top: 24, right: 20, left: 0, bottom: 50 }}>
               <Customized component={(chartProps) => <CustomBackgroundBands {...chartProps} data={chartData} />} />
               <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11, fontWeight: 700, fill: '#4b5563' }}
+                tick={{ fontSize: 10, fontWeight: 700, fill: '#4b5563' }}
                 interval={0}
-                angle={-15}
+                angle={-25}
                 textAnchor="end"
+                height={65}
               />
               <YAxis
                 tick={{ fontSize: 11, fontWeight: 700, fill: '#6b7280' }}

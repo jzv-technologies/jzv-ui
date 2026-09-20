@@ -5,97 +5,110 @@ import { showToast } from '../../utils/toast';
 import { ConditionalBlock } from '../portal-shared/ConditionalBlock';
 
 /**
- * Enhanced Mark Entry Grid for a single subject.
- * Features:
- * - Vertical keyboard navigation (Enter / ArrowDown to next student, ArrowUp to previous)
- * - Auto-select on focus for instant typing without backspacing
- * - 'A' / 'a' key shortcut to mark Absent and advance
- * - Quick student search by name / admission number
- * - Quick batch actions: Fill Remaining, Mark Remaining Absent, Clear All
- * - Live progress bar, grade validation, and summary metrics
- * - Mobile numeric keypad mode (inputMode="decimal")
+ * Multi-Subject Mark Entry Grid
+ * Displays all selected subjects in a single comprehensive table view.
+ * 
+ * Capabilities:
+ * - Columns for all selected subjects side-by-side
+ * - Per-subject column editing permission (subject teacher, invigilator, coordinator)
+ * - Read-only display with lock indicator for unauthorized subjects
+ * - Keyboard navigation (Enter / ArrowDown to next student, ArrowRight / Tab to next subject)
+ * - Quick batch actions: Fill Remaining, Mark Remaining Absent
+ * - Live calculations: Student Total, %, Pass/Fail status
+ * - Instant debounced saving to Supabase with real-time feedback
  */
 const ExamResultsEntryGrid = ({
-  result,
-  students,
+  results = [], // Array of result objects
+  subjects = [], // Array of subject objects
+  students = [],
   onStatusUpdate,
-  canEdit = true,
-  invigilatorName = '',
+  canEditMap = {}, // Object mapping resultId -> boolean
+  invigilatorNames = {}, // Object mapping resultId -> invigilator name
   canOverrideInvigilator = false,
   isCoordinator = false,
-  onNextSubject = null,
-  hasNextSubject = false,
-  nextSubjectName = '',
   userRoles = [],
 }) => {
-  const hasOverrideAccess = canOverrideInvigilator || isCoordinator;
-  const [entries, setEntries] = useState([]);
+  // allEntries structure: { [resultId]: { [studentId]: entryObject } }
+  const [allEntries, setAllEntries] = useState({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(new Set());
+  const [savingCells, setSavingCells] = useState(new Set()); // Set of "resultId_studentId"
   const [searchQuery, setSearchQuery] = useState('');
-  const [quickFillValue, setQuickFillValue] = useState('');
   const [showQuickFillModal, setShowQuickFillModal] = useState(false);
-  const debounceTimers = useRef({});
-  const inputRefs = useRef({});
+  const [quickFillSubjectId, setQuickFillSubjectId] = useState(results[0]?.id || '');
+  const [quickFillValue, setQuickFillValue] = useState('');
 
-  const loadEntries = useCallback(async () => {
+  const debounceTimers = useRef({});
+  const inputRefs = useRef({}); // "rowIdx_colIdx" -> input DOM element
+
+  // Load entries for all selected results from DB
+  const loadAllEntries = useCallback(async () => {
+    if (!results || results.length === 0) {
+      setAllEntries({});
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
+      const resultIds = results.map((r) => r.id);
       const { data, error } = await supabase
         .from('exam_result_entries')
         .select('*')
-        .eq('result_id', result.id);
+        .in('result_id', resultIds);
+
       if (error) throw error;
 
-      // Build a full row for every student (even if not yet entered)
-      const entryMap = {};
-      (data || []).forEach((e) => {
-        entryMap[String(e.student_id)] = e;
+      const entriesMap = {};
+      results.forEach((r) => {
+        entriesMap[String(r.id)] = {};
       });
 
-      const rows = students.map((stu) => ({
-        student_id: stu.id,
-        student_name: stu.student_name,
-        admission_no: stu.admission_no,
-        ...(entryMap[String(stu.id)] || {
-          id: null,
-          result_id: result.id,
-          marks_obtained: '',
-          is_absent: false,
-          remarks: '',
-        }),
-      }));
+      (data || []).forEach((entry) => {
+        const rId = String(entry.result_id);
+        const sId = String(entry.student_id);
+        if (entriesMap[rId]) {
+          entriesMap[rId][sId] = entry;
+        }
+      });
 
-      setEntries(rows);
+      setAllEntries(entriesMap);
     } catch (err) {
-      showToast('Failed to load entries', 'error');
+      console.error('Failed to load exam entries:', err);
+      showToast('Failed to load marks entries', 'error');
     } finally {
       setLoading(false);
     }
-  }, [result.id, students]);
+  }, [results]);
 
   useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
+    loadAllEntries();
+  }, [loadAllEntries]);
 
-  const saveEntry = useCallback(
-    async (studentId, patch) => {
-      if (!canEdit) return;
-      setSaving((prev) => new Set(prev).add(studentId));
+  // Save a single entry to DB
+  const saveCellEntry = useCallback(
+    async (resultId, studentId, patch) => {
+      const cellKey = `${resultId}_${studentId}`;
+      setSavingCells((prev) => new Set(prev).add(cellKey));
+
       try {
-        const existing = entries.find((e) => String(e.student_id) === String(studentId));
+        const currentResultEntries = allEntries[String(resultId)] || {};
+        const existing = currentResultEntries[String(studentId)];
+
+        const marksVal =
+          patch.marks_obtained !== undefined ? patch.marks_obtained : existing?.marks_obtained;
+        const isAbsentVal =
+          patch.is_absent !== undefined ? patch.is_absent : existing?.is_absent || false;
+        const remarksVal =
+          patch.remarks !== undefined ? patch.remarks : existing?.remarks || null;
+
         const payload = {
-          result_id: result.id,
+          result_id: Number(resultId),
           student_id: Number(studentId),
-          marks_obtained: patch.is_absent
-            ? null
-            : patch.marks_obtained !== '' &&
-                patch.marks_obtained !== null &&
-                patch.marks_obtained !== undefined
-              ? Number(patch.marks_obtained)
-              : null,
-          is_absent: patch.is_absent ?? existing?.is_absent ?? false,
-          remarks: patch.remarks ?? existing?.remarks ?? null,
+          marks_obtained:
+            isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
+              ? null
+              : Number(marksVal),
+          is_absent: Boolean(isAbsentVal),
+          remarks: remarksVal,
         };
 
         if (existing?.id) {
@@ -111,229 +124,254 @@ const ExamResultsEntryGrid = ({
             .select()
             .single();
           if (error) throw error;
-          setEntries((prev) =>
-            prev.map((e) =>
-              String(e.student_id) === String(studentId) ? { ...e, id: data.id, ...patch } : e
-            )
-          );
+
+          // Update local ID
+          setAllEntries((prev) => {
+            const next = { ...prev };
+            if (!next[String(resultId)]) next[String(resultId)] = {};
+            next[String(resultId)] = {
+              ...next[String(resultId)],
+              [String(studentId)]: { ...payload, id: data.id },
+            };
+            return next;
+          });
         }
 
-        // Check if all students are entered and update result status
-        const allEntries = entries.map((e) =>
-          String(e.student_id) === String(studentId) ? { ...e, ...patch } : e
-        );
-        const allFilled = allEntries.every(
-          (e) =>
-            e.is_absent ||
-            (e.marks_obtained !== '' && e.marks_obtained !== null && e.marks_obtained !== undefined)
-        );
+        // Check if all students for this result are filled
+        const updatedEntries = {
+          ...currentResultEntries,
+          [String(studentId)]: { ...(existing || {}), ...payload },
+        };
+        const allStudentIds = students.map((s) => String(s.id));
+        const allFilled = allStudentIds.every((sId) => {
+          const e = updatedEntries[sId];
+          return e && (e.is_absent || (e.marks_obtained !== null && e.marks_obtained !== ''));
+        });
 
         if (allFilled && onStatusUpdate) {
-          onStatusUpdate(result.id, 'completed');
+          onStatusUpdate(Number(resultId), 'completed');
         } else if (
-          allEntries.some((e) => e.is_absent || e.marks_obtained !== '') &&
+          allStudentIds.some((sId) => {
+            const e = updatedEntries[sId];
+            return e && (e.is_absent || e.marks_obtained !== null);
+          }) &&
           onStatusUpdate
         ) {
-          onStatusUpdate(result.id, 'in_progress');
+          onStatusUpdate(Number(resultId), 'in_progress');
         }
       } catch (err) {
-        showToast(err.message || 'Save failed', 'error');
+        console.error('Save cell error:', err);
+        showToast('Save failed: ' + err.message, 'error');
       } finally {
-        setSaving((prev) => {
+        setSavingCells((prev) => {
           const next = new Set(prev);
-          next.delete(studentId);
+          next.delete(cellKey);
           return next;
         });
       }
     },
-    [canEdit, entries, result.id, onStatusUpdate]
+    [allEntries, students, onStatusUpdate]
   );
 
-  const handleMarksChange = (studentId, value) => {
-    setEntries((prev) =>
-      prev.map((e) =>
-        String(e.student_id) === String(studentId) ? { ...e, marks_obtained: value } : e
-      )
-    );
-    clearTimeout(debounceTimers.current[studentId]);
-    debounceTimers.current[studentId] = setTimeout(() => {
-      saveEntry(studentId, { marks_obtained: value });
-    }, 600);
+  // Handle local marks edit with debouncing
+  const handleMarksChange = (resultId, studentId, value) => {
+    // Update local state immediately for responsive typing
+    setAllEntries((prev) => {
+      const next = { ...prev };
+      const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
+      const existing = currentRes[String(studentId)] || { student_id: studentId, result_id: resultId };
+      currentRes[String(studentId)] = { ...existing, marks_obtained: value, is_absent: false };
+      next[String(resultId)] = currentRes;
+      return next;
+    });
+
+    const timerKey = `${resultId}_${studentId}`;
+    clearTimeout(debounceTimers.current[timerKey]);
+    debounceTimers.current[timerKey] = setTimeout(() => {
+      saveCellEntry(resultId, studentId, { marks_obtained: value, is_absent: false });
+    }, 500);
   };
 
-  const handleAbsentToggle = (studentId, checked) => {
-    setEntries((prev) =>
-      prev.map((e) =>
-        String(e.student_id) === String(studentId)
-          ? { ...e, is_absent: checked, marks_obtained: checked ? '' : e.marks_obtained }
-          : e
-      )
-    );
-    saveEntry(studentId, { is_absent: checked, marks_obtained: checked ? null : undefined });
+  // Toggle absent state
+  const handleAbsentToggle = (resultId, studentId) => {
+    const current = allEntries[String(resultId)]?.[String(studentId)];
+    const newAbsent = !current?.is_absent;
+
+    setAllEntries((prev) => {
+      const next = { ...prev };
+      const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
+      const existing = currentRes[String(studentId)] || { student_id: studentId, result_id: resultId };
+      currentRes[String(studentId)] = {
+        ...existing,
+        is_absent: newAbsent,
+        marks_obtained: newAbsent ? '' : existing.marks_obtained,
+      };
+      next[String(resultId)] = currentRes;
+      return next;
+    });
+
+    saveCellEntry(resultId, studentId, {
+      is_absent: newAbsent,
+      marks_obtained: newAbsent ? null : current?.marks_obtained,
+    });
   };
 
-  const handleRemarksChange = (studentId, value) => {
-    setEntries((prev) =>
-      prev.map((e) => (String(e.student_id) === String(studentId) ? { ...e, remarks: value } : e))
-    );
-    clearTimeout(debounceTimers.current[`remarks_${studentId}`]);
-    debounceTimers.current[`remarks_${studentId}`] = setTimeout(() => {
-      saveEntry(studentId, { remarks: value });
-    }, 1000);
-  };
-
-  // Filter entries based on search query
-  const filteredEntries = useMemo(() => {
-    if (!searchQuery.trim()) return entries;
-    const q = searchQuery.toLowerCase().trim();
-    return entries.filter(
-      (e) =>
-        (e.student_name || '').toLowerCase().includes(q) ||
-        (e.admission_no || '').toLowerCase().includes(q)
-    );
-  }, [entries, searchQuery]);
-
-  // Keyboard navigation for rapid marks entry
-  const handleKeyDown = (e, index, studentId) => {
-    // Arrow Down or Enter or Tab: Go to next student
-    if (e.key === 'Enter' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
+  // Keyboard navigation across cells
+  const handleKeyDown = (e, rowIdx, colIdx, resultId, studentId) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
       e.preventDefault();
-      const nextIndex = index + 1;
-      if (inputRefs.current[nextIndex]) {
-        inputRefs.current[nextIndex].focus();
-        inputRefs.current[nextIndex].select();
-      }
-    }
-    // Arrow Up or Shift+Tab: Go to previous student
-    else if (e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey)) {
+      const nextInput = inputRefs.current[`${rowIdx + 1}_${colIdx}`];
+      if (nextInput) nextInput.focus();
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const prevIndex = index - 1;
-      if (inputRefs.current[prevIndex]) {
-        inputRefs.current[prevIndex].focus();
-        inputRefs.current[prevIndex].select();
+      const prevInput = inputRefs.current[`${rowIdx - 1}_${colIdx}`];
+      if (prevInput) prevInput.focus();
+    } else if (e.key === 'ArrowRight' && e.target.selectionStart === e.target.value.length) {
+      const nextColInput = inputRefs.current[`${rowIdx}_${colIdx + 1}`];
+      if (nextColInput) {
+        e.preventDefault();
+        nextColInput.focus();
       }
-    }
-    // Key 'A' or 'a': Shortcut to mark as Absent and advance
-    else if (e.key === 'a' || e.key === 'A') {
+    } else if (e.key === 'ArrowLeft' && e.target.selectionStart === 0) {
+      const prevColInput = inputRefs.current[`${rowIdx}_${colIdx - 1}`];
+      if (prevColInput) {
+        e.preventDefault();
+        prevColInput.focus();
+      }
+    } else if (e.key === 'a' || e.key === 'A') {
+      // Shortcut to toggle absent
       e.preventDefault();
-      handleAbsentToggle(studentId, true);
-      const nextIndex = index + 1;
-      if (inputRefs.current[nextIndex]) {
-        inputRefs.current[nextIndex].focus();
-        inputRefs.current[nextIndex].select();
-      }
+      handleAbsentToggle(resultId, studentId);
+      // Advance to next row
+      const nextInput = inputRefs.current[`${rowIdx + 1}_${colIdx}`];
+      if (nextInput) nextInput.focus();
     }
   };
 
-  // Bulk Quick Action: Fill Remaining unentered students
-  const handleApplyQuickFill = async (score) => {
-    if (!canEdit) return;
-    const unfilled = entries.filter(
-      (e) => !e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null)
-    );
-    if (unfilled.length === 0) {
-      showToast('All students already have marks or are marked absent', 'info');
+  // Quick fill handler
+  const handleQuickFill = async () => {
+    if (!quickFillSubjectId || quickFillValue === '') return;
+    const targetResult = results.find((r) => String(r.id) === String(quickFillSubjectId));
+    if (!targetResult || !canEditMap[targetResult.id]) {
+      showToast('You do not have permission to edit marks for this subject', 'error');
+      return;
+    }
+
+    const currentResEntries = allEntries[String(targetResult.id)] || {};
+    const unfilledStudents = students.filter((stu) => {
+      const e = currentResEntries[String(stu.id)];
+      return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
+    });
+
+    if (unfilledStudents.length === 0) {
+      showToast('No unfilled students remaining for this subject', 'info');
       setShowQuickFillModal(false);
       return;
     }
-    const numScore = Number(score);
-    if (isNaN(numScore) || numScore < 0 || numScore > Number(result.max_marks)) {
-      showToast(`Please enter a valid score between 0 and ${result.max_marks}`, 'warning');
-      return;
-    }
-
-    setEntries((prev) =>
-      prev.map((e) =>
-        !e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null)
-          ? { ...e, marks_obtained: numScore }
-          : e
-      )
-    );
-    setShowQuickFillModal(false);
-    setQuickFillValue('');
 
     try {
-      const promises = unfilled.map((stu) => {
+      const promises = unfilledStudents.map((stu) => {
+        const existing = currentResEntries[String(stu.id)];
         const payload = {
-          result_id: result.id,
-          student_id: Number(stu.student_id),
-          marks_obtained: numScore,
+          result_id: targetResult.id,
+          student_id: stu.id,
+          marks_obtained: Number(quickFillValue),
           is_absent: false,
-          remarks: stu.remarks || null,
         };
-        if (stu.id) {
-          return supabase.from('exam_result_entries').update(payload).eq('id', stu.id);
+        if (existing?.id) {
+          return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
         } else {
           return supabase.from('exam_result_entries').insert(payload);
         }
       });
+
       await Promise.all(promises);
-      showToast(`Updated marks for ${unfilled.length} students`, 'success');
-      loadEntries();
-      if (onStatusUpdate) onStatusUpdate(result.id, 'completed');
+      showToast(`Filled marks for ${unfilledStudents.length} students`, 'success');
+      setShowQuickFillModal(false);
+      setQuickFillValue('');
+      loadAllEntries();
     } catch (err) {
-      showToast('Error saving bulk marks: ' + err.message, 'error');
+      showToast('Quick fill error: ' + err.message, 'error');
     }
   };
 
-  // Bulk Quick Action: Mark all remaining unentered as Absent
-  const handleMarkRemainingAbsent = async () => {
-    if (!canEdit) return;
-    const unfilled = entries.filter(
-      (e) => !e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null)
-    );
+  // Mark all remaining unfilled students as absent for editable subjects
+  const handleMarkRemainingAbsent = async (targetResultId) => {
+    const targetResult = results.find((r) => String(r.id) === String(targetResultId));
+    if (!targetResult || !canEditMap[targetResult.id]) return;
+
+    const currentResEntries = allEntries[String(targetResult.id)] || {};
+    const unfilled = students.filter((stu) => {
+      const e = currentResEntries[String(stu.id)];
+      return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
+    });
+
     if (unfilled.length === 0) {
       showToast('No unentered students remaining', 'info');
       return;
     }
 
-    setEntries((prev) =>
-      prev.map((e) =>
-        !e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null)
-          ? { ...e, is_absent: true, marks_obtained: '' }
-          : e
-      )
-    );
-
     try {
       const promises = unfilled.map((stu) => {
+        const existing = currentResEntries[String(stu.id)];
         const payload = {
-          result_id: result.id,
-          student_id: Number(stu.student_id),
+          result_id: targetResult.id,
+          student_id: stu.id,
           marks_obtained: null,
           is_absent: true,
-          remarks: stu.remarks || 'Absent',
+          remarks: 'Absent',
         };
-        if (stu.id) {
-          return supabase.from('exam_result_entries').update(payload).eq('id', stu.id);
+        if (existing?.id) {
+          return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
         } else {
           return supabase.from('exam_result_entries').insert(payload);
         }
       });
       await Promise.all(promises);
-      showToast(`Marked ${unfilled.length} remaining students as Absent`, 'success');
-      loadEntries();
-      if (onStatusUpdate) onStatusUpdate(result.id, 'completed');
+      showToast(`Marked ${unfilled.length} students as absent`, 'success');
+      loadAllEntries();
+      if (onStatusUpdate) onStatusUpdate(targetResult.id, 'completed');
     } catch (err) {
-      showToast('Error: ' + err.message, 'error');
+      showToast('Error marking absent: ' + err.message, 'error');
     }
   };
 
-  // Summary stats
-  const entered = entries.filter(
-    (e) => e.is_absent || (e.marks_obtained !== '' && e.marks_obtained !== null)
-  );
-  const absentCount = entries.filter((e) => e.is_absent).length;
-  const marks = entries
-    .filter((e) => !e.is_absent && e.marks_obtained !== '' && e.marks_obtained !== null)
-    .map((e) => Number(e.marks_obtained));
-  const avg = marks.length > 0 ? (marks.reduce((a, b) => a + b, 0) / marks.length).toFixed(1) : '—';
-  const highest = marks.length > 0 ? Math.max(...marks) : '—';
-  const lowest = marks.length > 0 ? Math.min(...marks) : '—';
-  const passCount = result.pass_marks
-    ? marks.filter((m) => m >= Number(result.pass_marks)).length
-    : null;
-  const pctRecorded = entries.length > 0 ? Math.round((entered.length / entries.length) * 100) : 0;
+  // Filter students based on search query
+  const filteredStudents = useMemo(() => {
+    if (!searchQuery.trim()) return students;
+    const q = searchQuery.toLowerCase().trim();
+    return students.filter(
+      (s) =>
+        (s.student_name || '').toLowerCase().includes(q) ||
+        (s.admission_no || '').toLowerCase().includes(q)
+    );
+  }, [students, searchQuery]);
+
+  // Overall statistics across all selected results
+  const overallStats = useMemo(() => {
+    let totalPossible = 0;
+    let totalFilled = 0;
+    let totalAbsent = 0;
+
+    results.forEach((r) => {
+      const resEntries = allEntries[String(r.id)] || {};
+      students.forEach((stu) => {
+        totalPossible++;
+        const e = resEntries[String(stu.id)];
+        if (e) {
+          if (e.is_absent) {
+            totalFilled++;
+            totalAbsent++;
+          } else if (e.marks_obtained !== '' && e.marks_obtained !== null) {
+            totalFilled++;
+          }
+        }
+      });
+    });
+
+    const pct = totalPossible > 0 ? Math.round((totalFilled / totalPossible) * 100) : 0;
+    return { totalPossible, totalFilled, totalAbsent, pct };
+  }, [results, students, allEntries]);
 
   if (loading) {
     return (
@@ -345,240 +383,337 @@ const ExamResultsEntryGrid = ({
 
   return (
     <div className="space-y-4">
-      {/* Table Container */}
-      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
-        {/* Progress & Quick Entry Toolbar */}
-        <div className="bg-white border border-light-border rounded-2xl p-4 shadow-xs space-y-3">
-          {/* Top: Stats Counter & Progress Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-dark-primary">
-                  Progress: {entered.length} of {entries.length} Students
-                </span>
-                <span
-                  className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    pctRecorded === 100
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {pctRecorded}%
-                </span>
-              </div>
-              <div className="w-48 sm:w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                  style={{ width: `${pctRecorded}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Toolbar: Student Search + Quick Fill Tools */}
-            <div className="flex items-center gap-2 text-xs text-dark-muted font-bold flex-wrap">
-              <div className="relative flex-1 w-full sm:max-w-xs">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search student or admission no..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
-                  >
-                    <i className="fas fa-times-circle" />
-                  </button>
-                )}
-              </div>
-              {canEdit && (
-                <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
-                  <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickFillModal(true)}
-                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      title="Fill all empty student scores at once"
-                    >
-                      <i className="fas fa-magic text-[10px]" />
-                      <span>Quick Fill</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleMarkRemainingAbsent}
-                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
-                      title="Mark all unfilled students as absent"
-                    >
-                      <i className="fas fa-user-slash text-[10px]" />
-                      <span>Mark Rest Absent</span>
-                    </button>
-                  </div>
-                </ConditionalBlock>
-              )}
-              <span className="px-2.5 py-1 bg-slate-50 border border-light-border rounded-xl shrink-0">
-                Absent: <strong className="text-red-600">{absentCount}</strong>
+      {/* Controls & Progress Bar */}
+      <div className="bg-white border border-light-border rounded-2xl p-4 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-dark-primary">
+                Marks Register Progress: {overallStats.totalFilled} of {overallStats.totalPossible} Entries
+              </span>
+              <span
+                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  overallStats.pct === 100
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                {overallStats.pct}% Complete
               </span>
             </div>
+            <div className="w-48 sm:w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                style={{ width: `${overallStats.pct}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Search filter */}
+            <div className="relative w-full sm:w-60">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search student or adm no..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
+                >
+                  <i className="fas fa-times-circle" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Fill Button */}
+            {results.some((r) => canEditMap[r.id]) && (
+              <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={() => setShowQuickFillModal(true)}
+                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Quick fill marks for unfilled students"
+                >
+                  <i className="fas fa-magic text-[10px]" />
+                  <span>Quick Fill</span>
+                </button>
+              </ConditionalBlock>
+            )}
           </div>
         </div>
-        <div className="overflow-x-auto relative max-h-[650px] overflow-y-auto">
+      </div>
+
+      {/* Multi-Subject Table */}
+      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto relative max-h-[700px] overflow-y-auto">
           <table className="w-full text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50 z-20 shadow-2xs">
-              <tr className="border-b border-light-border bg-slate-50 text-dark-slate font-bold">
-                <th className="py-3 px-3 text-left w-8 sm:w-10">#</th>
-                <th className="py-3 px-3 sm:px-4 text-left sticky left-0 bg-slate-50 z-30 border-r border-light-border shadow-xs min-w-[130px] sm:min-w-[180px]">
-                  Student
+              <tr className="border-b border-light-border text-dark-slate font-bold">
+                {/* Fixed Columns: Index & Student */}
+                <th className="py-3 px-3 text-left w-8 sticky left-0 bg-slate-50 z-30">#</th>
+                <th className="py-3 px-4 text-left sticky left-8 bg-slate-50 z-30 border-r border-light-border shadow-xs min-w-[160px] sm:min-w-[200px]">
+                  Student Details
                 </th>
-                <th className="py-3 px-3 text-center w-28 sm:w-36 min-w-[100px]">
-                  Marks <span className="text-dark-muted font-normal">/ {result.max_marks}</span>
+
+                {/* Dynamic Subject Columns */}
+                {results.map((result, colIdx) => {
+                  const subject = subjects[colIdx];
+                  const canEdit = canEditMap[result.id];
+                  const invigName = invigilatorNames[result.id];
+
+                  return (
+                    <th
+                      key={result.id}
+                      className="py-3 px-3 text-center border-r border-slate-200 min-w-[160px] max-w-[220px]"
+                    >
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="font-black text-dark-primary text-xs">
+                          {subject?.name || `Sub #${result.subject_id}`}
+                        </span>
+                        {!canEdit && (
+                          <span title="Read-only: You do not have permission to edit marks for this subject">
+                            <i className="fas fa-lock text-slate-400 text-[10px]" />
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-center gap-1 text-[10px] text-dark-muted font-normal mt-0.5">
+                        <span>Max: <strong>{result.max_marks}</strong></span>
+                        {result.pass_marks && (
+                          <span>· Pass: <strong>{result.pass_marks}</strong></span>
+                        )}
+                      </div>
+                      {invigName && (
+                        <div className="text-[9px] text-emerald-700 font-semibold truncate mt-0.5">
+                          Invig: {invigName}
+                        </div>
+                      )}
+                      {canEdit && (
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMarkRemainingAbsent(result.id)}
+                            className="text-[9px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-1.5 py-0.5 rounded cursor-pointer"
+                            title="Mark remaining empty students as absent"
+                          >
+                            Mark Rest Absent
+                          </button>
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
+
+                {/* Summary Columns */}
+                <th className="py-3 px-3 text-center w-24 bg-slate-100/70 border-r border-slate-200">
+                  Total
                 </th>
-                <th className="py-3 px-2 sm:px-3 text-center w-20 sm:w-24">Status</th>
-                <th className="py-3 px-2 sm:px-3 text-center w-16 sm:w-20">Absent</th>
-                <th className="py-3 px-3 sm:px-4 text-left min-w-[130px] sm:min-w-[160px]">
-                  Teacher Remarks
+                <th className="py-3 px-3 text-center w-20 bg-slate-100/70 border-r border-slate-200">
+                  %
+                </th>
+                <th className="py-3 px-3 text-center w-20 bg-slate-100/70">
+                  Result
                 </th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-light-border">
-              {filteredEntries.length === 0 ? (
+              {filteredStudents.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
-                    className="text-center py-10 text-xs text-dark-muted font-semibold"
+                    colSpan={results.length + 5}
+                    className="text-center py-12 text-xs text-dark-muted font-semibold"
                   >
-                    No students match the search criteria.
+                    No students found matching the criteria.
                   </td>
                 </tr>
               ) : (
-                filteredEntries.map((entry, idx) => {
-                  const isSaving = saving.has(entry.student_id);
-                  const numMarks =
-                    entry.marks_obtained !== '' && entry.marks_obtained !== null
-                      ? Number(entry.marks_obtained)
-                      : null;
-                  const isOver =
-                    !entry.is_absent && numMarks !== null && numMarks > Number(result.max_marks);
-                  const isPassing =
-                    result.pass_marks &&
-                    !entry.is_absent &&
-                    numMarks !== null &&
-                    numMarks >= Number(result.pass_marks);
-                  const isFailing =
-                    result.pass_marks &&
-                    !entry.is_absent &&
-                    numMarks !== null &&
-                    numMarks < Number(result.pass_marks);
+                filteredStudents.map((stu, rowIdx) => {
+                  let studentObtainedTotal = 0;
+                  let studentMaxTotal = 0;
+                  let hasAnyFail = false;
+                  let allSubjectsEntered = true;
 
                   return (
-                    <tr
-                      key={entry.student_id}
-                      className={`transition-colors ${
-                        entry.is_absent
-                          ? 'bg-red-50/30'
-                          : isOver
-                            ? 'bg-orange-50/40'
-                            : isPassing
-                              ? 'hover:bg-emerald-50/15'
-                              : isFailing
-                                ? 'hover:bg-rose-50/15'
-                                : 'hover:bg-slate-50/60'
-                      }`}
-                    >
-                      <td className="py-2.5 px-3 text-dark-muted text-[11px] font-mono font-bold">
-                        {idx + 1}
+                    <tr key={stu.id} className="hover:bg-slate-50/50 transition-colors">
+                      {/* Row number */}
+                      <td className="py-2.5 px-3 text-dark-muted text-[11px] font-mono font-bold sticky left-0 bg-white z-10">
+                        {rowIdx + 1}
                       </td>
-                      <td className="py-2.5 px-3 sm:px-4 sticky left-0 bg-white z-10 border-r border-light-border shadow-xs">
-                        <div className="font-bold text-dark-primary text-xs truncate max-w-[130px] sm:max-w-[200px]">
-                          {entry.student_name}
+
+                      {/* Student info */}
+                      <td className="py-2.5 px-4 sticky left-8 bg-white z-10 border-r border-light-border shadow-xs">
+                        <div className="font-bold text-dark-primary text-xs truncate max-w-[150px] sm:max-w-[190px]">
+                          {stu.student_name}
                         </div>
                         <div className="text-[10px] text-dark-muted font-mono truncate">
-                          Adm: {entry.admission_no}
+                          Adm: {stu.admission_no}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {entry.is_absent ? (
-                          <span className="inline-block px-3 py-1 rounded-lg bg-red-100 text-red-700 text-xs font-bold">
-                            Absent
-                          </span>
-                        ) : (
-                          <div className="relative inline-flex items-center justify-center">
-                            <input
-                              ref={(el) => {
-                                inputRefs.current[idx] = el;
-                              }}
-                              type="number"
-                              inputMode="decimal"
-                              min="0"
-                              max={result.max_marks}
-                              step="0.5"
-                              disabled={!canEdit}
-                              placeholder="0"
-                              value={entry.marks_obtained}
-                              onFocus={(e) => e.target.select()}
-                              onKeyDown={(e) => handleKeyDown(e, idx, entry.student_id)}
-                              onChange={(e) => handleMarksChange(entry.student_id, e.target.value)}
-                              className={`w-20 text-center font-bold px-2 py-1.5 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 transition-all ${
-                                isOver
-                                  ? 'border-orange-400 bg-orange-50 text-orange-800'
-                                  : isPassing
-                                    ? 'border-emerald-300 bg-emerald-50/40 text-emerald-900'
-                                    : isFailing
-                                      ? 'border-rose-300 bg-rose-50/40 text-rose-900'
-                                      : 'border-light-border bg-white text-dark-primary'
-                              } disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-50`}
-                            />
-                            {isSaving && (
-                              <div className="absolute -top-1.5 -right-1.5 w-3 h-3 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+
+                      {/* Subject Mark Columns */}
+                      {results.map((result, colIdx) => {
+                        const canEdit = canEditMap[result.id];
+                        const cellKey = `${result.id}_${stu.id}`;
+                        const entry = allEntries[String(result.id)]?.[String(stu.id)];
+                        const isSaving = savingCells.has(cellKey);
+
+                        const marks = entry?.marks_obtained;
+                        const isAbsent = Boolean(entry?.is_absent);
+                        const numMarks = marks !== '' && marks !== null && marks !== undefined ? Number(marks) : null;
+
+                        const isOver = !isAbsent && numMarks !== null && numMarks > Number(result.max_marks);
+                        const isPassing =
+                          result.pass_marks &&
+                          !isAbsent &&
+                          numMarks !== null &&
+                          numMarks >= Number(result.pass_marks);
+                        const isFailing =
+                          result.pass_marks &&
+                          !isAbsent &&
+                          numMarks !== null &&
+                          numMarks < Number(result.pass_marks);
+
+                        // Accumulate summary totals
+                        if (isAbsent) {
+                          studentMaxTotal += Number(result.max_marks);
+                          hasAnyFail = true;
+                        } else if (numMarks !== null) {
+                          studentObtainedTotal += numMarks;
+                          studentMaxTotal += Number(result.max_marks);
+                          if (isFailing) hasAnyFail = true;
+                        } else {
+                          allSubjectsEntered = false;
+                          studentMaxTotal += Number(result.max_marks);
+                        }
+
+                        return (
+                          <td
+                            key={result.id}
+                            className={`py-2 px-2 text-center border-r border-slate-100 ${
+                              isAbsent
+                                ? 'bg-red-50/40'
+                                : isOver
+                                  ? 'bg-amber-50/40'
+                                  : isFailing
+                                    ? 'bg-rose-50/20'
+                                    : ''
+                            }`}
+                          >
+                            {canEdit ? (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <div className="relative inline-flex items-center justify-center">
+                                  <input
+                                    ref={(el) => {
+                                      inputRefs.current[`${rowIdx}_${colIdx}`] = el;
+                                    }}
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    max={result.max_marks}
+                                    step="0.5"
+                                    disabled={isAbsent}
+                                    placeholder="—"
+                                    value={isAbsent ? '' : marks ?? ''}
+                                    onFocus={(e) => e.target.select()}
+                                    onKeyDown={(e) =>
+                                      handleKeyDown(e, rowIdx, colIdx, result.id, stu.id)
+                                    }
+                                    onChange={(e) =>
+                                      handleMarksChange(result.id, stu.id, e.target.value)
+                                    }
+                                    className={`w-16 text-center font-bold px-1.5 py-1 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 transition-all ${
+                                      isAbsent
+                                        ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                        : isOver
+                                          ? 'border-orange-400 bg-orange-50 text-orange-800'
+                                          : isPassing
+                                            ? 'border-emerald-300 bg-emerald-50/40 text-emerald-900'
+                                            : isFailing
+                                              ? 'border-rose-300 bg-rose-50/40 text-rose-900'
+                                              : 'border-light-border bg-white text-dark-primary'
+                                    }`}
+                                  />
+                                  {isSaving && (
+                                    <div className="absolute -top-1 -right-1 w-2.5 h-2.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                                  )}
+                                </div>
+
+                                {/* Absent toggle button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleAbsentToggle(result.id, stu.id)}
+                                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                    isAbsent
+                                      ? 'bg-red-600 text-white shadow-xs'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                  }`}
+                                  title={isAbsent ? 'Unmark absent' : 'Mark absent (or press "A")'}
+                                >
+                                  {isAbsent ? 'Abs' : 'A'}
+                                </button>
+                              </div>
+                            ) : (
+                              /* Read-only cell */
+                              <div className="text-center font-bold text-xs py-1">
+                                {isAbsent ? (
+                                  <span className="inline-block px-2 py-0.5 rounded bg-red-100 text-red-700 text-[10px]">
+                                    Absent
+                                  </span>
+                                ) : numMarks !== null ? (
+                                  <span
+                                    className={
+                                      isPassing
+                                        ? 'text-emerald-700'
+                                        : isFailing
+                                          ? 'text-rose-700'
+                                          : 'text-dark-primary'
+                                    }
+                                  >
+                                    {numMarks}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </div>
                             )}
-                          </div>
-                        )}
+                          </td>
+                        );
+                      })}
+
+                      {/* Summary: Total Marks */}
+                      <td className="py-2 px-2 text-center bg-slate-50/60 border-r border-slate-200 font-bold text-xs">
+                        <span className="text-dark-primary">{studentObtainedTotal}</span>
+                        <span className="text-[10px] text-dark-muted font-normal"> / {studentMaxTotal}</span>
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {entry.is_absent ? (
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">
-                            AB
+
+                      {/* Summary: Percentage */}
+                      <td className="py-2 px-2 text-center bg-slate-50/60 border-r border-slate-200 font-black text-xs">
+                        {studentMaxTotal > 0
+                          ? `${((studentObtainedTotal / studentMaxTotal) * 100).toFixed(1)}%`
+                          : '—'}
+                      </td>
+
+                      {/* Summary: Pass/Fail */}
+                      <td className="py-2 px-2 text-center bg-slate-50/60">
+                        {hasAnyFail ? (
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">
+                            Fail
                           </span>
-                        ) : numMarks !== null ? (
-                          isPassing ? (
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Pass
-                            </span>
-                          ) : isFailing ? (
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200">
-                              Fail
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-dark-muted font-mono">
-                              {Math.round((numMarks / Number(result.max_marks)) * 100)}%
-                            </span>
-                          )
+                        ) : allSubjectsEntered ? (
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            Pass
+                          </span>
                         ) : (
-                          <span className="text-[10px] text-slate-400 italic">Pending</span>
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-dark-muted">
+                            Pending
+                          </span>
                         )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          disabled={!canEdit}
-                          checked={entry.is_absent}
-                          onChange={(e) => handleAbsentToggle(entry.student_id, e.target.checked)}
-                          className="w-4 h-4 rounded border-light-border text-red-600 focus:ring-red-300 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                          title="Toggle Absent"
-                        />
-                      </td>
-                      <td className="py-2.5 px-4">
-                        <input
-                          type="text"
-                          disabled={!canEdit}
-                          placeholder={canEdit ? 'Optional remarks...' : '—'}
-                          value={entry.remarks || ''}
-                          onChange={(e) => handleRemarksChange(entry.student_id, e.target.value)}
-                          className="w-full px-2.5 py-1 text-xs border border-light-border rounded-xl bg-white focus:ring-1 focus:ring-emerald-300 outline-none text-dark-primary disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-50"
-                        />
                       </td>
                     </tr>
                   );
@@ -592,59 +727,72 @@ const ExamResultsEntryGrid = ({
       {/* Quick Fill Modal */}
       {showQuickFillModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">
-                <i className="fas fa-magic" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-dark-primary">Quick Fill Unentered</h3>
-                <p className="text-xs text-dark-muted">
-                  Apply a score to all students who don't have marks yet.
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-dark-slate mb-1">
-                Score (out of {result.max_marks})
-              </label>
-              <input
-                type="number"
-                min="0"
-                max={result.max_marks}
-                value={quickFillValue}
-                onChange={(e) => setQuickFillValue(e.target.value)}
-                placeholder={`e.g. ${result.pass_marks || 0}`}
-                className="w-full px-3 py-2 text-sm font-bold border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300"
-                autoFocus
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => handleApplyQuickFill(quickFillValue)}
-                disabled={quickFillValue === ''}
-                className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
-              >
-                Apply to Unfilled
-              </button>
-              {result.pass_marks && (
-                <button
-                  type="button"
-                  onClick={() => handleApplyQuickFill(result.pass_marks)}
-                  className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-dark-slate text-xs font-bold transition-all cursor-pointer"
-                >
-                  Pass ({result.pass_marks})
-                </button>
-              )}
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-dark-primary flex items-center gap-2">
+                <i className="fas fa-magic text-emerald-600" />
+                <span>Quick Fill Marks</span>
+              </h3>
               <button
                 type="button"
                 onClick={() => setShowQuickFillModal(false)}
-                className="px-3 py-2 rounded-xl border border-light-border text-dark-muted hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            <p className="text-xs text-dark-muted">
+              Fills all unentered student marks for the selected subject at once.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-dark-slate mb-1">Target Subject</label>
+                <select
+                  value={quickFillSubjectId}
+                  onChange={(e) => setQuickFillSubjectId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                >
+                  {results
+                    .filter((r) => canEditMap[r.id])
+                    .map((r, idx) => (
+                      <option key={r.id} value={r.id}>
+                        {subjects[idx]?.name || `Subject #${r.subject_id}`} (Max: {r.max_marks})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-dark-slate mb-1">Score to Fill</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={quickFillValue}
+                  onChange={(e) => setQuickFillValue(e.target.value)}
+                  placeholder="e.g. 80"
+                  className="w-full px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-light-border">
+              <button
+                type="button"
+                onClick={() => setShowQuickFillModal(false)}
+                className="px-3.5 py-1.5 text-xs font-bold rounded-xl border border-light-border text-dark-muted hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickFill}
+                disabled={quickFillValue === ''}
+                className="px-4 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+              >
+                Apply Fill
               </button>
             </div>
           </div>

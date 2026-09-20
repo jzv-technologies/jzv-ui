@@ -108,3 +108,51 @@ export const fetchAllAppRoles = async (forceRefresh = false) => {
 
   return rolesPromise;
 };
+
+/**
+ * Role Hierarchy Priority Definition
+ * Priority sequence:
+ * admin -> management -> teacher -> staff -> <custom role> -> parent -> candidate -> guest
+ */
+export const ROLE_HIERARCHY_PRIORITY = {
+  admin: 100,
+  management: 90,
+  teacher: 80,
+  staff: 70,
+  parent: 30,
+  candidate: 20,
+  guest: 10,
+};
+
+export const getRolePriority = (role) => {
+  const r = String(role || '').toLowerCase().trim();
+  if (ROLE_HIERARCHY_PRIORITY[r] !== undefined) {
+    return ROLE_HIERARCHY_PRIORITY[r];
+  }
+  // Any custom role: placed dynamically between staff (70) and parent (30)
+  return 50;
+};
+
+export const sortRolesByPriority = (roles = []) => {
+  const normalized = normalizeRoles(roles);
+  return [...normalized].sort((a, b) => getRolePriority(b) - getRolePriority(a));
+};
+
+export const getEffectiveRole = (userRoles = []) => {
+  const sorted = sortRolesByPriority(userRoles);
+  return sorted[0] || 'guest';
+};
+
+/**
+ * Checks feature access falling through the user's role hierarchy.
+ * If top role is not eligible, tests the next role and so on.
+ */
+export const checkFeatureAccessWithHierarchy = (userRoles = [], checkFn) => {
+  const sorted = sortRolesByPriority(userRoles);
+  for (const role of sorted) {
+    if (checkFn(role)) {
+      return { allowed: true, matchingRole: role };
+    }
+  }
+  return { allowed: false, matchingRole: null };
+};

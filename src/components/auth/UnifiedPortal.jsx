@@ -11,6 +11,7 @@ import AdminStudentsView from '../students/AdminStudentsView';
 import TimetableManager from '../timetable/TimetableManager';
 import TeacherTimetableViewer from '../timetable/TeacherTimetableViewer';
 import ParentTimetableViewer from '../timetable/ParentTimetableViewer';
+import ParentExamTimetableView from '../examinations/ParentExamTimetableView';
 import SyllabusManager from '../syllabus/SyllabusManager';
 import SyllabusTrackerPortal from '../syllabus/SyllabusTrackerPortal';
 import AcademicCalendarView from '../academic-calendar/AcademicCalendarView';
@@ -22,14 +23,14 @@ import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
+import ProgressReportGenerator from '../examinations/ProgressReportGenerator';
 
 // Shared subview containers
 import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewContainer';
 import AdminFormConfigsContainer from '../portal-shared/AdminFormConfigsContainer';
 import CandidateTestAccessManager from '../portal-shared/CandidateTestAccessManager';
 import SubmissionsTableView from '../portal-shared/SubmissionsTableView';
-
-const ROLE_PRIORITY = ['admin', 'management', 'teacher', 'parent', 'candidate', 'staff', 'guest'];
+import { getEffectiveRole } from '../../utils/roleUtils';
 
 export const UnifiedPortal = ({
   user,
@@ -44,10 +45,10 @@ export const UnifiedPortal = ({
 
   const { viewConfigs, loading, error, refreshConfigs, getVisibleTiles } = useViewConfig();
 
-  // Determine effective primary role for portal theming
+  // Determine effective primary role using centralized priority hierarchy:
+  // admin -> management -> teacher -> staff -> custom -> parent -> candidate -> guest
   const effectiveRole = useMemo(() => {
-    const rolesLower = (userRoles || []).map((r) => String(r).toLowerCase().trim());
-    return ROLE_PRIORITY.find((p) => rolesLower.includes(p)) || 'management';
+    return getEffectiveRole(userRoles);
   }, [userRoles]);
 
   const isAdmin = userRoles.includes('admin');
@@ -319,6 +320,13 @@ export const UnifiedPortal = ({
           </div>
         );
 
+      case 'ward-exam-timetable':
+        return (
+          <div data-feature="ward-exam-timetable">
+            <ParentExamTimetableView user={user} classes={[]} subjects={[]} />
+          </div>
+        );
+
       case 'syllabus-manager':
       case 'syllabus':
         return (
@@ -457,7 +465,15 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="lesson-planner">
             <LessonManager
-              role={isAdmin ? 'admin' : isManagement ? 'management' : isTeacher ? 'teacher' : 'management'}
+              role={
+                isAdmin
+                  ? 'admin'
+                  : isManagement
+                    ? 'management'
+                    : isTeacher
+                      ? 'teacher'
+                      : 'management'
+              }
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
@@ -492,6 +508,13 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="exam-results">
             <ExamResultsManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
+          </div>
+        );
+
+      case 'exam-progress-report':
+        return (
+          <div data-feature="exam-progress-report">
+            <ProgressReportGenerator user={user} userRoles={userRoles} />
           </div>
         );
 

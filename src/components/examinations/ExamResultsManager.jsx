@@ -4,6 +4,10 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import ExamResultsEntryGrid from './ExamResultsEntryGrid';
+import ProgressReportGenerator from './ProgressReportGenerator';
+import MultiSelectDropdown from '../MultiSelectDropdown';
+import { getAdminConfig } from '../../utils/adminConfigUtils';
+import { DEFAULT_TEMPLATE } from './ProgressReportDesigner';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -44,6 +48,12 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
         label: 'Class Summary',
         icon: 'fa-chart-pie',
       },
+      {
+        id: 'report',
+        componentName: 'exam-results-tab-report',
+        label: 'Progress Reports',
+        icon: 'fa-file-invoice',
+      },
     ],
     []
   );
@@ -72,6 +82,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   const [teachers, setTeachers] = useState([]);
   const [slots, setSlots] = useState([]);
   const [classSubjects, setClassSubjects] = useState([]);
+  const [classAssignments, setClassAssignments] = useState([]);
 
   // Exam results
   const [results, setResults] = useState([]);
@@ -79,15 +90,27 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   // UI state
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [activeResultId, setActiveResultId] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'pending' | 'in_progress' | 'completed'
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdHocForm, setShowAdHocForm] = useState(false);
   const [adHocSubjectId, setAdHocSubjectId] = useState('');
   const [adHocMaxMarks, setAdHocMaxMarks] = useState('100');
   const [adHocPassMarks, setAdHocPassMarks] = useState('');
   const [savingAdHoc, setSavingAdHoc] = useState(false);
-  const [showSchemeEdit, setShowSchemeEdit] = useState(false);
+
+  // Marking Scheme Dialog State
+  const [showSchemeModal, setShowSchemeModal] = useState(false);
+  const [schemeEdits, setSchemeEdits] = useState({});
+  const [bulkMaxMarks, setBulkMaxMarks] = useState('100');
+  const [bulkPassMarks, setBulkPassMarks] = useState('35');
+  const [savingScheme, setSavingScheme] = useState(false);
+
+  // Progress Report Top Filter State
+  const [reportStudentScope, setReportStudentScope] = useState('all'); // 'all' | 'selected'
+  const [reportSelectedStudentIds, setReportSelectedStudentIds] = useState([]);
+  const [reportTemplates, setReportTemplates] = useState([DEFAULT_TEMPLATE]);
+  const [reportTemplateId, setReportTemplateId] = useState(DEFAULT_TEMPLATE.id);
+  const [isReportDesignerOpen, setIsReportDesignerOpen] = useState(false);
 
   // Summary entries for class overview tab
   const [summaryEntries, setSummaryEntries] = useState([]);
@@ -112,6 +135,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
       dbTeachers,
       dbSlots,
       dbClassSubjects,
+      dbClassAssignments,
       dbResults,
     ] = await Promise.all([
       safe(supabase.from('exam_schedules').select('*').order('start_date', { ascending: false })),
@@ -133,6 +157,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
       ),
       safe(supabase.from('exam_schedule_slots').select('*')),
       safe(supabase.from('class_subjects').select('*')),
+      safe(supabase.from('class_assignments').select('*')),
       safe(supabase.from('exam_results').select('*')),
     ]);
 
@@ -143,6 +168,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     setTeachers(dbTeachers);
     setSlots(dbSlots);
     setClassSubjects(dbClassSubjects);
+    setClassAssignments(dbClassAssignments);
     setResults(dbResults);
 
     if (!selectedScheduleId && dbSchedules.length > 0) {
@@ -180,6 +206,31 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
       (s) => String(s.class_id) === String(selectedClassId) && s.enrollment !== 'Inactive'
     );
   }, [students, selectedClassId]);
+
+  // Load report card templates strictly via RPC call with local cache fallback
+  useEffect(() => {
+    const loadReportTemplates = async () => {
+      try {
+        const data = await getAdminConfig('exam_progress_report_templates', [DEFAULT_TEMPLATE]);
+        if (data && Array.isArray(data) && data.length > 0) {
+          setReportTemplates(data);
+          setReportTemplateId(data[0].id);
+        }
+      } catch (err) {
+        console.warn('[ExamResultsManager] Failed to load progress report templates:', err);
+      }
+    };
+    loadReportTemplates();
+  }, []);
+
+  // Sync selected students when classStudents updates
+  useEffect(() => {
+    if (classStudents.length > 0) {
+      setReportSelectedStudentIds(classStudents.map((s) => String(s.id)));
+    } else {
+      setReportSelectedStudentIds([]);
+    }
+  }, [classStudents]);
 
   // Subjects that have exam_schedule_slots for this class in this schedule
   const scheduledSubjects = useMemo(() => {
@@ -263,9 +314,15 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     [classResultsIndex, selectedScheduleId, selectedClassId, refreshResults]
   );
 
-  const handleSubjectSelect = async (subjectId) => {
-    const result = await ensureResult(subjectId);
-    if (result) setActiveResultId(result.id);
+  const handleSubjectSelect = (subjectId) => {
+    const sStr = String(subjectId);
+    setSelectedSubjectIds((prev) =>
+      prev.includes(sStr) ? prev.filter((id) => id !== sStr) : [...prev, sStr]
+    );
+  };
+
+  const handleSubjectSelectSingle = (subjectId) => {
+    setSelectedSubjectIds([String(subjectId)]);
   };
 
   const handleStatusUpdate = useCallback(
@@ -320,42 +377,108 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     }
   };
 
-  const activeResult = useMemo(
-    () => results.find((r) => r.id === activeResultId) || null,
-    [results, activeResultId]
-  );
+  const activeResults = useMemo(() => {
+    if (!selectedClassId || selectedSubjectIds.length === 0) return [];
+    return selectedSubjectIds
+      .map((subId) => {
+        const found = classResultsIndex[String(subId)];
+        if (found) return found;
+        return {
+          id: `temp_${subId}`,
+          schedule_id: Number(selectedScheduleId),
+          class_id: Number(selectedClassId),
+          subject_id: Number(subId),
+          max_marks: 100,
+          pass_marks: null,
+          entry_status: 'pending',
+          is_from_schedule: true,
+        };
+      })
+      .filter(Boolean);
+  }, [selectedClassId, selectedSubjectIds, classResultsIndex, selectedScheduleId]);
 
-  const activeSubject = useMemo(
-    () =>
-      activeResult ? subjects.find((s) => String(s.id) === String(activeResult.subject_id)) : null,
-    [activeResult, subjects]
-  );
+  const activeSubjects = useMemo(() => {
+    return activeResults
+      .map((r) => subjects.find((s) => String(s.id) === String(r.subject_id)))
+      .filter(Boolean);
+  }, [activeResults, subjects]);
 
-  // Active slot and permission determination
-  const activeSlot = useMemo(() => {
-    if (!selectedScheduleId || !selectedClassId || !activeResult) return null;
-    return (
-      slots.find(
+  // Ensure DB rows exist for all selected subjects
+  useEffect(() => {
+    if (!selectedScheduleId || !selectedClassId || selectedSubjectIds.length === 0) return;
+    const initMissing = async () => {
+      let created = false;
+      for (const sId of selectedSubjectIds) {
+        if (!classResultsIndex[String(sId)]) {
+          await ensureResult(sId);
+          created = true;
+        }
+      }
+      if (created) {
+        await refreshResults();
+      }
+    };
+    initMissing();
+  }, [selectedScheduleId, selectedClassId, selectedSubjectIds, classResultsIndex, ensureResult, refreshResults]);
+
+  // Active slots and permission determination for each selected subject
+  const activeSlots = useMemo(() => {
+    if (!selectedScheduleId || !selectedClassId || activeResults.length === 0) return {};
+    const slotsMap = {};
+    activeResults.forEach((result) => {
+      const slot = slots.find(
         (s) =>
           String(s.schedule_id) === String(selectedScheduleId) &&
           String(s.class_id) === String(selectedClassId) &&
-          String(s.subject_id) === String(activeResult.subject_id)
-      ) || null
-    );
-  }, [slots, selectedScheduleId, selectedClassId, activeResult]);
+          String(s.subject_id) === String(result.subject_id)
+      );
+      if (slot) {
+        slotsMap[String(result.id)] = slot;
+      }
+    });
+    return slotsMap;
+  }, [slots, selectedScheduleId, selectedClassId, activeResults]);
 
-  const activeInvigilatorName = useMemo(() => {
-    if (!activeSlot?.teacher_id) return null;
-    return teacherMap[String(activeSlot.teacher_id)] || null;
-  }, [activeSlot, teacherMap]);
+  const activeInvigilatorNames = useMemo(() => {
+    const names = {};
+    Object.entries(activeSlots).forEach(([resultId, slot]) => {
+      if (slot?.teacher_id) {
+        names[resultId] = teacherMap[String(slot.teacher_id)] || null;
+      }
+    });
+    return names;
+  }, [activeSlots, teacherMap]);
 
-  const isInvigilator = useMemo(() => {
-    if (!teacherRecord?.id || !activeSlot?.teacher_id) return false;
-    return String(teacherRecord.id) === String(activeSlot.teacher_id);
-  }, [teacherRecord, activeSlot]);
+  // Check if logged-in teacher is allocated to this subject in class_assignments
+  const isAllocatedSubjectTeacher = useMemo(() => {
+    const allocatedMap = {};
+    if (!teacherRecord?.id || !selectedClassId) return allocatedMap;
+    activeResults.forEach((result) => {
+      const isAssigned = classAssignments.some(
+        (ca) =>
+          String(ca.class_id) === String(selectedClassId) &&
+          String(ca.subject_id) === String(result.subject_id) &&
+          String(ca.teacher_id) === String(teacherRecord.id)
+      );
+      allocatedMap[String(result.id)] = isAssigned;
+    });
+    return allocatedMap;
+  }, [teacherRecord, selectedClassId, activeResults, classAssignments]);
 
-  // Enforce access control for mark editing
-  const canEditMarks = canAccess('exam-results-edit-marks') && (canManageAllMarks || isInvigilator);
+  // Enforce access control for mark editing - per subject
+  const canEditMarksForSubject = useMemo(() => {
+    const editMap = {};
+    activeResults.forEach((result) => {
+      const isInvigilator =
+        activeSlots[String(result.id)]?.teacher_id &&
+        String(teacherRecord?.id) === String(activeSlots[String(result.id)]?.teacher_id);
+      const isSubjectTeacherForThis = isAllocatedSubjectTeacher[String(result.id)];
+      editMap[String(result.id)] =
+        canAccess('exam-results-edit-marks') &&
+        (canManageAllMarks || isInvigilator || isSubjectTeacherForThis);
+    });
+    return editMap;
+  }, [activeResults, activeSlots, teacherRecord, canManageAllMarks, canAccess, isAllocatedSubjectTeacher]);
 
   // All subjects to show in the left panel = scheduledSubjects + ad-hoc
   const adHocResults = useMemo(
@@ -387,87 +510,88 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     return list;
   }, [scheduledSubjects, adHocSubjects]);
 
-  // Completion summary
-  const completionStats = useMemo(() => {
-    const total = allSubjectsToShow.length;
-    const completed = allSubjectsToShow.filter(
-      (s) => classResultsIndex[String(s.id)]?.entry_status === 'completed'
-    ).length;
-    const inProgress = allSubjectsToShow.filter(
-      (s) => classResultsIndex[String(s.id)]?.entry_status === 'in_progress'
-    ).length;
-    return { total, completed, inProgress, pending: total - completed - inProgress };
-  }, [allSubjectsToShow, classResultsIndex]);
-
-  // Filtered subjects based on statusFilter tab
-  const filteredSubjects = useMemo(() => {
-    if (statusFilter === 'all') return allSubjectsToShow;
-    return allSubjectsToShow.filter((sub) => {
-      const st = classResultsIndex[String(sub.id)]?.entry_status || 'pending';
-      return st === statusFilter;
-    });
-  }, [allSubjectsToShow, statusFilter, classResultsIndex]);
-
-  // Auto-select preferred or first subject whenever class or subject list changes
+  // Auto-select all subjects for class when class or subject list changes
   useEffect(() => {
     if (!selectedClassId || allSubjectsToShow.length === 0) {
-      setActiveResultId(null);
+      setSelectedSubjectIds([]);
       return;
     }
 
-    const currentSubjectIsValid =
-      activeResult &&
-      allSubjectsToShow.some((s) => String(s.id) === String(activeResult.subject_id));
-    if (currentSubjectIsValid) return;
+    setSelectedSubjectIds((prev) => {
+      const valid = prev.filter((id) => allSubjectsToShow.some((s) => String(s.id) === String(id)));
+      return valid.length > 0 ? valid : allSubjectsToShow.map((s) => String(s.id));
+    });
+  }, [selectedClassId, allSubjectsToShow]);
 
-    // Prefer subject where logged-in user is invigilator
-    let preferredSubject = null;
-    if (teacherRecord?.id) {
-      const mySlot = slots.find(
-        (s) =>
-          String(s.schedule_id) === String(selectedScheduleId) &&
-          String(s.class_id) === String(selectedClassId) &&
-          String(s.teacher_id) === String(teacherRecord.id)
-      );
-      if (mySlot) {
-        preferredSubject = allSubjectsToShow.find(
-          (s) => String(s.id) === String(mySlot.subject_id)
-        );
-      }
-    }
-
-    // Otherwise prefer first pending subject, then first subject
-    if (!preferredSubject) {
-      preferredSubject =
-        allSubjectsToShow.find(
-          (s) => classResultsIndex[String(s.id)]?.entry_status === 'pending'
-        ) || allSubjectsToShow[0];
-    }
-
-    if (preferredSubject) {
-      handleSubjectSelect(preferredSubject.id);
-    }
-  }, [selectedClassId, allSubjectsToShow, teacherRecord?.id, slots, selectedScheduleId]);
-
-  const currentSubjectIndex = useMemo(() => {
-    if (!activeResult) return -1;
-    return allSubjectsToShow.findIndex((s) => String(s.id) === String(activeResult.subject_id));
-  }, [activeResult, allSubjectsToShow]);
-
-  const hasPrevSubject = currentSubjectIndex > 0;
-  const hasNextSubject =
-    currentSubjectIndex >= 0 && currentSubjectIndex < allSubjectsToShow.length - 1;
-  const nextSubjectName = hasNextSubject ? allSubjectsToShow[currentSubjectIndex + 1]?.name : '';
-
-  const handlePrevSubject = () => {
-    if (hasPrevSubject) {
-      handleSubjectSelect(allSubjectsToShow[currentSubjectIndex - 1].id);
-    }
+  const handleOpenSchemeModal = () => {
+    const initial = {};
+    allSubjectsToShow.forEach((sub) => {
+      const res = classResultsIndex[String(sub.id)];
+      initial[String(sub.id)] = {
+        max_marks: res?.max_marks !== undefined ? res.max_marks : 100,
+        pass_marks: res?.pass_marks !== undefined && res?.pass_marks !== null ? res.pass_marks : 35,
+      };
+    });
+    setSchemeEdits(initial);
+    setShowSchemeModal(true);
   };
 
-  const handleNextSubject = () => {
-    if (hasNextSubject) {
-      handleSubjectSelect(allSubjectsToShow[currentSubjectIndex + 1].id);
+  const handleBulkApplyScheme = () => {
+    const maxVal = Number(bulkMaxMarks) || 100;
+    const passVal = bulkPassMarks !== '' ? Number(bulkPassMarks) : null;
+    setSchemeEdits((prev) => {
+      const updated = { ...prev };
+      allSubjectsToShow.forEach((sub) => {
+        updated[String(sub.id)] = {
+          max_marks: maxVal,
+          pass_marks: passVal,
+        };
+      });
+      return updated;
+    });
+    showToast(`Applied ${maxVal} Max Marks to all ${allSubjectsToShow.length} subjects`, 'info');
+  };
+
+  const handleSaveScheme = async () => {
+    setSavingScheme(true);
+    try {
+      for (const sub of allSubjectsToShow) {
+        const edit = schemeEdits[String(sub.id)];
+        if (!edit) continue;
+        const existing = classResultsIndex[String(sub.id)];
+        const maxVal = Number(edit.max_marks) || 100;
+        const passVal = edit.pass_marks !== '' && edit.pass_marks !== null ? Number(edit.pass_marks) : null;
+
+        if (existing && !String(existing.id).startsWith('temp_')) {
+          await supabase
+            .from('exam_results')
+            .update({
+              max_marks: maxVal,
+              pass_marks: passVal,
+            })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('exam_results').upsert(
+            {
+              schedule_id: Number(selectedScheduleId),
+              class_id: Number(selectedClassId),
+              subject_id: Number(sub.id),
+              max_marks: maxVal,
+              pass_marks: passVal,
+              entry_status: 'pending',
+              is_from_schedule: !sub.isAdHoc,
+            },
+            { onConflict: 'schedule_id,class_id,subject_id' }
+          );
+        }
+      }
+      await refreshResults();
+      showToast('Marking scheme updated successfully', 'success');
+      setShowSchemeModal(false);
+    } catch (err) {
+      showToast('Failed to save marking scheme: ' + err.message, 'error');
+    } finally {
+      setSavingScheme(false);
     }
   };
 
@@ -615,7 +739,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                 value={selectedClassId || ''}
                 onChange={(e) => {
                   setSelectedClassId(e.target.value);
-                  setActiveResultId(null);
+                  setSelectedSubjectIds([]);
                 }}
                 disabled={!selectedScheduleId}
                 className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer disabled:opacity-50 min-w-[130px] max-w-[200px] truncate"
@@ -629,42 +753,40 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               </select>
             </div>
 
-            {/* Status Filter Pills (Only relevant in Entry tab) */}
-            {activeTab === 'entry' && (
-              <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full">
-                {[
-                  { id: 'all', label: 'All', count: completionStats.total },
-                  { id: 'pending', label: 'Pending', count: completionStats.pending },
-                  { id: 'in_progress', label: 'In Progress', count: completionStats.inProgress },
-                  { id: 'completed', label: 'Done', count: completionStats.completed },
-                ].map((pill) => (
-                  <button
-                    key={pill.id}
-                    type="button"
-                    onClick={() => setStatusFilter(pill.id)}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      statusFilter === pill.id
-                        ? 'bg-white text-emerald-700 shadow-xs'
-                        : 'text-dark-muted hover:text-dark-primary'
-                    }`}
-                  >
-                    <span>{pill.label}</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                        statusFilter === pill.id
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-slate-200/70 text-dark-muted'
-                      }`}
-                    >
-                      {pill.count}
-                    </span>
-                  </button>
-                ))}
+            {/* Subject Selector MultiSelectDropdown in top filter bar */}
+            {activeTab === 'entry' && selectedClassId && (
+              <div className="min-w-[180px] max-w-[300px]">
+                <MultiSelectDropdown
+                  label="Subjects"
+                  options={allSubjectsToShow.map((sub) => ({
+                    id: String(sub.id),
+                    label: sub.name,
+                  }))}
+                  selected={selectedSubjectIds}
+                  onChange={setSelectedSubjectIds}
+                  placeholder="Select subjects..."
+                  fullWidth={false}
+                />
               </div>
             )}
 
+            {/* Marking Scheme button in data-feature-filter */}
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
+              <ConditionalBlock name="exam-results-marking-scheme" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={handleOpenSchemeModal}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                  title="Configure Maximum and Pass Marks for Subjects"
+                >
+                  <i className="fas fa-sliders text-emerald-600 text-[11px]" />
+                  <span>Marking Scheme</span>
+                </button>
+              </ConditionalBlock>
+            )}
+
             {/* Ad-Hoc Subject Button guarded by ConditionalBlock */}
-            {selectedScheduleId && selectedClassId && (
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
               <ConditionalBlock name="exam-results-adhoc" roles={userRoles}>
                 <button
                   type="button"
@@ -677,35 +799,84 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                 </button>
               </ConditionalBlock>
             )}
-          </div>
 
-          {/* Right: Quick Summary Counts */}
-          {selectedClassId && allSubjectsToShow.length > 0 && (
-            <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold text-emerald-700 bg-emerald-50 border-emerald-200">
-                <span>
-                  {completionStats.completed}/{completionStats.total}
-                </span>
-                <span className="font-normal text-[11px] hidden sm:inline">Completed</span>
-              </div>
-              {completionStats.pending > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold text-amber-700 bg-amber-50 border-amber-200">
-                  <i className="fas fa-hourglass-half text-[10px]" />
-                  <span>{completionStats.pending}</span>
-                  <span className="font-normal text-[11px] hidden sm:inline">Pending</span>
-                  {statusFilter !== 'pending' && (
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilter('pending')}
-                      className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all shrink-0 cursor-pointer self-start sm:self-auto"
-                    >
-                      Filter Pending Only
-                    </button>
-                  )}
+            {/* Progress Report Top Filters (repurposing Exam & Class, adding Scope, Template, Designer, Print) */}
+            {activeTab === 'report' && (
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                {/* Student Scope Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
+                    Scope:
+                  </span>
+                  <select
+                    value={reportStudentScope}
+                    onChange={(e) => setReportStudentScope(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer"
+                  >
+                    <option value="all">Entire Class ({classStudents.length})</option>
+                    <option value="selected">Selected Students</option>
+                  </select>
                 </div>
-              )}
-            </div>
-          )}
+
+                {/* Conditional Students MultiSelect */}
+                {reportStudentScope === 'selected' && (
+                  <div className="min-w-[160px] max-w-[240px]">
+                    <MultiSelectDropdown
+                      label="Students"
+                      options={classStudents.map((s) => ({
+                        id: String(s.id),
+                        label: `${s.student_name} (${s.admission_no})`,
+                      }))}
+                      selected={reportSelectedStudentIds}
+                      onChange={setReportSelectedStudentIds}
+                      placeholder="Select students..."
+                      fullWidth={false}
+                    />
+                  </div>
+                )}
+
+                {/* Active Template Selector */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
+                  <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
+                    Template:
+                  </span>
+                  <select
+                    value={reportTemplateId}
+                    onChange={(e) => setReportTemplateId(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer max-w-[170px] truncate"
+                  >
+                    {reportTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Designer button */}
+                <button
+                  type="button"
+                  onClick={() => setIsReportDesignerOpen(true)}
+                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                  title="Design / Edit Template"
+                >
+                  <i className="fas fa-palette text-[10px]" />
+                  <span>Designer</span>
+                </button>
+
+                {/* Print button */}
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  disabled={classStudents.length === 0}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                >
+                  <i className="fas fa-print text-xs" />
+                  <span>Print / Export PDF</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -715,334 +886,32 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
         {activeTab === 'entry' && (
           <ConditionalBlock name="exam-results-tab-entry" roles={userRoles}>
             {selectedScheduleId && selectedClassId ? (
-              <div className="space-y-4">
-                {/* Mobile Subject Switcher Strip (Visible on < lg, hidden on lg+) */}
-                <div className="lg:hidden bg-white p-3 rounded-2xl border border-light-border shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-dark-primary uppercase tracking-wide flex items-center gap-1.5">
-                      <i className="fas fa-book text-emerald-600 text-xs" />
-                      <span>Subjects ({filteredSubjects.length})</span>
-                    </span>
-                    {activeSubject && (
-                      <span className="text-[11px] font-bold text-dark-muted">
-                        Active: <strong className="text-emerald-700">{activeSubject.name}</strong>
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                    {filteredSubjects.map((sub) => {
-                      const res = classResultsIndex[String(sub.id)];
-                      const cfg = ENTRY_STATUS_CONFIG[res?.entry_status || 'pending'];
-                      const isActive = String(res?.id) === String(activeResultId);
-                      return (
-                        <button
-                          key={sub.id}
-                          type="button"
-                          onClick={() => handleSubjectSelect(sub.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer shrink-0 border ${
-                            isActive
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-slate-50 hover:bg-slate-100 text-dark-primary border-light-border'
-                          }`}
-                        >
-                          <span>{sub.name}</span>
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              isActive
-                                ? 'bg-white'
-                                : res?.entry_status === 'completed'
-                                  ? 'bg-emerald-500'
-                                  : res?.entry_status === 'in_progress'
-                                    ? 'bg-amber-500'
-                                    : 'bg-slate-300'
-                            }`}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-                  {/* Left: Desktop Subject list (hidden on < lg) */}
-                  <div className="hidden lg:block lg:col-span-1 space-y-3">
-                    <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs">
-                      <div className="p-3.5 border-b border-light-border bg-slate-50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <i className="fas fa-book text-xs text-dark-muted" />
-                          <h3 className="text-xs font-black text-dark-primary uppercase tracking-wide">
-                            Subjects ({filteredSubjects.length})
-                          </h3>
-                        </div>
+              <div className="w-full space-y-4">
+                {activeResults.length > 0 ? (
+                  <ExamResultsEntryGrid
+                    results={activeResults}
+                    subjects={activeSubjects}
+                    students={classStudents}
+                    onStatusUpdate={handleStatusUpdate}
+                    canEditMap={canEditMarksForSubject}
+                    invigilatorNames={activeInvigilatorNames}
+                    canOverrideInvigilator={canManageAllMarks}
+                    userRoles={userRoles}
+                  />
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
+                        <i className="fas fa-hand-pointer" />
                       </div>
-
-                      {filteredSubjects.length === 0 ? (
-                        <div className="text-center py-8 text-xs text-dark-muted px-4">
-                          <i className="fas fa-book-open text-2xl mb-2 block opacity-20" />
-                          No subjects match the "{statusFilter}" filter.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-slate-100 max-h-[520px] overflow-y-auto">
-                          {filteredSubjects.map((sub) => {
-                            const res = classResultsIndex[String(sub.id)];
-                            const cfg = ENTRY_STATUS_CONFIG[res?.entry_status || 'pending'];
-                            const isActive = String(res?.id) === String(activeResultId);
-
-                            const slot = slots.find(
-                              (s) =>
-                                String(s.schedule_id) === String(selectedScheduleId) &&
-                                String(s.class_id) === String(selectedClassId) &&
-                                String(s.subject_id) === String(sub.id)
-                            );
-                            const invName = slot?.teacher_id
-                              ? teacherMap[String(slot.teacher_id)]
-                              : null;
-                            const isMyDuty =
-                              teacherRecord?.id &&
-                              slot?.teacher_id &&
-                              String(teacherRecord.id) === String(slot.teacher_id);
-
-                            return (
-                              <button
-                                key={sub.id}
-                                type="button"
-                                onClick={() => handleSubjectSelect(sub.id)}
-                                className={`w-full text-left px-3.5 py-3 transition-all cursor-pointer flex items-start gap-2.5 ${
-                                  isActive
-                                    ? 'bg-emerald-50 border-l-4 border-emerald-500'
-                                    : 'hover:bg-slate-50'
-                                }`}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <p
-                                      className={`text-xs font-bold truncate ${
-                                        isActive ? 'text-emerald-700' : 'text-dark-deepblue'
-                                      }`}
-                                    >
-                                      {sub.name}
-                                    </p>
-                                    {sub.isAdHoc && (
-                                      <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
-                                        Ad-hoc
-                                      </span>
-                                    )}
-                                    {isMyDuty && (
-                                      <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
-                                        You
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[10px] text-dark-muted truncate mt-0.5">
-                                    Inv:{' '}
-                                    <span className="font-semibold text-dark-slate">
-                                      {invName || 'Unassigned'}
-                                    </span>
-                                  </p>
-                                </div>
-                                <span
-                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${cfg.color}`}
-                                >
-                                  <i className={`fas ${cfg.icon} mr-1 text-[8px]`} />
-                                  {cfg.label}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <p className="text-sm font-bold text-dark-primary">
+                        Select Subject(s) to Enter Marks
+                      </p>
+                      <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
+                        Use the dropdown above to select one or more subjects, then enter marks for all selected subjects in the grid below.
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Right: Subject Switcher & Results Entry Grid */}
-                  <div className="w-full lg:col-span-3 space-y-4">
-                    {activeResult ? (
-                      <>
-                        {/* Subject Header & Quick Navigation Bar */}
-                        <div className="bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs space-y-3">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
-                                <i className="fas fa-book-open" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h2 className="text-base font-black text-dark-primary tracking-tight">
-                                    {activeSubject?.name}
-                                  </h2>
-                                  {currentSubjectIndex >= 0 && (
-                                    <span className="text-[11px] font-bold text-dark-muted bg-slate-100 px-2 py-0.5 rounded-full">
-                                      Subject {currentSubjectIndex + 1} of{' '}
-                                      {allSubjectsToShow.length}
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                                      ENTRY_STATUS_CONFIG[activeResult.entry_status]?.color
-                                    }`}
-                                  >
-                                    {ENTRY_STATUS_CONFIG[activeResult.entry_status]?.label}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2.5 text-xs text-dark-muted mt-0.5 flex-wrap">
-                                  <span>{classStudents.length} Students</span>
-                                  <span>·</span>
-                                  <span>
-                                    Max Marks: <strong>{activeResult.max_marks}</strong>
-                                  </span>
-                                  {activeResult.pass_marks && (
-                                    <>
-                                      <span>·</span>
-                                      <span>
-                                        Pass Marks: <strong>{activeResult.pass_marks}</strong>
-                                      </span>
-                                    </>
-                                  )}
-                                  {activeInvigilatorName && (
-                                    <>
-                                      <span>·</span>
-                                      <span>
-                                        Invigilator:{' '}
-                                        <strong className="text-dark-primary">
-                                          {activeInvigilatorName}
-                                        </strong>
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Subject Navigation Buttons & Mobile Dropdown */}
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
-                              {/* Mobile Subject Dropdown Picker */}
-                              <div className="sm:hidden">
-                                <select
-                                  value={activeSubject?.id || ''}
-                                  onChange={(e) => handleSubjectSelect(e.target.value)}
-                                  className="text-xs font-bold border border-light-border rounded-xl px-2 py-1.5 bg-slate-50"
-                                >
-                                  {allSubjectsToShow.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <ConditionalBlock
-                                name="exam-results-marking-scheme"
-                                roles={userRoles}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => setShowSchemeEdit(!showSchemeEdit)}
-                                  className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                                    showSchemeEdit
-                                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                                      : 'border-light-border text-dark-slate hover:bg-slate-50'
-                                  }`}
-                                  title="Edit Max Marks and Pass Marks"
-                                >
-                                  <i className="fas fa-sliders text-[10px]" />
-                                  <span className="hidden sm:inline">Marking Scheme</span>
-                                </button>
-                              </ConditionalBlock>
-
-                              <button
-                                type="button"
-                                disabled={!hasPrevSubject}
-                                onClick={handlePrevSubject}
-                                className="px-2.5 py-1.5 rounded-xl border border-light-border text-xs font-bold text-dark-slate hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
-                                title="Go to previous subject"
-                              >
-                                <i className="fas fa-chevron-left text-[10px]" />
-                                <span className="hidden sm:inline">Prev</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={!hasNextSubject}
-                                onClick={handleNextSubject}
-                                className="px-2.5 py-1.5 rounded-xl border border-light-border text-xs font-bold text-dark-slate hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
-                                title="Go to next subject"
-                              >
-                                <span className="hidden sm:inline">Next</span>
-                                <i className="fas fa-chevron-right text-[10px]" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Expandable Marking Scheme Editor */}
-                          {showSchemeEdit && canEditMarks && (
-                            <div className="bg-slate-50/80 p-3 rounded-2xl border border-light-border flex flex-wrap items-center gap-4 text-xs font-bold animate-in fade-in duration-150">
-                              <div className="flex items-center gap-2">
-                                <span className="text-dark-muted">Max Marks:</span>
-                                <input
-                                  type="number"
-                                  value={activeResult.max_marks}
-                                  onChange={(e) =>
-                                    handleMaxMarksChange(activeResult.id, e.target.value)
-                                  }
-                                  className="w-20 px-2.5 py-1 border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-dark-muted">Pass Marks:</span>
-                                <input
-                                  type="number"
-                                  value={activeResult.pass_marks || ''}
-                                  placeholder="Optional"
-                                  onChange={(e) =>
-                                    supabase
-                                      .from('exam_results')
-                                      .update({
-                                        pass_marks: e.target.value ? Number(e.target.value) : null,
-                                      })
-                                      .eq('id', activeResult.id)
-                                      .then(() => refreshResults())
-                                  }
-                                  className="w-24 px-2.5 py-1 border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-                                />
-                              </div>
-                              <span className="text-[11px] text-dark-muted font-normal ml-auto">
-                                Changes update in real-time.
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Mark Entry Register Grid */}
-                        <ExamResultsEntryGrid
-                          result={activeResult}
-                          students={classStudents}
-                          onStatusUpdate={handleStatusUpdate}
-                          canEdit={canEditMarks}
-                          invigilatorName={activeInvigilatorName}
-                          canOverrideInvigilator={canManageAllMarks}
-                          onNextSubject={handleNextSubject}
-                          hasNextSubject={hasNextSubject}
-                          nextSubjectName={nextSubjectName}
-                          userRoles={userRoles}
-                        />
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
-                          <i className="fas fa-hand-pointer" />
-                        </div>
-                        <p className="text-sm font-bold text-dark-primary">
-                          Select a Subject to Enter Marks
-                        </p>
-                        <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
-                          Click any subject from the list on the left to view the student register
-                          and record examination marks.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              </div>
             ) : (
               <div className="text-center py-20 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm p-8">
                 <i className="fas fa-clipboard-list text-4xl text-slate-300 mb-4 block" />
@@ -1231,7 +1100,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                             <button
                               type="button"
                               onClick={() => {
-                                handleSubjectSelect(sub.id);
+                                setSelectedSubjectIds([String(sub.id)]);
                                 setActiveTab('entry');
                               }}
                               className="w-full py-1.5 px-3 bg-white hover:bg-emerald-50 border border-light-border hover:border-emerald-200 text-dark-slate hover:text-emerald-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
@@ -1260,7 +1129,253 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
             )}
           </ConditionalBlock>
         )}
+
+        {activeTab === 'report' && (
+          <ConditionalBlock name="exam-results-tab-report" roles={userRoles}>
+            <ProgressReportGenerator
+              schedules={schedules}
+              classes={classes}
+              subjects={subjects}
+              initialScheduleId={selectedScheduleId}
+              initialClassId={selectedClassId}
+              userRoles={userRoles}
+              studentSelectionMode={reportStudentScope}
+              onStudentSelectionModeChange={setReportStudentScope}
+              selectedStudentIds={reportSelectedStudentIds}
+              onSelectedStudentIdsChange={setReportSelectedStudentIds}
+              selectedTemplateId={reportTemplateId}
+              onSelectedTemplateIdChange={setReportTemplateId}
+              isDesignerOpen={isReportDesignerOpen}
+              onIsDesignerOpenChange={setIsReportDesignerOpen}
+              onTemplatesLoaded={setReportTemplates}
+              hideControlBar={true}
+            />
+          </ConditionalBlock>
+        )}
       </div>
+
+      {/* Marking Scheme Modal Dialog */}
+      {showSchemeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-light-border bg-emerald-50/50 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm shadow-2xs">
+                  <i className="fas fa-sliders" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-dark-primary">Marking Scheme</h3>
+                  <p className="text-xs text-dark-muted mt-0.5">
+                    {classes.find((c) => String(c.id) === String(selectedClassId))?.name || 'Class'} ·{' '}
+                    {schedules.find((s) => String(s.id) === String(selectedScheduleId))?.name || 'Exam'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSchemeModal(false)}
+                className="w-8 h-8 rounded-xl hover:bg-slate-200 text-dark-muted flex items-center justify-center transition-all cursor-pointer"
+              >
+                <i className="fas fa-times text-xs" />
+              </button>
+            </div>
+
+            {/* Quick Bulk Apply Bar */}
+            <div className="p-4 bg-slate-50 border-b border-light-border shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-dark-primary flex items-center gap-1.5">
+                    <i className="fas fa-bolt text-amber-500 text-xs" />
+                    Apply in One Go:
+                  </span>
+                  <div className="flex items-center gap-1.5 bg-white border border-light-border px-2.5 py-1 rounded-xl shadow-2xs">
+                    <span className="text-[11px] font-bold text-dark-muted">Max:</span>
+                    <input
+                      type="number"
+                      value={bulkMaxMarks}
+                      onChange={(e) => setBulkMaxMarks(e.target.value)}
+                      className="w-14 text-xs font-bold text-dark-primary outline-none"
+                      placeholder="100"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white border border-light-border px-2.5 py-1 rounded-xl shadow-2xs">
+                    <span className="text-[11px] font-bold text-dark-muted">Pass:</span>
+                    <input
+                      type="number"
+                      value={bulkPassMarks}
+                      onChange={(e) => setBulkPassMarks(e.target.value)}
+                      className="w-14 text-xs font-bold text-dark-primary outline-none"
+                      placeholder="35"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBulkApplyScheme}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <i className="fas fa-check-double text-[10px]" />
+                    <span>Apply to All Subjects</span>
+                  </button>
+                </div>
+                <span className="text-[11px] text-dark-muted font-semibold">
+                  {allSubjectsToShow.length} {allSubjectsToShow.length === 1 ? 'subject' : 'subjects'}
+                </span>
+              </div>
+            </div>
+
+            {/* Subjects Table */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {allSubjectsToShow.length === 0 ? (
+                <div className="text-center py-10 text-dark-muted text-xs font-semibold">
+                  No subjects found for this class.
+                </div>
+              ) : (
+                <div className="border border-light-border rounded-2xl overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-light-border text-dark-muted font-bold">
+                      <tr>
+                        <th className="py-2.5 px-3">Subject</th>
+                        <th className="py-2.5 px-3">Type</th>
+                        <th className="py-2.5 px-3">Teacher / Invigilator</th>
+                        <th className="py-2.5 px-3 w-28">Max Marks</th>
+                        <th className="py-2.5 px-3 w-28">Pass Marks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {allSubjectsToShow.map((sub) => {
+                        const edit = schemeEdits[String(sub.id)] || { max_marks: 100, pass_marks: 35 };
+                        const slot = slots.find(
+                          (s) =>
+                            String(s.schedule_id) === String(selectedScheduleId) &&
+                            String(s.class_id) === String(selectedClassId) &&
+                            String(s.subject_id) === String(sub.id)
+                        );
+                        const slotTeacher = slot?.teacher_id ? teacherMap[String(slot.teacher_id)] : null;
+                        const ca = classAssignments.find(
+                          (a) =>
+                            String(a.class_id) === String(selectedClassId) &&
+                            String(a.subject_id) === String(sub.id)
+                        );
+                        const caTeacher = ca?.teacher_id ? teacherMap[String(ca.teacher_id)] : null;
+                        const teacherDisplay = slotTeacher || caTeacher || '—';
+
+                        return (
+                          <tr key={sub.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-2.5 px-3 font-bold text-dark-primary">
+                              <div className="flex items-center gap-1.5">
+                                <span>{sub.name}</span>
+                                {sub.code && (
+                                  <span className="text-[10px] text-dark-muted font-mono bg-slate-100 px-1.5 py-0.5 rounded">
+                                    {sub.code}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {sub.isAdHoc ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                  <i className="fas fa-tag text-[8px]" />
+                                  Ad-Hoc
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                  <i className="fas fa-calendar-check text-[8px]" />
+                                  Scheduled
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-dark-muted">
+                              <span className="truncate max-w-[140px] block" title={teacherDisplay}>
+                                {teacherDisplay}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="number"
+                                min="1"
+                                max="1000"
+                                value={edit.max_marks ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setSchemeEdits((prev) => ({
+                                    ...prev,
+                                    [String(sub.id)]: {
+                                      ...prev[String(sub.id)],
+                                      max_marks: val === '' ? '' : Number(val),
+                                    },
+                                  }));
+                                }}
+                                className="w-24 px-2.5 py-1.5 text-xs font-bold border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                                placeholder="100"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="number"
+                                min="0"
+                                max="1000"
+                                value={edit.pass_marks ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setSchemeEdits((prev) => ({
+                                    ...prev,
+                                    [String(sub.id)]: {
+                                      ...prev[String(sub.id)],
+                                      pass_marks: val === '' ? '' : Number(val),
+                                    },
+                                  }));
+                                }}
+                                className="w-24 px-2.5 py-1.5 text-xs font-bold border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                                placeholder="35"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-light-border bg-slate-50 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-dark-muted font-medium">
+                Changes apply across this class examination results.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSchemeModal(false)}
+                  disabled={savingScheme}
+                  className="px-4 py-2 text-xs font-bold rounded-xl border border-light-border text-dark-muted hover:bg-white transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveScheme}
+                  disabled={savingScheme}
+                  className="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {savingScheme ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin text-xs" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save text-xs" />
+                      <span>Save Marking Scheme</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ad-hoc Subject Modal */}
       {showAdHocForm && (

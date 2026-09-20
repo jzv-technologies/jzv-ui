@@ -236,7 +236,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'exam-schedule': {
     title: 'Exam Schedule',
-    description: 'Schedule examinations, assign invigilators, and manage Exam Schedules across all classes.',
+    description:
+      'Schedule examinations, assign invigilators, and manage Exam Schedules across all classes.',
     icon: 'fa-file-circle-check',
     buttonColor: 'bg-rose-600 text-white',
     shadow: 'shadow-rose-200',
@@ -247,7 +248,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'exam-results': {
     title: 'Exam Results',
-    description: 'Enter and manage examination marks, track completion status, and view result summaries.',
+    description:
+      'Enter and manage examination marks, track completion status, and view result summaries.',
     icon: 'fa-clipboard-check',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
@@ -255,6 +257,18 @@ export const TILE_METADATA_REGISTRY = {
     action: 'subview',
     valid_access_roles: ['admin', 'management', 'teacher'],
     display_order: 85,
+  },
+  'exam-progress-report': {
+    title: 'Progress Reports',
+    description:
+      'Design custom report card templates, preview charts, and generate student progress report cards.',
+    icon: 'fa-file-invoice',
+    buttonColor: 'bg-emerald-600 text-white',
+    shadow: 'shadow-emerald-200',
+    group: 'Academics',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
+    display_order: 86,
   },
   dashboard: {
     title: 'Dashboard',
@@ -297,6 +311,17 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-calendar-alt',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
+    group: 'Calendar and Schedules',
+    action: 'subview',
+  },
+  'ward-exam-timetable': {
+    title: 'Ward Exam Timetable',
+    titleKey: 'role_portal.ward_exam_timetable.title',
+    description: 'View the published examination schedule for your child.',
+    descriptionKey: 'role_portal.ward_exam_timetable.description',
+    icon: 'fa-file-alt',
+    buttonColor: 'bg-rose-600 text-white',
+    shadow: 'shadow-rose-200',
     group: 'Calendar and Schedules',
     action: 'subview',
   },

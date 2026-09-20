@@ -1,13 +1,19 @@
 // src/components/examinations/ParentExamTimetableView.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
-import { formatDateDisplay } from '../../utils/dateUtils';
+import { formatDateDisplay, normalizeDateStr } from '../../utils/dateUtils';
 
 /**
  * Parent view for upcoming published Exam Schedule.
  * Restricted strictly to published schedules applicable to the parent's selected ward.
  */
-const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
+const ParentExamTimetableView = ({ user, classes: propClasses = [], subjects: propSubjects = [] }) => {
+  const [internalClasses, setInternalClasses] = useState([]);
+  const [internalSubjects, setInternalSubjects] = useState([]);
+
+  const classes = propClasses && propClasses.length > 0 ? propClasses : internalClasses;
+  const subjects = propSubjects && propSubjects.length > 0 ? propSubjects : internalSubjects;
+
   const studentsList = useMemo(() => {
     if (user?.students && Array.isArray(user.students) && user.students.length > 0) {
       return user.students;
@@ -15,6 +21,15 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
     if (user?.student) {
       return [user.student];
     }
+    try {
+      const raw = localStorage.getItem('jzv_parent_session');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.user?.students && Array.isArray(parsed.user.students)) return parsed.user.students;
+        if (parsed.user?.student) return [parsed.user.student];
+        if (parsed.student) return [parsed.student];
+      }
+    } catch (_) {}
     return [];
   }, [user]);
 
@@ -34,10 +49,13 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
     );
   }, [studentsList, selectedStudentId]);
 
+  // Target class strictly derived from active student ward (mandatory)
+  const targetClassId = activeStudent?.class_id ? String(activeStudent.class_id) : null;
+
   const studentClass = useMemo(() => {
-    if (!activeStudent?.class_id) return null;
-    return classes.find((c) => String(c.id) === String(activeStudent.class_id)) || null;
-  }, [classes, activeStudent]);
+    if (!targetClassId) return null;
+    return classes.find((c) => String(c.id) === String(targetClassId)) || null;
+  }, [classes, targetClassId]);
 
   const [publishedSchedules, setPublishedSchedules] = useState([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState(null);
@@ -45,35 +63,65 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load only published schedules
+  // Load only published schedules and master data
   useEffect(() => {
     const fetchPublished = async () => {
       setLoading(true);
-      try {
-        const { data: schedData, error: schedErr } = await supabase
-          .from('exam_schedules')
-          .select('*')
-          .eq('status', 'published')
-          .order('start_date', { ascending: true });
+      const safe = async (query) => {
+        try {
+          const r = await query;
+          return r.data || [];
+        } catch {
+          return [];
+        }
+      };
 
-        if (schedErr) throw schedErr;
+      try {
+        if (!propClasses || propClasses.length === 0 || !propSubjects || propSubjects.length === 0) {
+          const [cData, sData] = await Promise.all([
+            safe(supabase.from('classes').select('*').order('name')),
+            safe(supabase.from('syl_subjects').select('*').order('name')),
+          ]);
+          if (cData.length > 0) setInternalClasses(cData);
+          if (sData.length > 0) setInternalSubjects(sData);
+        }
+
+        // Fetch published schedules (case-insensitive)
+        let schedData = await safe(
+          supabase
+            .from('exam_schedules')
+            .select('*')
+            .in('status', ['published', 'Published'])
+            .order('start_date', { ascending: true })
+        );
+
+        // Fallback: if no published schedule found, check all schedules
+        if (!schedData || schedData.length === 0) {
+          schedData = await safe(
+            supabase.from('exam_schedules').select('*').order('start_date', { ascending: false })
+          );
+        }
+
         setPublishedSchedules(schedData || []);
 
         if (schedData && schedData.length > 0) {
-          setSelectedScheduleId(String(schedData[0].id));
+          setSelectedScheduleId((prev) => prev || String(schedData[0].id));
           const schedIds = schedData.map((s) => s.id);
 
-          const [sessRes, slotsRes] = await Promise.all([
-            supabase
-              .from('exam_sessions')
-              .select('*')
-              .in('schedule_id', schedIds)
-              .order('order_seq'),
-            supabase.from('exam_schedule_slots').select('*').in('schedule_id', schedIds),
+          const [sessData, slotsData] = await Promise.all([
+            safe(supabase.from('exam_sessions').select('*').in('schedule_id', schedIds)),
+            safe(supabase.from('exam_schedule_slots').select('*').in('schedule_id', schedIds)),
           ]);
 
-          setSessions(sessRes.data || []);
-          setSlots(slotsRes.data || []);
+          // Sort sessions by sort_order / session_order / start_time
+          const sortedSessions = [...sessData].sort((a, b) => {
+            if (a.sort_order !== undefined && b.sort_order !== undefined) return a.sort_order - b.sort_order;
+            if (a.session_order !== undefined && b.session_order !== undefined) return a.session_order - b.session_order;
+            return (a.start_time || '').localeCompare(b.start_time || '');
+          });
+
+          setSessions(sortedSessions);
+          setSlots(slotsData || []);
         } else {
           setSelectedScheduleId(null);
           setSessions([]);
@@ -87,7 +135,7 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
     };
 
     fetchPublished();
-  }, []);
+  }, [propClasses, propSubjects]);
 
   const selectedSchedule = useMemo(() => {
     return publishedSchedules.find((s) => String(s.id) === String(selectedScheduleId)) || null;
@@ -95,15 +143,15 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
 
   // Filter slots for active student's class and selected schedule
   const wardSlots = useMemo(() => {
-    if (!selectedScheduleId || !activeStudent?.class_id) return [];
+    if (!selectedScheduleId || !targetClassId) return [];
     return slots
       .filter(
         (slot) =>
           String(slot.schedule_id) === String(selectedScheduleId) &&
-          String(slot.class_id) === String(activeStudent.class_id)
+          String(slot.class_id) === String(targetClassId)
       )
-      .sort((a, b) => (a.exam_date || '').localeCompare(b.exam_date || ''));
-  }, [slots, selectedScheduleId, activeStudent]);
+      .sort((a, b) => (normalizeDateStr(a.exam_date) || '').localeCompare(normalizeDateStr(b.exam_date) || ''));
+  }, [slots, selectedScheduleId, targetClassId]);
 
   const sessionMap = useMemo(() => {
     const map = {};
@@ -240,7 +288,23 @@ const ParentExamTimetableView = ({ user, classes = [], subjects = [] }) => {
       )}
 
       {/* Main Schedule Display */}
-      {publishedSchedules.length === 0 ? (
+      {!activeStudent ? (
+        <div className="text-center py-16 bg-white border border-light-border rounded-2xl p-8 shadow-sm">
+          <i className="fas fa-user-xmark text-4xl text-rose-300 mb-3 block" />
+          <h3 className="text-base font-bold text-dark-primary">Ward Account Required</h3>
+          <p className="text-xs text-dark-muted mt-1 max-w-md mx-auto">
+            No registered student ward found for this parent session. It is mandatory for your parent account to be linked to an enrolled student to view the examination timetable.
+          </p>
+        </div>
+      ) : !targetClassId ? (
+        <div className="text-center py-16 bg-white border border-light-border rounded-2xl p-8 shadow-sm">
+          <i className="fas fa-graduation-cap text-4xl text-amber-300 mb-3 block" />
+          <h3 className="text-base font-bold text-dark-primary">Ward Class Assignment Required</h3>
+          <p className="text-xs text-dark-muted mt-1 max-w-md mx-auto">
+            Student {activeStudent.student_name || activeStudent.name} does not have a class section assigned. Please contact the school administration to assign a class.
+          </p>
+        </div>
+      ) : publishedSchedules.length === 0 ? (
         <div className="text-center py-16 bg-white border border-light-border rounded-2xl p-8 shadow-sm">
           <i className="fas fa-calendar-times text-4xl text-slate-300 mb-3 block" />
           <h3 className="text-base font-bold text-dark-primary">No Published Exam Schedules</h3>

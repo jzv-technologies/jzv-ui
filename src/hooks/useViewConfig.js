@@ -3,8 +3,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../utils/supabase';
 import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
+import { sortRolesByPriority } from '../utils/roleUtils';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v9';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v10';
 
 const readSessionCache = () => {
   try {
@@ -16,6 +17,7 @@ const readSessionCache = () => {
     sessionStorage.removeItem('jzv_view_config_cache_v6');
     sessionStorage.removeItem('jzv_view_config_cache_v7');
     sessionStorage.removeItem('jzv_view_config_cache_v8');
+    sessionStorage.removeItem('jzv_view_config_cache_v9');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
@@ -29,6 +31,7 @@ const readSessionCache = () => {
       !names.has('exam-results') ||
       !names.has('exam-sched-tab-setup') ||
       !names.has('exam-sched-slot-edit') ||
+      !names.has('exam-results-tab-report') ||
       !names.has('student-tab-records') ||
       !names.has('student-tab-fees') ||
       !names.has('emp-tab-records')
@@ -145,13 +148,21 @@ export const useViewConfig = () => {
   }, [fetchConfigs]);
 
   /**
-   * Evaluates if given validRoles grant access to any of the user's roles.
+   * Evaluates if given validRoles grant access to user's roles in priority hierarchy order:
+   * admin -> management -> teacher -> staff -> custom -> parent -> candidate -> guest.
+   * If top role is not eligible, falls through to check the next role and so on.
    */
   const hasAccess = useCallback((validRoles = [], defaultAccess = 'none', userRoles = []) => {
     if (defaultAccess === 'all') return true;
     if (!userRoles || userRoles.length === 0) return false;
-    const userLower = userRoles.map((r) => String(r).toLowerCase().trim());
-    return (validRoles || []).some((r) => userLower.includes(String(r).toLowerCase().trim()));
+    const prioritizedRoles = sortRolesByPriority(userRoles);
+    const validLower = (validRoles || []).map((r) => String(r).toLowerCase().trim());
+    for (const role of prioritizedRoles) {
+      if (validLower.includes(role)) {
+        return true;
+      }
+    }
+    return false;
   }, []);
 
   /**
@@ -302,6 +313,23 @@ export const useViewConfig = () => {
       if (componentName === 'syl-tab-my-activity') {
         return userRoles.some((r) =>
           ['teacher', 'admin', 'management'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
+      // Builtin fallback for exam-results-tab-report & exam-progress-report
+      if (componentName === 'exam-results-tab-report' || componentName === 'exam-progress-report') {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator', 'teacher', 'staff', 'principal'].includes(
+            String(r).toLowerCase().trim()
+          )
+        );
+      }
+
+      // Builtin fallback for parent exam timetable
+      if (componentName === 'ward-exam-timetable' || componentName === 'exam-sched-tab-parent') {
+        return userRoles.some((r) =>
+          ['parent', 'admin', 'management'].includes(String(r).toLowerCase().trim())
         );
       }
 
