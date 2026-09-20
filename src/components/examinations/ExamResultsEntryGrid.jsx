@@ -27,12 +27,15 @@ const ExamResultsEntryGrid = ({
   canOverrideInvigilator = false,
   isCoordinator = false,
   userRoles = [],
+  searchQuery: propSearchQuery,
+  onReload,
 }) => {
   // allEntries structure: { [resultId]: { [studentId]: entryObject } }
   const [allEntries, setAllEntries] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingCells, setSavingCells] = useState(new Set()); // Set of "resultId_studentId"
-  const [searchQuery, setSearchQuery] = useState('');
+  const [internalSearchQuery, setInternalSearchQuery] = useState('');
+  const activeSearchQuery = propSearchQuery !== undefined ? propSearchQuery : internalSearchQuery;
   const [showQuickFillModal, setShowQuickFillModal] = useState(false);
   const [quickFillSubjectId, setQuickFillSubjectId] = useState(results[0]?.id || '');
   const [quickFillValue, setQuickFillValue] = useState('');
@@ -338,14 +341,15 @@ const ExamResultsEntryGrid = ({
 
   // Filter students based on search query
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return students;
-    const q = searchQuery.toLowerCase().trim();
+    if (!activeSearchQuery.trim()) return students;
+    const q = activeSearchQuery.toLowerCase().trim();
     return students.filter(
       (s) =>
         (s.student_name || '').toLowerCase().includes(q) ||
-        (s.admission_no || '').toLowerCase().includes(q)
+        (s.admission_no || '').toLowerCase().includes(q) ||
+        String(s.roll_no || '').toLowerCase().includes(q)
     );
-  }, [students, searchQuery]);
+  }, [students, activeSearchQuery]);
 
   // Overall statistics across all selected results
   const overallStats = useMemo(() => {
@@ -410,26 +414,28 @@ const ExamResultsEntryGrid = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Search filter */}
-            <div className="relative w-full sm:w-60">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search student or adm no..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
-                >
-                  <i className="fas fa-times-circle" />
-                </button>
-              )}
-            </div>
+            {/* Search filter (only rendered internally if not supplied from parent feature-filter) */}
+            {propSearchQuery === undefined && (
+              <div className="relative w-full sm:w-60">
+                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search student or adm no..."
+                  value={internalSearchQuery}
+                  onChange={(e) => setInternalSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
+                />
+                {internalSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setInternalSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
+                  >
+                    <i className="fas fa-times-circle" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Quick Fill Button */}
             {results.some((r) => canEditMap[r.id]) && (

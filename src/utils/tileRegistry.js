@@ -258,18 +258,6 @@ export const TILE_METADATA_REGISTRY = {
     valid_access_roles: ['admin', 'management', 'teacher'],
     display_order: 85,
   },
-  'exam-progress-report': {
-    title: 'Progress Reports',
-    description:
-      'Design custom report card templates, preview charts, and generate student progress report cards.',
-    icon: 'fa-file-invoice',
-    buttonColor: 'bg-emerald-600 text-white',
-    shadow: 'shadow-emerald-200',
-    group: 'Academics',
-    action: 'subview',
-    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
-    display_order: 86,
-  },
   dashboard: {
     title: 'Dashboard',
     description: 'View syllabus progress, activity, and attention-required insights.',

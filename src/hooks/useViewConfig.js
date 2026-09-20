@@ -316,8 +316,12 @@ export const useViewConfig = () => {
         );
       }
 
-      // Builtin fallback for exam-results-tab-report & exam-progress-report
-      if (componentName === 'exam-results-tab-report' || componentName === 'exam-progress-report') {
+      // Builtin fallback for exam-results-tab-report & exam-results-import
+      if (
+        componentName === 'exam-results-tab-report' ||
+        componentName === 'exam-results-import' ||
+        componentName === 'exam-progress-report'
+      ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
           ['admin', 'management', 'coordinator', 'teacher', 'staff', 'principal'].includes(

@@ -20,10 +20,8 @@ import DynamicForm from '../DynamicForm';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
-import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
-import ProgressReportGenerator from '../examinations/ProgressReportGenerator';
 
 // Shared subview containers
 import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewContainer';
@@ -513,8 +511,8 @@ export const UnifiedPortal = ({
 
       case 'exam-progress-report':
         return (
-          <div data-feature="exam-progress-report">
-            <ProgressReportGenerator user={user} userRoles={userRoles} />
+          <div data-feature="exam-results">
+            <ExamResultsManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} initialTab="report" />
           </div>
         );
 

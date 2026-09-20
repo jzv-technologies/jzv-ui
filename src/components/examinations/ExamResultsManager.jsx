@@ -6,6 +6,8 @@ import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBloc
 import ExamResultsEntryGrid from './ExamResultsEntryGrid';
 import ProgressReportGenerator from './ProgressReportGenerator';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import OfflineMarkSheetModal from './OfflineMarkSheetModal';
+import ImportMarksModal from './ImportMarksModal';
 import { getAdminConfig } from '../../utils/adminConfigUtils';
 import { DEFAULT_TEMPLATE } from './ProgressReportDesigner';
 
@@ -27,7 +29,7 @@ const ENTRY_STATUS_CONFIG = {
   },
 };
 
-const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
+const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = null }) => {
   const canAccess = useCanAccess(userRoles);
 
   // Capability driven strictly by app_view_controller component
@@ -63,6 +65,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab && canAccess(`exam-results-tab-${initialTab}`)) return initialTab;
     if (canAccess('exam-results-tab-entry')) return 'entry';
     return availableTabs[0]?.id || 'entry';
   });
@@ -97,6 +100,15 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   const [adHocMaxMarks, setAdHocMaxMarks] = useState('100');
   const [adHocPassMarks, setAdHocPassMarks] = useState('');
   const [savingAdHoc, setSavingAdHoc] = useState(false);
+
+  // Student Search in Results Entry (Requirement 2.1)
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
+  // Offline Mark Sheet Print Modal (Requirement 2.2)
+  const [showPrintSheetModal, setShowPrintSheetModal] = useState(false);
+
+  // Import Marks Modal (Requirement 2.3)
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Marking Scheme Dialog State
   const [showSchemeModal, setShowSchemeModal] = useState(false);
@@ -534,6 +546,97 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     return { completed, inProgress, pending };
   }, [allSubjectsToShow, classResultsIndex]);
 
+  const selectedClass = useMemo(
+    () => classes.find((c) => String(c.id) === String(selectedClassId)) || null,
+    [classes, selectedClassId]
+  );
+
+  const handleExportMarks = useCallback(async () => {
+    if (!selectedClassId || classStudents.length === 0) {
+      showToast('Select a class with enrolled students to export', 'warning');
+      return;
+    }
+
+    const subjectsToExport = activeSubjects.length > 0 ? activeSubjects : allSubjectsToShow;
+    if (subjectsToExport.length === 0) {
+      showToast('No subjects available to export for this class', 'warning');
+      return;
+    }
+
+    // Ensure we have marks entries for this class
+    let entriesToUse = summaryEntries;
+    if (entriesToUse.length === 0 && classResults.length > 0) {
+      try {
+        const resultIds = classResults.map((r) => r.id);
+        const { data } = await supabase
+          .from('exam_result_entries')
+          .select('*')
+          .in('result_id', resultIds);
+        entriesToUse = data || [];
+      } catch (err) {
+        console.warn('Could not pre-fetch marks for export:', err);
+      }
+    }
+
+    // Build CSV Headers
+    const headers = [
+      'Roll No',
+      'Admission No',
+      'Student Name',
+      ...subjectsToExport.map((s) => `"${s.name} [${s.id}]"`),
+    ];
+
+    // Build CSV Rows
+    const rows = classStudents.map((student) => {
+      const rowVals = [
+        `"${student.roll_no || ''}"`,
+        `"${student.admission_no || ''}"`,
+        `"${student.student_name || ''}"`,
+      ];
+
+      subjectsToExport.forEach((sub) => {
+        const res = classResultsIndex[String(sub.id)];
+        const entry = entriesToUse.find(
+          (e) =>
+            String(e.result_id) === String(res?.id) &&
+            String(e.student_id) === String(student.id)
+        );
+        if (entry?.is_absent) {
+          rowVals.push('"ABSENT"');
+        } else if (entry?.marks_obtained !== null && entry?.marks_obtained !== undefined) {
+          rowVals.push(`"${entry.marks_obtained}"`);
+        } else {
+          rowVals.push('""');
+        }
+      });
+
+      return rowVals.join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const fileName = `Marks_${(selectedSchedule?.name || 'Exam').replace(/\s+/g, '_')}_${(selectedClass?.name || 'Class').replace(/\s+/g, '_')}.csv`;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported marks for ${classStudents.length} students`, 'success');
+  }, [
+    selectedClassId,
+    classStudents,
+    activeSubjects,
+    allSubjectsToShow,
+    selectedSchedule,
+    selectedClass,
+    classResults,
+    classResultsIndex,
+    summaryEntries,
+  ]);
+
   // Auto-select all subjects for class when class or subject list changes
   useEffect(() => {
     if (!selectedClassId || allSubjectsToShow.length === 0) {
@@ -830,6 +933,70 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               </ConditionalBlock>
             )}
 
+            {/* Student Search Field in data-feature-filter (Requirement 2.1) */}
+            {activeTab === 'entry' && selectedClassId && classStudents.length > 0 && (
+              <div className="relative min-w-[170px] max-w-[240px]">
+                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search student / adm..."
+                  value={studentSearchQuery}
+                  onChange={(e) => setStudentSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-7 py-1.5 sm:py-2 h-9 sm:h-8 text-xs font-semibold border border-gray-250 rounded-xl bg-white focus:ring-2 focus:ring-emerald-400 outline-none"
+                />
+                {studentSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setStudentSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
+                  >
+                    <i className="fas fa-times-circle" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Offline Mark Sheet Print button (Requirement 2.2) */}
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
+              <button
+                type="button"
+                onClick={() => setShowPrintSheetModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Print blank mark sheet for manual offline mark entry"
+              >
+                <i className="fas fa-print text-indigo-600 text-[11px]" />
+                <span>Print Sheet</span>
+              </button>
+            )}
+
+            {/* Export Marks to CSV (Requirement 2.3) */}
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
+              <button
+                type="button"
+                onClick={handleExportMarks}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Export class marks to CSV"
+              >
+                <i className="fas fa-file-export text-teal-600 text-[11px]" />
+                <span>Export</span>
+              </button>
+            )}
+
+            {/* Import Marks from CSV (Requirement 2.3) */}
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
+              <ConditionalBlock name="exam-results-import" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                  title="Import marks from CSV with override/ignore options"
+                >
+                  <i className="fas fa-file-import text-emerald-700 text-[11px]" />
+                  <span>Import</span>
+                </button>
+              </ConditionalBlock>
+            )}
+
             {/* Progress Report Top Filters: Direct Students list, Template, Paper Size, Orientation, Designer, Print */}
             {activeTab === 'report' && (
               <div className="flex items-center gap-2 flex-wrap">
@@ -943,6 +1110,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                     invigilatorNames={activeInvigilatorNames}
                     canOverrideInvigilator={canManageAllMarks}
                     userRoles={userRoles}
+                    searchQuery={studentSearchQuery}
+                    onReload={refreshResults}
                   />
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
@@ -1497,6 +1666,34 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Offline Mark Sheet Print Modal (Requirement 2.2) */}
+      {showPrintSheetModal && (
+        <OfflineMarkSheetModal
+          isOpen={showPrintSheetModal}
+          onClose={() => setShowPrintSheetModal(false)}
+          schedule={selectedSchedule}
+          selectedClass={selectedClass}
+          subjects={activeSubjects.length > 0 ? activeSubjects : allSubjectsToShow}
+          students={classStudents}
+        />
+      )}
+
+      {/* Import Marks CSV Modal (Requirement 2.3) */}
+      {showImportModal && (
+        <ImportMarksModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          schedule={selectedSchedule}
+          selectedClass={selectedClass}
+          subjects={allSubjectsToShow}
+          results={classResults}
+          students={classStudents}
+          onImportSuccess={async () => {
+            await refreshResults();
+          }}
+        />
       )}
     </div>
   );
