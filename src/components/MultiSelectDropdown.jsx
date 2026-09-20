@@ -63,12 +63,42 @@ const MultiSelectDropdown = ({
   onGenderChange,
   fullWidth = false,
   className = '',
+  singleSelect = false,
+  icon = null,
+  disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [internalGenderFilter, setInternalGenderFilter] = useState('all');
 
   const { triggerRef, panelStyle, updatePosition } = useDropdownPortal();
+
+  // Normalize selected value(s)
+  const selectedArray = useMemo(() => {
+    if (selected === null || selected === undefined) return [];
+    if (Array.isArray(selected)) return selected.map(String);
+    if (String(selected).trim() === '') return [];
+    return [String(selected)];
+  }, [selected]);
+
+  const selectedCount = selectedArray.length;
+
+  const getOptValue = (opt) => {
+    if (typeof opt === 'string' || typeof opt === 'number') return String(opt);
+    if (opt.value !== undefined && opt.value !== null) return String(opt.value);
+    if (opt.id !== undefined && opt.id !== null) return String(opt.id);
+    return String(opt);
+  };
+
+  const getOptLabel = (opt) => {
+    if (typeof opt === 'string' || typeof opt === 'number') return String(opt);
+    return String(opt.label || opt.name || opt.title || opt.value || opt.id || '');
+  };
+
+  const selectedSingleOption = useMemo(() => {
+    if (!singleSelect || selectedArray.length === 0) return null;
+    return options.find((opt) => getOptValue(opt) === selectedArray[0]) || null;
+  }, [singleSelect, selectedArray, options]);
 
   // Active gender filter state
   const activeGenderFilter = onGenderChange ? genderFilter || 'all' : internalGenderFilter;
@@ -118,20 +148,6 @@ const MultiSelectDropdown = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const selectedCount = selected.length;
-
-  const getOptValue = (opt) => {
-    if (typeof opt === 'string' || typeof opt === 'number') return String(opt);
-    if (opt.value !== undefined && opt.value !== null) return String(opt.value);
-    if (opt.id !== undefined && opt.id !== null) return String(opt.id);
-    return String(opt);
-  };
-
-  const getOptLabel = (opt) => {
-    if (typeof opt === 'string' || typeof opt === 'number') return String(opt);
-    return String(opt.label || opt.name || opt.title || opt.value || opt.id || '');
-  };
-
   const displayedOptions = options.filter((opt) => {
     // 1. Gender filtering if active
     if (hasGender && activeGenderFilter && activeGenderFilter !== 'all') {
@@ -148,24 +164,57 @@ const MultiSelectDropdown = ({
     return labelText.toLowerCase().includes(search.toLowerCase());
   });
 
-  const toggle = (val) => {
+  const getOptRawValue = (opt) => {
+    if (typeof opt === 'string' || typeof opt === 'number') return opt;
+    if (opt.value !== undefined && opt.value !== null) return opt.value;
+    if (opt.id !== undefined && opt.id !== null) return opt.id;
+    return opt;
+  };
+
+  const toggle = (val, opt) => {
+    const rawVal = getOptRawValue(opt);
     const stringVal = String(val);
-    const exists = selected.map(String).includes(stringVal);
+
+    if (singleSelect) {
+      onChange(rawVal);
+      setOpen(false);
+      return;
+    }
+
+    const exists = selectedArray.includes(stringVal);
     if (exists) {
-      onChange(selected.filter((s) => String(s) !== stringVal));
+      if (Array.isArray(selected)) {
+        onChange(selected.filter((s) => String(s) !== stringVal));
+      } else {
+        onChange(selectedArray.filter((s) => s !== stringVal));
+      }
     } else {
-      onChange([...selected, val]);
+      if (Array.isArray(selected)) {
+        onChange([...selected, rawVal]);
+      } else {
+        onChange([...selectedArray, rawVal]);
+      }
     }
   };
 
-  const handleSelectAll = () => {
-    const allVals = displayedOptions.map(getOptValue);
-    const newSelected = Array.from(new Set([...selected.map(String), ...allVals]));
-    onChange(newSelected);
+  const handleSelectAll = (e) => {
+    e?.stopPropagation();
+    const currentSelected = Array.isArray(selected) ? selected : [];
+    const currentStringMap = new Set(currentSelected.map(String));
+    const toAdd = [];
+    displayedOptions.forEach((opt) => {
+      const v = getOptValue(opt);
+      if (!currentStringMap.has(v)) {
+        currentStringMap.add(v);
+        toAdd.push(getOptRawValue(opt));
+      }
+    });
+    onChange([...currentSelected, ...toAdd]);
   };
 
-  const handleClearAll = () => {
-    onChange([]);
+  const handleClearAll = (e) => {
+    e?.stopPropagation();
+    onChange(singleSelect ? '' : []);
   };
 
   const panel =
@@ -174,7 +223,7 @@ const MultiSelectDropdown = ({
       <div
         data-dropdown-panel
         className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-        style={{ ...panelStyle, maxWidth: 280 }}
+        style={{ ...panelStyle, maxWidth: 300 }}
       >
         {/* Search Input */}
         <div className="p-2 border-b border-light-border bg-gray-50/50">
@@ -225,13 +274,15 @@ const MultiSelectDropdown = ({
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/50 border-b border-light-border text-[10px] font-extrabold text-gray-500">
           <span className="uppercase tracking-wider">{label || placeholder || 'Options'}</span>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              className="text-[9px] font-black text-brand-primary hover:underline cursor-pointer"
-            >
-              Select all
-            </button>
+            {!singleSelect && (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="text-[9px] font-black text-brand-primary hover:underline cursor-pointer"
+              >
+                Select all
+              </button>
+            )}
             {selectedCount > 0 && (
               <button
                 type="button"
@@ -253,7 +304,7 @@ const MultiSelectDropdown = ({
           ) : (
             displayedOptions.map((opt) => {
               const val = getOptValue(opt);
-              const isChecked = selected.map(String).includes(val);
+              const isChecked = selectedArray.includes(val);
               const isFemale =
                 opt.is_female === true ||
                 opt.is_male === false ||
@@ -269,34 +320,60 @@ const MultiSelectDropdown = ({
               const prefixColor = opt.prefixStyle?.color || (isFemale ? '#F472B6' : '#3B82F6');
 
               return (
-                <label
+                <div
                   key={val}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggle(val, opt);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      toggle(val, opt);
+                    }
+                  }}
                   title={getOptLabel(opt)}
-                  className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-all text-xs font-bold hover:bg-brand-primary/5 ${
+                  className={`w-full flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-all text-xs font-bold select-none hover:bg-brand-primary/5 ${
                     isChecked ? 'bg-brand-primary/10 text-brand-primary' : 'text-gray-750'
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    onChange={() => toggle(val)}
-                    className="rounded text-brand-primary focus:ring-brand-primary/50 w-3.5 h-3.5 mt-0.5 shrink-0 cursor-pointer"
-                  />
+                  {singleSelect ? (
+                    <div
+                      className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center mt-0.5 shrink-0 transition-colors pointer-events-none ${
+                        isChecked ? 'border-brand-primary bg-brand-primary' : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {isChecked && <i className="fas fa-check text-[7px] text-white" />}
+                    </div>
+                  ) : (
+                    <div
+                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center mt-0.5 shrink-0 transition-colors pointer-events-none ${
+                        isChecked ? 'border-brand-primary bg-brand-primary text-white' : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {isChecked && <i className="fas fa-check text-[8px]" />}
+                    </div>
+                  )}
                   {prefixIcon && (
                     <i
-                      className={`fas ${prefixIcon} text-[9px] mt-1 shrink-0`}
+                      className={`fas ${prefixIcon} text-[9px] mt-1 shrink-0 pointer-events-none`}
                       style={{ color: prefixColor }}
                     />
                   )}
-                  <span className="break-words leading-tight flex-1 text-left">{getOptLabel(opt)}</span>
-                </label>
+                  <span className="break-words leading-tight flex-1 text-left pointer-events-none">
+                    {getOptLabel(opt)}
+                  </span>
+                </div>
               );
             })
           )}
         </div>
 
         {/* Footer Status */}
-        {selectedCount > 0 && (
+        {selectedCount > 0 && !singleSelect && (
           <div className="px-3 py-1.5 border-t border-light-border bg-gray-50/50 text-[9px] text-gray-500 font-semibold flex justify-between">
             <span>{selectedCount} selected</span>
             <span>{displayedOptions.length} total</span>
@@ -310,39 +387,56 @@ const MultiSelectDropdown = ({
 
   return (
     <div className={`${fullWidth ? 'w-full' : 'relative inline-block w-full sm:w-auto'} ${className}`}>
-      {/* {label && <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>} */}
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center justify-between gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-          selectedCount > 0 || genderBadge
-            ? 'bg-brand-primary text-white border-brand-primary shadow-sm'
-            : 'bg-white border-gray-250 text-gray-700 hover:border-brand-primary/50 hover:bg-gray-50/50'
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        className={`flex items-center justify-between gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 rounded-xl border text-xs font-bold transition-all ${
+          disabled
+            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+            : selectedCount > 0 || genderBadge
+              ? 'bg-white border-brand-primary text-brand-primary shadow-xs hover:bg-brand-primary/5 cursor-pointer'
+              : 'bg-white border-gray-250 text-gray-700 hover:border-brand-primary/50 hover:bg-gray-50/50 cursor-pointer'
         } ${fullWidth ? 'w-full' : 'w-full sm:w-auto whitespace-nowrap min-w-0 sm:min-w-[120px]'}`}
       >
         <span className="flex items-center gap-1.5 truncate min-w-0">
-          <i className="fas fa-filter text-[9px] shrink-0 opacity-80" />
+          <i
+            className={`fas ${
+              icon || (singleSelect ? 'fa-chevron-circle-down' : 'fa-filter')
+            } text-[9px] shrink-0 opacity-80`}
+          />
           <span className="truncate">
-            {selectedCount === 0
-              ? displayTitle
-              : selectedCount === options.length
-                ? `All ${displayTitle}`
-                : `${selectedCount} ${displayTitle}`}
+            {singleSelect ? (
+              selectedSingleOption ? (
+                <span>
+                  {label && <span className="text-gray-400 font-semibold mr-1">{label}:</span>}
+                  <span className="text-dark-primary font-black">{getOptLabel(selectedSingleOption)}</span>
+                </span>
+              ) : (
+                <span className="text-gray-500 font-semibold">{placeholder || label || 'Select...'}</span>
+              )
+            ) : selectedCount === 0 ? (
+              displayTitle
+            ) : selectedCount === options.length && options.length > 0 ? (
+              `All ${displayTitle}`
+            ) : (
+              `${selectedCount} ${displayTitle}`
+            )}
           </span>
-          {selectedCount > 0 && (
-            <span className="bg-white/30 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ml-0.5 shrink-0">
+          {!singleSelect && selectedCount > 0 && (
+            <span className="bg-brand-primary/15 text-brand-primary text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ml-0.5 shrink-0">
               {selectedCount}
             </span>
           )}
           {genderBadge && selectedCount === 0 && (
-            <span className="bg-white/30 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ml-0.5 capitalize shrink-0">
+            <span className="bg-brand-primary/15 text-brand-primary text-[9px] font-extrabold px-1.5 py-0.5 rounded-full ml-0.5 capitalize shrink-0">
               {genderBadge}
             </span>
           )}
         </span>
         <i
-          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-1 shrink-0 opacity-80`}
+          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] ml-1 shrink-0 opacity-70`}
         />
       </button>
       {panel}

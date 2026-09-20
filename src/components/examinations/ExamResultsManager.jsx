@@ -1,5 +1,5 @@
 // src/components/examinations/ExamResultsManager.jsx
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
@@ -106,11 +106,12 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
   const [savingScheme, setSavingScheme] = useState(false);
 
   // Progress Report Top Filter State
-  const [reportStudentScope, setReportStudentScope] = useState('all'); // 'all' | 'selected'
   const [reportSelectedStudentIds, setReportSelectedStudentIds] = useState([]);
   const [reportTemplates, setReportTemplates] = useState([DEFAULT_TEMPLATE]);
   const [reportTemplateId, setReportTemplateId] = useState(DEFAULT_TEMPLATE.id);
   const [isReportDesignerOpen, setIsReportDesignerOpen] = useState(false);
+  const [paperSize, setPaperSize] = useState('a4');
+  const [orientation, setOrientation] = useState('portrait');
 
   // Summary entries for class overview tab
   const [summaryEntries, setSummaryEntries] = useState([]);
@@ -223,14 +224,23 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     loadReportTemplates();
   }, []);
 
-  // Sync selected students when classStudents updates
+  // Sync selected students only when selectedClassId changes
+  const prevClassIdForStudentsRef = useRef(null);
   useEffect(() => {
-    if (classStudents.length > 0) {
-      setReportSelectedStudentIds(classStudents.map((s) => String(s.id)));
-    } else {
+    if (!selectedClassId) {
       setReportSelectedStudentIds([]);
+      prevClassIdForStudentsRef.current = null;
+      return;
     }
-  }, [classStudents]);
+    if (prevClassIdForStudentsRef.current !== selectedClassId) {
+      prevClassIdForStudentsRef.current = selectedClassId;
+      if (classStudents.length > 0) {
+        setReportSelectedStudentIds(classStudents.map((s) => String(s.id)));
+      } else {
+        setReportSelectedStudentIds([]);
+      }
+    }
+  }, [selectedClassId, classStudents]);
 
   // Subjects that have exam_schedule_slots for this class in this schedule
   const scheduledSubjects = useMemo(() => {
@@ -510,6 +520,20 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
     return list;
   }, [scheduledSubjects, adHocSubjects]);
 
+  const completionStats = useMemo(() => {
+    let completed = 0;
+    let inProgress = 0;
+    let pending = 0;
+    allSubjectsToShow.forEach((sub) => {
+      const res = classResultsIndex[String(sub.id)];
+      const status = res?.entry_status || 'pending';
+      if (status === 'completed') completed++;
+      else if (status === 'in_progress') inProgress++;
+      else pending++;
+    });
+    return { completed, inProgress, pending };
+  }, [allSubjectsToShow, classResultsIndex]);
+
   // Auto-select all subjects for class when class or subject list changes
   useEffect(() => {
     if (!selectedClassId || allSubjectsToShow.length === 0) {
@@ -522,6 +546,19 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
       return valid.length > 0 ? valid : allSubjectsToShow.map((s) => String(s.id));
     });
   }, [selectedClassId, allSubjectsToShow]);
+
+  // Auto-select all students for class in Progress Reports
+  useEffect(() => {
+    if (!selectedClassId || classStudents.length === 0) {
+      setReportSelectedStudentIds([]);
+      return;
+    }
+
+    setReportSelectedStudentIds((prev) => {
+      const valid = prev.filter((id) => classStudents.some((s) => String(s.id) === String(id)));
+      return valid.length > 0 ? valid : classStudents.map((s) => String(s.id));
+    });
+  }, [selectedClassId, classStudents]);
 
   const handleOpenSchemeModal = () => {
     const initial = {};
@@ -668,27 +705,23 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
 
           <div className="flex items-center gap-2.5 self-end sm:self-auto">
             {schedules.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
-                <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                  Exam:
-                </span>
-                <select
-                  value={selectedScheduleId || ''}
-                  onChange={(e) => {
-                    setSelectedScheduleId(e.target.value);
-                    setSelectedClassId('');
-                    setActiveResultId(null);
-                  }}
-                  className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer max-w-[180px] sm:max-w-xs truncate"
-                >
-                  <option value="">— Select Schedule —</option>
-                  {schedules.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <MultiSelectDropdown
+                label="Exam"
+                icon="fa-calendar-check"
+                singleSelect={true}
+                options={schedules.map((s) => ({
+                  id: String(s.id),
+                  label: `${s.name} (${s.status})`,
+                }))}
+                selected={selectedScheduleId}
+                onChange={(val) => {
+                  setSelectedScheduleId(val);
+                  setSelectedClassId('');
+                  setSelectedSubjectIds([]);
+                }}
+                placeholder="Select Exam..."
+                fullWidth={false}
+              />
             )}
             <button
               onClick={async () => {
@@ -730,34 +763,31 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               </div>
             )}
 
-            {/* Class Selector Dropdown */}
-            <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
-              <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                Class:
-              </span>
-              <select
-                value={selectedClassId || ''}
-                onChange={(e) => {
-                  setSelectedClassId(e.target.value);
-                  setSelectedSubjectIds([]);
-                }}
-                disabled={!selectedScheduleId}
-                className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer disabled:opacity-50 min-w-[130px] max-w-[200px] truncate"
-              >
-                <option value="">— Select Class —</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Class Selector Dropdown (Single Class selection using MultiSelectDropdown style) */}
+            <MultiSelectDropdown
+              label="Class"
+              icon="fa-chalkboard-user"
+              singleSelect={true}
+              disabled={!selectedScheduleId}
+              options={classes.map((c) => ({
+                id: String(c.id),
+                label: c.name,
+              }))}
+              selected={selectedClassId}
+              onChange={(val) => {
+                setSelectedClassId(val);
+                setSelectedSubjectIds([]);
+              }}
+              placeholder="Select Class..."
+              fullWidth={false}
+            />
 
             {/* Subject Selector MultiSelectDropdown in top filter bar */}
             {activeTab === 'entry' && selectedClassId && (
               <div className="min-w-[180px] max-w-[300px]">
                 <MultiSelectDropdown
                   label="Subjects"
+                  icon="fa-book-open"
                   options={allSubjectsToShow.map((sub) => ({
                     id: String(sub.id),
                     label: sub.name,
@@ -800,29 +830,15 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               </ConditionalBlock>
             )}
 
-            {/* Progress Report Top Filters (repurposing Exam & Class, adding Scope, Template, Designer, Print) */}
+            {/* Progress Report Top Filters: Direct Students list, Template, Paper Size, Orientation, Designer, Print */}
             {activeTab === 'report' && (
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                {/* Student Scope Selector */}
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
-                  <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                    Scope:
-                  </span>
-                  <select
-                    value={reportStudentScope}
-                    onChange={(e) => setReportStudentScope(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer"
-                  >
-                    <option value="all">Entire Class ({classStudents.length})</option>
-                    <option value="selected">Selected Students</option>
-                  </select>
-                </div>
-
-                {/* Conditional Students MultiSelect */}
-                {reportStudentScope === 'selected' && (
-                  <div className="min-w-[160px] max-w-[240px]">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Students MultiSelectDropdown displayed directly (All selected = Entire Class) */}
+                {selectedClassId && classStudents.length > 0 && (
+                  <div className="min-w-[170px] max-w-[260px]">
                     <MultiSelectDropdown
                       label="Students"
+                      icon="fa-user-graduate"
                       options={classStudents.map((s) => ({
                         id: String(s.id),
                         label: `${s.student_name} (${s.admission_no})`,
@@ -836,28 +852,57 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                 )}
 
                 {/* Active Template Selector */}
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-light-border px-2.5 py-1.5 rounded-xl">
-                  <span className="text-[11px] font-bold text-dark-muted whitespace-nowrap">
-                    Template:
-                  </span>
-                  <select
-                    value={reportTemplateId}
-                    onChange={(e) => setReportTemplateId(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-dark-primary outline-none cursor-pointer max-w-[170px] truncate"
-                  >
-                    {reportTemplates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <MultiSelectDropdown
+                  label="Template"
+                  icon="fa-file-lines"
+                  singleSelect={true}
+                  options={reportTemplates.map((t) => ({
+                    id: String(t.id),
+                    label: t.name,
+                  }))}
+                  selected={reportTemplateId}
+                  onChange={setReportTemplateId}
+                  placeholder="Select Template..."
+                  fullWidth={false}
+                />
+
+                {/* Paper Size Selector */}
+                <MultiSelectDropdown
+                  label="Size"
+                  icon="fa-file"
+                  singleSelect={true}
+                  options={[
+                    { id: 'a4', label: 'A4' },
+                    { id: 'letter', label: 'Letter' },
+                    { id: 'legal', label: 'Legal' },
+                    { id: 'a3', label: 'A3' },
+                  ]}
+                  selected={paperSize}
+                  onChange={setPaperSize}
+                  placeholder="Paper Size..."
+                  fullWidth={false}
+                />
+
+                {/* Orientation Selector */}
+                <MultiSelectDropdown
+                  label="Layout"
+                  icon="fa-repeat"
+                  singleSelect={true}
+                  options={[
+                    { id: 'portrait', label: 'Portrait' },
+                    { id: 'landscape', label: 'Landscape' },
+                  ]}
+                  selected={orientation}
+                  onChange={setOrientation}
+                  placeholder="Orientation..."
+                  fullWidth={false}
+                />
 
                 {/* Designer button */}
                 <button
                   type="button"
                   onClick={() => setIsReportDesignerOpen(true)}
-                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
                   title="Design / Edit Template"
                 >
                   <i className="fas fa-palette text-[10px]" />
@@ -870,6 +915,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
                   onClick={() => window.print()}
                   disabled={classStudents.length === 0}
                   className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                  title="Print or Save as PDF"
                 >
                   <i className="fas fa-print text-xs" />
                   <span>Print / Export PDF</span>
@@ -1136,11 +1182,10 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               schedules={schedules}
               classes={classes}
               subjects={subjects}
+              students={students}
               initialScheduleId={selectedScheduleId}
               initialClassId={selectedClassId}
               userRoles={userRoles}
-              studentSelectionMode={reportStudentScope}
-              onStudentSelectionModeChange={setReportStudentScope}
               selectedStudentIds={reportSelectedStudentIds}
               onSelectedStudentIdsChange={setReportSelectedStudentIds}
               selectedTemplateId={reportTemplateId}
@@ -1148,6 +1193,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord }) => {
               isDesignerOpen={isReportDesignerOpen}
               onIsDesignerOpenChange={setIsReportDesignerOpen}
               onTemplatesLoaded={setReportTemplates}
+              paperSize={paperSize}
+              orientation={orientation}
               hideControlBar={true}
             />
           </ConditionalBlock>

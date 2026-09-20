@@ -41,6 +41,7 @@ const ProgressReportGenerator = ({
   schedules = [],
   classes = [],
   subjects = [],
+  students: propStudents = null,
   initialScheduleId = null,
   initialClassId = null,
   userRoles = [],
@@ -53,8 +54,15 @@ const ProgressReportGenerator = ({
   isDesignerOpen: controlledIsDesignerOpen,
   onIsDesignerOpenChange,
   onTemplatesLoaded,
+  paperSize: propPaperSize = 'a4',
+  orientation: propOrientation = 'portrait',
   hideControlBar = false,
 }) => {
+  const [internalPaperSize, setInternalPaperSize] = useState('a4');
+  const [internalOrientation, setInternalOrientation] = useState('portrait');
+  const paperSize = propPaperSize || internalPaperSize;
+  const orientation = propOrientation || internalOrientation;
+
   const [internalSchedules, setInternalSchedules] = useState(schedules);
   const [internalClasses, setInternalClasses] = useState(classes);
   const [internalSubjects, setInternalSubjects] = useState(subjects);
@@ -67,27 +75,35 @@ const ProgressReportGenerator = ({
   );
 
   useEffect(() => {
-    if (initialScheduleId) setSelectedScheduleId(String(initialScheduleId));
+    if (initialScheduleId !== undefined && initialScheduleId !== null) {
+      setSelectedScheduleId(String(initialScheduleId));
+    }
   }, [initialScheduleId]);
 
   useEffect(() => {
-    if (initialClassId) setSelectedClassId(String(initialClassId));
+    if (initialClassId !== undefined && initialClassId !== null) {
+      setSelectedClassId(String(initialClassId));
+    }
   }, [initialClassId]);
 
   // Sync props to internal state
   useEffect(() => {
     if (schedules.length > 0) {
       setInternalSchedules(schedules);
-      if (!selectedScheduleId) setSelectedScheduleId(String(schedules[0].id));
+      if (!selectedScheduleId && initialScheduleId === null) {
+        setSelectedScheduleId(String(schedules[0].id));
+      }
     }
-  }, [schedules]);
+  }, [schedules, initialScheduleId, selectedScheduleId]);
 
   useEffect(() => {
     if (classes.length > 0) {
       setInternalClasses(classes);
-      if (!selectedClassId) setSelectedClassId(String(classes[0].id));
+      if (!selectedClassId && initialClassId === null) {
+        setSelectedClassId(String(classes[0].id));
+      }
     }
-  }, [classes]);
+  }, [classes, initialClassId, selectedClassId]);
 
   useEffect(() => {
     if (subjects.length > 0) setInternalSubjects(subjects);
@@ -221,6 +237,13 @@ const ProgressReportGenerator = ({
     return templates.find((t) => t.id === selectedTemplateId) || templates[0] || DEFAULT_TEMPLATE;
   }, [templates, selectedTemplateId]);
 
+  // If propStudents is passed, sync students state directly
+  useEffect(() => {
+    if (propStudents && Array.isArray(propStudents)) {
+      setStudents(propStudents.filter((s) => String(s.class_id) === String(selectedClassId)));
+    }
+  }, [propStudents, selectedClassId]);
+
   // Load class students and exam data
   useEffect(() => {
     if (!selectedClassId || !selectedScheduleId) {
@@ -234,14 +257,19 @@ const ProgressReportGenerator = ({
       setLoading(true);
       try {
         // 1. Fetch Students
-        const { data: stuData } = await supabase
-          .from('students')
-          .select('*')
-          .eq('class_id', selectedClassId)
-          .eq('enrollment', 'Active')
-          .order('student_name');
-
-        setStudents(stuData || []);
+        if (propStudents && Array.isArray(propStudents) && propStudents.length > 0) {
+          const matched = propStudents.filter(
+            (s) => String(s.class_id) === String(selectedClassId)
+          );
+          setStudents(matched);
+        } else {
+          const { data: stuData } = await supabase
+            .from('students')
+            .select('*')
+            .eq('class_id', selectedClassId)
+            .order('student_name');
+          setStudents(stuData || []);
+        }
 
         // 2. Fetch Results for this Schedule + Class
         const { data: resData } = await supabase
@@ -273,7 +301,7 @@ const ProgressReportGenerator = ({
     };
 
     fetchData();
-  }, [selectedScheduleId, selectedClassId]);
+  }, [selectedScheduleId, selectedClassId, propStudents]);
 
   // Selected schedule object
   const selectedSchedule = useMemo(() => {
@@ -288,7 +316,17 @@ const ProgressReportGenerator = ({
   // Determine which students to render cards for
   const displayedStudents = useMemo(() => {
     if (studentSelectionMode === 'all') return students;
-    return students.filter((s) => selectedStudentIds.includes(String(s.id)));
+    if (selectedStudentIds === undefined || selectedStudentIds === null) {
+      return students;
+    }
+    if (selectedStudentIds.length === 0) {
+      return [];
+    }
+    if (selectedStudentIds.length === students.length) {
+      return students;
+    }
+    const stringIds = new Set(selectedStudentIds.map(String));
+    return students.filter((s) => stringIds.has(String(s.id)));
   }, [students, studentSelectionMode, selectedStudentIds]);
 
   // Compute calculated metrics & ranks across all students in class
@@ -533,12 +571,24 @@ const ProgressReportGenerator = ({
         <div className="flex justify-center py-20 bg-white rounded-3xl border border-light-border">
           <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : !selectedClassId ? (
+        <div className="text-center py-16 bg-white border border-light-border rounded-3xl p-8 shadow-xs">
+          <i className="fas fa-chalkboard text-3xl text-slate-300 mb-2 block" />
+          <p className="text-sm font-bold text-dark-primary">Select an Examination and Class</p>
+          <p className="text-xs text-dark-muted mt-1">
+            Choose an examination event and class section to view or generate student progress report cards.
+          </p>
+        </div>
       ) : displayedStudents.length === 0 ? (
         <div className="text-center py-16 bg-white border border-light-border rounded-3xl p-8 shadow-xs">
           <i className="fas fa-user-graduate text-3xl text-slate-300 mb-2 block" />
-          <p className="text-sm font-bold text-dark-primary">No Students Selected</p>
+          <p className="text-sm font-bold text-dark-primary">
+            {students.length === 0 ? 'No Students in this Class' : 'No Students Selected'}
+          </p>
           <p className="text-xs text-dark-muted mt-1">
-            Choose a class or select students from the filter bar above.
+            {students.length === 0
+              ? `No students found enrolled in ${selectedClass?.name || 'this class'}.`
+              : 'Choose students from the filter dropdown above to display their report cards.'}
           </p>
         </div>
       ) : results.length === 0 ? (
@@ -550,8 +600,69 @@ const ProgressReportGenerator = ({
           </p>
         </div>
       ) : (
-        /* Report Cards List (One card per student, styled for A4 page break on print) */
-        <div className="space-y-8 print:space-y-0">
+        /* Report Cards List (One card per student, strictly 1 full page without border) */
+        <div className="space-y-8 print:space-y-0 print-cards-container">
+          {/* Dynamic Print Stylesheet for 1 Full Page Per Card & Zero Border */}
+          <style>{`
+            @media print {
+              @page {
+                size: ${paperSize} ${orientation};
+                margin: 0 !important;
+              }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              header, nav, aside, footer, [data-feature-filter], [data-feature-tab], .print\\:hidden {
+                display: none !important;
+              }
+              .print-cards-container {
+                display: block !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+              }
+              .progress-report-card-page {
+                width: 100vw !important;
+                height: 100vh !important;
+                max-height: 100vh !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
+                padding: ${orientation === 'landscape' ? '5mm 7mm' : '7mm 8mm'} !important;
+                border: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: flex-start !important;
+                gap: ${orientation === 'landscape' ? '2mm' : '2.5mm'} !important;
+                overflow: hidden !important;
+                background: #ffffff !important;
+              }
+              .progress-report-card-page > * {
+                margin-top: 0 !important;
+                margin-bottom: 0 !important;
+              }
+              .progress-report-card-page .report-card-signatures {
+                margin-top: auto !important;
+                padding-top: 2.5mm !important;
+              }
+              .progress-report-card-page table {
+                font-size: 9.5px !important;
+              }
+              .progress-report-card-page th,
+              .progress-report-card-page td {
+                padding: 3px 5px !important;
+              }
+            }
+          `}</style>
           {displayedStudents.map((student, studentIdx) => {
             const metrics = studentMetricsMap[String(student.id)] || {};
             const subjectScores = metrics.subjectScores || [];
@@ -600,7 +711,7 @@ const ProgressReportGenerator = ({
             return (
               <div
                 key={student.id}
-                className="bg-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-md print:shadow-none print:border-2 print:border-black print:rounded-none print:m-0 print:p-6 print:break-after-page space-y-6 max-w-4xl mx-auto"
+                className="bg-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto space-y-4 print:space-y-0"
               >
                 {/* ── Render Blocks according to activeTemplate.blockOrder ── */}
                 {activeTemplate.blockOrder.map((blockKey) => {
@@ -610,26 +721,26 @@ const ProgressReportGenerator = ({
                       return (
                         <div
                           key="schoolHeader"
-                          className="border-b-2 border-slate-900 pb-4 text-center space-y-1 relative"
+                          className="border-b-2 border-slate-900 pb-3 print:pb-1 text-center space-y-1 print:space-y-0.5 relative"
                         >
                           {activeTemplate.schoolHeader.logoUrl && (
                             <img
                               src={activeTemplate.schoolHeader.logoUrl}
                               alt="School Logo"
-                              className="mx-auto max-h-14 mb-1 object-contain"
+                              className="mx-auto max-h-12 print:max-h-8 mb-1 print:mb-0 object-contain"
                             />
                           )}
-                          <h1 className="text-xl sm:text-2xl font-black tracking-tight uppercase text-dark-primary">
+                          <h1 className="text-xl sm:text-2xl print:text-base font-black tracking-tight uppercase text-dark-primary">
                             {activeTemplate.schoolHeader.title}
                           </h1>
-                          <p className="text-xs font-bold text-dark-muted uppercase tracking-wider">
+                          <p className="text-xs print:text-[9px] font-bold text-dark-muted uppercase tracking-wider">
                             {activeTemplate.schoolHeader.subtitle}
                           </p>
-                          <p className="text-[10px] font-semibold text-slate-500">
+                          <p className="text-[10px] print:text-[8px] font-semibold text-slate-500">
                             {activeTemplate.schoolHeader.address}
                           </p>
-                          <div className="pt-2">
-                            <span className="inline-block px-3 py-1 rounded-full bg-slate-900 text-white text-[11px] font-black uppercase tracking-widest">
+                          <div className="pt-1.5 print:pt-0.5">
+                            <span className="inline-block px-3 py-1 print:py-0.5 print:px-2 rounded-full bg-slate-900 text-white text-[11px] print:text-[9px] font-black uppercase tracking-widest">
                               {selectedSchedule?.name || activeTemplate.schoolHeader.examTitle}
                             </span>
                           </div>
@@ -641,18 +752,18 @@ const ProgressReportGenerator = ({
                       return (
                         <div
                           key="studentInfo"
-                          className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs"
+                          className="bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg p-3.5 print:p-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5 print:gap-1.5 text-xs print:text-[10px]"
                         >
                           <div>
-                            <span className="text-[10px] font-bold text-dark-muted uppercase block">
+                            <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                               Student Name
                             </span>
-                            <span className="font-black text-dark-primary text-sm">
+                            <span className="font-black text-dark-primary text-sm print:text-xs">
                               {student.student_name}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] font-bold text-dark-muted uppercase block">
+                            <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                               Admission No
                             </span>
                             <span className="font-mono font-bold text-dark-primary">
@@ -660,7 +771,7 @@ const ProgressReportGenerator = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] font-bold text-dark-muted uppercase block">
+                            <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                               Class & Section
                             </span>
                             <span className="font-bold text-rose-700">
@@ -668,7 +779,7 @@ const ProgressReportGenerator = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] font-bold text-dark-muted uppercase block">
+                            <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                               Roll No
                             </span>
                             <span className="font-mono font-bold text-dark-primary">
@@ -681,29 +792,29 @@ const ProgressReportGenerator = ({
                     case 'subjectTable':
                       if (!activeTemplate.showSubjectTable) return null;
                       return (
-                        <div key="subjectTable" className="space-y-3">
-                          <h3 className="text-xs font-black text-dark-primary uppercase tracking-wider">
+                        <div key="subjectTable" className="space-y-2 print:space-y-1">
+                          <h3 className="text-xs print:text-[10px] font-black text-dark-primary uppercase tracking-wider">
                             Academic Marks Register
                           </h3>
-                          <div className="overflow-x-auto rounded-xl border border-slate-900">
-                            <table className="w-full text-xs border-collapse">
+                          <div className="overflow-x-auto rounded-xl border border-slate-900 print:rounded-lg">
+                            <table className="w-full text-xs print:text-[9.5px] border-collapse">
                               <thead>
-                                <tr className="bg-slate-900 text-white font-black text-[11px] uppercase tracking-wider">
-                                  <th className="py-2.5 px-3 text-left">Subject</th>
+                                <tr className="bg-slate-900 text-white font-black text-[11px] print:text-[9px] uppercase tracking-wider">
+                                  <th className="py-2 print:py-1 px-2.5 print:px-1.5 text-left">Subject</th>
                                   {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                    <th className="py-2.5 px-2 text-center w-20">Max Marks</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">Max Marks</th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showPassMarks && (
-                                    <th className="py-2.5 px-2 text-center w-20">Pass Marks</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">Pass Marks</th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showMarksObtained && (
-                                    <th className="py-2.5 px-2 text-center w-24">Marks Obtained</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-24 print:w-18">Marks Obtained</th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showGrade && (
-                                    <th className="py-2.5 px-2 text-center w-16">Grade</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-16 print:w-12">Grade</th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showStatus && (
-                                    <th className="py-2.5 px-2 text-center w-20">Status</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-14">Status</th>
                                   )}
                                 </tr>
                               </thead>
@@ -711,32 +822,32 @@ const ProgressReportGenerator = ({
                                 {/* Grouped Sections */}
                                 {groupedSections.map((grp) => (
                                   <React.Fragment key={grp.groupName}>
-                                    <tr className="bg-slate-100 font-black text-[11px] text-dark-primary">
+                                    <tr className="bg-slate-100 font-black text-[11px] print:text-[9px] text-dark-primary">
                                       <td
                                         colSpan={6}
-                                        className="py-2 px-3 uppercase tracking-wider bg-rose-50/70 text-rose-900 border-y border-rose-200"
+                                        className="py-1.5 print:py-0.5 px-2.5 print:px-1.5 uppercase tracking-wider bg-rose-50/70 text-rose-900 border-y border-rose-200"
                                       >
                                         <i className="fas fa-layer-group text-[10px] mr-1.5 text-rose-600" />
                                         <span>Group: {grp.groupName}</span>
-                                        <span className="ml-3 font-normal text-[10px] text-dark-muted">
+                                        <span className="ml-3 font-normal text-[10px] print:text-[8px] text-dark-muted">
                                           (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} · {grp.groupPct}%)
                                         </span>
                                       </td>
                                     </tr>
                                     {grp.members.map((s) => (
                                       <tr key={s.subjectId} className="hover:bg-slate-50/50">
-                                        <td className="py-2 px-3 font-bold text-dark-primary pl-6">
+                                        <td className="py-1.5 print:py-0.5 px-2.5 print:px-1.5 font-bold text-dark-primary pl-5 print:pl-3">
                                           • {s.subjectName}
                                         </td>
                                         {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                          <td className="py-2 px-2 text-center font-mono">{s.maxMarks}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.maxMarks}</td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showPassMarks && (
-                                          <td className="py-2 px-2 text-center font-mono">{s.passMarks || '—'}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.passMarks || '—'}</td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showMarksObtained && (
                                           <td
-                                            className={`py-2 px-2 text-center font-black ${
+                                            className={`py-1.5 print:py-0.5 px-2 print:px-1 text-center font-black ${
                                               s.status === 'FAIL'
                                                 ? 'text-rose-600'
                                                 : s.isAbsent
@@ -748,10 +859,10 @@ const ProgressReportGenerator = ({
                                           </td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showGrade && (
-                                          <td className="py-2 px-2 text-center font-bold">{s.grade}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">{s.grade}</td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showStatus && (
-                                          <td className="py-2 px-2 text-center font-bold text-[10px]">
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold text-[10px] print:text-[8.5px]">
                                             <span
                                               className={
                                                 s.status === 'PASS'
@@ -771,18 +882,18 @@ const ProgressReportGenerator = ({
                                 {/* Ungrouped Individual Subjects */}
                                 {ungroupedScores.map((s) => (
                                   <tr key={s.subjectId} className="hover:bg-slate-50/50">
-                                    <td className="py-2 px-3 font-bold text-dark-primary">
+                                    <td className="py-1.5 print:py-0.5 px-2.5 print:px-1.5 font-bold text-dark-primary">
                                       {s.subjectName}
                                     </td>
                                     {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                      <td className="py-2 px-2 text-center font-mono">{s.maxMarks}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.maxMarks}</td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showPassMarks && (
-                                      <td className="py-2 px-2 text-center font-mono">{s.passMarks || '—'}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.passMarks || '—'}</td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showMarksObtained && (
                                       <td
-                                        className={`py-2 px-2 text-center font-black ${
+                                        className={`py-1.5 print:py-0.5 px-2 print:px-1 text-center font-black ${
                                           s.status === 'FAIL'
                                             ? 'text-rose-600'
                                             : s.isAbsent
@@ -794,10 +905,10 @@ const ProgressReportGenerator = ({
                                       </td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showGrade && (
-                                      <td className="py-2 px-2 text-center font-bold">{s.grade}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">{s.grade}</td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showStatus && (
-                                      <td className="py-2 px-2 text-center font-bold text-[10px]">
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold text-[10px] print:text-[8.5px]">
                                         <span
                                           className={
                                             s.status === 'PASS'
@@ -822,46 +933,46 @@ const ProgressReportGenerator = ({
                       return (
                         <div
                           key="summaryCalculations"
-                          className="bg-slate-900 text-white rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-5 gap-3 text-center"
+                          className="bg-slate-900 text-white rounded-2xl print:rounded-lg p-3.5 print:p-1.5 grid grid-cols-2 sm:grid-cols-5 gap-2.5 print:gap-1 text-center"
                         >
                           <div>
-                            <span className="text-[10px] text-slate-300 font-bold uppercase block">
+                            <span className="text-[10px] print:text-[8px] text-slate-300 font-bold uppercase block">
                               Grand Total
                             </span>
-                            <span className="text-base font-black text-white">
+                            <span className="text-base print:text-xs font-black text-white">
                               {metrics.totalObtained} / {metrics.totalMax}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-300 font-bold uppercase block">
+                            <span className="text-[10px] print:text-[8px] text-slate-300 font-bold uppercase block">
                               Percentage
                             </span>
-                            <span className="text-base font-black text-emerald-400">
+                            <span className="text-base print:text-xs font-black text-emerald-400">
                               {metrics.percentage}%
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-300 font-bold uppercase block">
+                            <span className="text-[10px] print:text-[8px] text-slate-300 font-bold uppercase block">
                               Overall Grade
                             </span>
-                            <span className="text-base font-black text-amber-400">
+                            <span className="text-base print:text-xs font-black text-amber-400">
                               {metrics.overallGrade}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-300 font-bold uppercase block">
+                            <span className="text-[10px] print:text-[8px] text-slate-300 font-bold uppercase block">
                               Class Rank
                             </span>
-                            <span className="text-base font-black text-white font-mono">
+                            <span className="text-base print:text-xs font-black text-white font-mono">
                               #{metrics.classRank}
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-slate-300 font-bold uppercase block">
+                            <span className="text-[10px] print:text-[8px] text-slate-300 font-bold uppercase block">
                               Result
                             </span>
                             <span
-                              className={`text-base font-black ${
+                              className={`text-base print:text-xs font-black ${
                                 metrics.status === 'PASS' ? 'text-emerald-400' : 'text-rose-400'
                               }`}
                             >
@@ -876,12 +987,12 @@ const ProgressReportGenerator = ({
                       return (
                         <div
                           key="charts"
-                          className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2"
+                          className="p-3 print:p-1.5 bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5"
                         >
-                          <h4 className="text-xs font-black text-dark-primary uppercase tracking-wider text-center">
+                          <h4 className="text-xs print:text-[9px] font-black text-dark-primary uppercase tracking-wider text-center">
                             {activeTemplate.chartConfig.title}
                           </h4>
-                          <div className="h-44 w-full">
+                          <div className={`h-44 ${orientation === 'landscape' ? 'print:h-22' : 'print:h-28'} w-full`}>
                             <ResponsiveContainer width="100%" height="100%">
                               {activeTemplate.chartConfig?.type === 'horizontal_bar' ? (
                                 <BarChart
@@ -1019,11 +1130,11 @@ const ProgressReportGenerator = ({
                     case 'remarks':
                       if (!activeTemplate.showTeacherRemarks) return null;
                       return (
-                        <div key="remarks" className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-1">
-                          <span className="text-[10px] font-bold text-dark-muted uppercase block">
+                        <div key="remarks" className="p-3.5 print:p-1.5 bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg space-y-1 print:space-y-0.5">
+                          <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                             Teacher / Institution Remarks
                           </span>
-                          <p className="text-xs text-dark-slate italic">
+                          <p className="text-xs print:text-[10px] text-dark-slate italic">
                             "{activeTemplate.remarksText}"
                           </p>
                         </div>
@@ -1034,25 +1145,25 @@ const ProgressReportGenerator = ({
                       return (
                         <div
                           key="signatures"
-                          className="pt-8 grid grid-cols-3 gap-6 text-center text-xs"
+                          className="report-card-signatures pt-6 print:pt-2 print:mt-auto grid grid-cols-3 gap-6 print:gap-3 text-center text-xs print:text-[9px]"
                         >
-                          <div className="border-t border-slate-900 pt-1.5">
+                          <div className="border-t border-slate-900 pt-1.5 print:pt-1">
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.classTeacher}
                             </span>
-                            <span className="text-[10px] text-dark-muted">Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">Signature</span>
                           </div>
-                          <div className="border-t border-slate-900 pt-1.5">
+                          <div className="border-t border-slate-900 pt-1.5 print:pt-1">
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.principal}
                             </span>
-                            <span className="text-[10px] text-dark-muted">Seal & Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">Seal & Signature</span>
                           </div>
-                          <div className="border-t border-slate-900 pt-1.5">
+                          <div className="border-t border-slate-900 pt-1.5 print:pt-1">
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.parent}
                             </span>
-                            <span className="text-[10px] text-dark-muted">Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">Signature</span>
                           </div>
                         </div>
                       );
