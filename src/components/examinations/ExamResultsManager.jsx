@@ -125,6 +125,14 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
   const [paperSize, setPaperSize] = useState('a4');
   const [orientation, setOrientation] = useState('portrait');
 
+  // Save Mode & Quick Fill State (moved from ExamResultsEntryGrid)
+  const [saveMode, setSaveMode] = useState('auto');
+  const [pendingChanges, setPendingChanges] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showQuickFillModal, setShowQuickFillModal] = useState(false);
+  const [quickFillSubjectId, setQuickFillSubjectId] = useState('');
+  const [quickFillValue, setQuickFillValue] = useState('');
+
   // Summary entries for class overview tab
   const [summaryEntries, setSummaryEntries] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -198,6 +206,17 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
     const { data } = await supabase.from('exam_results').select('*');
     setResults(data || []);
   }, []);
+
+  // Save All Pending Changes (for manual save mode)
+  const saveAllPendingChanges = useCallback(async () => {
+    if (!hasUnsavedChanges) return;
+
+    const changesToSave = { ...pendingChanges };
+    // We need to access the latest entries from ExamResultsEntryGrid
+    // This will be handled by passing a callback or using a ref
+    // For now, we'll trigger a custom event that ExamResultsEntryGrid listens to
+    window.dispatchEvent(new CustomEvent('exam-results-save-all', { detail: { changesToSave } }));
+  }, [pendingChanges, hasUnsavedChanges]);
 
   const selectedSchedule = useMemo(
     () => schedules.find((s) => String(s.id) === String(selectedScheduleId)) || null,
@@ -441,7 +460,14 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
       }
     };
     initMissing();
-  }, [selectedScheduleId, selectedClassId, selectedSubjectIds, classResultsIndex, ensureResult, refreshResults]);
+  }, [
+    selectedScheduleId,
+    selectedClassId,
+    selectedSubjectIds,
+    classResultsIndex,
+    ensureResult,
+    refreshResults,
+  ]);
 
   // Active slots and permission determination for each selected subject
   const activeSlots = useMemo(() => {
@@ -500,7 +526,38 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
         (canManageAllMarks || isInvigilator || isSubjectTeacherForThis);
     });
     return editMap;
-  }, [activeResults, activeSlots, teacherRecord, canManageAllMarks, canAccess, isAllocatedSubjectTeacher]);
+  }, [
+    activeResults,
+    activeSlots,
+    teacherRecord,
+    canManageAllMarks,
+    canAccess,
+    isAllocatedSubjectTeacher,
+  ]);
+
+  // Quick fill handler - uses activeResults and canEditMarksForSubject which are now defined
+  const handleQuickFill = useCallback(async () => {
+    if (!quickFillSubjectId || quickFillValue === '') return;
+    const targetResult = activeResults.find((r) => String(r.id) === String(quickFillSubjectId));
+    if (!targetResult || !canEditMarksForSubject[targetResult.id]) {
+      showToast('You do not have permission to edit marks for this subject', 'error');
+      return;
+    }
+
+    // Trigger custom event for ExamResultsEntryGrid to handle
+    window.dispatchEvent(
+      new CustomEvent('exam-results-quick-fill', {
+        detail: {
+          subjectId: quickFillSubjectId,
+          value: quickFillValue,
+          targetResult,
+        },
+      })
+    );
+
+    setShowQuickFillModal(false);
+    setQuickFillValue('');
+  }, [quickFillSubjectId, quickFillValue, activeResults, canEditMarksForSubject]);
 
   // All subjects to show in the left panel = scheduledSubjects + ad-hoc
   const adHocResults = useMemo(
@@ -598,8 +655,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
         const res = classResultsIndex[String(sub.id)];
         const entry = entriesToUse.find(
           (e) =>
-            String(e.result_id) === String(res?.id) &&
-            String(e.student_id) === String(student.id)
+            String(e.result_id) === String(res?.id) && String(e.student_id) === String(student.id)
         );
         if (entry?.is_absent) {
           rowVals.push('"ABSENT"');
@@ -700,7 +756,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
         if (!edit) continue;
         const existing = classResultsIndex[String(sub.id)];
         const maxVal = Number(edit.max_marks) || 100;
-        const passVal = edit.pass_marks !== '' && edit.pass_marks !== null ? Number(edit.pass_marks) : null;
+        const passVal =
+          edit.pass_marks !== '' && edit.pass_marks !== null ? Number(edit.pass_marks) : null;
 
         if (existing && !String(existing.id).startsWith('temp_')) {
           await supabase
@@ -903,21 +960,6 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
               </div>
             )}
 
-            {/* Marking Scheme button in data-feature-filter */}
-            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
-              <ConditionalBlock name="exam-results-marking-scheme" roles={userRoles}>
-                <button
-                  type="button"
-                  onClick={handleOpenSchemeModal}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                  title="Configure Maximum and Pass Marks for Subjects"
-                >
-                  <i className="fas fa-sliders text-emerald-600 text-[11px]" />
-                  <span>Marking Scheme</span>
-                </button>
-              </ConditionalBlock>
-            )}
-
             {/* Ad-Hoc Subject Button guarded by ConditionalBlock */}
             {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
               <ConditionalBlock name="exam-results-adhoc" roles={userRoles}>
@@ -956,16 +998,29 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
               </div>
             )}
 
+            {/* Marking Scheme button in data-feature-filter */}
+            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
+              <ConditionalBlock name="exam-results-marking-scheme" roles={userRoles}>
+                <button
+                  type="button"
+                  onClick={handleOpenSchemeModal}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                  title="Configure Marks"
+                >
+                  <i className="fas fa-arrow-up-9-1 text-emerald-600 text-xl" />
+                </button>
+              </ConditionalBlock>
+            )}
+
             {/* Offline Mark Sheet Print button (Requirement 2.2) */}
             {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
               <button
                 type="button"
                 onClick={() => setShowPrintSheetModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                title="Print blank mark sheet for manual offline mark entry"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate  text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Print Blank Sheet"
               >
-                <i className="fas fa-print text-indigo-600 text-[11px]" />
-                <span>Print Sheet</span>
+                <i className="fas fa-print text-indigo-600 text-xl" />
               </button>
             )}
 
@@ -974,11 +1029,10 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
               <button
                 type="button"
                 onClick={handleExportMarks}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                title="Export class marks to CSV"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate  text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                title="Download Marks"
               >
-                <i className="fas fa-file-export text-teal-600 text-[11px]" />
-                <span>Export</span>
+                <i className="fas fa-download text-teal-600 text-xl" />
               </button>
             )}
 
@@ -988,14 +1042,78 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                 <button
                   type="button"
                   onClick={() => setShowImportModal(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800  text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
                   title="Import marks from CSV with override/ignore options"
                 >
-                  <i className="fas fa-file-import text-emerald-700 text-[11px]" />
-                  <span>Import</span>
+                  <i className="fas fa-upload text-emerald-700 text-xl" />
                 </button>
               </ConditionalBlock>
             )}
+
+            {/* Save Mode Toggle - Icon based */}
+            {activeTab === 'entry' &&
+              selectedScheduleId &&
+              selectedClassId &&
+              activeResults.some((r) => canEditMarksForSubject[r.id]) && (
+                <div
+                  className="flex items-center gap-2"
+                  data-feature-filter="exam-results-save-mode"
+                >
+                  <label
+                    className="inline-flex items-center gap-2 cursor-pointer"
+                    title={saveMode === 'auto' ? 'Auto Save (debounced)' : 'Manual Save (batch)'}
+                  >
+                    <input
+                      type="checkbox"
+                      className="peer absolute opacity-0 w-9 h-5 cursor-pointer"
+                      aria-label={saveMode === 'auto' ? 'Auto Save' : 'Manual Save'}
+                      checked={saveMode === 'manual'}
+                      onChange={(e) => setSaveMode(e.target.checked ? 'manual' : 'auto')}
+                    />
+                    <span className="relative h-5 w-9 rounded-full bg-emerald-700 transition-colors peer-checked:bg-rose-700 after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-xs after:transition-transform peer-checked:after:translate-x-4"></span>
+                    {saveMode === 'manual' && (
+                      <i className="fa-solid fa-floppy-disk text-xl text-emerald-700 transition-colors" />
+                    )}
+                  </label>
+                </div>
+              )}
+
+            {/* Save All Button - only in manual mode with unsaved changes */}
+            {activeTab === 'entry' &&
+              selectedScheduleId &&
+              selectedClassId &&
+              activeResults.some((r) => canEditMarksForSubject[r.id]) &&
+              saveMode === 'manual' &&
+              hasUnsavedChanges && (
+                <button
+                  type="button"
+                  onClick={saveAllPendingChanges}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Save all pending changes"
+                  data-feature-filter="exam-results-save-all"
+                >
+                  <i className="fa-solid fa-floppy-disk text-xl" />
+                  <span>Save All</span>
+                </button>
+              )}
+
+            {/* Quick Fill Button - controlled by data-feature-filter */}
+            {activeTab === 'entry' &&
+              selectedScheduleId &&
+              selectedClassId &&
+              activeResults.some((r) => canEditMarksForSubject[r.id]) && (
+                <div data-feature-filter="exam-results-quick-fill">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickFillModal(true)}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="Quick fill marks for unfilled students"
+                  >
+                    <i className="fas fa-magic text-[10px]" />
+                    <span>Quick Fill</span>
+                  </button>
+                </div>
+              )}
 
             {/* Progress Report Top Filters: Direct Students list, Template, Paper Size, Orientation, Designer, Print */}
             {activeTab === 'report' && (
@@ -1112,21 +1230,37 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                     userRoles={userRoles}
                     searchQuery={studentSearchQuery}
                     onReload={refreshResults}
+                    // Save Mode & Quick Fill props (controlled by parent ExamResultsManager)
+                    saveMode={saveMode}
+                    setSaveMode={setSaveMode}
+                    pendingChanges={pendingChanges}
+                    setPendingChanges={setPendingChanges}
+                    hasUnsavedChanges={hasUnsavedChanges}
+                    setHasUnsavedChanges={setHasUnsavedChanges}
+                    showQuickFillModal={showQuickFillModal}
+                    setShowQuickFillModal={setShowQuickFillModal}
+                    quickFillSubjectId={quickFillSubjectId}
+                    setQuickFillSubjectId={setQuickFillSubjectId}
+                    quickFillValue={quickFillValue}
+                    setQuickFillValue={setQuickFillValue}
+                    saveAllPendingChanges={saveAllPendingChanges}
+                    handleQuickFill={handleQuickFill}
                   />
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
-                        <i className="fas fa-hand-pointer" />
-                      </div>
-                      <p className="text-sm font-bold text-dark-primary">
-                        Select Subject(s) to Enter Marks
-                      </p>
-                      <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
-                        Use the dropdown above to select one or more subjects, then enter marks for all selected subjects in the grid below.
-                      </p>
+                  <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
+                      <i className="fas fa-hand-pointer" />
                     </div>
-                  )}
-                </div>
+                    <p className="text-sm font-bold text-dark-primary">
+                      Select Subject(s) to Enter Marks
+                    </p>
+                    <p className="text-xs text-dark-muted mt-1 max-w-sm text-center">
+                      Use the dropdown above to select one or more subjects, then enter marks for
+                      all selected subjects in the grid below.
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="text-center py-20 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm p-8">
                 <i className="fas fa-clipboard-list text-4xl text-slate-300 mb-4 block" />
@@ -1383,8 +1517,10 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                 <div>
                   <h3 className="text-base font-bold text-dark-primary">Marking Scheme</h3>
                   <p className="text-xs text-dark-muted mt-0.5">
-                    {classes.find((c) => String(c.id) === String(selectedClassId))?.name || 'Class'} ·{' '}
-                    {schedules.find((s) => String(s.id) === String(selectedScheduleId))?.name || 'Exam'}
+                    {classes.find((c) => String(c.id) === String(selectedClassId))?.name || 'Class'}{' '}
+                    ·{' '}
+                    {schedules.find((s) => String(s.id) === String(selectedScheduleId))?.name ||
+                      'Exam'}
                   </p>
                 </div>
               </div>
@@ -1435,7 +1571,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                   </button>
                 </div>
                 <span className="text-[11px] text-dark-muted font-semibold">
-                  {allSubjectsToShow.length} {allSubjectsToShow.length === 1 ? 'subject' : 'subjects'}
+                  {allSubjectsToShow.length}{' '}
+                  {allSubjectsToShow.length === 1 ? 'subject' : 'subjects'}
                 </span>
               </div>
             </div>
@@ -1460,14 +1597,19 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {allSubjectsToShow.map((sub) => {
-                        const edit = schemeEdits[String(sub.id)] || { max_marks: 100, pass_marks: 35 };
+                        const edit = schemeEdits[String(sub.id)] || {
+                          max_marks: 100,
+                          pass_marks: 35,
+                        };
                         const slot = slots.find(
                           (s) =>
                             String(s.schedule_id) === String(selectedScheduleId) &&
                             String(s.class_id) === String(selectedClassId) &&
                             String(s.subject_id) === String(sub.id)
                         );
-                        const slotTeacher = slot?.teacher_id ? teacherMap[String(slot.teacher_id)] : null;
+                        const slotTeacher = slot?.teacher_id
+                          ? teacherMap[String(slot.teacher_id)]
+                          : null;
                         const ca = classAssignments.find(
                           (a) =>
                             String(a.class_id) === String(selectedClassId) &&

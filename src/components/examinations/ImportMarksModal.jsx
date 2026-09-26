@@ -197,10 +197,19 @@ const ImportMarksModal = ({
 
   const findStudentInRow = (row) => {
     // 1. Check admission number columns
-    const admKeys = ['admission no', 'admission_no', 'adm no', 'adm_no', 'admissionno', 'admission'];
+    const admKeys = [
+      'admission no',
+      'admission_no',
+      'adm no',
+      'adm_no',
+      'admissionno',
+      'admission',
+    ];
     for (const k of Object.keys(row)) {
       if (admKeys.includes(k.toLowerCase().trim())) {
-        const val = String(row[k] || '').trim().toLowerCase();
+        const val = String(row[k] || '')
+          .trim()
+          .toLowerCase();
         if (val && studentIndex.byAdm[val]) return studentIndex.byAdm[val];
       }
     }
@@ -218,7 +227,9 @@ const ImportMarksModal = ({
     const nameKeys = ['student name', 'student_name', 'name', 'student'];
     for (const k of Object.keys(row)) {
       if (nameKeys.includes(k.toLowerCase().trim())) {
-        const val = String(row[k] || '').trim().toLowerCase();
+        const val = String(row[k] || '')
+          .trim()
+          .toLowerCase();
         if (val && studentIndex.byName[val]) return studentIndex.byName[val];
       }
     }
@@ -269,9 +280,7 @@ const ImportMarksModal = ({
           badgeColor = 'bg-rose-100 text-rose-800 border-rose-300';
         } else if (isInvalid) {
           actionType = 'error';
-          actionLabel = exceedsMax
-            ? `Exceeds Max (${subMeta.maxMarks})`
-            : 'Invalid Number';
+          actionLabel = exceedsMax ? `Exceeds Max (${subMeta.maxMarks})` : 'Invalid Number';
           badgeColor = 'bg-rose-100 text-rose-800 border-rose-300';
         } else if (hasExistingMark) {
           if (conflictStrategy === 'override') {
@@ -403,7 +412,7 @@ const ImportMarksModal = ({
         <div className="p-4 sm:p-5 border-b border-light-border bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm shadow-2xs shrink-0">
-              <i className="fas fa-file-import" />
+              <i className="fas fa-upload" />
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-dark-primary">
@@ -447,7 +456,9 @@ const ImportMarksModal = ({
               />
               <i
                 className={`fas ${
-                  fileName ? 'fa-file-circle-check text-emerald-600' : 'fa-cloud-arrow-up text-slate-400'
+                  fileName
+                    ? 'fa-file-circle-check text-emerald-600'
+                    : 'fa-cloud-arrow-up text-slate-400'
                 } text-2xl sm:text-3xl mb-2 block`}
               />
               {fileName ? (
@@ -463,7 +474,8 @@ const ImportMarksModal = ({
                     Click or drop CSV file here to upload
                   </p>
                   <p className="text-[11px] text-dark-muted mt-1">
-                    Columns should include Student details (Admission No or Roll No) and Subject Marks
+                    Columns should include Student details (Admission No or Roll No) and Subject
+                    Marks
                   </p>
                 </div>
               )}
@@ -476,9 +488,7 @@ const ImportMarksModal = ({
               <label className="text-xs font-black uppercase text-dark-slate tracking-wider">
                 2. If Mark Already Exists
               </label>
-              <span className="text-[10px] text-dark-muted font-bold">
-                Conflict Handling Mode
-              </span>
+              <span className="text-[10px] text-dark-muted font-bold">Conflict Handling Mode</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <label
@@ -522,7 +532,8 @@ const ImportMarksModal = ({
                 <div>
                   <span className="text-xs font-black block">Ignore / Preserve Existing</span>
                   <span className="text-[10px] opacity-80 leading-tight block mt-0.5">
-                    Keep existing marks safe. Only fill marks for students currently pending or empty.
+                    Keep existing marks safe. Only fill marks for students currently pending or
+                    empty.
                   </span>
                 </div>
               </label>
@@ -577,7 +588,8 @@ const ImportMarksModal = ({
                               <option value="">-- Do Not Import / Not a Subject --</option>
                               {subjects.map((sub) => (
                                 <option key={sub.id} value={sub.id}>
-                                  {sub.name} (Max: {subjectMetaMap[String(sub.id)]?.maxMarks || 100})
+                                  {sub.name} (Max: {subjectMetaMap[String(sub.id)]?.maxMarks || 100}
+                                  )
                                 </option>
                               ))}
                             </select>
@@ -691,9 +703,7 @@ const ImportMarksModal = ({
               ) : (
                 <>
                   <i className="fas fa-check-double text-xs" />
-                  <span>
-                    Import {summaryCounts.toInsert + summaryCounts.toOverride} Marks
-                  </span>
+                  <span>Import {summaryCounts.toInsert + summaryCounts.toOverride} Marks</span>
                 </>
               )}
             </button>

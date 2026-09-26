@@ -167,7 +167,9 @@ const StudentFeesView = ({
     });
 
     return students.map((std) => {
-      const admKey = String(std.admission_no || '').trim().toLowerCase();
+      const admKey = String(std.admission_no || '')
+        .trim()
+        .toLowerCase();
       const fee = feeMap.get(admKey) || {};
 
       const prevBal = parseFloat(fee.previous_balance) || 0;
@@ -316,15 +318,13 @@ const StudentFeesView = ({
       totalPayable: totalPayableSum,
       totalPaid: totalPaidSum,
       totalBalance: totalBalanceSum,
-      overallCollectionRate:
-        totalPayableSum > 0 ? (totalPaidSum / totalPayableSum) * 100 : 0,
+      overallCollectionRate: totalPayableSum > 0 ? (totalPaidSum / totalPayableSum) * 100 : 0,
 
       // MRQU Pillar
       mrquAllocated: mrquAllocatedSum,
       mrquReceived: mrquReceivedSum,
       mrquPending: mrquPendingSum,
-      mrquCollectionRate:
-        mrquAllocatedSum > 0 ? (mrquReceivedSum / mrquAllocatedSum) * 100 : 0,
+      mrquCollectionRate: mrquAllocatedSum > 0 ? (mrquReceivedSum / mrquAllocatedSum) * 100 : 0,
 
       // External Pillar
       externalAllocated: externalAllocatedSum,
@@ -583,7 +583,12 @@ const StudentFeesView = ({
     const previewList = rawObjects.map((row) => {
       const getVal = (keys) => {
         const foundKey = Object.keys(row).find((k) =>
-          keys.some((key) => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(key))
+          keys.some((key) =>
+            k
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, '')
+              .includes(key)
+          )
         );
         return foundKey !== undefined ? row[foundKey] : undefined;
       };
@@ -597,7 +602,13 @@ const StudentFeesView = ({
         parseFloat(getVal(['mrqusponsorship', 'mrqualloc', 'mrquallocation', 'mrqu'])) || 0;
       const extSpon =
         parseFloat(
-          getVal(['externalsponsorship', 'externalalloc', 'externalallocation', 'extspon', 'external'])
+          getVal([
+            'externalsponsorship',
+            'externalalloc',
+            'externalallocation',
+            'extspon',
+            'external',
+          ])
         ) || 0;
       const stdPay = parseFloat(getVal(['studentpayable', 'stdpayable', 'payable'])) || 0;
       const wOff = parseFloat(getVal(['writeoff', 'discount', 'concession', 'waiver'])) || 0;
@@ -635,7 +646,10 @@ const StudentFeesView = ({
       const balance = totalPayable - totalP;
 
       const matchedStudent = students.find(
-        (s) => String(s.admission_no || '').trim().toLowerCase() === admNo.toLowerCase()
+        (s) =>
+          String(s.admission_no || '')
+            .trim()
+            .toLowerCase() === admNo.toLowerCase()
       );
 
       return {
@@ -766,10 +780,7 @@ const StudentFeesView = ({
             throw error;
           }
         } else {
-          showToast(
-            `Successfully imported/updated ${payloadList.length} fee records.`,
-            'success'
-          );
+          showToast(`Successfully imported/updated ${payloadList.length} fee records.`, 'success');
         }
         await loadFeesData();
       } else {
@@ -884,9 +895,7 @@ const StudentFeesView = ({
                 }`}
               >
                 <i
-                  className={`fas ${
-                    metrics.totalBalance > 0 ? 'fa-clock' : 'fa-check-double'
-                  }`}
+                  className={`fas ${metrics.totalBalance > 0 ? 'fa-clock' : 'fa-check-double'}`}
                 ></i>
               </div>
               <div className="min-w-0">
@@ -1058,7 +1067,9 @@ const StudentFeesView = ({
                     <span className="text-xs font-black text-emerald-950 block leading-tight">
                       Student Direct Share
                     </span>
-                    <span className="text-[9px] font-bold text-emerald-700/80">Parent / Student</span>
+                    <span className="text-[9px] font-bold text-emerald-700/80">
+                      Parent / Student
+                    </span>
                   </div>
                 </div>
                 <span className="text-[10px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-200">
@@ -1191,7 +1202,7 @@ const StudentFeesView = ({
                     onClick={() => setIsImportModalOpen(true)}
                     className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                   >
-                    <i className="fas fa-file-import"></i>
+                    <i className="fas fa-upload"></i>
                     Import
                   </button>
                 )}
@@ -1684,9 +1695,7 @@ const StudentFeesView = ({
                       type="number"
                       step="0.01"
                       value={formData.external_paid}
-                      onChange={(e) =>
-                        setFormData({ ...formData, external_paid: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, external_paid: e.target.value })}
                       className="w-full px-3 py-2 border border-indigo-300 rounded-xl text-xs font-black text-indigo-900 bg-white outline-none focus:border-indigo-600 shadow-2xs"
                     />
                     <div className="flex justify-between items-center text-[10px] pt-1 text-indigo-900 font-semibold">

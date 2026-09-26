@@ -2,12 +2,11 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
-import { ConditionalBlock } from '../portal-shared/ConditionalBlock';
 
 /**
  * Multi-Subject Mark Entry Grid
  * Displays all selected subjects in a single comprehensive table view.
- * 
+ *
  * Capabilities:
  * - Columns for all selected subjects side-by-side
  * - Per-subject column editing permission (subject teacher, invigilator, coordinator)
@@ -29,6 +28,21 @@ const ExamResultsEntryGrid = ({
   userRoles = [],
   searchQuery: propSearchQuery,
   onReload,
+  // Save Mode & Quick Fill props (controlled by parent ExamResultsManager)
+  saveMode = 'auto',
+  setSaveMode = () => {},
+  pendingChanges = {},
+  setPendingChanges = () => {},
+  hasUnsavedChanges = false,
+  setHasUnsavedChanges = () => {},
+  showQuickFillModal = false,
+  setShowQuickFillModal = () => {},
+  quickFillSubjectId = '',
+  setQuickFillSubjectId = () => {},
+  quickFillValue = '',
+  setQuickFillValue = () => {},
+  saveAllPendingChanges = () => {},
+  handleQuickFill = () => {},
 }) => {
   // allEntries structure: { [resultId]: { [studentId]: entryObject } }
   const [allEntries, setAllEntries] = useState({});
@@ -36,12 +50,12 @@ const ExamResultsEntryGrid = ({
   const [savingCells, setSavingCells] = useState(new Set()); // Set of "resultId_studentId"
   const [internalSearchQuery, setInternalSearchQuery] = useState('');
   const activeSearchQuery = propSearchQuery !== undefined ? propSearchQuery : internalSearchQuery;
-  const [showQuickFillModal, setShowQuickFillModal] = useState(false);
-  const [quickFillSubjectId, setQuickFillSubjectId] = useState(results[0]?.id || '');
-  const [quickFillValue, setQuickFillValue] = useState('');
 
   const debounceTimers = useRef({});
   const inputRefs = useRef({}); // "rowIdx_colIdx" -> input DOM element
+  // Store the latest values to avoid stale closures in debounced saves
+  const latestEntriesRef = useRef(allEntries);
+  latestEntriesRef.current = allEntries;
 
   // Load entries for all selected results from DB
   const loadAllEntries = useCallback(async () => {
@@ -86,22 +100,140 @@ const ExamResultsEntryGrid = ({
     loadAllEntries();
   }, [loadAllEntries]);
 
-  // Save a single entry to DB
+  // Listen for save-all event from parent
+  useEffect(() => {
+    const handleSaveAll = (event) => {
+      const { changesToSave } = event.detail;
+      // Process the save all logic here
+      const promises = [];
+      Object.entries(changesToSave).forEach(([resultId, students]) => {
+        Object.entries(students).forEach(([studentId, patch]) => {
+          const currentResultEntries = latestEntriesRef.current[String(resultId)] || {};
+          const existing = currentResultEntries[String(studentId)];
+
+          const marksVal =
+            patch.marks_obtained !== undefined ? patch.marks_obtained : existing?.marks_obtained;
+          const isAbsentVal =
+            patch.is_absent !== undefined ? patch.is_absent : existing?.is_absent || false;
+          const remarksVal =
+            patch.remarks !== undefined ? patch.remarks : existing?.remarks || null;
+
+          const payload = {
+            result_id: Number(resultId),
+            student_id: Number(studentId),
+            marks_obtained:
+              isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
+                ? null
+                : Number(marksVal),
+            is_absent: Boolean(isAbsentVal),
+            remarks: remarksVal,
+          };
+
+          if (existing?.id) {
+            promises.push(
+              supabase.from('exam_result_entries').update(payload).eq('id', existing.id)
+            );
+          } else {
+            promises.push(supabase.from('exam_result_entries').insert(payload));
+          }
+        });
+      });
+
+      Promise.all(promises)
+        .then(() => {
+          showToast('All changes saved successfully', 'success');
+          setPendingChanges({});
+          setHasUnsavedChanges(false);
+          loadAllEntries();
+        })
+        .catch((err) => {
+          console.error('Save all error:', err);
+          showToast('Save failed: ' + err.message, 'error');
+        })
+        .finally(() => {
+          setSavingCells((prev) => {
+            const next = new Set(prev);
+            Object.entries(changesToSave).forEach(([resultId, students]) => {
+              Object.keys(students).forEach((studentId) => {
+                next.delete(`${resultId}_${studentId}`);
+              });
+            });
+            return next;
+          });
+        });
+    };
+
+    window.addEventListener('exam-results-save-all', handleSaveAll);
+    return () => window.removeEventListener('exam-results-save-all', handleSaveAll);
+  }, [loadAllEntries, setPendingChanges, setHasUnsavedChanges]);
+
+  // Listen for quick-fill event from parent
+  useEffect(() => {
+    const handleQuickFill = async (event) => {
+      const { subjectId, value, targetResult } = event.detail;
+      if (!subjectId || value === '') return;
+      if (!targetResult || !canEditMap[targetResult.id]) {
+        showToast('You do not have permission to edit marks for this subject', 'error');
+        return;
+      }
+
+      const currentResEntries = allEntries[String(targetResult.id)] || {};
+      const unfilledStudents = students.filter((stu) => {
+        const e = currentResEntries[String(stu.id)];
+        return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
+      });
+
+      if (unfilledStudents.length === 0) {
+        showToast('No unfilled students remaining for this subject', 'info');
+        setShowQuickFillModal(false);
+        return;
+      }
+
+      try {
+        const promises = unfilledStudents.map((stu) => {
+          const existing = currentResEntries[String(stu.id)];
+          const payload = {
+            result_id: targetResult.id,
+            student_id: stu.id,
+            marks_obtained: Number(value),
+            is_absent: false,
+          };
+          if (existing?.id) {
+            return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
+          } else {
+            return supabase.from('exam_result_entries').insert(payload);
+          }
+        });
+
+        await Promise.all(promises);
+        showToast(`Filled marks for ${unfilledStudents.length} students`, 'success');
+        setShowQuickFillModal(false);
+        setQuickFillValue('');
+        loadAllEntries();
+      } catch (err) {
+        showToast('Quick fill error: ' + err.message, 'error');
+      }
+    };
+
+    window.addEventListener('exam-results-quick-fill', handleQuickFill);
+    return () => window.removeEventListener('exam-results-quick-fill', handleQuickFill);
+  }, [allEntries, students, canEditMap, loadAllEntries, setShowQuickFillModal, setQuickFillValue]);
+
+  // Save a single entry to DB - uses latestEntriesRef to avoid stale closure and re-renders
   const saveCellEntry = useCallback(
     async (resultId, studentId, patch) => {
       const cellKey = `${resultId}_${studentId}`;
       setSavingCells((prev) => new Set(prev).add(cellKey));
 
       try {
-        const currentResultEntries = allEntries[String(resultId)] || {};
+        const currentResultEntries = latestEntriesRef.current[String(resultId)] || {};
         const existing = currentResultEntries[String(studentId)];
 
         const marksVal =
           patch.marks_obtained !== undefined ? patch.marks_obtained : existing?.marks_obtained;
         const isAbsentVal =
           patch.is_absent !== undefined ? patch.is_absent : existing?.is_absent || false;
-        const remarksVal =
-          patch.remarks !== undefined ? patch.remarks : existing?.remarks || null;
+        const remarksVal = patch.remarks !== undefined ? patch.remarks : existing?.remarks || null;
 
         const payload = {
           result_id: Number(resultId),
@@ -173,7 +305,7 @@ const ExamResultsEntryGrid = ({
         });
       }
     },
-    [allEntries, students, onStatusUpdate]
+    [students, onStatusUpdate]
   );
 
   // Handle local marks edit with debouncing
@@ -182,17 +314,35 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = currentRes[String(studentId)] || { student_id: studentId, result_id: resultId };
+      const existing = currentRes[String(studentId)] || {
+        student_id: studentId,
+        result_id: resultId,
+      };
       currentRes[String(studentId)] = { ...existing, marks_obtained: value, is_absent: false };
       next[String(resultId)] = currentRes;
       return next;
     });
 
-    const timerKey = `${resultId}_${studentId}`;
-    clearTimeout(debounceTimers.current[timerKey]);
-    debounceTimers.current[timerKey] = setTimeout(() => {
-      saveCellEntry(resultId, studentId, { marks_obtained: value, is_absent: false });
-    }, 500);
+    if (saveMode === 'auto') {
+      const timerKey = `${resultId}_${studentId}`;
+      clearTimeout(debounceTimers.current[timerKey]);
+      debounceTimers.current[timerKey] = setTimeout(() => {
+        saveCellEntry(resultId, studentId, { marks_obtained: value, is_absent: false });
+      }, 500);
+    } else {
+      // Manual save mode - track pending changes
+      setPendingChanges((prev) => {
+        const next = { ...prev };
+        if (!next[String(resultId)]) next[String(resultId)] = {};
+        next[String(resultId)][String(studentId)] = {
+          marks_obtained: value,
+          is_absent: false,
+          remarks: null,
+        };
+        return next;
+      });
+      setHasUnsavedChanges(true);
+    }
   };
 
   // Toggle absent state
@@ -203,7 +353,10 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = currentRes[String(studentId)] || { student_id: studentId, result_id: resultId };
+      const existing = currentRes[String(studentId)] || {
+        student_id: studentId,
+        result_id: resultId,
+      };
       currentRes[String(studentId)] = {
         ...existing,
         is_absent: newAbsent,
@@ -213,10 +366,25 @@ const ExamResultsEntryGrid = ({
       return next;
     });
 
-    saveCellEntry(resultId, studentId, {
-      is_absent: newAbsent,
-      marks_obtained: newAbsent ? null : current?.marks_obtained,
-    });
+    if (saveMode === 'auto') {
+      saveCellEntry(resultId, studentId, {
+        is_absent: newAbsent,
+        marks_obtained: newAbsent ? null : current?.marks_obtained,
+      });
+    } else {
+      // Manual save mode - track pending changes
+      setPendingChanges((prev) => {
+        const next = { ...prev };
+        if (!next[String(resultId)]) next[String(resultId)] = {};
+        next[String(resultId)][String(studentId)] = {
+          marks_obtained: newAbsent ? null : current?.marks_obtained,
+          is_absent: newAbsent,
+          remarks: newAbsent ? 'Absent' : null,
+        };
+        return next;
+      });
+      setHasUnsavedChanges(true);
+    }
   };
 
   // Keyboard navigation across cells
@@ -248,53 +416,6 @@ const ExamResultsEntryGrid = ({
       // Advance to next row
       const nextInput = inputRefs.current[`${rowIdx + 1}_${colIdx}`];
       if (nextInput) nextInput.focus();
-    }
-  };
-
-  // Quick fill handler
-  const handleQuickFill = async () => {
-    if (!quickFillSubjectId || quickFillValue === '') return;
-    const targetResult = results.find((r) => String(r.id) === String(quickFillSubjectId));
-    if (!targetResult || !canEditMap[targetResult.id]) {
-      showToast('You do not have permission to edit marks for this subject', 'error');
-      return;
-    }
-
-    const currentResEntries = allEntries[String(targetResult.id)] || {};
-    const unfilledStudents = students.filter((stu) => {
-      const e = currentResEntries[String(stu.id)];
-      return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
-    });
-
-    if (unfilledStudents.length === 0) {
-      showToast('No unfilled students remaining for this subject', 'info');
-      setShowQuickFillModal(false);
-      return;
-    }
-
-    try {
-      const promises = unfilledStudents.map((stu) => {
-        const existing = currentResEntries[String(stu.id)];
-        const payload = {
-          result_id: targetResult.id,
-          student_id: stu.id,
-          marks_obtained: Number(quickFillValue),
-          is_absent: false,
-        };
-        if (existing?.id) {
-          return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
-        } else {
-          return supabase.from('exam_result_entries').insert(payload);
-        }
-      });
-
-      await Promise.all(promises);
-      showToast(`Filled marks for ${unfilledStudents.length} students`, 'success');
-      setShowQuickFillModal(false);
-      setQuickFillValue('');
-      loadAllEntries();
-    } catch (err) {
-      showToast('Quick fill error: ' + err.message, 'error');
     }
   };
 
@@ -339,6 +460,27 @@ const ExamResultsEntryGrid = ({
     }
   };
 
+  // Calculate completion status for each subject column
+  const columnStats = useMemo(() => {
+    const stats = {};
+    results.forEach((result) => {
+      const resEntries = allEntries[String(result.id)] || {};
+      let total = 0;
+      let filled = 0;
+      students.forEach((stu) => {
+        total++;
+        const e = resEntries[String(stu.id)];
+        if (e) {
+          if (e.is_absent || (e.marks_obtained !== '' && e.marks_obtained !== null)) {
+            filled++;
+          }
+        }
+      });
+      stats[result.id] = { total, filled, pct: total > 0 ? Math.round((filled / total) * 100) : 0 };
+    });
+    return stats;
+  }, [results, students, allEntries]);
+
   // Filter students based on search query
   const filteredStudents = useMemo(() => {
     if (!activeSearchQuery.trim()) return students;
@@ -347,7 +489,9 @@ const ExamResultsEntryGrid = ({
       (s) =>
         (s.student_name || '').toLowerCase().includes(q) ||
         (s.admission_no || '').toLowerCase().includes(q) ||
-        String(s.roll_no || '').toLowerCase().includes(q)
+        String(s.roll_no || '')
+          .toLowerCase()
+          .includes(q)
     );
   }, [students, activeSearchQuery]);
 
@@ -388,72 +532,6 @@ const ExamResultsEntryGrid = ({
   return (
     <div className="space-y-4">
       {/* Controls & Progress Bar */}
-      <div className="bg-white border border-light-border rounded-2xl p-4 shadow-xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-dark-primary">
-                Marks Register Progress: {overallStats.totalFilled} of {overallStats.totalPossible} Entries
-              </span>
-              <span
-                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  overallStats.pct === 100
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {overallStats.pct}% Complete
-              </span>
-            </div>
-            <div className="w-48 sm:w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                style={{ width: `${overallStats.pct}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Search filter (only rendered internally if not supplied from parent feature-filter) */}
-            {propSearchQuery === undefined && (
-              <div className="relative w-full sm:w-60">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search student or adm no..."
-                  value={internalSearchQuery}
-                  onChange={(e) => setInternalSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
-                />
-                {internalSearchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setInternalSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted hover:text-dark-primary cursor-pointer"
-                  >
-                    <i className="fas fa-times-circle" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Quick Fill Button */}
-            {results.some((r) => canEditMap[r.id]) && (
-              <ConditionalBlock name="exam-results-quick-fill" roles={userRoles}>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickFillModal(true)}
-                  className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Quick fill marks for unfilled students"
-                >
-                  <i className="fas fa-magic text-[10px]" />
-                  <span>Quick Fill</span>
-                </button>
-              </ConditionalBlock>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Multi-Subject Table */}
       <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-sm">
@@ -472,12 +550,36 @@ const ExamResultsEntryGrid = ({
                   const subject = subjects[colIdx];
                   const canEdit = canEditMap[result.id];
                   const invigName = invigilatorNames[result.id];
+                  const stats = columnStats[result.id] || { total: 0, filled: 0, pct: 0 };
+
+                  // Determine border color based on completion status
+                  const getHeaderBorderColor = () => {
+                    if (stats.pct === 100) return 'border-emerald-500'; // Complete - green
+                    if (stats.pct > 0) return 'border-amber-500'; // In progress - yellow
+                    return 'border-slate-400'; // Pending - darker grey for visibility
+                  };
+
+                  const getHeaderBgColor = () => {
+                    if (stats.pct === 100) return 'bg-emerald-50';
+                    if (stats.pct > 0) return 'bg-amber-50';
+                    return 'bg-slate-50';
+                  };
 
                   return (
                     <th
                       key={result.id}
-                      className="py-3 px-3 text-center border-r border-slate-200 min-w-[160px] max-w-[220px]"
+                      className={`relative py-3 px-3 text-center border-r border-slate-200 min-w-[160px] max-w-[220px] border-t-8 ${getHeaderBorderColor()} ${getHeaderBgColor()}`}
+                      style={{ borderTopWidth: '8px' }}
                     >
+                      {/* Progress bar at top of header */}
+                      <div
+                        className="absolute top-0 left-0 right-0 h-1.5 rounded-t-lg"
+                        style={{
+                          backgroundColor:
+                            stats.pct === 100 ? '#10b981' : stats.pct > 0 ? '#f59e0b' : '#94a3b8',
+                          width: `${stats.pct}%`,
+                        }}
+                      />
                       <div className="flex items-center justify-center gap-1.5">
                         <span className="font-black text-dark-primary text-xs">
                           {subject?.name || `Sub #${result.subject_id}`}
@@ -489,9 +591,13 @@ const ExamResultsEntryGrid = ({
                         )}
                       </div>
                       <div className="flex items-center justify-center gap-1 text-[10px] text-dark-muted font-normal mt-0.5">
-                        <span>Max: <strong>{result.max_marks}</strong></span>
+                        <span>
+                          Max: <strong>{result.max_marks}</strong>
+                        </span>
                         {result.pass_marks && (
-                          <span>· Pass: <strong>{result.pass_marks}</strong></span>
+                          <span>
+                            · Pass: <strong>{result.pass_marks}</strong>
+                          </span>
                         )}
                       </div>
                       {invigName && (
@@ -499,6 +605,20 @@ const ExamResultsEntryGrid = ({
                           Invig: {invigName}
                         </div>
                       )}
+                      {/* Progress indicator */}
+                      <div className="mt-1 flex items-center justify-center gap-1 text-[9px]">
+                        <span
+                          className={`font-semibold ${
+                            stats.pct === 100
+                              ? 'text-emerald-700'
+                              : stats.pct > 0
+                                ? 'text-amber-700'
+                                : 'text-slate-500'
+                          }`}
+                        >
+                          {stats.filled}/{stats.total} ({stats.pct}%)
+                        </span>
+                      </div>
                       {canEdit && (
                         <div className="mt-1 flex items-center justify-center gap-1">
                           <button
@@ -522,9 +642,7 @@ const ExamResultsEntryGrid = ({
                 <th className="py-3 px-3 text-center w-20 bg-slate-100/70 border-r border-slate-200">
                   %
                 </th>
-                <th className="py-3 px-3 text-center w-20 bg-slate-100/70">
-                  Result
-                </th>
+                <th className="py-3 px-3 text-center w-20 bg-slate-100/70">Result</th>
               </tr>
             </thead>
 
@@ -571,9 +689,13 @@ const ExamResultsEntryGrid = ({
 
                         const marks = entry?.marks_obtained;
                         const isAbsent = Boolean(entry?.is_absent);
-                        const numMarks = marks !== '' && marks !== null && marks !== undefined ? Number(marks) : null;
+                        const numMarks =
+                          marks !== '' && marks !== null && marks !== undefined
+                            ? Number(marks)
+                            : null;
 
-                        const isOver = !isAbsent && numMarks !== null && numMarks > Number(result.max_marks);
+                        const isOver =
+                          !isAbsent && numMarks !== null && numMarks > Number(result.max_marks);
                         const isPassing =
                           result.pass_marks &&
                           !isAbsent &&
@@ -625,7 +747,7 @@ const ExamResultsEntryGrid = ({
                                     step="0.5"
                                     disabled={isAbsent}
                                     placeholder="—"
-                                    value={isAbsent ? '' : marks ?? ''}
+                                    value={isAbsent ? '' : (marks ?? '')}
                                     onFocus={(e) => e.target.select()}
                                     onKeyDown={(e) =>
                                       handleKeyDown(e, rowIdx, colIdx, result.id, stu.id)
@@ -695,7 +817,10 @@ const ExamResultsEntryGrid = ({
                       {/* Summary: Total Marks */}
                       <td className="py-2 px-2 text-center bg-slate-50/60 border-r border-slate-200 font-bold text-xs">
                         <span className="text-dark-primary">{studentObtainedTotal}</span>
-                        <span className="text-[10px] text-dark-muted font-normal"> / {studentMaxTotal}</span>
+                        <span className="text-[10px] text-dark-muted font-normal">
+                          {' '}
+                          / {studentMaxTotal}
+                        </span>
                       </td>
 
                       {/* Summary: Percentage */}
@@ -754,7 +879,9 @@ const ExamResultsEntryGrid = ({
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-dark-slate mb-1">Target Subject</label>
+                <label className="block text-xs font-bold text-dark-slate mb-1">
+                  Target Subject
+                </label>
                 <select
                   value={quickFillSubjectId}
                   onChange={(e) => setQuickFillSubjectId(e.target.value)}
@@ -771,7 +898,9 @@ const ExamResultsEntryGrid = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-dark-slate mb-1">Score to Fill</label>
+                <label className="block text-xs font-bold text-dark-slate mb-1">
+                  Score to Fill
+                </label>
                 <input
                   type="number"
                   min="0"

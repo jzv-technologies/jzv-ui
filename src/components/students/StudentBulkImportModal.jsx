@@ -30,9 +30,7 @@ const StudentBulkImportModal = ({
   const [pasteContent, setPasteContent] = useState('');
   const [parsedRows, setParsedRows] = useState([]);
   const [updateMode, setUpdateMode] = useState('full'); // 'full' | 'selected'
-  const [selectedColumns, setSelectedColumns] = useState(
-    IMPORTABLE_COLUMNS.map((c) => c.key)
-  );
+  const [selectedColumns, setSelectedColumns] = useState(IMPORTABLE_COLUMNS.map((c) => c.key));
   const [importing, setImporting] = useState(false);
 
   // Toggle single column for 'selected' update mode
@@ -51,7 +49,10 @@ const StudentBulkImportModal = ({
   };
 
   // Helper to normalize strings for comparison
-  const normalize = (str) => String(str || '').trim().toLowerCase();
+  const normalize = (str) =>
+    String(str || '')
+      .trim()
+      .toLowerCase();
 
   // Helper to resolve Class ID from string or number (ID or Name)
   const resolveClassId = (classVal) => {
@@ -62,9 +63,7 @@ const StudentBulkImportModal = ({
     if (directMatch) return directMatch.id;
 
     // 2. Name match (case-insensitive)
-    const nameMatch = classes.find(
-      (c) => normalize(c.name) === normalize(str)
-    );
+    const nameMatch = classes.find((c) => normalize(c.name) === normalize(str));
     if (nameMatch) return nameMatch.id;
 
     return classVal;
@@ -97,7 +96,13 @@ const StudentBulkImportModal = ({
         return '';
       };
 
-      const admission_no = getVal('admission_no', 'Admission No', 'Admission Number', 'Adm No', 'adm_no');
+      const admission_no = getVal(
+        'admission_no',
+        'Admission No',
+        'Admission Number',
+        'Adm No',
+        'adm_no'
+      );
       const student_name = getVal('student_name', 'Student Name', 'Name', 'name', 'student');
       const father_name = getVal(
         'father_name',
@@ -108,10 +113,18 @@ const StudentBulkImportModal = ({
         'Parent Name',
         'parent_name'
       );
-      const mobile1 = getVal('mobile1', 'Mobile 1', 'Mobile1', 'Primary Mobile', 'Mobile', 'Phone', 'mobile');
+      const mobile1 = getVal(
+        'mobile1',
+        'Mobile 1',
+        'Mobile1',
+        'Primary Mobile',
+        'Mobile',
+        'Phone',
+        'mobile'
+      );
       const mobile2 = getVal('mobile2', 'Mobile 2', 'Mobile2', 'Secondary Mobile', 'Alt Mobile');
       let birth_date = getVal('birth_date', 'Birth Date', 'DOB', 'Date of Birth', 'birthdate');
-      
+
       // Handle Excel date numbers if applicable
       if (birth_date && typeof row['birth_date'] === 'number') {
         try {
@@ -124,7 +137,13 @@ const StudentBulkImportModal = ({
 
       const blood_group = getVal('blood_group', 'Blood Group', 'BloodGroup', 'blood');
       const area = getVal('area', 'Area', 'Location', 'Address Area');
-      const transport_point = getVal('transport_point', 'Transport Point', 'Transport', 'Bus Point', 'Route');
+      const transport_point = getVal(
+        'transport_point',
+        'Transport Point',
+        'Transport',
+        'Bus Point',
+        'Route'
+      );
       const edsoft_id = getVal('edsoft_id', 'Edsoft ID', 'EdsoftId', 'EDSOFT ID');
       const rawClass = getVal('class_id', 'Class', 'Class ID', 'Class Name', 'grade');
       const class_id = resolveClassId(rawClass);
@@ -133,8 +152,8 @@ const StudentBulkImportModal = ({
       const hostel = ['yes', 'y', 'true', '1'].includes(normalize(hostelVal))
         ? 'Yes'
         : ['no', 'n', 'false', '0'].includes(normalize(hostelVal))
-        ? 'No'
-        : hostelVal || 'No';
+          ? 'No'
+          : hostelVal || 'No';
 
       if (!admission_no) {
         // Skip empty rows
@@ -148,7 +167,9 @@ const StudentBulkImportModal = ({
         rowIndex: idx + 1,
         admission_no,
         student_name: student_name || (matchedExisting ? matchedExisting.student_name : ''),
-        father_name: father_name || (matchedExisting ? (matchedExisting.father_name || matchedExisting.guardian_name) : ''),
+        father_name:
+          father_name ||
+          (matchedExisting ? matchedExisting.father_name || matchedExisting.guardian_name : ''),
         mobile1,
         mobile2,
         birth_date,
@@ -360,10 +381,11 @@ const StudentBulkImportModal = ({
         <div className="p-6 bg-green-dark text-white flex justify-between items-center shrink-0">
           <div>
             <h3 className="text-xl font-bold flex items-center gap-2">
-              <i className="fas fa-file-import"></i> Bulk Import Students
+              <i className="fas fa-upload"></i> Bulk Import Students
             </h3>
             <p className="text-xs opacity-80 mt-0.5">
-              Import student profiles via Excel/CSV. Existing admission numbers will update; new ones will be created.
+              Import student profiles via Excel/CSV. Existing admission numbers will update; new
+              ones will be created.
             </p>
           </div>
           <button
@@ -480,7 +502,8 @@ const StudentBulkImportModal = ({
                 <i className="fas fa-sliders text-emerald-600"></i> Existing Records Update Mode
               </h4>
               <p className="text-[11px] text-dark-muted font-medium mt-0.5">
-                Choose how existing students (matching Admission No) should be updated. New students will always be created with all provided columns.
+                Choose how existing students (matching Admission No) should be updated. New students
+                will always be created with all provided columns.
               </p>
             </div>
 
@@ -506,7 +529,8 @@ const StudentBulkImportModal = ({
                     Full Update (All Columns)
                   </span>
                   <span className="text-[11px] text-dark-muted leading-tight block mt-0.5">
-                    Overwrites all student fields from the import file for existing admission numbers.
+                    Overwrites all student fields from the import file for existing admission
+                    numbers.
                   </span>
                 </div>
               </label>
@@ -532,7 +556,8 @@ const StudentBulkImportModal = ({
                     Selected Columns Only
                   </span>
                   <span className="text-[11px] text-dark-muted leading-tight block mt-0.5">
-                    Update only chosen fields for existing records, preserving other existing values.
+                    Update only chosen fields for existing records, preserving other existing
+                    values.
                   </span>
                 </div>
               </label>
@@ -636,9 +661,13 @@ const StudentBulkImportModal = ({
                             )}
                           </td>
                           <td className="p-2.5 font-bold text-dark-primary">{r.admission_no}</td>
-                          <td className="p-2.5 font-bold text-dark-primary">{r.student_name || '—'}</td>
+                          <td className="p-2.5 font-bold text-dark-primary">
+                            {r.student_name || '—'}
+                          </td>
                           <td className="p-2.5 text-dark-soft">{r.father_name || '—'}</td>
-                          <td className="p-2.5 text-dark-soft">{clsObj ? clsObj.name : r.class_id || '—'}</td>
+                          <td className="p-2.5 text-dark-soft">
+                            {clsObj ? clsObj.name : r.class_id || '—'}
+                          </td>
                           <td className="p-2.5 text-dark-soft">{r.mobile1 || '—'}</td>
                           <td className="p-2.5 text-dark-soft">{r.blood_group || '—'}</td>
                           <td className="p-2.5 text-dark-soft">{r.area || '—'}</td>
@@ -673,7 +702,8 @@ const StudentBulkImportModal = ({
               </>
             ) : (
               <>
-                <i className="fas fa-check-circle"></i> Confirm Import ({parsedRows.length} Students)
+                <i className="fas fa-check-circle"></i> Confirm Import ({parsedRows.length}{' '}
+                Students)
               </>
             )}
           </button>

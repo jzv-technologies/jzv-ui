@@ -115,7 +115,11 @@ const AdminStudentsView = ({
 
   // Load classes from Supabase or LocalStorage
   const loadClasses = async (force = false) => {
-    if (!force && Array.isArray(studentRecordsCache.classes) && studentRecordsCache.classes.length > 0) {
+    if (
+      !force &&
+      Array.isArray(studentRecordsCache.classes) &&
+      studentRecordsCache.classes.length > 0
+    ) {
       setClasses(studentRecordsCache.classes);
       return studentRecordsCache.classes;
     }
@@ -153,7 +157,11 @@ const AdminStudentsView = ({
   const loadStudents = async (loadedClasses = [], force = false) => {
     setLoading(true);
     setError('');
-    if (!force && Array.isArray(studentRecordsCache.students) && studentRecordsCache.students.length > 0) {
+    if (
+      !force &&
+      Array.isArray(studentRecordsCache.students) &&
+      studentRecordsCache.students.length > 0
+    ) {
       setStudents(studentRecordsCache.students);
       setIsSupabaseMode(true);
       setLoading(false);
@@ -758,7 +766,10 @@ const AdminStudentsView = ({
   };
 
   return (
-    <div className="flex flex-col min-h-[500px] space-y-6 pb-16 md:pb-0" data-feature="student-records">
+    <div
+      className="flex flex-col min-h-[500px] space-y-6 pb-16 md:pb-0"
+      data-feature="student-records"
+    >
       {/* ── Unified Responsive Top Header ── */}
       <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
@@ -788,7 +799,10 @@ const AdminStudentsView = ({
 
           {/* Navigation Pill Tabs - Only when not locked into a specific mode */}
           {mode === null && availableTabs.length > 1 && (
-            <div className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto" data-feature-tab="student-tabs">
+            <div
+              className="bg-light-lbg border border-light-border p-1 rounded-2xl flex items-center gap-1 shrink-0 overflow-x-auto scrollbar-hide w-full sm:w-auto"
+              data-feature-tab="student-tabs"
+            >
               {availableTabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -863,7 +877,7 @@ const AdminStudentsView = ({
                     onClick={() => setIsImportModalOpen(true)}
                     className="w-full sm:w-auto px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 active:scale-95"
                   >
-                    <i className="fas fa-file-import text-indigo-600"></i>
+                    <i className="fas fa-upload text-indigo-600"></i>
                     Import Students
                   </button>
                 )}
@@ -998,7 +1012,10 @@ const AdminStudentsView = ({
 
         {/* Action Controls Bar for Student Fees tab */}
         {activeTab === 'fees' && feesControls && (
-          <div className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3" data-feature-filter={activeTab}>
+          <div
+            className="pt-1 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3"
+            data-feature-filter={activeTab}
+          >
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1">
               {/* Search Input */}
               <div className="relative flex-1 min-w-[200px]">
@@ -1054,7 +1071,7 @@ const AdminStudentsView = ({
                 onClick={feesControls.onOpenImport}
                 className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center justify-center gap-1.5 active:scale-95"
               >
-                <i className="fas fa-file-import"></i>
+                <i className="fas fa-upload"></i>
                 Bulk Import
               </button>
             </div>
