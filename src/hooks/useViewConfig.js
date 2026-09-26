@@ -173,14 +173,13 @@ export const useViewConfig = () => {
       if (!userRoles || userRoles.length === 0) return [];
 
       // Filter active tile entries permitted for userRoles
+      // Database (app_view_controller) is the authoritative source for access control.
+      // Registry valid_access_roles only applies as fallback for tiles not in the database.
       const activeTiles = viewConfigs.filter((item) => {
         const isTile = item.type === 'tile' || Boolean(TILE_METADATA_REGISTRY[item.component_name]);
         if (!isTile) return false;
-        const meta = TILE_METADATA_REGISTRY[item.component_name];
-        const combinedRoles = Array.from(
-          new Set([...(item.valid_access_roles || []), ...(meta?.valid_access_roles || [])])
-        );
-        return hasAccess(combinedRoles, item.default_access, userRoles);
+        // Use ONLY database roles for tiles registered in app_view_controller
+        return hasAccess(item.valid_access_roles || [], item.default_access, userRoles);
       });
 
       // Include fallback tiles from TILE_METADATA_REGISTRY if not yet registered in app_view_controller

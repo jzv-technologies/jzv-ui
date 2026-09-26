@@ -82,7 +82,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'student-fees': {
     title: 'Student Fees',
-    description: 'Track student fee allocations, sponsorships, payments, and balances.',
+    description:
+      'Track student fee allocations, MRQU & external sponsorships, payments, and balances.',
     icon: 'fa-receipt',
     buttonColor: 'bg-teal-600 text-white',
     shadow: 'shadow-teal-200',

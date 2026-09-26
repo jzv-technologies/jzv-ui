@@ -1067,6 +1067,7 @@ const AdminStudentsView = ({
           <StudentFeesView
             students={students}
             classes={classes}
+            userRoles={effectiveRoles}
             onRefreshStudents={() => loadStudents(classes, true)}
             onRegisterControls={setFeesControls}
           />
