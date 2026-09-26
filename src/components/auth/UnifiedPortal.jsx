@@ -20,6 +20,7 @@ import DynamicForm from '../DynamicForm';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
+import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
 
@@ -512,7 +513,12 @@ export const UnifiedPortal = ({
       case 'exam-progress-report':
         return (
           <div data-feature="exam-results">
-            <ExamResultsManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} initialTab="report" />
+            <ExamResultsManager
+              user={user}
+              userRoles={userRoles}
+              teacherRecord={teacherRecord}
+              initialTab="report"
+            />
           </div>
         );
 
