@@ -4,12 +4,13 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import ExamResultsEntryGrid from './ExamResultsEntryGrid';
-import ProgressReportGenerator from './ProgressReportGenerator';
+import ReportCardGenerator from './ReportCardGenerator';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import OfflineMarkSheetModal from './OfflineMarkSheetModal';
 import ImportMarksModal from './ImportMarksModal';
 import { getAdminConfig } from '../../utils/adminConfigUtils';
-import { DEFAULT_TEMPLATE } from './ProgressReportDesigner';
+import { DEFAULT_TEMPLATE } from './ReportCardDesigner';
+import ExamClassSummaryView from './ExamClassSummaryView';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -136,6 +137,8 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
   // Summary entries for class overview tab
   const [summaryEntries, setSummaryEntries] = useState([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryClassFilter, setSummaryClassFilter] = useState('');
+  const [isAllExpanded, setIsAllExpanded] = useState(true);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -305,26 +308,76 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
     return idx;
   }, [classResults]);
 
-  // Fetch all entries for summary tab
+  // All results for the active exam schedule across all classes
+  const scheduleResults = useMemo(() => {
+    if (!selectedScheduleId) return [];
+    return results.filter((r) => String(r.schedule_id) === String(selectedScheduleId));
+  }, [results, selectedScheduleId]);
+
+  // Fetch all entries for summary tab across all classes in the selected schedule
   useEffect(() => {
-    if (activeTab !== 'summary' || classResults.length === 0) return;
+    if (activeTab !== 'summary') return;
+    if (!selectedScheduleId || scheduleResults.length === 0) {
+      setSummaryEntries([]);
+      setSummaryLoading(false);
+      return;
+    }
+
+    let isMounted = true;
     const fetchSummaryEntries = async () => {
       setSummaryLoading(true);
       try {
-        const resultIds = classResults.map((r) => r.id);
-        const { data } = await supabase
-          .from('exam_result_entries')
-          .select('*')
-          .in('result_id', resultIds);
-        setSummaryEntries(data || []);
+        const resultIds = scheduleResults.map((r) => r.id);
+        const BATCH_SIZE = 100;
+        let allEntries = [];
+
+        for (let i = 0; i < resultIds.length; i += BATCH_SIZE) {
+          const chunkIds = resultIds.slice(i, i + BATCH_SIZE);
+          let from = 0;
+          const pageSize = 1000;
+          let hasMore = true;
+
+          while (hasMore) {
+            const { data, error } = await supabase
+              .from('exam_result_entries')
+              .select('id, result_id, student_id, marks_obtained, is_absent')
+              .in('result_id', chunkIds)
+              .range(from, from + pageSize - 1);
+
+            if (error) {
+              console.error('Error fetching summary entries chunk:', error);
+              hasMore = false;
+            } else if (!data || data.length === 0) {
+              hasMore = false;
+            } else {
+              allEntries = allEntries.concat(data);
+              if (data.length < pageSize) {
+                hasMore = false;
+              } else {
+                from += pageSize;
+              }
+            }
+          }
+        }
+
+        if (isMounted) {
+          setSummaryEntries(allEntries);
+        }
       } catch (err) {
         console.error('Failed to load summary entries:', err);
       } finally {
-        setSummaryLoading(false);
+        if (isMounted) {
+          setSummaryLoading(false);
+        }
       }
     };
+
     fetchSummaryEntries();
-  }, [activeTab, classResults]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, selectedScheduleId, scheduleResults]);
 
   // Ensure result rows exist for all scheduled subjects
   const ensureResult = useCallback(
@@ -923,24 +976,57 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
               </div>
             )}
 
-            {/* Class Selector Dropdown (Single Class selection using MultiSelectDropdown style) */}
-            <MultiSelectDropdown
-              label="Class"
-              icon="fa-chalkboard-user"
-              singleSelect={true}
-              disabled={!selectedScheduleId}
-              options={classes.map((c) => ({
-                id: String(c.id),
-                label: c.name,
-              }))}
-              selected={selectedClassId}
-              onChange={(val) => {
-                setSelectedClassId(val);
-                setSelectedSubjectIds([]);
-              }}
-              placeholder="Select Class..."
-              fullWidth={false}
-            />
+            {/* Class Selector Dropdown: Filters class in summary tab or selects class for entry/report */}
+            {activeTab === 'summary' ? (
+              <div className="flex items-center gap-2">
+                <MultiSelectDropdown
+                  label="Filter Class"
+                  icon="fa-chalkboard-user"
+                  singleSelect={true}
+                  disabled={!selectedScheduleId}
+                  options={[
+                    { id: '', label: 'All Classes' },
+                    ...classes.map((c) => ({
+                      id: String(c.id),
+                      label: c.name,
+                    })),
+                  ]}
+                  selected={summaryClassFilter}
+                  onChange={(val) => setSummaryClassFilter(val)}
+                  placeholder="All Classes"
+                  fullWidth={false}
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsAllExpanded((prev) => !prev)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-gray-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
+                  title={isAllExpanded ? 'Collapse All' : 'Expand All'}
+                >
+                  <i
+                    className={`fas ${isAllExpanded ? 'fa-angles-up' : 'fa-angles-down'} text-emerald-600 text-xs`}
+                  />
+                  <span>{isAllExpanded ? 'Collapse All' : 'Expand All'}</span>
+                </button>
+              </div>
+            ) : (
+              <MultiSelectDropdown
+                label="Class"
+                icon="fa-chalkboard-user"
+                singleSelect={true}
+                disabled={!selectedScheduleId}
+                options={classes.map((c) => ({
+                  id: String(c.id),
+                  label: c.name,
+                }))}
+                selected={selectedClassId}
+                onChange={(val) => {
+                  setSelectedClassId(val);
+                  setSelectedSubjectIds([]);
+                }}
+                placeholder="Select Class..."
+                fullWidth={false}
+              />
+            )}
 
             {/* Subject Selector MultiSelectDropdown in top filter bar */}
             {activeTab === 'entry' && selectedClassId && (
@@ -1007,7 +1093,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                   className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
                   title="Configure Marks"
                 >
-                  <i className="fas fa-arrow-up-9-1 text-emerald-600 text-xl" />
+                  <i className="fas fa-gears text-emerald-600 text-xl" />
                 </button>
               </ConditionalBlock>
             )}
@@ -1279,209 +1365,36 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
         {/* Tab 2: Class Summary & Analytics */}
         {activeTab === 'summary' && (
           <ConditionalBlock name="exam-results-tab-summary" roles={userRoles}>
-            {selectedScheduleId && selectedClassId ? (
-              <div className="space-y-4">
-                {/* Summary KPIs */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                  <div className="bg-white p-4 rounded-2xl border border-light-border shadow-2xs">
-                    <span className="text-[11px] font-bold text-dark-muted uppercase tracking-wider block">
-                      Total Papers
-                    </span>
-                    <span className="text-2xl font-black text-dark-primary mt-1 block">
-                      {allSubjectsToShow.length}
-                    </span>
-                  </div>
-                  <div className="bg-white p-4 rounded-2xl border border-light-border shadow-2xs">
-                    <span className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">
-                      Completed
-                    </span>
-                    <span className="text-2xl font-black text-emerald-700 mt-1 block">
-                      {completionStats.completed}
-                    </span>
-                  </div>
-                  <div className="bg-white p-4 rounded-2xl border border-light-border shadow-2xs">
-                    <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
-                      In Progress
-                    </span>
-                    <span className="text-2xl font-black text-amber-700 mt-1 block">
-                      {completionStats.inProgress}
-                    </span>
-                  </div>
-                  <div className="bg-white p-4 rounded-2xl border border-light-border shadow-2xs">
-                    <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider block">
-                      Pending
-                    </span>
-                    <span className="text-2xl font-black text-rose-700 mt-1 block">
-                      {completionStats.pending}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Subject Cards Grid */}
-                <div className="bg-white rounded-2xl sm:rounded-3xl border border-light-border shadow-sm p-4 sm:p-6 space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-light-border">
-                    <h3 className="text-sm font-black text-dark-primary">
-                      Class Subject Evaluation Breakdown ({allSubjectsToShow.length})
-                    </h3>
-                    <span className="text-xs font-semibold text-dark-muted">
-                      {classStudents.length} Students Enrolled
-                    </span>
-                  </div>
-
-                  {summaryLoading ? (
-                    <div className="text-center py-12">
-                      <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                      <p className="text-xs text-dark-muted mt-2 font-semibold">
-                        Loading class performance metrics...
-                      </p>
-                    </div>
-                  ) : allSubjectsToShow.length === 0 ? (
-                    <div className="text-center py-12 text-xs text-dark-muted">
-                      No subjects configured for this class and schedule.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {allSubjectsToShow.map((sub) => {
-                        const res = classResultsIndex[String(sub.id)];
-                        const cfg = ENTRY_STATUS_CONFIG[res?.entry_status || 'pending'];
-                        const subEntries = summaryEntries.filter((e) => e.result_id === res?.id);
-                        const validMarks = subEntries
-                          .filter(
-                            (e) =>
-                              !e.is_absent && e.marks_obtained !== null && e.marks_obtained !== ''
-                          )
-                          .map((e) => Number(e.marks_obtained));
-                        const absentCount = subEntries.filter((e) => e.is_absent).length;
-                        const avg =
-                          validMarks.length > 0
-                            ? (validMarks.reduce((a, b) => a + b, 0) / validMarks.length).toFixed(1)
-                            : null;
-                        const highest = validMarks.length > 0 ? Math.max(...validMarks) : null;
-                        const passMarks = res?.pass_marks ? Number(res.pass_marks) : null;
-                        const passCount = passMarks
-                          ? validMarks.filter((m) => m >= passMarks).length
-                          : null;
-                        const evaluatedCount = validMarks.length + absentCount;
-                        const progressPct =
-                          classStudents.length > 0
-                            ? Math.min(
-                                100,
-                                Math.round((evaluatedCount / classStudents.length) * 100)
-                              )
-                            : 0;
-
-                        return (
-                          <div
-                            key={sub.id}
-                            className="bg-slate-50/70 border border-light-border rounded-2xl p-4 flex flex-col justify-between space-y-3 hover:shadow-xs transition-shadow"
-                          >
-                            <div>
-                              <div className="flex items-start justify-between gap-2">
-                                <div>
-                                  <div className="flex items-center gap-1.5">
-                                    <h4 className="text-xs font-black text-dark-primary">
-                                      {sub.name}
-                                    </h4>
-                                    {sub.isAdHoc && (
-                                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                                        Ad-Hoc
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[11px] text-dark-muted mt-0.5">
-                                    Max: <strong>{res?.max_marks || 100}</strong>
-                                    {passMarks ? ` · Pass: ${passMarks}` : ''}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${cfg.color}`}
-                                >
-                                  <i className={`fas ${cfg.icon} mr-1 text-[8px]`} />
-                                  {cfg.label}
-                                </span>
-                              </div>
-
-                              {/* Progress bar */}
-                              <div className="mt-3 space-y-1">
-                                <div className="flex items-center justify-between text-[10px] text-dark-muted font-bold">
-                                  <span>Marks Recorded</span>
-                                  <span>
-                                    {evaluatedCount} / {classStudents.length} ({progressPct}%)
-                                  </span>
-                                </div>
-                                <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-300 ${
-                                      progressPct === 100
-                                        ? 'bg-emerald-500'
-                                        : progressPct > 0
-                                          ? 'bg-amber-500'
-                                          : 'bg-slate-300'
-                                    }`}
-                                    style={{ width: `${progressPct}%` }}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Score Stats */}
-                              <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                                <div className="bg-white p-1.5 rounded-xl border border-light-border">
-                                  <span className="text-[10px] text-dark-muted block">Average</span>
-                                  <span className="text-xs font-black text-dark-primary">
-                                    {avg || '—'}
-                                  </span>
-                                </div>
-                                <div className="bg-white p-1.5 rounded-xl border border-light-border">
-                                  <span className="text-[10px] text-dark-muted block">Highest</span>
-                                  <span className="text-xs font-black text-emerald-700">
-                                    {highest ?? '—'}
-                                  </span>
-                                </div>
-                                <div className="bg-white p-1.5 rounded-xl border border-light-border">
-                                  <span className="text-[10px] text-dark-muted block">Absent</span>
-                                  <span className="text-xs font-black text-rose-700">
-                                    {absentCount}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedSubjectIds([String(sub.id)]);
-                                setActiveTab('entry');
-                              }}
-                              className="w-full py-1.5 px-3 bg-white hover:bg-emerald-50 border border-light-border hover:border-emerald-200 text-dark-slate hover:text-emerald-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                            >
-                              <i className="fas fa-edit text-[10px]" />
-                              <span>Open in Entry Register</span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-20 bg-white border border-light-border rounded-2xl sm:rounded-3xl shadow-sm p-8">
-                <i className="fas fa-chart-pie text-4xl text-slate-300 mb-4 block" />
-                <p className="text-base font-bold text-dark-primary">
-                  Select an Exam Schedule and Class
-                </p>
-                <p className="text-xs text-dark-muted mt-1 max-w-md mx-auto">
-                  Choose an examination event and class section from the dropdowns above to view
-                  class-level score summaries.
-                </p>
-              </div>
-            )}
+            <ExamClassSummaryView
+              schedules={schedules}
+              selectedScheduleId={selectedScheduleId}
+              classes={classes}
+              subjects={subjects}
+              students={students}
+              slots={slots}
+              results={results}
+              summaryEntries={summaryEntries}
+              summaryLoading={summaryLoading}
+              onOpenEntryRegister={(classId, subjectId) => {
+                setSelectedClassId(String(classId));
+                setSelectedSubjectIds([String(subjectId)]);
+                setActiveTab('entry');
+              }}
+              onRefresh={async () => {
+                await refreshResults();
+                showToast('Results refreshed', 'success');
+              }}
+              userRoles={userRoles}
+              ENTRY_STATUS_CONFIG={ENTRY_STATUS_CONFIG}
+              filterClassId={summaryClassFilter}
+              isAllExpanded={isAllExpanded}
+            />
           </ConditionalBlock>
         )}
 
         {activeTab === 'report' && (
           <ConditionalBlock name="exam-results-tab-report" roles={userRoles}>
-            <ProgressReportGenerator
+            <ReportCardGenerator
               schedules={schedules}
               classes={classes}
               subjects={subjects}

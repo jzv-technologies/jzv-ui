@@ -1,10 +1,10 @@
-// src/components/examinations/ProgressReportGenerator.jsx
+// src/components/examinations/ReportCardGenerator.jsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
-import ProgressReportDesigner, { DEFAULT_TEMPLATE } from './ProgressReportDesigner';
+import ReportCardDesigner, { DEFAULT_TEMPLATE } from './ReportCardDesigner';
 import {
   BarChart,
   Bar,
@@ -37,7 +37,7 @@ const TEMPLATES_CONFIG_KEY = 'exam_progress_report_templates';
  * - Embedded charts/graphs per student
  * - High quality A4 multi-student print & PDF export
  */
-const ProgressReportGenerator = ({
+const ReportCardGenerator = ({
   schedules = [],
   classes = [],
   subjects = [],
@@ -135,7 +135,7 @@ const ProgressReportGenerator = ({
           if (subData) setInternalSubjects(subData);
         }
       } catch (err) {
-        console.error('Failed to load master data in ProgressReportGenerator:', err);
+        console.error('Failed to load master data in ReportCardGenerator:', err);
       }
     };
     if (schedules.length === 0 || classes.length === 0 || subjects.length === 0) {
@@ -149,16 +149,14 @@ const ProgressReportGenerator = ({
     controlledStudentSelectionMode !== undefined
       ? controlledStudentSelectionMode
       : internalStudentSelectionMode;
-  const setStudentSelectionMode =
-    onStudentSelectionModeChange || setInternalStudentSelectionMode;
+  const setStudentSelectionMode = onStudentSelectionModeChange || setInternalStudentSelectionMode;
 
   const [internalSelectedStudentIds, setInternalSelectedStudentIds] = useState([]);
   const selectedStudentIds =
     controlledSelectedStudentIds !== undefined
       ? controlledSelectedStudentIds
       : internalSelectedStudentIds;
-  const setSelectedStudentIds =
-    onSelectedStudentIdsChange || setInternalSelectedStudentIds;
+  const setSelectedStudentIds = onSelectedStudentIdsChange || setInternalSelectedStudentIds;
 
   // Templates
   const [templates, setTemplates] = useState([DEFAULT_TEMPLATE]);
@@ -167,14 +165,11 @@ const ProgressReportGenerator = ({
     controlledSelectedTemplateId !== undefined
       ? controlledSelectedTemplateId
       : internalSelectedTemplateId;
-  const setSelectedTemplateId =
-    onSelectedTemplateIdChange || setInternalSelectedTemplateId;
+  const setSelectedTemplateId = onSelectedTemplateIdChange || setInternalSelectedTemplateId;
 
   const [internalIsDesignerOpen, setInternalIsDesignerOpen] = useState(false);
   const isDesignerOpen =
-    controlledIsDesignerOpen !== undefined
-      ? controlledIsDesignerOpen
-      : internalIsDesignerOpen;
+    controlledIsDesignerOpen !== undefined ? controlledIsDesignerOpen : internalIsDesignerOpen;
   const setIsDesignerOpen = (val) => {
     if (onIsDesignerOpenChange) onIsDesignerOpenChange(val);
     setInternalIsDesignerOpen(val);
@@ -199,7 +194,7 @@ const ProgressReportGenerator = ({
           if (onTemplatesLoaded) onTemplatesLoaded(data);
         }
       } catch (err) {
-        console.warn('[ProgressReportGenerator] Remote templates fallback:', err);
+        console.warn('[ReportCardGenerator] Remote templates fallback:', err);
       }
     };
     loadTemplates();
@@ -342,7 +337,8 @@ const ProgressReportGenerator = ({
       results.forEach((result) => {
         const sub = internalSubjects.find((s) => String(s.id) === String(result.subject_id));
         const entry = entries.find(
-          (e) => String(e.result_id) === String(result.id) && String(e.student_id) === String(student.id)
+          (e) =>
+            String(e.result_id) === String(result.id) && String(e.student_id) === String(student.id)
         );
 
         const isAbsent = Boolean(entry?.is_absent);
@@ -409,7 +405,9 @@ const ProgressReportGenerator = ({
     });
 
     // Rank students by totalObtained descending
-    const sortedByTotal = [...studentCalculations].sort((a, b) => b.totalObtained - a.totalObtained);
+    const sortedByTotal = [...studentCalculations].sort(
+      (a, b) => b.totalObtained - a.totalObtained
+    );
     const metricsMap = {};
     sortedByTotal.forEach((item, idx) => {
       metricsMap[String(item.studentId)] = {
@@ -430,140 +428,146 @@ const ProgressReportGenerator = ({
       {/* ── Control Bar (Hidden on Print or when hideControlBar is true) ── */}
       {!hideControlBar && (
         <div className="print:hidden bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Title and Icon */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg shadow-2xs shrink-0">
-              <i className="fas fa-file-invoice" />
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Title and Icon */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-lg shadow-2xs shrink-0">
+                <i className="fas fa-file-invoice" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-dark-primary tracking-tight">
+                  Progress Report Generator
+                </h2>
+                <p className="text-xs font-bold text-dark-muted">
+                  Generate student performance cards with custom grouping, charts, and calculations
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-black text-dark-primary tracking-tight">
-                Progress Report Generator
-              </h2>
-              <p className="text-xs font-bold text-dark-muted">
-                Generate student performance cards with custom grouping, charts, and calculations
-              </p>
-            </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap self-end lg:self-auto">
-            <button
-              type="button"
-              onClick={() => setIsDesignerOpen(true)}
-              className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Open Template Layout & Grouping Designer"
-            >
-              <i className="fas fa-sliders text-rose-600 text-[11px]" />
-              <span>Design Template</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePrint}
-              disabled={displayedStudents.length === 0 || results.length === 0}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <i className="fas fa-print" />
-              <span>Print / Export PDF</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Controls Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-          {/* Examination Selector */}
-          <div>
-            <label className="block text-[11px] font-bold text-dark-slate mb-1">Examination</label>
-            <select
-              value={selectedScheduleId}
-              onChange={(e) => setSelectedScheduleId(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none focus:ring-2 focus:ring-rose-300"
-            >
-              {internalSchedules.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Class Selector */}
-          <div>
-            <label className="block text-[11px] font-bold text-dark-slate mb-1">Class</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none focus:ring-2 focus:ring-rose-300"
-            >
-              {internalClasses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Generation Scope (Entire Class vs Selected Students) */}
-          <div>
-            <label className="block text-[11px] font-bold text-dark-slate mb-1">Students Scope</label>
-            <div className="flex items-center gap-2">
-              <select
-                value={studentSelectionMode}
-                onChange={(e) => setStudentSelectionMode(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
-              >
-                <option value="all">Entire Class ({students.length})</option>
-                <option value="selected">Selected Students</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Template Selector */}
-          <div>
-            <label className="block text-[11px] font-bold text-dark-slate mb-1">Active Template</label>
-            <div className="flex items-center gap-1.5">
-              <select
-                value={selectedTemplateId}
-                onChange={(e) => setSelectedTemplateId(e.target.value)}
-                className="flex-1 px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
-              >
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 flex-wrap self-end lg:self-auto">
               <button
                 type="button"
                 onClick={() => setIsDesignerOpen(true)}
-                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
-                title="Design / Edit Template"
+                className="px-3.5 py-2 bg-slate-50 hover:bg-slate-100 text-dark-slate border border-light-border rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Open Template Layout & Grouping Designer"
               >
-                <i className="fas fa-palette text-[10px]" />
-                <span>Designer</span>
+                <i className="fas fa-sliders text-rose-600 text-[11px]" />
+                <span>Design Template</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={displayedStudents.length === 0 || results.length === 0}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <i className="fas fa-print" />
+                <span>Print / Export PDF</span>
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Conditional Student MultiSelect if 'selected' mode is active */}
-        {studentSelectionMode === 'selected' && (
-          <div className="pt-2 animate-in fade-in duration-150">
-            <MultiSelectDropdown
-              label="Choose Students"
-              options={students.map((s) => ({
-                id: s.id,
-                label: `${s.student_name} (${s.admission_no})`,
-              }))}
-              selected={selectedStudentIds}
-              onChange={setSelectedStudentIds}
-              placeholder="Select students..."
-              fullWidth={true}
-            />
+          {/* Filter Controls Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+            {/* Examination Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-dark-slate mb-1">
+                Examination
+              </label>
+              <select
+                value={selectedScheduleId}
+                onChange={(e) => setSelectedScheduleId(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none focus:ring-2 focus:ring-rose-300"
+              >
+                {internalSchedules.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Class Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-dark-slate mb-1">Class</label>
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none focus:ring-2 focus:ring-rose-300"
+              >
+                {internalClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Generation Scope (Entire Class vs Selected Students) */}
+            <div>
+              <label className="block text-[11px] font-bold text-dark-slate mb-1">
+                Students Scope
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={studentSelectionMode}
+                  onChange={(e) => setStudentSelectionMode(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
+                >
+                  <option value="all">Entire Class ({students.length})</option>
+                  <option value="selected">Selected Students</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Template Selector */}
+            <div>
+              <label className="block text-[11px] font-bold text-dark-slate mb-1">
+                Active Template
+              </label>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="flex-1 px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
+                >
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setIsDesignerOpen(true)}
+                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                  title="Design / Edit Template"
+                >
+                  <i className="fas fa-palette text-[10px]" />
+                  <span>Designer</span>
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Conditional Student MultiSelect if 'selected' mode is active */}
+          {studentSelectionMode === 'selected' && (
+            <div className="pt-2 animate-in fade-in duration-150">
+              <MultiSelectDropdown
+                label="Choose Students"
+                options={students.map((s) => ({
+                  id: s.id,
+                  label: `${s.student_name} (${s.admission_no})`,
+                }))}
+                selected={selectedStudentIds}
+                onChange={setSelectedStudentIds}
+                placeholder="Select students..."
+                fullWidth={true}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── Report Card Preview & Printable Area ── */}
@@ -576,7 +580,8 @@ const ProgressReportGenerator = ({
           <i className="fas fa-chalkboard text-3xl text-slate-300 mb-2 block" />
           <p className="text-sm font-bold text-dark-primary">Select an Examination and Class</p>
           <p className="text-xs text-dark-muted mt-1">
-            Choose an examination event and class section to view or generate student progress report cards.
+            Choose an examination event and class section to view or generate student progress
+            report cards.
           </p>
         </div>
       ) : displayedStudents.length === 0 ? (
@@ -596,7 +601,8 @@ const ProgressReportGenerator = ({
           <i className="fas fa-clipboard-question text-3xl text-amber-400 mb-2 block" />
           <p className="text-sm font-bold text-dark-primary">No Exam Results Recorded</p>
           <p className="text-xs text-dark-muted mt-1">
-            No results or marks have been initialized for {selectedClass?.name} in {selectedSchedule?.name}.
+            No results or marks have been initialized for {selectedClass?.name} in{' '}
+            {selectedSchedule?.name}.
           </p>
         </div>
       ) : (
@@ -680,7 +686,8 @@ const ProgressReportGenerator = ({
                 if (groupMembers.length > 0) {
                   groupMembers.forEach((m) => mappedIds.add(String(m.subjectId)));
                   const groupTotalObt = groupMembers.reduce(
-                    (acc, curr) => acc + (typeof curr.marksObtained === 'number' ? curr.marksObtained : 0),
+                    (acc, curr) =>
+                      acc + (typeof curr.marksObtained === 'number' ? curr.marksObtained : 0),
                     0
                   );
                   const groupTotalMax = groupMembers.reduce((acc, curr) => acc + curr.maxMarks, 0);
@@ -800,21 +807,33 @@ const ProgressReportGenerator = ({
                             <table className="w-full text-xs print:text-[9.5px] border-collapse">
                               <thead>
                                 <tr className="bg-slate-900 text-white font-black text-[11px] print:text-[9px] uppercase tracking-wider">
-                                  <th className="py-2 print:py-1 px-2.5 print:px-1.5 text-left">Subject</th>
+                                  <th className="py-2 print:py-1 px-2.5 print:px-1.5 text-left">
+                                    Subject
+                                  </th>
                                   {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">Max Marks</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">
+                                      Max Marks
+                                    </th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showPassMarks && (
-                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">Pass Marks</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-16">
+                                      Pass Marks
+                                    </th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showMarksObtained && (
-                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-24 print:w-18">Marks Obtained</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-24 print:w-18">
+                                      Marks Obtained
+                                    </th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showGrade && (
-                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-16 print:w-12">Grade</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-16 print:w-12">
+                                      Grade
+                                    </th>
                                   )}
                                   {activeTemplate.subjectTableConfig.showStatus && (
-                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-14">Status</th>
+                                    <th className="py-2 print:py-1 px-2 print:px-1 text-center w-20 print:w-14">
+                                      Status
+                                    </th>
                                   )}
                                 </tr>
                               </thead>
@@ -830,7 +849,8 @@ const ProgressReportGenerator = ({
                                         <i className="fas fa-layer-group text-[10px] mr-1.5 text-rose-600" />
                                         <span>Group: {grp.groupName}</span>
                                         <span className="ml-3 font-normal text-[10px] print:text-[8px] text-dark-muted">
-                                          (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} · {grp.groupPct}%)
+                                          (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} ·{' '}
+                                          {grp.groupPct}%)
                                         </span>
                                       </td>
                                     </tr>
@@ -840,10 +860,14 @@ const ProgressReportGenerator = ({
                                           • {s.subjectName}
                                         </td>
                                         {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.maxMarks}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">
+                                            {s.maxMarks}
+                                          </td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showPassMarks && (
-                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.passMarks || '—'}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">
+                                            {s.passMarks || '—'}
+                                          </td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showMarksObtained && (
                                           <td
@@ -859,7 +883,9 @@ const ProgressReportGenerator = ({
                                           </td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showGrade && (
-                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">{s.grade}</td>
+                                          <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">
+                                            {s.grade}
+                                          </td>
                                         )}
                                         {activeTemplate.subjectTableConfig.showStatus && (
                                           <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold text-[10px] print:text-[8.5px]">
@@ -886,10 +912,14 @@ const ProgressReportGenerator = ({
                                       {s.subjectName}
                                     </td>
                                     {activeTemplate.subjectTableConfig.showMaxMarks && (
-                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.maxMarks}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">
+                                        {s.maxMarks}
+                                      </td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showPassMarks && (
-                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">{s.passMarks || '—'}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-mono">
+                                        {s.passMarks || '—'}
+                                      </td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showMarksObtained && (
                                       <td
@@ -905,7 +935,9 @@ const ProgressReportGenerator = ({
                                       </td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showGrade && (
-                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">{s.grade}</td>
+                                      <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold">
+                                        {s.grade}
+                                      </td>
                                     )}
                                     {activeTemplate.subjectTableConfig.showStatus && (
                                       <td className="py-1.5 print:py-0.5 px-2 print:px-1 text-center font-bold text-[10px] print:text-[8.5px]">
@@ -992,7 +1024,9 @@ const ProgressReportGenerator = ({
                           <h4 className="text-xs print:text-[9px] font-black text-dark-primary uppercase tracking-wider text-center">
                             {activeTemplate.chartConfig.title}
                           </h4>
-                          <div className={`h-44 ${orientation === 'landscape' ? 'print:h-22' : 'print:h-28'} w-full`}>
+                          <div
+                            className={`h-44 ${orientation === 'landscape' ? 'print:h-22' : 'print:h-28'} w-full`}
+                          >
                             <ResponsiveContainer width="100%" height="100%">
                               {activeTemplate.chartConfig?.type === 'horizontal_bar' ? (
                                 <BarChart
@@ -1000,7 +1034,11 @@ const ProgressReportGenerator = ({
                                   layout="vertical"
                                   margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#cbd5e1" />
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    horizontal={false}
+                                    stroke="#cbd5e1"
+                                  />
                                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9 }} />
                                   <YAxis
                                     type="category"
@@ -1014,7 +1052,11 @@ const ProgressReportGenerator = ({
                                       item.payload.fullName,
                                     ]}
                                   />
-                                  <Bar dataKey="Marks" fill={activeTemplate.accentColor || '#e11d48'} radius={[0, 4, 4, 0]}>
+                                  <Bar
+                                    dataKey="Marks"
+                                    fill={activeTemplate.accentColor || '#e11d48'}
+                                    radius={[0, 4, 4, 0]}
+                                  >
                                     {chartData.map((entry, index) => (
                                       <Cell
                                         key={`cell-${index}`}
@@ -1030,8 +1072,15 @@ const ProgressReportGenerator = ({
                               ) : activeTemplate.chartConfig?.type === 'radar' ? (
                                 <RadarChart outerRadius={55} data={chartData}>
                                   <PolarGrid stroke="#cbd5e1" />
-                                  <PolarAngleAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8 }} />
+                                  <PolarAngleAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 9, fontWeight: 700 }}
+                                  />
+                                  <PolarRadiusAxis
+                                    angle={30}
+                                    domain={[0, 100]}
+                                    tick={{ fontSize: 8 }}
+                                  />
                                   <Radar
                                     name="Marks"
                                     dataKey="Marks"
@@ -1051,8 +1100,16 @@ const ProgressReportGenerator = ({
                                   data={chartData}
                                   margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={false}
+                                    stroke="#cbd5e1"
+                                  />
+                                  <XAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 10, fontWeight: 700 }}
+                                    interval={0}
+                                  />
                                   <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
                                   <Tooltip
                                     formatter={(value, name, item) => [
@@ -1073,8 +1130,16 @@ const ProgressReportGenerator = ({
                                   data={chartData}
                                   margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={false}
+                                    stroke="#cbd5e1"
+                                  />
+                                  <XAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 10, fontWeight: 700 }}
+                                    interval={0}
+                                  />
                                   <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
                                   <Tooltip
                                     formatter={(value, name, item) => [
@@ -1095,7 +1160,11 @@ const ProgressReportGenerator = ({
                                   data={chartData}
                                   margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={false}
+                                    stroke="#cbd5e1"
+                                  />
                                   <XAxis
                                     dataKey="name"
                                     tick={{ fontSize: 10, fontWeight: 700 }}
@@ -1108,7 +1177,11 @@ const ProgressReportGenerator = ({
                                       item.payload.fullName,
                                     ]}
                                   />
-                                  <Bar dataKey="Marks" fill={activeTemplate.accentColor || '#e11d48'} radius={[4, 4, 0, 0]}>
+                                  <Bar
+                                    dataKey="Marks"
+                                    fill={activeTemplate.accentColor || '#e11d48'}
+                                    radius={[4, 4, 0, 0]}
+                                  >
                                     {chartData.map((entry, index) => (
                                       <Cell
                                         key={`cell-${index}`}
@@ -1130,7 +1203,10 @@ const ProgressReportGenerator = ({
                     case 'remarks':
                       if (!activeTemplate.showTeacherRemarks) return null;
                       return (
-                        <div key="remarks" className="p-3.5 print:p-1.5 bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg space-y-1 print:space-y-0.5">
+                        <div
+                          key="remarks"
+                          className="p-3.5 print:p-1.5 bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg space-y-1 print:space-y-0.5"
+                        >
                           <span className="text-[10px] print:text-[8px] font-bold text-dark-muted uppercase block">
                             Teacher / Institution Remarks
                           </span>
@@ -1151,19 +1227,25 @@ const ProgressReportGenerator = ({
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.classTeacher}
                             </span>
-                            <span className="text-[10px] print:text-[8px] text-dark-muted">Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">
+                              Signature
+                            </span>
                           </div>
                           <div className="border-t border-slate-900 pt-1.5 print:pt-1">
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.principal}
                             </span>
-                            <span className="text-[10px] print:text-[8px] text-dark-muted">Seal & Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">
+                              Seal & Signature
+                            </span>
                           </div>
                           <div className="border-t border-slate-900 pt-1.5 print:pt-1">
                             <span className="font-bold text-dark-slate block">
                               {activeTemplate.signatures.parent}
                             </span>
-                            <span className="text-[10px] print:text-[8px] text-dark-muted">Signature</span>
+                            <span className="text-[10px] print:text-[8px] text-dark-muted">
+                              Signature
+                            </span>
                           </div>
                         </div>
                       );
@@ -1180,7 +1262,7 @@ const ProgressReportGenerator = ({
 
       {/* ── Template Designer Modal ── */}
       {isDesignerOpen && (
-        <ProgressReportDesigner
+        <ReportCardDesigner
           template={activeTemplate}
           availableSubjects={internalSubjects}
           onSave={handleSaveTemplate}
@@ -1191,4 +1273,4 @@ const ProgressReportGenerator = ({
   );
 };
 
-export default ProgressReportGenerator;
+export default ReportCardGenerator;

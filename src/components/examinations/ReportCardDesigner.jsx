@@ -1,4 +1,4 @@
-// src/components/examinations/ProgressReportDesigner.jsx
+// src/components/examinations/ReportCardDesigner.jsx
 import React, { useState, useMemo } from 'react';
 import { showToast } from '../../utils/toast';
 import {
@@ -32,13 +32,69 @@ const PREVIEW_STUDENT = {
 };
 
 const PREVIEW_SCORES = [
-  { subjectId: '1', subjectName: 'English Literature', maxMarks: 100, passMarks: 35, marksObtained: 88, grade: 'A+', status: 'PASS' },
-  { subjectId: '2', subjectName: 'Mathematics', maxMarks: 100, passMarks: 35, marksObtained: 94, grade: 'O', status: 'PASS' },
-  { subjectId: '3', subjectName: 'Physics', maxMarks: 100, passMarks: 35, marksObtained: 82, grade: 'A', status: 'PASS' },
-  { subjectId: '4', subjectName: 'Chemistry', maxMarks: 100, passMarks: 35, marksObtained: 79, grade: 'B+', status: 'PASS' },
-  { subjectId: '5', subjectName: 'Biology', maxMarks: 100, passMarks: 35, marksObtained: 91, grade: 'A+', status: 'PASS' },
-  { subjectId: '6', subjectName: 'Islamic Studies', maxMarks: 100, passMarks: 35, marksObtained: 96, grade: 'O', status: 'PASS' },
-  { subjectId: '7', subjectName: 'Social Studies', maxMarks: 100, passMarks: 35, marksObtained: 85, grade: 'A', status: 'PASS' },
+  {
+    subjectId: '1',
+    subjectName: 'English Literature',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 88,
+    grade: 'A+',
+    status: 'PASS',
+  },
+  {
+    subjectId: '2',
+    subjectName: 'Mathematics',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 94,
+    grade: 'O',
+    status: 'PASS',
+  },
+  {
+    subjectId: '3',
+    subjectName: 'Physics',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 82,
+    grade: 'A',
+    status: 'PASS',
+  },
+  {
+    subjectId: '4',
+    subjectName: 'Chemistry',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 79,
+    grade: 'B+',
+    status: 'PASS',
+  },
+  {
+    subjectId: '5',
+    subjectName: 'Biology',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 91,
+    grade: 'A+',
+    status: 'PASS',
+  },
+  {
+    subjectId: '6',
+    subjectName: 'Islamic Studies',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 96,
+    grade: 'O',
+    status: 'PASS',
+  },
+  {
+    subjectId: '7',
+    subjectName: 'Social Studies',
+    maxMarks: 100,
+    passMarks: 35,
+    marksObtained: 85,
+    grade: 'A',
+    status: 'PASS',
+  },
 ];
 
 /**
@@ -128,7 +184,7 @@ const BLOCK_LABELS = {
   signatures: { name: 'Signatures & Verification Footer', icon: 'fa-file-signature' },
 };
 
-const ProgressReportDesigner = ({
+const ReportCardDesigner = ({
   template = DEFAULT_TEMPLATE,
   availableSubjects = [],
   onSave,
@@ -139,7 +195,10 @@ const ProgressReportDesigner = ({
     ...template,
     schoolHeader: { ...DEFAULT_TEMPLATE.schoolHeader, ...(template?.schoolHeader || {}) },
     studentFields: { ...DEFAULT_TEMPLATE.studentFields, ...(template?.studentFields || {}) },
-    subjectTableConfig: { ...DEFAULT_TEMPLATE.subjectTableConfig, ...(template?.subjectTableConfig || {}) },
+    subjectTableConfig: {
+      ...DEFAULT_TEMPLATE.subjectTableConfig,
+      ...(template?.subjectTableConfig || {}),
+    },
     summaryConfig: { ...DEFAULT_TEMPLATE.summaryConfig, ...(template?.summaryConfig || {}) },
     chartConfig: { ...DEFAULT_TEMPLATE.chartConfig, ...(template?.chartConfig || {}) },
     signatures: { ...DEFAULT_TEMPLATE.signatures, ...(template?.signatures || {}) },
@@ -458,7 +517,9 @@ const ProgressReportDesigner = ({
                     Subject Grouping System
                   </h3>
                   <p className="text-xs text-dark-muted mt-0.5 max-w-lg">
-                    Group individual subjects under a custom parent title (e.g. place Physics, Chemistry, and Biology under "Science"). Custom titles are strictly user-defined.
+                    Group individual subjects under a custom parent title (e.g. place Physics,
+                    Chemistry, and Biology under "Science"). Custom titles are strictly
+                    user-defined.
                   </p>
                 </div>
                 <button
@@ -476,7 +537,8 @@ const ProgressReportDesigner = ({
                   <i className="fas fa-layer-group text-3xl text-slate-300 mb-2 block" />
                   <p className="text-xs font-bold text-dark-primary">No Subject Groups Defined</p>
                   <p className="text-[11px] text-dark-muted mt-1 max-w-sm mx-auto">
-                    All subjects will render as individual rows in the table. Click "Add Subject Group" to combine related subjects under a single category title.
+                    All subjects will render as individual rows in the table. Click "Add Subject
+                    Group" to combine related subjects under a single category title.
                   </p>
                 </div>
               ) : (
@@ -550,7 +612,9 @@ const ProgressReportDesigner = ({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-dark-slate mb-1">School Name</label>
+                  <label className="block text-xs font-bold text-dark-slate mb-1">
+                    School Name
+                  </label>
                   <input
                     type="text"
                     value={currentConfig.schoolHeader.title}
@@ -564,7 +628,9 @@ const ProgressReportDesigner = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-dark-slate mb-1">Subtitle / Motto</label>
+                  <label className="block text-xs font-bold text-dark-slate mb-1">
+                    Subtitle / Motto
+                  </label>
                   <input
                     type="text"
                     value={currentConfig.schoolHeader.subtitle}
@@ -578,7 +644,9 @@ const ProgressReportDesigner = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-dark-slate mb-1">Campus Address</label>
+                  <label className="block text-xs font-bold text-dark-slate mb-1">
+                    Campus Address
+                  </label>
                   <input
                     type="text"
                     value={currentConfig.schoolHeader.address}
@@ -592,7 +660,9 @@ const ProgressReportDesigner = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-dark-slate mb-1">Logo URL or Path</label>
+                  <label className="block text-xs font-bold text-dark-slate mb-1">
+                    Logo URL or Path
+                  </label>
                   <input
                     type="text"
                     value={currentConfig.schoolHeader.logoUrl}
@@ -669,7 +739,9 @@ const ProgressReportDesigner = ({
                   </label>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-dark-muted mb-1">Chart Type</label>
+                    <label className="block text-[11px] font-bold text-dark-muted mb-1">
+                      Chart Type
+                    </label>
                     <select
                       value={currentConfig.chartConfig.type}
                       onChange={(e) =>
@@ -689,7 +761,9 @@ const ProgressReportDesigner = ({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-dark-muted mb-1">Chart Title</label>
+                    <label className="block text-[11px] font-bold text-dark-muted mb-1">
+                      Chart Title
+                    </label>
                     <input
                       type="text"
                       value={currentConfig.chartConfig.title}
@@ -904,11 +978,15 @@ const ProgressReportDesigner = ({
                                 {previewData.sections.map((grp) => (
                                   <React.Fragment key={grp.groupName}>
                                     <tr className="bg-rose-50/60 font-black text-[10px] text-rose-900">
-                                      <td colSpan={6} className="py-1.5 px-3 uppercase tracking-wider">
+                                      <td
+                                        colSpan={6}
+                                        className="py-1.5 px-3 uppercase tracking-wider"
+                                      >
                                         <i className="fas fa-layer-group text-[9px] mr-1.5 text-rose-600" />
                                         <span>Group: {grp.groupName}</span>
                                         <span className="ml-2 font-normal text-slate-600">
-                                          (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} · {grp.groupPct}%)
+                                          (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} ·{' '}
+                                          {grp.groupPct}%)
                                         </span>
                                       </td>
                                     </tr>
@@ -918,10 +996,14 @@ const ProgressReportDesigner = ({
                                           • {s.subjectName}
                                         </td>
                                         {currentConfig.subjectTableConfig?.showMaxMarks && (
-                                          <td className="py-1.5 px-2 text-center font-mono">{s.maxMarks}</td>
+                                          <td className="py-1.5 px-2 text-center font-mono">
+                                            {s.maxMarks}
+                                          </td>
                                         )}
                                         {currentConfig.subjectTableConfig?.showPassMarks && (
-                                          <td className="py-1.5 px-2 text-center font-mono">{s.passMarks}</td>
+                                          <td className="py-1.5 px-2 text-center font-mono">
+                                            {s.passMarks}
+                                          </td>
                                         )}
                                         {currentConfig.subjectTableConfig?.showMarksObtained && (
                                           <td className="py-1.5 px-2 text-center font-black text-dark-primary font-mono">
@@ -957,10 +1039,14 @@ const ProgressReportDesigner = ({
                                       {s.subjectName}
                                     </td>
                                     {currentConfig.subjectTableConfig?.showMaxMarks && (
-                                      <td className="py-1.5 px-2 text-center font-mono">{s.maxMarks}</td>
+                                      <td className="py-1.5 px-2 text-center font-mono">
+                                        {s.maxMarks}
+                                      </td>
                                     )}
                                     {currentConfig.subjectTableConfig?.showPassMarks && (
-                                      <td className="py-1.5 px-2 text-center font-mono">{s.passMarks}</td>
+                                      <td className="py-1.5 px-2 text-center font-mono">
+                                        {s.passMarks}
+                                      </td>
                                     )}
                                     {currentConfig.subjectTableConfig?.showMarksObtained && (
                                       <td className="py-1.5 px-2 text-center font-black text-dark-primary font-mono">
@@ -1053,17 +1139,42 @@ const ProgressReportDesigner = ({
                                   layout="vertical"
                                   margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#cbd5e1" />
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    horizontal={false}
+                                    stroke="#cbd5e1"
+                                  />
                                   <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} width={70} />
+                                  <YAxis
+                                    type="category"
+                                    dataKey="name"
+                                    tick={{ fontSize: 9, fontWeight: 700 }}
+                                    width={70}
+                                  />
                                   <Tooltip />
-                                  <Bar dataKey="Marks" fill={currentConfig.accentColor || '#e11d48'} radius={[0, 4, 4, 0]} />
+                                  <Bar
+                                    dataKey="Marks"
+                                    fill={currentConfig.accentColor || '#e11d48'}
+                                    radius={[0, 4, 4, 0]}
+                                  />
                                 </BarChart>
                               ) : currentConfig.chartConfig?.type === 'radar' ? (
-                                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={previewChartData}>
+                                <RadarChart
+                                  cx="50%"
+                                  cy="50%"
+                                  outerRadius="75%"
+                                  data={previewChartData}
+                                >
                                   <PolarGrid stroke="#cbd5e1" />
-                                  <PolarAngleAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8 }} />
+                                  <PolarAngleAxis
+                                    dataKey="name"
+                                    tick={{ fontSize: 9, fontWeight: 700 }}
+                                  />
+                                  <PolarRadiusAxis
+                                    angle={30}
+                                    domain={[0, 100]}
+                                    tick={{ fontSize: 8 }}
+                                  />
                                   <Radar
                                     name="Marks"
                                     dataKey="Marks"
@@ -1074,7 +1185,10 @@ const ProgressReportDesigner = ({
                                   <Tooltip />
                                 </RadarChart>
                               ) : currentConfig.chartConfig?.type === 'line' ? (
-                                <LineChart data={previewChartData} margin={{ top: 10, right: 20, left: -10, bottom: 5 }}>
+                                <LineChart
+                                  data={previewChartData}
+                                  margin={{ top: 10, right: 20, left: -10, bottom: 5 }}
+                                >
                                   <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                                   <XAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
                                   <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
@@ -1088,11 +1202,28 @@ const ProgressReportDesigner = ({
                                   />
                                 </LineChart>
                               ) : currentConfig.chartConfig?.type === 'area' ? (
-                                <AreaChart data={previewChartData} margin={{ top: 10, right: 20, left: -10, bottom: 5 }}>
+                                <AreaChart
+                                  data={previewChartData}
+                                  margin={{ top: 10, right: 20, left: -10, bottom: 5 }}
+                                >
                                   <defs>
-                                    <linearGradient id="designerPreviewGradient" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor={currentConfig.accentColor || '#e11d48'} stopOpacity={0.7} />
-                                      <stop offset="95%" stopColor={currentConfig.accentColor || '#e11d48'} stopOpacity={0.05} />
+                                    <linearGradient
+                                      id="designerPreviewGradient"
+                                      x1="0"
+                                      y1="0"
+                                      x2="0"
+                                      y2="1"
+                                    >
+                                      <stop
+                                        offset="5%"
+                                        stopColor={currentConfig.accentColor || '#e11d48'}
+                                        stopOpacity={0.7}
+                                      />
+                                      <stop
+                                        offset="95%"
+                                        stopColor={currentConfig.accentColor || '#e11d48'}
+                                        stopOpacity={0.05}
+                                      />
                                     </linearGradient>
                                   </defs>
                                   <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
@@ -1109,8 +1240,15 @@ const ProgressReportDesigner = ({
                                   />
                                 </AreaChart>
                               ) : (
-                                <BarChart data={previewChartData} margin={{ top: 10, right: 10, left: -15, bottom: 5 }}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                                <BarChart
+                                  data={previewChartData}
+                                  margin={{ top: 10, right: 10, left: -15, bottom: 5 }}
+                                >
+                                  <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={false}
+                                    stroke="#cbd5e1"
+                                  />
                                   <XAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
                                   <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
                                   <Tooltip />
@@ -1118,7 +1256,11 @@ const ProgressReportDesigner = ({
                                     {previewChartData.map((entry, index) => (
                                       <Cell
                                         key={`cell-${index}`}
-                                        fill={entry.Marks >= 80 ? currentConfig.secondaryColor || '#059669' : currentConfig.accentColor || '#e11d48'}
+                                        fill={
+                                          entry.Marks >= 80
+                                            ? currentConfig.secondaryColor || '#059669'
+                                            : currentConfig.accentColor || '#e11d48'
+                                        }
                                       />
                                     ))}
                                   </Bar>
@@ -1132,7 +1274,10 @@ const ProgressReportDesigner = ({
                     case 'remarks':
                       if (!currentConfig.showTeacherRemarks) return null;
                       return (
-                        <div key="remarks" className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-xs">
+                        <div
+                          key="remarks"
+                          className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-xs"
+                        >
                           <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider block mb-1">
                             Teacher Remarks & Recommendations:
                           </span>
@@ -1192,7 +1337,8 @@ const ProgressReportDesigner = ({
             </div>
 
             <p className="text-xs text-dark-muted">
-              Specify a custom title to group multiple subjects under one header (e.g. Science, Social, Languages).
+              Specify a custom title to group multiple subjects under one header (e.g. Science,
+              Social, Languages).
             </p>
 
             <div>
@@ -1232,7 +1378,9 @@ const ProgressReportDesigner = ({
                           if (e.target.checked) {
                             setGroupSubjectIds([...groupSubjectIds, String(sub.id)]);
                           } else {
-                            setGroupSubjectIds(groupSubjectIds.filter((id) => id !== String(sub.id)));
+                            setGroupSubjectIds(
+                              groupSubjectIds.filter((id) => id !== String(sub.id))
+                            );
                           }
                         }}
                         className="rounded text-rose-600 focus:ring-rose-400"
@@ -1266,4 +1414,4 @@ const ProgressReportDesigner = ({
   );
 };
 
-export default ProgressReportDesigner;
+export default ReportCardDesigner;
