@@ -7,8 +7,11 @@ import MultiSelectDropdown from '../MultiSelectDropdown';
 import {
   DEFAULT_TEMPLATE,
   DEFAULT_GRADING_SCALE,
+  DEFAULT_CHART_COLUMN,
+  DEFAULT_MOCK_CLASSIFICATIONS,
   calculateGrade,
   getActiveTableColumns,
+  getLabelPlacement,
 } from './ReportCardDesigner';
 import {
   BarChart,
@@ -22,6 +25,10 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
+  PieChart,
+  Pie,
+  Legend,
+  LabelList,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -68,6 +75,7 @@ const ReportCardGenerator = ({
   const [internalSchedules, setInternalSchedules] = useState(schedules);
   const [internalClasses, setInternalClasses] = useState(classes);
   const [internalSubjects, setInternalSubjects] = useState(subjects);
+  const [internalClassifications, setInternalClassifications] = useState(DEFAULT_MOCK_CLASSIFICATIONS);
 
   const [selectedScheduleId, setSelectedScheduleId] = useState(
     initialScheduleId ? String(initialScheduleId) : schedules[0]?.id ? String(schedules[0].id) : ''
@@ -136,6 +144,8 @@ const ReportCardGenerator = ({
           const { data: subData } = await supabase.from('syl_subjects').select('*').order('name');
           if (subData) setInternalSubjects(subData);
         }
+        const { data: clsData } = await supabase.from('syl_classifications').select('*').order('name');
+        if (clsData && clsData.length > 0) setInternalClassifications(clsData);
       } catch (err) {
         console.error('Failed to load master data in ReportCardGenerator:', err);
       }
@@ -334,10 +344,17 @@ const ReportCardGenerator = ({
         }
         totalMax += maxMarks;
 
+        const clsObj = internalClassifications.find(
+          (c) => String(c.id) === String(sub?.classification_id)
+        );
+        const classificationName = clsObj?.name || 'General';
+
         subjectScores.push({
           subjectId: result.subject_id,
           subjectName: sub?.name || `Subject #${result.subject_id}`,
           arabicName: sub?.arabic_name || '',
+          classificationId: sub?.classification_id || null,
+          classificationName,
           maxMarks,
           passMarks,
           marksObtained: isAbsent ? 'Absent' : marks !== null ? marks : '—',
@@ -1226,6 +1243,422 @@ const ReportCardGenerator = ({
                     case 'charts': {
                       if (!activeTemplate.showCharts || chartData.length === 0) return null;
                       const ch = activeTemplate.chartConfig || {};
+
+                      // If multi-column charts are defined, render them
+                      if (ch.columns && ch.columns.length > 0) {
+                        const chartCols = ch.columns;
+                        const colWidthClass = chartCols.length === 1 ? 'grid-cols-1' : chartCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+                        const chartH = ch.height || (ch.size === 'compact' ? 120 : ch.size === 'large' ? 220 : 160);
+                        const accentColor = activeTemplate.accentColor || '#e11d48';
+                        const PALETTE = ['#e11d48', '#059669', '#7c3aed', '#0284c7', '#d97706', '#db2777', '#0891b2'];
+
+                        const isPercentage = (colCfg) => {
+                          const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+                          const agg = colCfg.aggregation || 'none';
+                          if (d === 'subject_pct' || d === 'overall_pct') return true;
+                          if (d === 'subject_classification' && agg !== 'sum' && agg !== 'max') return true;
+                          return false;
+                        };
+
+                        const buildColData = (colCfg) => {
+                          const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+                          const agg = colCfg.aggregation || 'none';
+
+                          if (d === 'subject_marks') {
+                            return subjectScores.map(s => ({
+                              name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
+                              fullName: s.subjectName,
+                              value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
+                              Max: s.maxMarks,
+                            }));
+                          }
+
+                          if (d === 'subject_pct') {
+                            return subjectScores.map(s => ({
+                              name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
+                              fullName: s.subjectName,
+                              value: s.maxMarks > 0 && typeof s.marksObtained === 'number' ? Math.round((s.marksObtained / s.maxMarks) * 100) : 0,
+                              Max: 100,
+                            }));
+                          }
+
+                          if (d === 'subject_classification') {
+                            const groupsMap = new Map();
+                            subjectScores.forEach(s => {
+                              const key = s.classificationName || 'General';
+                              if (!groupsMap.has(key)) groupsMap.set(key, []);
+                              groupsMap.get(key).push(s);
+                            });
+
+                            const result = [];
+                            groupsMap.forEach((subList, groupName) => {
+                              const totalObt = subList.reduce((acc, curr) => acc + (typeof curr.marksObtained === 'number' ? curr.marksObtained : 0), 0);
+                              const totalMax = subList.reduce((acc, curr) => acc + (Number(curr.maxMarks) || 0), 0);
+                              const count = subList.length;
+
+                              let val = 0;
+                              if (agg === 'sum') {
+                                val = Math.round(totalObt);
+                              } else if (agg === 'max') {
+                                val = Math.max(...subList.map(s => typeof s.marksObtained === 'number' ? s.marksObtained : 0));
+                              } else {
+                                val = totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : 0;
+                              }
+
+                              result.push({
+                                name: groupName.length > 12 ? groupName.slice(0, 10) + '…' : groupName,
+                                fullName: `${groupName} (${count} subjects)`,
+                                value: val,
+                                count,
+                                Max: agg === 'sum' ? totalMax : 100,
+                              });
+                            });
+                            return result;
+                          }
+
+                          if (d === 'grade_classification') {
+                            const scale = Array.isArray(activeTemplate.gradingScale) && activeTemplate.gradingScale.length > 0
+                              ? activeTemplate.gradingScale
+                              : DEFAULT_GRADING_SCALE;
+
+                            const counts = {};
+                            scale.forEach(g => { counts[g.grade] = 0; });
+                            subjectScores.forEach(s => {
+                              if (s.grade && s.grade !== '—') {
+                                counts[s.grade] = (counts[s.grade] || 0) + 1;
+                              }
+                            });
+
+                            const isPieOrDonut = colCfg.chartType === 'pie' || colCfg.chartType === 'donut';
+                            const gradeEntries = scale.map(g => ({
+                              name: g.grade,
+                              fullName: `Grade ${g.grade}`,
+                              value: counts[g.grade] || 0,
+                            }));
+
+                            const nonZero = gradeEntries.filter(g => g.value > 0);
+                            return (isPieOrDonut || nonZero.length >= 3) ? (nonZero.length > 0 ? nonZero : gradeEntries) : gradeEntries;
+                          }
+
+                          if (d === 'attendance') {
+                            const attVal = Number(String(student.attendance || '').replace(/[^0-9.]/g, '')) || 95;
+                            return [
+                              { name: 'Present', value: attVal, Max: 100 },
+                              { name: 'Absent', value: Math.max(0, 100 - attVal), Max: 100 },
+                            ];
+                          }
+
+                          if (d === 'overall_pct') {
+                            const pct = Number(metrics.percentage) || 0;
+                            return [
+                              { name: 'Score', value: Math.round(pct), Max: 100 },
+                              { name: 'Remaining', value: Math.max(0, 100 - Math.round(pct)), Max: 100 },
+                            ];
+                          }
+
+                          return subjectScores.map(s => ({
+                            name: s.subjectName.slice(0, 6),
+                            fullName: s.subjectName,
+                            value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
+                            Max: s.maxMarks,
+                          }));
+                        };
+
+                        const isTight = !!ch.tightMargins;
+
+                        const renderPrintChart = (colCfg, h, tight = false) => {
+                          const data = buildColData(colCfg);
+                          const t = colCfg.chartType || 'bar';
+                          const pctMode = isPercentage(colCfg);
+                          const cd = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+
+                          const userColors = Array.isArray(colCfg.colors) ? colCfg.colors.filter(Boolean) : [];
+                          const randomHsl = (i) => `hsl(${Math.round((i * 137.508) % 360)}, 65%, 52%)`;
+                          const getColor = (i) => {
+                            if (userColors.length > 0) return i < userColors.length ? userColors[i] : randomHsl(i);
+                            return PALETTE[i % PALETTE.length];
+                          };
+                          const baseColor = getColor(0) || accentColor;
+
+                          const showValues = colCfg.showValues !== undefined ? !!colCfg.showValues : !!colCfg.showDataLabels;
+                          const showLabels = !!colCfg.showLabels;
+                          const showAnyLabel = showValues || showLabels;
+                          const labelColor = colCfg.dataLabelColor || '#1e293b';
+                          const rawPos = colCfg.dataLabelPosition || 'top';
+                          const placement = getLabelPlacement(t, rawPos);
+                          const labelStyle = { fontSize: tight ? 8.5 : 8, fontWeight: 700, fill: labelColor };
+
+                          const enrichedData = data.map((d) => {
+                            const fVal = pctMode ? `${d.value}%` : `${d.value}`;
+                            const nameStr = d.name || '';
+                            let displayLabel = '';
+                            if (showValues && showLabels) {
+                              displayLabel = `${nameStr}: ${fVal}`;
+                            } else if (showLabels) {
+                              displayLabel = nameStr;
+                            } else if (showValues) {
+                              displayLabel = fVal;
+                            }
+                            return {
+                              ...d,
+                              formattedValue: fVal,
+                              displayLabel,
+                            };
+                          });
+
+                          const scaleType = colCfg.maxScale || 'auto';
+                          const axisMax = scaleType === 'pct100' ? 100 : scaleType === 'custom' ? (Number(colCfg.maxScaleValue) || 100) : 'auto';
+                          const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
+
+                          const tooltipFormatter = (val, name, item) => {
+                            const title = item?.payload?.fullName || name;
+                            if (pctMode) return [`${val}%`, title];
+                            if (cd === 'grade_classification') return [`${val} subjects`, title];
+                            if (item?.payload?.Max) return [`${val} / ${item.payload.Max}`, title];
+                            return [val, title];
+                          };
+
+                          if (t === 'text') {
+                            return (
+                              <div className={`flex flex-col ${tight ? 'gap-0.5' : 'gap-1'} justify-center h-full px-1`}>
+                                {enrichedData.slice(0, 6).map((d, i) => (
+                                  <div key={i} className="flex items-center justify-between text-[9px] font-bold">
+                                    <span className="text-dark-muted truncate max-w-[60%]">{d.name}</span>
+                                    <span className="font-black" style={{ color: baseColor }}>
+                                      {d.value}{pctMode ? '%' : cd === 'grade_classification' ? ' subs' : ''}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          }
+
+                          if (t === 'donut' || t === 'pie') {
+                            const isPieInside = placement.isInside;
+                            const pieData = enrichedData.map((d, i) => ({ ...d, fill: getColor(i) }));
+                            const outerR = tight ? (isPieInside ? '90%' : '80%') : '70%';
+                            const innerR = t === 'donut' ? (tight ? '46%' : '40%') : 0;
+                            const RADIAN = Math.PI / 180;
+
+                            const renderCustomPieLabel = (props) => {
+                              const { cx, cy, midAngle, innerRadius, outerRadius, name, value, payload, x, y } = props;
+                              const text = payload?.displayLabel || (showValues && showLabels ? `${name}: ${value}` : showLabels ? `${name}` : `${value}`);
+                              if (!text) return null;
+
+                              if (isPieInside) {
+                                const ir = Number(innerRadius) || 0;
+                                const or = Number(outerRadius) || 60;
+                                const r = ir + (or - ir) * (t === 'donut' ? 0.52 : 0.6);
+                                const lx = cx + r * Math.cos(-midAngle * RADIAN);
+                                const ly = cy + r * Math.sin(-midAngle * RADIAN);
+                                return (
+                                  <text
+                                    x={lx}
+                                    y={ly}
+                                    fill={labelColor}
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    fontSize={tight ? 8.5 : 8}
+                                    fontWeight={700}
+                                  >
+                                    {text}
+                                  </text>
+                                );
+                              }
+
+                              return (
+                                <text
+                                  x={x}
+                                  y={y}
+                                  fill={labelColor}
+                                  textAnchor={x > cx ? 'start' : 'end'}
+                                  dominantBaseline="central"
+                                  fontSize={8}
+                                  fontWeight={700}
+                                >
+                                  {text}
+                                </text>
+                              );
+                            };
+
+                            return (
+                              <ResponsiveContainer width="100%" height={h}>
+                                <PieChart>
+                                  <Pie
+                                    data={pieData}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={innerR}
+                                    outerRadius={outerR}
+                                    paddingAngle={tight ? 1 : 2}
+                                    label={showAnyLabel ? renderCustomPieLabel : undefined}
+                                    labelLine={showAnyLabel && !isPieInside ? { stroke: labelColor, strokeWidth: 1 } : false}
+                                  >
+                                    {pieData.map((entry, index) => (
+                                      <Cell key={index} fill={entry.fill} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                  <Legend iconSize={tight ? 7 : 8} wrapperStyle={{ fontSize: tight ? 7.5 : 8, bottom: tight ? -4 : 0 }} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            );
+                          }
+
+                          if (t === 'horizontal_bar') {
+                            const hMargin = tight
+                              ? { top: 1, right: showAnyLabel && placement.position === 'right' ? 26 : 4, left: 16, bottom: -2 }
+                              : { top: 2, right: showAnyLabel && placement.position === 'right' ? 36 : 10, left: 30, bottom: 2 };
+
+                            return (
+                              <ResponsiveContainer width="100%" height={h}>
+                                <BarChart
+                                  data={enrichedData}
+                                  layout="vertical"
+                                  margin={hMargin}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                  <XAxis type="number" tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
+                                  <YAxis type="category" dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} width={tight ? 28 : 36} />
+                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                  <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+                                    {enrichedData.map((_, i) => (
+                                      <Cell key={i} fill={getColor(i)} />
+                                    ))}
+                                    {showAnyLabel && (
+                                      <LabelList
+                                        dataKey="displayLabel"
+                                        position={placement.position}
+                                        offset={placement.offset}
+                                        fill={labelColor}
+                                        style={labelStyle}
+                                      />
+                                    )}
+                                  </Bar>
+                                </BarChart>
+                              </ResponsiveContainer>
+                            );
+                          }
+
+                          if (t === 'line') {
+                            const lineMargin = tight
+                              ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
+                              : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
+
+                            return (
+                              <ResponsiveContainer width="100%" height={h}>
+                                <LineChart data={enrichedData} margin={lineMargin}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
+                                  <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
+                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                  <Line type="monotone" dataKey="value" stroke={baseColor} strokeWidth={2} dot={{ r: 3, fill: baseColor }}>
+                                    {showAnyLabel && (
+                                      <LabelList
+                                        dataKey="displayLabel"
+                                        position={placement.position}
+                                        offset={placement.offset}
+                                        fill={labelColor}
+                                        style={labelStyle}
+                                      />
+                                    )}
+                                  </Line>
+                                </LineChart>
+                              </ResponsiveContainer>
+                            );
+                          }
+
+                          if (t === 'area') {
+                            const areaMargin = tight
+                              ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
+                              : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
+
+                            return (
+                              <ResponsiveContainer width="100%" height={h}>
+                                <AreaChart data={enrichedData} margin={areaMargin}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                  <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
+                                  <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
+                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                  <Area
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke={baseColor}
+                                    strokeWidth={2}
+                                    fillOpacity={0.25}
+                                    fill={baseColor}
+                                  >
+                                    {showAnyLabel && (
+                                      <LabelList
+                                        dataKey="displayLabel"
+                                        position={placement.position}
+                                        offset={placement.offset}
+                                        fill={labelColor}
+                                        style={labelStyle}
+                                      />
+                                    )}
+                                  </Area>
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            );
+                          }
+
+                          const vMargin = tight
+                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 2, right: 2, left: -22, bottom: -4 }
+                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 5, left: -20, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <BarChart data={enrichedData} margin={vMargin}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
+                                <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+                                  {enrichedData.map((_, index) => (
+                                    <Cell key={index} fill={getColor(index)} />
+                                  ))}
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          );
+                        };
+
+                        return (
+                          <div
+                            key="charts"
+                            className={`${isTight ? 'p-1.5 print:p-0.5 space-y-1 print:space-y-0.5' : 'p-3 print:p-1.5 space-y-1.5 print:space-y-0.5'} bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg transition-all`}
+                          >
+                            <div className={`grid ${colWidthClass} ${isTight ? 'gap-1.5 print:gap-1' : 'gap-3'}`}>
+                              {chartCols.map((colCfg, colIdx) => (
+                                <div key={colIdx} className={isTight ? 'space-y-0.5' : 'space-y-1'}>
+                                  {colCfg.title && (
+                                    <h5 className={`${isTight ? 'text-[9.5px] print:text-[7.5px] mb-0.5' : 'text-[10px] print:text-[8px] mb-1'} font-black text-dark-primary uppercase tracking-wider text-center`}>
+                                      {colCfg.title}
+                                    </h5>
+                                  )}
+                                  <div style={{ height: `${chartH}px` }}>
+                                    {renderPrintChart(colCfg, chartH, isTight)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Legacy single chart fallback
                       const chartHClass =
                         ch.size === 'compact'
                           ? 'h-32 print:h-20'

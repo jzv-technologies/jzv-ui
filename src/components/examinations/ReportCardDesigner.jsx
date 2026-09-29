@@ -19,12 +19,16 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  LabelList,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from 'recharts';
 
 /**
@@ -84,6 +88,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 88,
     status: 'PASS',
+    classificationId: 1,
+    classificationName: 'English Literacy',
   },
   {
     subjectId: '2',
@@ -93,6 +99,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 94,
     status: 'PASS',
+    classificationId: 10,
+    classificationName: 'Modern Education',
   },
   {
     subjectId: '3',
@@ -102,6 +110,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 82,
     status: 'PASS',
+    classificationId: 10,
+    classificationName: 'Modern Education',
   },
   {
     subjectId: '4',
@@ -111,6 +121,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 79,
     status: 'PASS',
+    classificationId: 10,
+    classificationName: 'Modern Education',
   },
   {
     subjectId: '5',
@@ -120,6 +132,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 91,
     status: 'PASS',
+    classificationId: 10,
+    classificationName: 'Modern Education',
   },
   {
     subjectId: '6',
@@ -129,6 +143,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 96,
     status: 'PASS',
+    classificationId: 12,
+    classificationName: 'Personality Development',
   },
   {
     subjectId: '7',
@@ -138,6 +154,8 @@ const RAW_PREVIEW_SCORES = [
     passMarks: 35,
     marksObtained: 85,
     status: 'PASS',
+    classificationId: 10,
+    classificationName: 'Modern Education',
   },
 ];
 
@@ -193,6 +211,129 @@ export const getActiveTableColumns = (tblConfig = {}) => {
  * Allows configuring layout, reordering blocks, custom subject groupings,
  * headers, footers, tables, charts, grading rules, and sizing per visual block.
  */
+// Per-block style defaults (applied globally or overridden per block)
+export const DEFAULT_BLOCK_STYLE = {
+  background: '',          // CSS color string or '' for transparent
+  labelFontSize: 9,        // px for label/heading text
+  labelColor: '',          // CSS color or '' to use theme default
+  contentFontSize: 11,     // px for main content text
+  contentColor: '',        // CSS color or '' to use theme default
+};
+
+// Chart column defaults for new multi-column chart system
+export const DEFAULT_CHART_COLUMN = {
+  chartType: 'bar',           // 'bar'|'horizontal_bar'|'line'|'area'|'donut'|'pie'|'stacked_bar'|'stacked_bar_h'|'text'
+  chartData: 'subject_marks', // 'subject_marks'|'subject_pct'|'subject_classification'|'grade_classification'|'attendance'|'overall_pct'
+  aggregation: 'none',        // 'none'|'sum'|'avg'|'max'
+  title: '',
+  colors: [],                  // user-defined palette; empty = use defaults; overflow = random hsl
+  showDataLabels: false,       // backward compat: if true, showValues = true
+  showValues: false,           // show numeric value on chart
+  showLabels: false,           // show category / item name label on chart
+  dataLabelColor: '#1e293b',   // customizable data label color
+  dataLabelPosition: 'top',   // 'top'|'center'|'inside'|'insideTop'|'insideBottom'
+  maxScale: 'auto',            // 'auto'|'pct100'|'custom'
+  maxScaleValue: 100,          // used when maxScale === 'custom'
+};
+
+// Normalizes data label positioning across Cartesian (vertical/horizontal), Line, Area, and Pie/Donut charts
+export const getLabelPlacement = (chartType, rawPos = 'top') => {
+  const isHoriz = chartType === 'horizontal_bar' || chartType === 'stacked_bar_h';
+  const isLineOrArea = chartType === 'line' || chartType === 'area';
+  const isPie = chartType === 'donut' || chartType === 'pie';
+
+  if (isPie) {
+    const isInside = ['inside', 'center', 'insideTop', 'insideBottom'].includes(rawPos);
+    return { isInside, position: isInside ? 'inside' : 'outside', offset: 0 };
+  }
+
+  if (isHoriz) {
+    switch (rawPos) {
+      case 'center':
+        return { isInside: true, position: 'center', offset: 0 };
+      case 'inside':
+      case 'insideTop':
+        return { isInside: true, position: 'insideRight', offset: 4 };
+      case 'insideBottom':
+        return { isInside: true, position: 'insideLeft', offset: 4 };
+      case 'top':
+      default:
+        return { isInside: false, position: 'right', offset: 4 };
+    }
+  }
+
+  if (isLineOrArea) {
+    switch (rawPos) {
+      case 'center':
+        return { isInside: true, position: 'center', offset: 0 };
+      case 'insideBottom':
+      case 'bottom':
+        return { isInside: false, position: 'bottom', offset: 6 };
+      case 'top':
+      case 'inside':
+      case 'insideTop':
+      default:
+        return { isInside: false, position: 'top', offset: 6 };
+    }
+  }
+
+  // Vertical Bar & Stacked Bar
+  switch (rawPos) {
+    case 'center':
+      return { isInside: true, position: 'center', offset: 0 };
+    case 'inside':
+    case 'insideTop':
+      return { isInside: true, position: 'insideTop', offset: 4 };
+    case 'insideBottom':
+      return { isInside: true, position: 'insideBottom', offset: 4 };
+    case 'top':
+    default:
+      return { isInside: false, position: 'top', offset: 4 };
+  }
+};
+
+export const CHART_TYPE_LABELS = {
+  bar: 'Vertical Bar',
+  horizontal_bar: 'Horizontal Bar',
+  line: 'Line',
+  area: 'Area',
+  donut: 'Donut',
+  pie: 'Pie',
+  stacked_bar: 'Vertical Stacked Bar',
+  stacked_bar_h: 'Horizontal Stacked Bar',
+  text: 'Text / Numbers',
+};
+
+export const CHART_DATA_LABELS = {
+  subject_marks: 'Subject Marks',
+  subject_pct: 'Subject Mark %',
+  subject_classification: 'Subject Classification',
+  grade_classification: 'Grade Classification',
+  attendance: 'Attendance',
+  overall_pct: 'Overall Percentage',
+};
+
+export const AGGREGATION_LABELS = {
+  none: 'Default / None',
+  avg: 'Average (%)',
+  sum: 'Sum (Total Marks)',
+  max: 'Maximum Mark',
+};
+
+export const DEFAULT_MOCK_CLASSIFICATIONS = [
+  { id: 1, name: 'English Literacy' },
+  { id: 2, name: 'Arabic Literacy' },
+  { id: 3, name: 'Tamil Literacy' },
+  { id: 4, name: 'Urdu Literacy' },
+  { id: 8, name: '10th Board' },
+  { id: 9, name: '12th Board' },
+  { id: 10, name: 'Modern Education' },
+  { id: 11, name: 'Critical Thinking' },
+  { id: 12, name: 'Personality Development' },
+  { id: 13, name: 'Aalimiyat' },
+  { id: 14, name: 'Holy Quran' },
+];
+
 export const DEFAULT_TEMPLATE = {
   id: 'standard-report',
   name: 'Standard Comprehensive Report Card',
@@ -215,6 +356,7 @@ export const DEFAULT_TEMPLATE = {
     showExamTitle: true,
     showHeaderImage: false,
     headerImageUrl: '',
+    style: { ...DEFAULT_BLOCK_STYLE },
   },
   showStudentInfo: true,
   studentFields: {
@@ -231,6 +373,7 @@ export const DEFAULT_TEMPLATE = {
   studentInfoConfig: {
     size: 'standard', // 'compact' | 'standard' | 'large'
     columns: 4, // 2 | 3 | 4
+    style: { ...DEFAULT_BLOCK_STYLE },
   },
   showSubjectTable: true,
   subjectTableConfig: {
@@ -243,6 +386,7 @@ export const DEFAULT_TEMPLATE = {
     showStatus: true,
     bandedRows: true,
     size: 'standard', // 'compact' | 'standard' | 'spacious'
+    style: { ...DEFAULT_BLOCK_STYLE },
     columnOrder: [
       'subject',
       'arabicName',
@@ -257,10 +401,22 @@ export const DEFAULT_TEMPLATE = {
   subjectGroups: [],
   showCharts: true,
   chartConfig: {
-    type: 'bar', // 'bar' | 'horizontal_bar' | 'radar' | 'line' | 'area'
+    // Legacy single chart (kept for backward compat, but columns[] takes priority)
+    type: 'bar',
     title: 'Subject Performance Analysis',
     height: 180,
     size: 'standard', // 'compact' | 'standard' | 'large'
+    tightMargins: false, // removes margins and padding to maximize chart size
+    style: { ...DEFAULT_BLOCK_STYLE },
+    // New multi-column chart config (up to 3 columns)
+    columns: [
+      {
+        ...DEFAULT_CHART_COLUMN,
+        chartType: 'bar',
+        chartData: 'subject_marks',
+        title: 'Subject Marks',
+      },
+    ],
   },
   showSummaryCalculations: true,
   summaryConfig: {
@@ -271,6 +427,10 @@ export const DEFAULT_TEMPLATE = {
     showPassFail: true,
     showTotalSubjects: false,
     size: 'standard', // 'compact' | 'standard' | 'large'
+    columns: 0,    // 0 = auto, 1-6 fixed columns per row
+    style: { ...DEFAULT_BLOCK_STYLE },
+    // Order of items within the summary block (drag-reorderable)
+    itemOrder: ['showGrandTotal', 'showPercentage', 'showGrade', 'showClassRank', 'showPassFail', 'showTotalSubjects'],
   },
   showTeacherRemarks: true,
   remarksText: 'Hard work and continuous dedication bring great achievements.',
@@ -279,6 +439,7 @@ export const DEFAULT_TEMPLATE = {
     size: 'standard', // 'compact' | 'standard' | 'spacious'
     showSignatureLine: false,
     showPromotion: false,
+    style: { ...DEFAULT_BLOCK_STYLE },
   },
   showSignatures: true,
   signatures: {
@@ -294,6 +455,7 @@ export const DEFAULT_TEMPLATE = {
     showPrincipal: true,
     showParent: true,
     showDate: false,
+    style: { ...DEFAULT_BLOCK_STYLE },
   },
   // Grading scale configuration & display legend
   showGradingScale: false,
@@ -335,6 +497,7 @@ const ReportCardDesigner = ({
 
   const [internalTemplates, setInternalTemplates] = useState(templates);
   const [internalSubjects, setInternalSubjects] = useState(availableSubjects);
+  const [classifications, setClassifications] = useState(DEFAULT_MOCK_CLASSIFICATIONS);
 
   const effectiveTemplates = useMemo(() => {
     return Array.isArray(templates) && templates.length > 0 ? templates : internalTemplates;
@@ -346,35 +509,60 @@ const ReportCardDesigner = ({
       : internalSubjects;
   }, [availableSubjects, internalSubjects]);
 
-  const [currentConfig, setCurrentConfig] = useState(() => ({
-    ...DEFAULT_TEMPLATE,
-    ...(template || {}),
-    schoolHeader: { ...DEFAULT_TEMPLATE.schoolHeader, ...(template?.schoolHeader || {}) },
-    studentFields: { ...DEFAULT_TEMPLATE.studentFields, ...(template?.studentFields || {}) },
+  const mergeConfig = (base, override) => ({
+    ...base,
+    ...(override || {}),
+    schoolHeader: {
+      ...base.schoolHeader,
+      ...(override?.schoolHeader || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.schoolHeader?.style, ...(override?.schoolHeader?.style || {}) },
+    },
+    studentFields: { ...base.studentFields, ...(override?.studentFields || {}) },
     studentInfoConfig: {
-      ...DEFAULT_TEMPLATE.studentInfoConfig,
-      ...(template?.studentInfoConfig || {}),
+      ...base.studentInfoConfig,
+      ...(override?.studentInfoConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.studentInfoConfig?.style, ...(override?.studentInfoConfig?.style || {}) },
     },
     subjectTableConfig: {
-      ...DEFAULT_TEMPLATE.subjectTableConfig,
-      ...(template?.subjectTableConfig || {}),
+      ...base.subjectTableConfig,
+      ...(override?.subjectTableConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.subjectTableConfig?.style, ...(override?.subjectTableConfig?.style || {}) },
     },
-    summaryConfig: { ...DEFAULT_TEMPLATE.summaryConfig, ...(template?.summaryConfig || {}) },
-    chartConfig: { ...DEFAULT_TEMPLATE.chartConfig, ...(template?.chartConfig || {}) },
-    remarksConfig: { ...DEFAULT_TEMPLATE.remarksConfig, ...(template?.remarksConfig || {}) },
-    signatures: { ...DEFAULT_TEMPLATE.signatures, ...(template?.signatures || {}) },
+    summaryConfig: {
+      ...base.summaryConfig,
+      ...(override?.summaryConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.summaryConfig?.style, ...(override?.summaryConfig?.style || {}) },
+      itemOrder: override?.summaryConfig?.itemOrder || base.summaryConfig?.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder,
+    },
+    chartConfig: {
+      ...base.chartConfig,
+      ...(override?.chartConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.chartConfig?.style, ...(override?.chartConfig?.style || {}) },
+      columns: override?.chartConfig?.columns || base.chartConfig?.columns || DEFAULT_TEMPLATE.chartConfig.columns,
+    },
+    remarksConfig: {
+      ...base.remarksConfig,
+      ...(override?.remarksConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.remarksConfig?.style, ...(override?.remarksConfig?.style || {}) },
+    },
+    signatures: { ...base.signatures, ...(override?.signatures || {}) },
     signaturesConfig: {
-      ...DEFAULT_TEMPLATE.signaturesConfig,
-      ...(template?.signaturesConfig || {}),
+      ...base.signaturesConfig,
+      ...(override?.signaturesConfig || {}),
+      style: { ...DEFAULT_BLOCK_STYLE, ...base.signaturesConfig?.style, ...(override?.signaturesConfig?.style || {}) },
     },
     gradingScale:
-      template?.gradingScale && template.gradingScale.length > 0
-        ? template.gradingScale
-        : DEFAULT_GRADING_SCALE,
-    showGradingScale: template?.showGradingScale ?? false,
-    blockOrder: template?.blockOrder || DEFAULT_TEMPLATE.blockOrder,
-    subjectGroups: template?.subjectGroups || [],
-  }));
+      override?.gradingScale && override.gradingScale.length > 0
+        ? override.gradingScale
+        : base.gradingScale?.length > 0 ? base.gradingScale : DEFAULT_GRADING_SCALE,
+    showGradingScale: override?.showGradingScale ?? base.showGradingScale ?? false,
+    blockOrder: override?.blockOrder || base.blockOrder,
+    subjectGroups: override?.subjectGroups || base.subjectGroups || [],
+  });
+
+  const [currentConfig, setCurrentConfig] = useState(() =>
+    mergeConfig(DEFAULT_TEMPLATE, template || {})
+  );
 
   // Auto-fetch remote templates if running standalone (no templates passed via props)
   useEffect(() => {
@@ -385,54 +573,7 @@ const ReportCardDesigner = ({
           if (data && Array.isArray(data) && data.length > 0) {
             setInternalTemplates(data);
             if (!template?.id) {
-              const firstTpl = data[0];
-              setCurrentConfig({
-                ...DEFAULT_TEMPLATE,
-                ...firstTpl,
-                schoolHeader: {
-                  ...DEFAULT_TEMPLATE.schoolHeader,
-                  ...(firstTpl.schoolHeader || {}),
-                },
-                studentFields: {
-                  ...DEFAULT_TEMPLATE.studentFields,
-                  ...(firstTpl.studentFields || {}),
-                },
-                studentInfoConfig: {
-                  ...DEFAULT_TEMPLATE.studentInfoConfig,
-                  ...(firstTpl.studentInfoConfig || {}),
-                },
-                subjectTableConfig: {
-                  ...DEFAULT_TEMPLATE.subjectTableConfig,
-                  ...(firstTpl.subjectTableConfig || {}),
-                },
-                summaryConfig: {
-                  ...DEFAULT_TEMPLATE.summaryConfig,
-                  ...(firstTpl.summaryConfig || {}),
-                },
-                chartConfig: {
-                  ...DEFAULT_TEMPLATE.chartConfig,
-                  ...(firstTpl.chartConfig || {}),
-                },
-                remarksConfig: {
-                  ...DEFAULT_TEMPLATE.remarksConfig,
-                  ...(firstTpl.remarksConfig || {}),
-                },
-                signatures: {
-                  ...DEFAULT_TEMPLATE.signatures,
-                  ...(firstTpl.signatures || {}),
-                },
-                signaturesConfig: {
-                  ...DEFAULT_TEMPLATE.signaturesConfig,
-                  ...(firstTpl.signaturesConfig || {}),
-                },
-                gradingScale:
-                  firstTpl.gradingScale && firstTpl.gradingScale.length > 0
-                    ? firstTpl.gradingScale
-                    : DEFAULT_GRADING_SCALE,
-                showGradingScale: firstTpl.showGradingScale ?? false,
-                blockOrder: firstTpl.blockOrder || DEFAULT_TEMPLATE.blockOrder,
-                subjectGroups: firstTpl.subjectGroups || [],
-              });
+              setCurrentConfig(mergeConfig(DEFAULT_TEMPLATE, data[0]));
             }
           }
         } catch (err) {
@@ -441,6 +582,7 @@ const ReportCardDesigner = ({
       };
       loadRemoteTemplates();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templates, internalTemplates.length, template?.id]);
 
   // Auto-fetch subjects if running standalone
@@ -460,42 +602,30 @@ const ReportCardDesigner = ({
     }
   }, [availableSubjects, internalSubjects.length]);
 
+  // Load syl_classifications
+  useEffect(() => {
+    const loadClassifications = async () => {
+      try {
+        const { data } = await supabase.from('syl_classifications').select('*').order('name');
+        if (data && data.length > 0) {
+          setClassifications(data);
+        }
+      } catch (err) {
+        console.warn('[ReportCardDesigner] Failed to load classifications:', err);
+      }
+    };
+    loadClassifications();
+  }, []);
+
   // Sync external template changes if any
   useEffect(() => {
     if (template && template.id) {
       setCurrentConfig((prev) => {
         if (prev.id === template.id && prev.name === template.name) return prev;
-        return {
-          ...DEFAULT_TEMPLATE,
-          ...template,
-          schoolHeader: { ...DEFAULT_TEMPLATE.schoolHeader, ...(template.schoolHeader || {}) },
-          studentFields: { ...DEFAULT_TEMPLATE.studentFields, ...(template.studentFields || {}) },
-          studentInfoConfig: {
-            ...DEFAULT_TEMPLATE.studentInfoConfig,
-            ...(template.studentInfoConfig || {}),
-          },
-          subjectTableConfig: {
-            ...DEFAULT_TEMPLATE.subjectTableConfig,
-            ...(template.subjectTableConfig || {}),
-          },
-          summaryConfig: { ...DEFAULT_TEMPLATE.summaryConfig, ...(template.summaryConfig || {}) },
-          chartConfig: { ...DEFAULT_TEMPLATE.chartConfig, ...(template.chartConfig || {}) },
-          remarksConfig: { ...DEFAULT_TEMPLATE.remarksConfig, ...(template.remarksConfig || {}) },
-          signatures: { ...DEFAULT_TEMPLATE.signatures, ...(template.signatures || {}) },
-          signaturesConfig: {
-            ...DEFAULT_TEMPLATE.signaturesConfig,
-            ...(template.signaturesConfig || {}),
-          },
-          gradingScale:
-            template.gradingScale && template.gradingScale.length > 0
-              ? template.gradingScale
-              : DEFAULT_GRADING_SCALE,
-          showGradingScale: template.showGradingScale ?? false,
-          blockOrder: template.blockOrder || DEFAULT_TEMPLATE.blockOrder,
-          subjectGroups: template.subjectGroups || [],
-        };
+        return mergeConfig(DEFAULT_TEMPLATE, template);
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);
 
   // Options for template dropdown
@@ -519,38 +649,7 @@ const ReportCardDesigner = ({
     const target = (effectiveTemplates || []).find((t) => String(t.id) === String(templateId));
     if (target) {
       if (onSelectTemplate) onSelectTemplate(templateId);
-      setCurrentConfig({
-        ...DEFAULT_TEMPLATE,
-        ...target,
-        schoolHeader: { ...DEFAULT_TEMPLATE.schoolHeader, ...(target.schoolHeader || {}) },
-        studentFields: { ...DEFAULT_TEMPLATE.studentFields, ...(target.studentFields || {}) },
-        studentInfoConfig: {
-          ...DEFAULT_TEMPLATE.studentInfoConfig,
-          ...(target.studentInfoConfig || {}),
-        },
-        subjectTableConfig: {
-          ...DEFAULT_TEMPLATE.subjectTableConfig,
-          ...(target.subjectTableConfig || {}),
-        },
-        summaryConfig: { ...DEFAULT_TEMPLATE.summaryConfig, ...(target.summaryConfig || {}) },
-        chartConfig: { ...DEFAULT_TEMPLATE.chartConfig, ...(target.chartConfig || {}) },
-        remarksConfig: { ...DEFAULT_TEMPLATE.remarksConfig, ...(target.remarksConfig || {}) },
-        signatures: { ...DEFAULT_TEMPLATE.signatures, ...(target.signatures || {}) },
-        signaturesConfig: {
-          ...DEFAULT_TEMPLATE.signaturesConfig,
-          ...(target.signaturesConfig || {}),
-        },
-        gradingScale:
-          target.gradingScale && target.gradingScale.length > 0
-            ? target.gradingScale
-            : DEFAULT_GRADING_SCALE,
-        showGradingScale: target.showGradingScale ?? false,
-        blockOrder: target.blockOrder || DEFAULT_TEMPLATE.blockOrder,
-        subjectGroups: target.subjectGroups || [],
-      });
-      if (onSelectTemplate) {
-        onSelectTemplate(templateId);
-      }
+      setCurrentConfig(mergeConfig(DEFAULT_TEMPLATE, target));
       showToast(`Switched to template "${target.name}"`, 'success');
     }
   };
@@ -990,23 +1089,29 @@ const ReportCardDesigner = ({
     }
   };
 
-  // Compute preview scores with dynamically evaluated grades using currentConfig.gradingScale
+  // Compute preview scores with dynamically evaluated grades using currentConfig.gradingScale and classifications
   const previewScoresWithGrades = useMemo(() => {
     return RAW_PREVIEW_SCORES.map((s) => {
-      const dbSub = availableSubjects.find(
+      const dbSub = effectiveSubjects.find(
         (as) =>
           String(as.id) === String(s.subjectId) ||
           as.name?.trim().toLowerCase() === s.subjectName?.trim().toLowerCase()
       );
       const pct = (s.marksObtained / s.maxMarks) * 100;
       const grade = calculateGrade(pct, currentConfig.gradingScale);
+      const classId = dbSub?.classification_id || s.classificationId;
+      const classObj = classifications.find((c) => String(c.id) === String(classId));
+      const classificationName =
+        classObj?.name || s.classificationName || (classId ? `Classification ${classId}` : 'General');
       return {
         ...s,
         arabicName: dbSub?.arabic_name || s.arabicName || '',
         grade,
+        classificationId: classId,
+        classificationName,
       };
     });
-  }, [currentConfig.gradingScale, availableSubjects]);
+  }, [currentConfig.gradingScale, effectiveSubjects, classifications]);
 
   const previewData = useMemo(() => {
     const groups = currentConfig.subjectGroups || [];
@@ -1345,93 +1450,163 @@ const ReportCardDesigner = ({
                         </div>
 
                         {/* ── EXPANDABLE BLOCK DETAILS PANEL ── */}
-                        {isExpanded && (
+                        {isExpanded && (() => {
+                          // Helper to get/set block style
+                          const getBlockStyle = () => {
+                            switch (blockKey) {
+                              case 'schoolHeader': return currentConfig.schoolHeader?.style || {};
+                              case 'studentInfo': return currentConfig.studentInfoConfig?.style || {};
+                              case 'subjectTable': return currentConfig.subjectTableConfig?.style || {};
+                              case 'summaryCalculations': return currentConfig.summaryConfig?.style || {};
+                              case 'charts': return currentConfig.chartConfig?.style || {};
+                              case 'remarks': return currentConfig.remarksConfig?.style || {};
+                              case 'signatures': return currentConfig.signaturesConfig?.style || {};
+                              default: return {};
+                            }
+                          };
+                          const setBlockStyle = (stylePatch) => {
+                            const merged = { ...DEFAULT_BLOCK_STYLE, ...getBlockStyle(), ...stylePatch };
+                            switch (blockKey) {
+                              case 'schoolHeader': setCurrentConfig(p => ({ ...p, schoolHeader: { ...p.schoolHeader, style: merged } })); break;
+                              case 'studentInfo': setCurrentConfig(p => ({ ...p, studentInfoConfig: { ...p.studentInfoConfig, style: merged } })); break;
+                              case 'subjectTable': setCurrentConfig(p => ({ ...p, subjectTableConfig: { ...p.subjectTableConfig, style: merged } })); break;
+                              case 'summaryCalculations': setCurrentConfig(p => ({ ...p, summaryConfig: { ...p.summaryConfig, style: merged } })); break;
+                              case 'charts': setCurrentConfig(p => ({ ...p, chartConfig: { ...p.chartConfig, style: merged } })); break;
+                              case 'remarks': setCurrentConfig(p => ({ ...p, remarksConfig: { ...p.remarksConfig, style: merged } })); break;
+                              case 'signatures': setCurrentConfig(p => ({ ...p, signaturesConfig: { ...p.signaturesConfig, style: merged } })); break;
+                              default: break;
+                            }
+                          };
+                          const bs = { ...DEFAULT_BLOCK_STYLE, ...getBlockStyle() };
+                          return (
                           <div className="border-t border-slate-100 bg-slate-50/70 p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
-                            {/* Block Visibility & Size Settings Bar (Moved inside details) */}
+                            {/* Block Visibility & Size Settings Bar */}
                             <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white rounded-xl border border-light-border shadow-2xs">
-                              {/* Visibility Toggle Button (On / Off) */}
+                              {/* Visibility Toggle */}
                               <div className="flex items-center gap-2.5">
-                                <span className="text-xs font-bold text-dark-slate">
-                                  Visibility:
-                                </span>
+                                <span className="text-xs font-bold text-dark-slate">Visibility:</span>
                                 <button
                                   type="button"
                                   role="switch"
                                   aria-checked={isVisible}
                                   onClick={() => toggleBlockVisibility(blockKey)}
                                   className="flex items-center gap-2 cursor-pointer select-none group focus:outline-hidden"
-                                  title={
-                                    isVisible
-                                      ? 'Click to turn visibility Off'
-                                      : 'Click to turn visibility On'
-                                  }
+                                  title={isVisible ? 'Click to turn visibility Off' : 'Click to turn visibility On'}
                                 >
-                                  <div
-                                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                                      isVisible ? 'bg-emerald-600' : 'bg-slate-300'
-                                    }`}
-                                  >
-                                    <span
-                                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                                        isVisible ? 'translate-x-5' : 'translate-x-0'
-                                      }`}
-                                    />
+                                  <div className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isVisible ? 'bg-emerald-600' : 'bg-slate-300'}`}>
+                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${isVisible ? 'translate-x-5' : 'translate-x-0'}`} />
                                   </div>
-                                  <span
-                                    className={`text-xs font-black min-w-[34px] flex items-center gap-1 uppercase tracking-wide transition-colors ${
-                                      isVisible ? 'text-emerald-700' : 'text-slate-500'
-                                    }`}
-                                  >
-                                    <i
-                                      className={`fas ${
-                                        isVisible
-                                          ? 'fa-eye text-emerald-600'
-                                          : 'fa-eye-slash text-slate-400'
-                                      } text-[10px]`}
-                                    />
+                                  <span className={`text-xs font-black min-w-[34px] flex items-center gap-1 uppercase tracking-wide transition-colors ${isVisible ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                    <i className={`fas ${isVisible ? 'fa-eye text-emerald-600' : 'fa-eye-slash text-slate-400'} text-[10px]`} />
                                     <span>{isVisible ? 'On' : 'Off'}</span>
                                   </span>
                                 </button>
                               </div>
 
                               {/* Block Size Segmented Control */}
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-black">
-                                  <button
-                                    type="button"
-                                    onClick={() => setBlockSize(blockKey, 'compact')}
-                                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                                      blockSize === 'compact'
-                                        ? 'bg-white text-rose-700 shadow-2xs font-black'
-                                        : 'text-dark-muted hover:text-dark-primary'
-                                    }`}
-                                    title="Compact size (tight padding, smaller font - ideal for 1 page A4)"
-                                  >
-                                    Compact
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBlockSize(blockKey, 'standard')}
-                                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                                      blockSize === 'standard'
-                                        ? 'bg-white text-rose-700 shadow-2xs font-black'
-                                        : 'text-dark-muted hover:text-dark-primary'
-                                    }`}
-                                    title="Standard balanced size"
-                                  >
-                                    Standard
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setBlockSize(blockKey, 'large')}
-                                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                                      blockSize === 'large'
-                                        ? 'bg-white text-rose-700 shadow-2xs font-black'
-                                        : 'text-dark-muted hover:text-dark-primary'
-                                    }`}
-                                    title="Large spacious size"
-                                  >
-                                    Large
+                              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-black">
+                                {['compact', 'standard', 'large'].map(sz => (
+                                  <button key={sz} type="button" onClick={() => setBlockSize(blockKey, sz)}
+                                    className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer capitalize ${blockSize === sz ? 'bg-white text-rose-700 shadow-2xs font-black' : 'text-dark-muted hover:text-dark-primary'}`}
+                                  >{sz}</button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* ── Per-Block Style Controls ── */}
+                            <div className="p-3 bg-white rounded-xl border border-light-border shadow-2xs space-y-3">
+                              <h5 className="text-[11px] font-black text-dark-primary uppercase tracking-wider flex items-center gap-1.5">
+                                <i className="fas fa-palette text-rose-500 text-[10px]" />
+                                Block Styling
+                              </h5>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {/* Background */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-dark-muted mb-1">Background Color</label>
+                                  <div className="flex items-center gap-1.5">
+                                    <input type="color" value={bs.background || '#ffffff'}
+                                      onChange={e => setBlockStyle({ background: e.target.value === '#ffffff' ? '' : e.target.value })}
+                                      className="w-8 h-7 rounded-lg border border-light-border cursor-pointer"
+                                    />
+                                    <input type="text" value={bs.background || ''}
+                                      onChange={e => setBlockStyle({ background: e.target.value })}
+                                      placeholder="e.g. #f8fafc"
+                                      className="flex-1 px-2 py-1 text-[10px] border border-light-border rounded-lg font-mono"
+                                    />
+                                    {bs.background && (
+                                      <button type="button" onClick={() => setBlockStyle({ background: '' })}
+                                        className="text-slate-400 hover:text-rose-600 cursor-pointer" title="Clear">
+                                        <i className="fas fa-times text-[9px]" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Label Font Size */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-dark-muted mb-1">Label Font Size (px)</label>
+                                  <input type="number" min="7" max="20" step="1"
+                                    value={bs.labelFontSize || 9}
+                                    onChange={e => setBlockStyle({ labelFontSize: Number(e.target.value) })}
+                                    className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-lg font-mono"
+                                  />
+                                </div>
+                                {/* Label Color */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-dark-muted mb-1">Label Color</label>
+                                  <div className="flex items-center gap-1.5">
+                                    <input type="color" value={bs.labelColor || '#64748b'}
+                                      onChange={e => setBlockStyle({ labelColor: e.target.value === '#64748b' ? '' : e.target.value })}
+                                      className="w-8 h-7 rounded-lg border border-light-border cursor-pointer"
+                                    />
+                                    <input type="text" value={bs.labelColor || ''}
+                                      onChange={e => setBlockStyle({ labelColor: e.target.value })}
+                                      placeholder="e.g. #64748b"
+                                      className="flex-1 px-2 py-1 text-[10px] border border-light-border rounded-lg font-mono"
+                                    />
+                                    {bs.labelColor && (
+                                      <button type="button" onClick={() => setBlockStyle({ labelColor: '' })}
+                                        className="text-slate-400 hover:text-rose-600 cursor-pointer" title="Clear">
+                                        <i className="fas fa-times text-[9px]" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Content Font Size */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-dark-muted mb-1">Content Font Size (px)</label>
+                                  <input type="number" min="7" max="24" step="1"
+                                    value={bs.contentFontSize || 11}
+                                    onChange={e => setBlockStyle({ contentFontSize: Number(e.target.value) })}
+                                    className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-lg font-mono"
+                                  />
+                                </div>
+                                {/* Content Color */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-dark-muted mb-1">Content Color</label>
+                                  <div className="flex items-center gap-1.5">
+                                    <input type="color" value={bs.contentColor || '#0f172a'}
+                                      onChange={e => setBlockStyle({ contentColor: e.target.value === '#0f172a' ? '' : e.target.value })}
+                                      className="w-8 h-7 rounded-lg border border-light-border cursor-pointer"
+                                    />
+                                    <input type="text" value={bs.contentColor || ''}
+                                      onChange={e => setBlockStyle({ contentColor: e.target.value })}
+                                      placeholder="e.g. #0f172a"
+                                      className="flex-1 px-2 py-1 text-[10px] border border-light-border rounded-lg font-mono"
+                                    />
+                                    {bs.contentColor && (
+                                      <button type="button" onClick={() => setBlockStyle({ contentColor: '' })}
+                                        className="text-slate-400 hover:text-rose-600 cursor-pointer" title="Clear">
+                                        <i className="fas fa-times text-[9px]" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Reset style */}
+                                <div className="flex items-end">
+                                  <button type="button"
+                                    onClick={() => setBlockStyle({ background: '', labelFontSize: 9, labelColor: '', contentFontSize: 11, contentColor: '' })}
+                                    className="px-3 py-1.5 text-[10px] font-bold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer transition-all flex items-center gap-1">
+                                    <i className="fas fa-undo-alt text-[9px]" /> Reset Style
                                   </button>
                                 </div>
                               </div>
@@ -1895,109 +2070,463 @@ const ReportCardDesigner = ({
                             )}
 
                             {/* 4. Performance Summary Details */}
-                            {blockKey === 'summaryCalculations' && (
-                              <div className="space-y-3">
-                                <div className="max-w-md">
-                                  <MultiSelectDropdown
-                                    label="Details to Display"
-                                    placeholder="Select summary metrics..."
-                                    options={[
-                                      {
-                                        id: 'showGrandTotal',
-                                        label: 'Grand Total (Obtained / Max)',
-                                      },
-                                      { id: 'showPercentage', label: 'Percentage (%)' },
-                                      { id: 'showGrade', label: 'Overall Grade' },
-                                      { id: 'showClassRank', label: 'Class Rank (#)' },
-                                      { id: 'showPassFail', label: 'Result Status (PASS/FAIL)' },
-                                      {
-                                        id: 'showTotalSubjects',
-                                        label: 'Total Subjects Evaluated',
-                                      },
-                                    ]}
-                                    selected={Object.keys(currentConfig.summaryConfig || {}).filter(
-                                      (k) => currentConfig.summaryConfig[k]
-                                    )}
-                                    onChange={(selectedIds) => {
-                                      const arr = Array.isArray(selectedIds)
-                                        ? selectedIds
-                                        : [selectedIds];
-                                      const allKeys = [
-                                        'showGrandTotal',
-                                        'showPercentage',
-                                        'showGrade',
-                                        'showClassRank',
-                                        'showPassFail',
-                                        'showTotalSubjects',
-                                      ];
-                                      const updated = { ...currentConfig.summaryConfig };
-                                      allKeys.forEach((k) => {
-                                        updated[k] = arr.includes(k);
-                                      });
-                                      setCurrentConfig((prev) => ({
-                                        ...prev,
-                                        summaryConfig: updated,
-                                      }));
-                                    }}
-                                    icon="fa-calculator"
-                                    fullWidth={true}
-                                  />
-                                </div>
-                              </div>
-                            )}
+                            {blockKey === 'summaryCalculations' && (() => {
+                              const SUMMARY_ITEM_LABELS = {
+                                showGrandTotal: 'Grand Total (Obtained / Max)',
+                                showPercentage: 'Percentage (%)',
+                                showGrade: 'Overall Grade',
+                                showClassRank: 'Class Rank (#)',
+                                showPassFail: 'Result Status (PASS/FAIL)',
+                                showTotalSubjects: 'Total Subjects Evaluated',
+                              };
+                              const itemOrder = currentConfig.summaryConfig?.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
+                              const moveSummaryItem = (idx, dir) => {
+                                const newOrder = [...itemOrder];
+                                const toIdx = idx + dir;
+                                if (toIdx < 0 || toIdx >= newOrder.length) return;
+                                [newOrder[idx], newOrder[toIdx]] = [newOrder[toIdx], newOrder[idx]];
+                                setCurrentConfig(p => ({ ...p, summaryConfig: { ...p.summaryConfig, itemOrder: newOrder } }));
+                              };
+                              return (
+                                <div className="space-y-4">
+                                  {/* Columns control */}
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <span className="text-[11px] font-bold text-dark-slate">Columns per Row:</span>
+                                    <div className="flex items-center gap-1">
+                                      {[0, 1, 2, 3, 4, 5, 6].map(col => (
+                                        <button key={col} type="button"
+                                          onClick={() => setCurrentConfig(p => ({ ...p, summaryConfig: { ...p.summaryConfig, columns: col } }))}
+                                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition-all ${
+                                            (currentConfig.summaryConfig?.columns ?? 0) === col
+                                              ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                                              : 'bg-white text-dark-slate border-light-border hover:bg-slate-50'
+                                          }`}>
+                                          {col === 0 ? 'Auto' : col}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
 
-                            {/* 5. Charts Details */}
-                            {blockKey === 'charts' && (
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {/* Items to display + sequence */}
                                   <div>
-                                    <label className="block text-[11px] font-bold text-dark-slate mb-1">
-                                      Chart Type
-                                    </label>
-                                    <select
-                                      value={currentConfig.chartConfig.type}
-                                      onChange={(e) =>
-                                        setCurrentConfig({
-                                          ...currentConfig,
-                                          chartConfig: {
-                                            ...currentConfig.chartConfig,
-                                            type: e.target.value,
-                                          },
-                                        })
-                                      }
-                                      className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold"
-                                    >
-                                      <option value="bar">Vertical Columns (Marks vs Max)</option>
-                                      <option value="horizontal_bar">
-                                        Horizontal Progress Bars
-                                      </option>
-                                      <option value="radar">Proficiency Radar / Spider Web</option>
-                                      <option value="line">Score Trend Line</option>
-                                      <option value="area">Gradient Area Chart</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-[11px] font-bold text-dark-slate mb-1">
-                                      Chart Title
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={currentConfig.chartConfig.title}
-                                      onChange={(e) =>
-                                        setCurrentConfig({
-                                          ...currentConfig,
-                                          chartConfig: {
-                                            ...currentConfig.chartConfig,
-                                            title: e.target.value,
-                                          },
-                                        })
-                                      }
-                                      className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold"
-                                    />
+                                    <div className="flex items-center justify-between mb-2">
+                                      <h5 className="text-[11px] font-black text-dark-primary flex items-center gap-1.5">
+                                        <i className="fas fa-arrows-alt-v text-rose-500 text-[10px]" />
+                                        Metrics & Sequence
+                                      </h5>
+                                      <button type="button"
+                                        onClick={() => setCurrentConfig(p => ({ ...p, summaryConfig: { ...p.summaryConfig, itemOrder: DEFAULT_TEMPLATE.summaryConfig.itemOrder } }))}
+                                        className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer">
+                                        <i className="fas fa-undo-alt mr-1 text-[9px]" />Reset Order
+                                      </button>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      {itemOrder.map((key, idx) => (
+                                        <div key={key} className="flex items-center justify-between px-3 py-2 bg-white rounded-xl border border-light-border shadow-2xs hover:border-slate-300 transition-all">
+                                          <div className="flex items-center gap-2">
+                                            <input type="checkbox"
+                                              checked={!!currentConfig.summaryConfig?.[key]}
+                                              onChange={e => setCurrentConfig(p => ({ ...p, summaryConfig: { ...p.summaryConfig, [key]: e.target.checked } }))}
+                                              className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
+                                            />
+                                            <span className="text-xs font-bold text-dark-primary">{SUMMARY_ITEM_LABELS[key] || key}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <button type="button" disabled={idx === 0} onClick={() => moveSummaryItem(idx, -1)}
+                                              className="w-6 h-6 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-slate-600 cursor-pointer">
+                                              <i className="fas fa-arrow-up text-[10px]" />
+                                            </button>
+                                            <button type="button" disabled={idx === itemOrder.length - 1} onClick={() => moveSummaryItem(idx, 1)}
+                                              className="w-6 h-6 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-slate-600 cursor-pointer">
+                                              <i className="fas fa-arrow-down text-[10px]" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
+
+                            {/* 5. Charts Details — Multi-Column Configurator */}
+                            {blockKey === 'charts' && (() => {
+                              const chCfg = currentConfig.chartConfig || {};
+                              const isTight = !!chCfg.tightMargins;
+                              const currentHeight = chCfg.height || 180;
+                              const cols = chCfg.columns || [{ ...DEFAULT_CHART_COLUMN }];
+                              const updateCol = (colIdx, patch) => {
+                                const next = cols.map((c, i) => i === colIdx ? { ...c, ...patch } : c);
+                                setCurrentConfig(p => ({ ...p, chartConfig: { ...p.chartConfig, columns: next } }));
+                              };
+                              const addCol = () => {
+                                if (cols.length >= 3) return;
+                                setCurrentConfig(p => ({ ...p, chartConfig: { ...p.chartConfig, columns: [...cols, { ...DEFAULT_CHART_COLUMN, title: `Column ${cols.length + 1}` }] } }));
+                              };
+                              const removeCol = (colIdx) => {
+                                if (cols.length <= 1) return;
+                                setCurrentConfig(p => ({ ...p, chartConfig: { ...p.chartConfig, columns: cols.filter((_, i) => i !== colIdx) } }));
+                              };
+                              return (
+                                <div className="space-y-4">
+                                  {/* ── Chart Dimensions & Spacing Card ── */}
+                                  <div className="p-3 bg-gradient-to-r from-rose-50/80 via-pink-50/50 to-slate-50 border border-rose-200/80 rounded-2xl space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center text-[10px] shadow-xs">
+                                          <i className="fas fa-expand-arrows-alt" />
+                                        </div>
+                                        <div>
+                                          <h5 className="text-[11px] font-black text-dark-primary leading-tight">Chart Sizing & Spacing</h5>
+                                          <p className="text-[9.5px] text-dark-muted">Control chart height and eliminate padding/margins for maximum chart size</p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 border-t border-rose-100">
+                                      {/* Maximize Size / Tight Fit Toggle */}
+                                      <div className="flex items-center justify-between p-2.5 bg-white rounded-xl border border-rose-100/90 shadow-2xs">
+                                        <div>
+                                          <span className="text-[10px] font-black text-dark-primary block">Maximize Chart Size</span>
+                                          <span className="text-[9px] text-dark-muted font-medium block leading-snug">
+                                            Remove margins & padding (full bleed)
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          role="switch"
+                                          aria-checked={isTight}
+                                          onClick={() => setCurrentConfig(p => ({
+                                            ...p,
+                                            chartConfig: { ...p.chartConfig, tightMargins: !isTight }
+                                          }))}
+                                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isTight ? 'bg-rose-600' : 'bg-slate-300'}`}
+                                        >
+                                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${isTight ? 'translate-x-4' : 'translate-x-0'}`} />
+                                        </button>
+                                      </div>
+
+                                      {/* Chart Height Presets + Numeric Input */}
+                                      <div className="p-2.5 bg-white rounded-xl border border-rose-100/90 shadow-2xs space-y-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] font-black text-dark-primary">Height</span>
+                                          <div className="flex items-center gap-1">
+                                            <input
+                                              type="number"
+                                              min={80}
+                                              max={600}
+                                              step={10}
+                                              value={currentHeight}
+                                              onChange={e => {
+                                                const val = Math.max(80, Math.min(600, Number(e.target.value) || 180));
+                                                setCurrentConfig(p => ({
+                                                  ...p,
+                                                  chartConfig: { ...p.chartConfig, height: val }
+                                                }));
+                                              }}
+                                              className="w-14 px-1.5 py-0.5 text-right font-mono text-[10px] font-black border border-slate-200 rounded-md bg-slate-50"
+                                            />
+                                            <span className="text-[9px] font-bold text-dark-muted">px</span>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {[
+                                            { label: 'Compact', h: 130 },
+                                            { label: 'Standard', h: 180 },
+                                            { label: 'Large', h: 240 },
+                                            { label: 'XL', h: 320 },
+                                          ].map(preset => (
+                                            <button
+                                              key={preset.label}
+                                              type="button"
+                                              onClick={() => setCurrentConfig(p => ({
+                                                ...p,
+                                                chartConfig: {
+                                                  ...p.chartConfig,
+                                                  height: preset.h,
+                                                  size: preset.label === 'Compact' ? 'compact' : preset.label === 'Large' ? 'large' : 'standard'
+                                                }
+                                              }))}
+                                              className={`flex-1 py-1 rounded-lg text-[9px] font-black transition-all cursor-pointer ${currentHeight === preset.h ? 'bg-rose-600 text-white shadow-2xs' : 'bg-slate-100 text-dark-muted hover:bg-slate-200'}`}
+                                            >
+                                              {preset.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Column count control */}
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <h5 className="text-[11px] font-black text-dark-primary flex items-center gap-1.5">
+                                        <i className="fas fa-columns text-rose-500 text-[10px]" />
+                                        Chart Columns ({cols.length} / 3)
+                                      </h5>
+                                      <p className="text-[10px] text-dark-muted">Configure up to 3 chart columns. Each column can show a different chart or data.</p>
+                                    </div>
+                                    {cols.length < 3 && (
+                                      <button type="button" onClick={addCol}
+                                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black shadow-xs transition-all flex items-center gap-1 cursor-pointer">
+                                        <i className="fas fa-plus text-[9px]" /> Add Column
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Per-column config */}
+                                  {cols.map((col, colIdx) => (
+                                    <div key={colIdx} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 relative">
+                                      {/* Column header */}
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                                          Column {colIdx + 1}
+                                        </span>
+                                        {cols.length > 1 && (
+                                          <button type="button" onClick={() => removeCol(colIdx)}
+                                            className="p-1.5 text-rose-400 hover:text-rose-700 cursor-pointer" title="Remove this column">
+                                            <i className="fas fa-trash text-[10px]" />
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {/* Title */}
+                                      <div>
+                                        <label className="block text-[10px] font-bold text-dark-muted mb-1">Column Title (optional)</label>
+                                        <input type="text" value={col.title || ''} onChange={e => updateCol(colIdx, { title: e.target.value })}
+                                          placeholder={`e.g. Subject Performance`}
+                                          className="w-full px-2.5 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold"
+                                        />
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {/* Chart Type */}
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-dark-muted mb-1">Chart Type</label>
+                                          <select value={col.chartType} onChange={e => updateCol(colIdx, { chartType: e.target.value })}
+                                            className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold">
+                                            {Object.entries(CHART_TYPE_LABELS).map(([v, l]) => (
+                                              <option key={v} value={v}>{l}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+
+                                        {/* Chart Data */}
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-dark-muted mb-1">Chart Data</label>
+                                          <select
+                                            value={col.chartData === 'classification' ? 'grade_classification' : (col.chartData || 'subject_marks')}
+                                            onChange={e => updateCol(colIdx, { chartData: e.target.value })}
+                                            className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold"
+                                          >
+                                            {Object.entries(CHART_DATA_LABELS).map(([v, l]) => (
+                                              <option key={v} value={v}>{l}</option>
+                                            ))}
+                                          </select>
+                                        </div>
+
+                                        {/* Aggregation */}
+                                        <div>
+                                          <label className="block text-[10px] font-bold text-dark-muted mb-1">
+                                            Aggregation {col.chartData === 'subject_classification' ? '(Category)' : ''}
+                                          </label>
+                                          <select
+                                            value={col.aggregation || 'none'}
+                                            onChange={e => updateCol(colIdx, { aggregation: e.target.value })}
+                                            className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold"
+                                          >
+                                            {Object.entries(AGGREGATION_LABELS).map(([v, l]) => (
+                                              <option key={v} value={v}>
+                                                {col.chartData === 'subject_classification' && v === 'none' ? 'Average % (Default)' : l}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      </div>
+
+                                      {/* ── Color Palette ── */}
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-[10px] font-black text-dark-slate flex items-center gap-1">
+                                          <i className="fas fa-palette text-rose-500 text-[9px]" />
+                                          Custom Colors
+                                        </label>
+                                        {(col.colors || []).length > 0 && (
+                                          <button type="button" onClick={() => updateCol(colIdx, { colors: [] })}
+                                            className="text-[9px] font-bold text-rose-500 hover:underline cursor-pointer">
+                                            Clear All
+                                          </button>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5 items-center">
+                                        {(col.colors || []).map((c, ci) => (
+                                          <div key={ci} className="relative group">
+                                            <input type="color" value={c || '#e11d48'}
+                                              onChange={e => {
+                                                const nc = [...(col.colors || [])];
+                                                nc[ci] = e.target.value;
+                                                updateCol(colIdx, { colors: nc });
+                                              }}
+                                              className="w-7 h-7 rounded-lg border-2 border-slate-300 cursor-pointer p-0.5"
+                                              title={`Color ${ci + 1}`}
+                                            />
+                                            <button type="button"
+                                              onClick={() => updateCol(colIdx, { colors: (col.colors || []).filter((_, i) => i !== ci) })}
+                                              className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-rose-500 text-white rounded-full text-[9px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer leading-none">
+                                              ×
+                                            </button>
+                                          </div>
+                                        ))}
+                                        <button type="button"
+                                          onClick={() => updateCol(colIdx, { colors: [...(col.colors || []), '#e11d48'] })}
+                                          className="w-7 h-7 rounded-lg border-2 border-dashed border-rose-300 hover:border-rose-500 hover:bg-rose-50 flex items-center justify-center text-rose-500 cursor-pointer text-sm font-black transition-all"
+                                          title="Add color">
+                                          +
+                                        </button>
+                                      </div>
+                                      <p className="text-[9px] text-dark-muted mt-1.5 leading-snug">
+                                        Colors assigned in order. Extra data points beyond this list get auto-generated random colors.
+                                      </p>
+                                    </div>
+
+                                    {/* ── Data Labels + Max Scale ── */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                                      {/* Data Labels */}
+                                      <div className="bg-white border border-light-border rounded-xl p-3 space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-[10px] font-black text-dark-slate flex items-center gap-1">
+                                            <i className="fas fa-tag text-rose-500 text-[9px]" />
+                                            Data Labels
+                                          </label>
+                                          {/* Configurable Color Picker */}
+                                          <div className="flex items-center gap-1.5" title="Data label text color">
+                                            <span className="text-[9px] font-bold text-dark-muted">Color</span>
+                                            <input
+                                              type="color"
+                                              value={col.dataLabelColor || '#1e293b'}
+                                              onChange={e => updateCol(colIdx, { dataLabelColor: e.target.value })}
+                                              className="w-5 h-5 rounded-md border border-slate-300 cursor-pointer p-0"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {/* Quick Color Presets */}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[8.5px] text-dark-muted font-bold">Presets:</span>
+                                          {[
+                                            { color: '#1e293b', title: 'Slate Dark' },
+                                            { color: '#ffffff', title: 'White' },
+                                            { color: '#e11d48', title: 'Rose' },
+                                            { color: '#059669', title: 'Emerald' },
+                                            { color: '#2563eb', title: 'Blue' },
+                                            { color: '#7c3aed', title: 'Purple' },
+                                          ].map(p => (
+                                            <button
+                                              key={p.color}
+                                              type="button"
+                                              onClick={() => updateCol(colIdx, { dataLabelColor: p.color })}
+                                              className="w-3.5 h-3.5 rounded-full border border-slate-300 hover:scale-115 transition-transform shadow-2xs cursor-pointer"
+                                              style={{ backgroundColor: p.color }}
+                                              title={p.title}
+                                            />
+                                          ))}
+                                        </div>
+
+                                        {/* Checkboxes: Show Values & Show Labels */}
+                                        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-100">
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={col.showValues !== undefined ? !!col.showValues : !!col.showDataLabels}
+                                              onChange={e => {
+                                                const checked = e.target.checked;
+                                                updateCol(colIdx, {
+                                                  showValues: checked,
+                                                  showDataLabels: checked || !!col.showLabels,
+                                                });
+                                              }}
+                                              className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
+                                            />
+                                            <span className="text-[10px] font-bold text-dark-primary">Show Values</span>
+                                          </label>
+
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={!!col.showLabels}
+                                              onChange={e => {
+                                                const checked = e.target.checked;
+                                                updateCol(colIdx, {
+                                                  showLabels: checked,
+                                                  showDataLabels: checked || (col.showValues !== undefined ? !!col.showValues : false),
+                                                });
+                                              }}
+                                              className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
+                                            />
+                                            <span className="text-[10px] font-bold text-dark-primary">Show Labels</span>
+                                          </label>
+                                        </div>
+
+                                        {/* Position dropdown (when either showValues or showLabels is active) */}
+                                        {((col.showValues !== undefined ? !!col.showValues : !!col.showDataLabels) || !!col.showLabels) && (
+                                          <div className="pt-1 border-t border-slate-100">
+                                            <label className="block text-[10px] font-bold text-dark-muted mb-1">Position</label>
+                                            <select
+                                              value={col.dataLabelPosition || 'top'}
+                                              onChange={e => updateCol(colIdx, { dataLabelPosition: e.target.value })}
+                                              className="w-full px-2 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold"
+                                            >
+                                              <option value="top">Top / Outside (Bar End)</option>
+                                              <option value="center">Center (Middle)</option>
+                                              <option value="inside">Inside End / Tip</option>
+                                              <option value="insideTop">Inside Top</option>
+                                              <option value="insideBottom">Inside Bottom (Base)</option>
+                                            </select>
+                                            <p className="text-[8.5px] text-dark-muted mt-1 leading-tight">
+                                              For Donut/Pie, &ldquo;Inside&rdquo; or &ldquo;Center&rdquo; positions labels directly within slices.
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Max Scale */}
+                                      <div className="bg-white border border-light-border rounded-xl p-3 space-y-2">
+                                        <label className="text-[10px] font-black text-dark-slate flex items-center gap-1">
+                                          <i className="fas fa-ruler-vertical text-rose-500 text-[9px]" />
+                                          Max Scale (Y Axis)
+                                        </label>
+                                        <div className="space-y-1">
+                                          {[
+                                            { v: 'auto', label: 'Auto (Max Data)' },
+                                            { v: 'pct100', label: 'Fixed 100' },
+                                            { v: 'custom', label: 'Custom Number' },
+                                          ].map(opt => (
+                                            <label key={opt.v} className="flex items-center gap-2 cursor-pointer">
+                                              <input type="radio" name={`maxScale-col-${colIdx}`} value={opt.v}
+                                                checked={(col.maxScale || 'auto') === opt.v}
+                                                onChange={() => updateCol(colIdx, { maxScale: opt.v })}
+                                                className="text-rose-600 focus:ring-rose-400 cursor-pointer"
+                                              />
+                                              <span className="text-[10px] font-bold text-dark-primary">{opt.label}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                        {(col.maxScale || 'auto') === 'custom' && (
+                                          <input type="number" min={1} value={col.maxScaleValue || 100}
+                                            onChange={e => updateCol(colIdx, { maxScaleValue: Number(e.target.value) })}
+                                            className="w-full px-2.5 py-1.5 text-[10px] border border-light-border rounded-xl bg-white font-bold"
+                                            placeholder="e.g. 100"
+                                          />
+                                        )}
+                                      </div>
+
+                                    </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
 
                             {/* 6. Teacher Remarks Details */}
                             {blockKey === 'remarks' && (
@@ -2231,7 +2760,8 @@ const ReportCardDesigner = ({
                               </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -2564,6 +3094,7 @@ const ReportCardDesigner = ({
                       const hdr = currentConfig.schoolHeader;
                       const isCompact = blockSize === 'compact';
                       const isLarge = blockSize === 'large';
+                      const hdrSt = { ...DEFAULT_BLOCK_STYLE, ...(hdr?.style || {}) };
 
                       return (
                         <div
@@ -2571,6 +3102,7 @@ const ReportCardDesigner = ({
                           className={`border-b-2 border-slate-900 text-center space-y-1 relative ${
                             isCompact ? 'pb-2' : isLarge ? 'pb-4' : 'pb-3'
                           }`}
+                          style={hdrSt.background ? { backgroundColor: hdrSt.background } : undefined}
                         >
                           {hdr?.showHeaderImage && hdr?.headerImageUrl && (
                             <div className="w-full mb-2 overflow-hidden rounded-xl">
@@ -2595,18 +3127,33 @@ const ReportCardDesigner = ({
                               className={`font-black uppercase tracking-tight ${
                                 isCompact ? 'text-lg' : isLarge ? 'text-2xl' : 'text-xl'
                               }`}
-                              style={{ color: currentConfig.accentColor || '#1e293b' }}
+                              style={{
+                                color: hdrSt.contentColor || currentConfig.accentColor || '#1e293b',
+                                fontSize: hdrSt.contentFontSize ? `${hdrSt.contentFontSize}px` : undefined,
+                              }}
                             >
                               {hdr?.title || 'School Name'}
                             </h2>
                           )}
                           {hdr?.showSubtitle !== false && hdr?.subtitle && (
-                            <p className="text-[11px] font-bold text-dark-muted uppercase tracking-wider">
+                            <p
+                              className="font-bold uppercase tracking-wider"
+                              style={{
+                                fontSize: `${hdrSt.labelFontSize || 11}px`,
+                                color: hdrSt.labelColor || '#64748b',
+                              }}
+                            >
                               {hdr.subtitle}
                             </p>
                           )}
                           {hdr?.showAddress !== false && hdr?.address && (
-                            <p className="text-[10px] font-semibold text-slate-500">
+                            <p
+                              className="font-semibold"
+                              style={{
+                                fontSize: `${hdrSt.labelFontSize || 10}px`,
+                                color: hdrSt.labelColor || '#94a3b8',
+                              }}
+                            >
                               {hdr.address}
                             </p>
                           )}
@@ -2629,6 +3176,7 @@ const ReportCardDesigner = ({
                       const flds = currentConfig.studentFields || {};
                       const cols = currentConfig.studentInfoConfig?.columns || 4;
                       const isCompact = blockSize === 'compact';
+                      const siSt = { ...DEFAULT_BLOCK_STYLE, ...(currentConfig.studentInfoConfig?.style || {}) };
                       const colClass =
                         cols === 2
                           ? 'sm:grid-cols-2'
@@ -2636,101 +3184,70 @@ const ReportCardDesigner = ({
                             ? 'sm:grid-cols-3'
                             : 'sm:grid-cols-4';
 
+                      // Reusable label/value style for studentInfo fields
+                      const siLabelStyle = { fontSize: `${siSt.labelFontSize || 9}px`, color: siSt.labelColor || '#64748b' };
+                      const siValueStyle = { fontSize: `${siSt.contentFontSize || 11}px`, color: siSt.contentColor || '#0f172a' };
+
                       return (
                         <div
                           key="studentInfo"
-                          className={`grid grid-cols-2 ${colClass} gap-2 bg-slate-50 rounded-xl border border-slate-200 ${
+                          className={`grid grid-cols-2 ${colClass} gap-2 rounded-xl border border-slate-200 ${
                             isCompact ? 'p-2 text-[10px]' : 'p-3 text-xs'
                           }`}
+                          style={{ backgroundColor: siSt.background || '#f8fafc' }}
                         >
                           {flds.name && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Student Name
-                              </span>
-                              <span className="font-black text-dark-primary">
-                                {PREVIEW_STUDENT.student_name}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Student Name</span>
+                              <span className="font-black" style={siValueStyle}>{PREVIEW_STUDENT.student_name}</span>
                             </div>
                           )}
                           {flds.admissionNo && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Admission No
-                              </span>
-                              <span className="font-bold text-dark-slate font-mono">
-                                {PREVIEW_STUDENT.admission_no}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Admission No</span>
+                              <span className="font-bold font-mono" style={siValueStyle}>{PREVIEW_STUDENT.admission_no}</span>
                             </div>
                           )}
                           {flds.className && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Class / Grade
-                              </span>
-                              <span className="font-bold text-dark-slate">
-                                {PREVIEW_STUDENT.class_name}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Class / Grade</span>
+                              <span className="font-bold" style={siValueStyle}>{PREVIEW_STUDENT.class_name}</span>
                             </div>
                           )}
                           {flds.rollNo && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Roll No
-                              </span>
-                              <span className="font-bold text-dark-slate font-mono">
-                                #{PREVIEW_STUDENT.roll_no}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Roll No</span>
+                              <span className="font-bold font-mono" style={siValueStyle}>#{PREVIEW_STUDENT.roll_no}</span>
                             </div>
                           )}
                           {flds.fatherName && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Father / Guardian
-                              </span>
-                              <span className="font-bold text-dark-slate">
-                                {PREVIEW_STUDENT.father_name}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Father / Guardian</span>
+                              <span className="font-bold" style={siValueStyle}>{PREVIEW_STUDENT.father_name}</span>
                             </div>
                           )}
                           {flds.dob && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Date of Birth
-                              </span>
-                              <span className="font-bold text-dark-slate font-mono">
-                                {PREVIEW_STUDENT.dob}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Date of Birth</span>
+                              <span className="font-bold font-mono" style={siValueStyle}>{PREVIEW_STUDENT.dob}</span>
                             </div>
                           )}
                           {flds.gender && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Gender
-                              </span>
-                              <span className="font-bold text-dark-slate">
-                                {PREVIEW_STUDENT.gender}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Gender</span>
+                              <span className="font-bold" style={siValueStyle}>{PREVIEW_STUDENT.gender}</span>
                             </div>
                           )}
                           {flds.bloodGroup && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Blood Group
-                              </span>
-                              <span className="font-bold text-dark-slate font-mono">
-                                {PREVIEW_STUDENT.blood_group}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Blood Group</span>
+                              <span className="font-bold font-mono" style={siValueStyle}>{PREVIEW_STUDENT.blood_group}</span>
                             </div>
                           )}
                           {flds.attendance && (
                             <div>
-                              <span className="text-[9px] font-bold text-dark-muted uppercase block">
-                                Attendance
-                              </span>
-                              <span className="font-bold text-emerald-700 font-mono">
-                                {PREVIEW_STUDENT.attendance}
-                              </span>
+                              <span className="font-bold uppercase block" style={siLabelStyle}>Attendance</span>
+                              <span className="font-bold font-mono" style={{ ...siValueStyle, color: siSt.contentColor || '#047857' }}>{PREVIEW_STUDENT.attendance}</span>
                             </div>
                           )}
                         </div>
@@ -2741,18 +3258,21 @@ const ReportCardDesigner = ({
                       if (!currentConfig.showSubjectTable) return null;
                       const tbl = currentConfig.subjectTableConfig || {};
                       const isCompact = blockSize === 'compact';
+                      const tblSt = { ...DEFAULT_BLOCK_STYLE, ...(tbl.style || {}) };
                       const cellPad = isCompact ? 'py-1 px-1.5' : 'py-1.5 px-2.5';
                       const activeCols = getActiveTableColumns(tbl);
+                      const tblLabelStyle = { fontSize: `${tblSt.labelFontSize || 10}px`, color: tblSt.labelColor || undefined };
+                      const tblValueStyle = { fontSize: `${tblSt.contentFontSize || 11}px`, color: tblSt.contentColor || undefined };
 
                       return (
-                        <div key="subjectTable" className="space-y-1">
+                        <div key="subjectTable" className="space-y-1" style={tblSt.background ? { backgroundColor: tblSt.background } : undefined}>
                           <div className="overflow-x-auto rounded-xl border border-slate-300">
                             <table
                               className={`w-full text-left border-collapse ${isCompact ? 'text-[10px]' : 'text-xs'}`}
                             >
                               <thead
                                 className="text-white text-[10px] uppercase font-black tracking-wider"
-                                style={{ backgroundColor: currentConfig.accentColor || '#1e293b' }}
+                                style={{ backgroundColor: currentConfig.accentColor || '#1e293b', ...tblLabelStyle, color: '#ffffff' }}
                               >
                                 <tr>
                                   {activeCols.map((colId) => {
@@ -2842,10 +3362,7 @@ const ReportCardDesigner = ({
                                         {activeCols.map((colId) => {
                                           if (colId === 'subject') {
                                             return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} pl-5 font-semibold text-dark-primary`}
-                                              >
+                                              <td key={colId} className={`${cellPad} pl-5 font-semibold`} style={tblValueStyle}>
                                                 • {s.subjectName}
                                               </td>
                                             );
@@ -2903,20 +3420,16 @@ const ReportCardDesigner = ({
                                           }
                                           if (colId === 'grade') {
                                             return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} text-center font-bold text-emerald-700`}
-                                              >
+                                              <td key={colId} className={`${cellPad} text-center font-bold`}
+                                                style={{ color: tblSt.contentColor || '#047857' }}>
                                                 {s.grade}
                                               </td>
                                             );
                                           }
                                           if (colId === 'status') {
                                             return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} text-center font-bold text-[10px] text-emerald-700`}
-                                              >
+                                              <td key={colId} className={`${cellPad} text-center font-bold`}
+                                                style={{ fontSize: `${tblSt.labelFontSize || 10}px`, color: tblSt.contentColor || '#047857' }}>
                                                 {s.status}
                                               </td>
                                             );
@@ -2941,10 +3454,7 @@ const ReportCardDesigner = ({
                                     {activeCols.map((colId) => {
                                       if (colId === 'subject') {
                                         return (
-                                          <td
-                                            key={colId}
-                                            className={`${cellPad} font-semibold text-dark-primary`}
-                                          >
+                                          <td key={colId} className={`${cellPad} font-semibold`} style={tblValueStyle}>
                                             {s.subjectName}
                                           </td>
                                         );
@@ -3002,20 +3512,16 @@ const ReportCardDesigner = ({
                                       }
                                       if (colId === 'grade') {
                                         return (
-                                          <td
-                                            key={colId}
-                                            className={`${cellPad} text-center font-bold text-emerald-700`}
-                                          >
+                                          <td key={colId} className={`${cellPad} text-center font-bold`}
+                                            style={{ color: tblSt.contentColor || '#047857' }}>
                                             {s.grade}
                                           </td>
                                         );
                                       }
                                       if (colId === 'status') {
                                         return (
-                                          <td
-                                            key={colId}
-                                            className={`${cellPad} text-center font-bold text-[10px] text-emerald-700`}
-                                          >
+                                          <td key={colId} className={`${cellPad} text-center font-bold`}
+                                            style={{ fontSize: `${tblSt.labelFontSize || 10}px`, color: tblSt.contentColor || '#047857' }}>
                                             {s.status}
                                           </td>
                                         );
@@ -3035,58 +3541,48 @@ const ReportCardDesigner = ({
                       if (!currentConfig.showSummaryCalculations) return null;
                       const sum = currentConfig.summaryConfig || {};
                       const isCompact = blockSize === 'compact';
+                      const sumStyle = { ...DEFAULT_BLOCK_STYLE, ...(sum.style || {}) };
+                      const itemOrder = sum.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
+                      const SUMMARY_PREVIEW_VALUES = {
+                        showGrandTotal: { label: 'Grand Total', value: '615 / 700', color: '' },
+                        showPercentage: { label: 'Percentage', value: `${overallPreviewPct}%`, color: sumStyle.contentColor || '#34d399' },
+                        showGrade: { label: 'Overall Grade', value: overallPreviewGrade, color: sumStyle.contentColor || '#fbbf24' },
+                        showClassRank: { label: 'Class Rank', value: '#3', color: '' },
+                        showPassFail: { label: 'Result', value: 'PASS', color: sumStyle.contentColor || '#34d399' },
+                        showTotalSubjects: { label: 'Total Subjects', value: '7', color: '' },
+                      };
+                      const visibleItems = itemOrder.filter(k => sum[k]);
+                      const numCols = sum.columns > 0 ? sum.columns : Math.min(visibleItems.length, 5);
+                      const gridCols = numCols <= 2 ? `grid-cols-${numCols}` : numCols === 3 ? 'grid-cols-3' : numCols === 4 ? 'grid-cols-4' : 'grid-cols-5';
 
                       return (
                         <div
                           key="summaryCalculations"
-                          className={`bg-slate-900 text-white rounded-xl grid grid-cols-2 sm:grid-cols-5 gap-2 text-center ${
+                          className={`rounded-xl grid ${gridCols} gap-2 text-center ${
                             isCompact ? 'p-2 text-xs' : 'p-3 text-sm'
                           }`}
+                          style={{ backgroundColor: sumStyle.background || '#0f172a' }}
                         >
-                          {sum.showGrandTotal && (
-                            <div>
-                              <span className="text-[9px] text-slate-300 font-bold uppercase block">
-                                Grand Total
-                              </span>
-                              <span className="font-black">615 / 700</span>
-                            </div>
-                          )}
-                          {sum.showPercentage && (
-                            <div>
-                              <span className="text-[9px] text-slate-300 font-bold uppercase block">
-                                Percentage
-                              </span>
-                              <span className="font-black text-emerald-400">
-                                {overallPreviewPct}%
-                              </span>
-                            </div>
-                          )}
-                          {sum.showGrade && (
-                            <div>
-                              <span className="text-[9px] text-slate-300 font-bold uppercase block">
-                                Overall Grade
-                              </span>
-                              <span className="font-black text-amber-400">
-                                {overallPreviewGrade}
-                              </span>
-                            </div>
-                          )}
-                          {sum.showClassRank && (
-                            <div>
-                              <span className="text-[9px] text-slate-300 font-bold uppercase block">
-                                Class Rank
-                              </span>
-                              <span className="font-black text-white font-mono">#3</span>
-                            </div>
-                          )}
-                          {sum.showPassFail && (
-                            <div>
-                              <span className="text-[9px] text-slate-300 font-bold uppercase block">
-                                Result
-                              </span>
-                              <span className="font-black text-emerald-400">PASS</span>
-                            </div>
-                          )}
+                          {visibleItems.map(key => {
+                            const item = SUMMARY_PREVIEW_VALUES[key];
+                            if (!item) return null;
+                            return (
+                              <div key={key}>
+                                <span
+                                  className="font-bold uppercase block"
+                                  style={{ fontSize: `${sumStyle.labelFontSize || 9}px`, color: sumStyle.labelColor || '#94a3b8' }}
+                                >
+                                  {item.label}
+                                </span>
+                                <span
+                                  className="font-black font-mono"
+                                  style={{ color: item.color || sumStyle.contentColor || '#ffffff', fontSize: `${sumStyle.contentFontSize || 14}px` }}
+                                >
+                                  {item.value}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     }
@@ -3094,132 +3590,489 @@ const ReportCardDesigner = ({
                     case 'charts': {
                       if (!currentConfig.showCharts) return null;
                       const ch = currentConfig.chartConfig || {};
-                      const chartH = ch.height || 180;
+                      const chartCols = ch.columns && ch.columns.length > 0 ? ch.columns : [{ ...DEFAULT_CHART_COLUMN }];
+                      const chartH = ch.height || (blockSize === 'compact' ? 130 : blockSize === 'large' ? 240 : 180);
+                      const accentColor = currentConfig.accentColor || '#e11d48';
+                      const secondColor = currentConfig.secondaryColor || '#059669';
+                      const PALETTE = ['#e11d48', '#059669', '#7c3aed', '#0284c7', '#d97706', '#db2777', '#0891b2'];
 
-                      return (
-                        <div
-                          key="charts"
-                          className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5"
-                        >
-                          <h4 className="text-[11px] font-black text-dark-primary uppercase tracking-wider text-center">
-                            {ch.title || 'Subject Performance Analysis'}
-                          </h4>
-                          <div style={{ height: `${chartH}px` }} className="w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              {ch.type === 'horizontal_bar' ? (
-                                <BarChart
-                                  data={previewChartData}
-                                  layout="vertical"
-                                  margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
+                      // Helper: determines if a chart column represents a percentage metric
+                      const isPercentage = (colCfg) => {
+                        const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+                        const agg = colCfg.aggregation || 'none';
+                        if (d === 'subject_pct' || d === 'overall_pct') return true;
+                        if (d === 'subject_classification' && agg !== 'sum' && agg !== 'max') return true;
+                        return false;
+                      };
+
+                      // Build chart data for a column config
+                      const buildChartData = (colCfg) => {
+                        const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+                        const agg = colCfg.aggregation || 'none';
+
+                        if (d === 'subject_marks') {
+                          return previewScoresWithGrades.map(s => ({
+                            name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
+                            fullName: s.subjectName,
+                            value: s.marksObtained,
+                            Max: s.maxMarks,
+                          }));
+                        }
+
+                        if (d === 'subject_pct') {
+                          return previewScoresWithGrades.map(s => ({
+                            name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
+                            fullName: s.subjectName,
+                            value: Math.round((s.marksObtained / s.maxMarks) * 100),
+                            Max: 100,
+                          }));
+                        }
+
+                        if (d === 'subject_classification') {
+                          // Aggregate preview scores by Subject Classification
+                          const groupsMap = new Map();
+                          previewScoresWithGrades.forEach(s => {
+                            const key = s.classificationName || 'General';
+                            if (!groupsMap.has(key)) {
+                              groupsMap.set(key, []);
+                            }
+                            groupsMap.get(key).push(s);
+                          });
+
+                          const result = [];
+                          groupsMap.forEach((subList, groupName) => {
+                            const totalObt = subList.reduce((acc, curr) => acc + (Number(curr.marksObtained) || 0), 0);
+                            const totalMax = subList.reduce((acc, curr) => acc + (Number(curr.maxMarks) || 0), 0);
+                            const count = subList.length;
+
+                            let val = 0;
+                            if (agg === 'sum') {
+                              val = Math.round(totalObt);
+                            } else if (agg === 'max') {
+                              val = Math.max(...subList.map(s => Number(s.marksObtained) || 0));
+                            } else {
+                              // 'avg' or 'none' / default: average percentage
+                              val = totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : (count > 0 ? Math.round(totalObt / count) : 0);
+                            }
+
+                            result.push({
+                              name: groupName.length > 12 ? groupName.slice(0, 10) + '…' : groupName,
+                              fullName: `${groupName} (${count} subject${count === 1 ? '' : 's'})`,
+                              value: val,
+                              count,
+                              Max: agg === 'sum' ? totalMax : 100,
+                            });
+                          });
+                          return result;
+                        }
+
+                        if (d === 'grade_classification') {
+                          // Frequency distribution of grades across subjects
+                          const scale = Array.isArray(currentConfig.gradingScale) && currentConfig.gradingScale.length > 0
+                            ? currentConfig.gradingScale
+                            : DEFAULT_GRADING_SCALE;
+
+                          const counts = {};
+                          scale.forEach(g => { counts[g.grade] = 0; });
+                          previewScoresWithGrades.forEach(s => {
+                            if (s.grade) {
+                              counts[s.grade] = (counts[s.grade] || 0) + 1;
+                            }
+                          });
+
+                          const isPieOrDonut = colCfg.chartType === 'pie' || colCfg.chartType === 'donut';
+                          const gradeEntries = scale.map(g => ({
+                            name: g.grade,
+                            fullName: `Grade ${g.grade}${g.description ? ` (${g.description})` : ''}`,
+                            value: counts[g.grade] || 0,
+                            count: counts[g.grade] || 0,
+                          }));
+
+                          const nonZero = gradeEntries.filter(g => g.value > 0);
+                          return (isPieOrDonut || nonZero.length >= 3) ? (nonZero.length > 0 ? nonZero : gradeEntries) : gradeEntries;
+                        }
+
+                        if (d === 'attendance') {
+                          return [
+                            { name: 'Present', fullName: 'Present Days', value: 96, Max: 100 },
+                            { name: 'Absent', fullName: 'Absent Days', value: 4, Max: 100 },
+                          ];
+                        }
+
+                        if (d === 'overall_pct') {
+                          return [
+                            { name: 'Score', fullName: 'Overall Score', value: Math.round(overallPreviewPct), Max: 100 },
+                            { name: 'Remaining', fullName: 'Remaining', value: Math.round(100 - overallPreviewPct), Max: 100 },
+                          ];
+                        }
+
+                        return previewScoresWithGrades.map(s => ({
+                          name: s.subjectName.slice(0, 6),
+                          fullName: s.subjectName,
+                          value: s.marksObtained,
+                          Max: s.maxMarks,
+                        }));
+                      };
+
+                      const renderSingleChart = (colCfg, h, isTight = false) => {
+                        const data = buildChartData(colCfg);
+                        const t = colCfg.chartType || 'bar';
+                        const pctMode = isPercentage(colCfg);
+                        const cd = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
+
+                        // ── Color palette: user-defined → overflow with seeded random hsl ──
+                        const userColors = Array.isArray(colCfg.colors) ? colCfg.colors.filter(Boolean) : [];
+                        const randomHsl = (i) => `hsl(${Math.round((i * 137.508) % 360)}, 65%, 52%)`;
+                        const getColor = (i) => {
+                          if (userColors.length > 0) return i < userColors.length ? userColors[i] : randomHsl(i);
+                          return PALETTE[i % PALETTE.length];
+                        };
+                        const baseColor = getColor(0) || accentColor;
+
+                        // ── Data labels: Show Values, Show Labels, Custom Color, Position Normalizer ──
+                        const showValues = colCfg.showValues !== undefined ? !!colCfg.showValues : !!colCfg.showDataLabels;
+                        const showLabels = !!colCfg.showLabels;
+                        const showAnyLabel = showValues || showLabels;
+                        const labelColor = colCfg.dataLabelColor || '#1e293b';
+                        const rawPos = colCfg.dataLabelPosition || 'top';
+                        const placement = getLabelPlacement(t, rawPos);
+                        const labelStyle = { fontSize: isTight ? 8.5 : 8, fontWeight: 700, fill: labelColor };
+
+                        // Enrich data with displayLabel based on showValues & showLabels
+                        const enrichedData = data.map((d) => {
+                          const fVal = pctMode ? `${d.value}%` : `${d.value}`;
+                          const nameStr = d.name || '';
+                          let displayLabel = '';
+                          if (showValues && showLabels) {
+                            displayLabel = `${nameStr}: ${fVal}`;
+                          } else if (showLabels) {
+                            displayLabel = nameStr;
+                          } else if (showValues) {
+                            displayLabel = fVal;
+                          }
+                          return {
+                            ...d,
+                            formattedValue: fVal,
+                            displayLabel,
+                          };
+                        });
+
+                        // ── Max scale → axis domain ──
+                        const scaleType = colCfg.maxScale || 'auto';
+                        const axisMax = scaleType === 'pct100' ? 100 : scaleType === 'custom' ? (Number(colCfg.maxScaleValue) || 100) : 'auto';
+                        const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
+
+                        // ── Common Tooltip Formatter ──
+                        const tooltipFormatter = (val, name, item) => {
+                          const title = item?.payload?.fullName || name;
+                          if (pctMode) return [`${val}%`, title];
+                          if (cd === 'grade_classification') return [`${val} subject${val === 1 ? '' : 's'}`, title];
+                          if (item?.payload?.Max) return [`${val} / ${item.payload.Max}`, title];
+                          return [val, title];
+                        };
+
+                        if (t === 'text') {
+                          return (
+                            <div className={`flex flex-col ${isTight ? 'gap-0.5' : 'gap-1'} justify-center h-full px-1`}>
+                              {enrichedData.slice(0, 6).map((d, i) => (
+                                <div key={i} className="flex items-center justify-between text-[9px] font-bold">
+                                  <span className="text-dark-muted truncate max-w-[60%]">{d.name}</span>
+                                  <span className="font-black" style={{ color: baseColor }}>
+                                    {d.value}{pctMode ? '%' : cd === 'grade_classification' ? (d.value === 1 ? ' subj' : ' subjs') : ''}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }
+
+                        if (t === 'donut' || t === 'pie') {
+                          const isPieInside = placement.isInside;
+                          const pieData = enrichedData.map((d, i) => ({ ...d, fill: getColor(i) }));
+                          const outerR = isTight ? (isPieInside ? '90%' : '80%') : '70%';
+                          const innerR = t === 'donut' ? (isTight ? '46%' : '40%') : 0;
+                          const RADIAN = Math.PI / 180;
+
+                          const renderCustomPieLabel = (props) => {
+                            const { cx, cy, midAngle, innerRadius, outerRadius, name, value, payload, x, y } = props;
+                            const text = payload?.displayLabel || (showValues && showLabels ? `${name}: ${value}` : showLabels ? `${name}` : `${value}`);
+                            if (!text) return null;
+
+                            if (isPieInside) {
+                              const ir = Number(innerRadius) || 0;
+                              const or = Number(outerRadius) || 60;
+                              const r = ir + (or - ir) * (t === 'donut' ? 0.52 : 0.6);
+                              const lx = cx + r * Math.cos(-midAngle * RADIAN);
+                              const ly = cy + r * Math.sin(-midAngle * RADIAN);
+                              return (
+                                <text
+                                  x={lx}
+                                  y={ly}
+                                  fill={labelColor}
+                                  textAnchor="middle"
+                                  dominantBaseline="central"
+                                  fontSize={isTight ? 8.5 : 8}
+                                  fontWeight={700}
                                 >
-                                  <CartesianGrid
-                                    strokeDasharray="3 3"
-                                    horizontal={false}
-                                    stroke="#cbd5e1"
-                                  />
-                                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <YAxis
-                                    type="category"
-                                    dataKey="name"
-                                    tick={{ fontSize: 9, fontWeight: 700 }}
-                                    width={70}
-                                  />
-                                  <Tooltip />
-                                  <Bar
-                                    dataKey="Marks"
-                                    fill={currentConfig.accentColor || '#e11d48'}
-                                    radius={[0, 4, 4, 0]}
-                                  />
-                                </BarChart>
-                              ) : ch.type === 'radar' ? (
-                                <RadarChart
+                                  {text}
+                                </text>
+                              );
+                            }
+
+                            return (
+                              <text
+                                x={x}
+                                y={y}
+                                fill={labelColor}
+                                textAnchor={x > cx ? 'start' : 'end'}
+                                dominantBaseline="central"
+                                fontSize={8}
+                                fontWeight={700}
+                              >
+                                {text}
+                              </text>
+                            );
+                          };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <PieChart>
+                                <Pie
+                                  data={pieData}
+                                  dataKey="value"
+                                  nameKey="name"
                                   cx="50%"
                                   cy="50%"
-                                  outerRadius="75%"
-                                  data={previewChartData}
+                                  innerRadius={innerR}
+                                  outerRadius={outerR}
+                                  paddingAngle={isTight ? 1 : 2}
+                                  label={showAnyLabel ? renderCustomPieLabel : undefined}
+                                  labelLine={showAnyLabel && !isPieInside ? { stroke: labelColor, strokeWidth: 1 } : false}
                                 >
-                                  <PolarGrid stroke="#cbd5e1" />
-                                  <PolarAngleAxis
-                                    dataKey="name"
-                                    tick={{ fontSize: 9, fontWeight: 700 }}
-                                  />
-                                  <PolarRadiusAxis
-                                    angle={30}
-                                    domain={[0, 100]}
-                                    tick={{ fontSize: 8 }}
-                                  />
-                                  <Radar
-                                    name="Marks"
-                                    dataKey="Marks"
-                                    stroke={currentConfig.accentColor || '#e11d48'}
-                                    fill={currentConfig.accentColor || '#e11d48'}
-                                    fillOpacity={0.45}
-                                  />
-                                  <Tooltip />
-                                </RadarChart>
-                              ) : ch.type === 'line' ? (
-                                <LineChart
-                                  data={previewChartData}
-                                  margin={{ top: 10, right: 20, left: -10, bottom: 5 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <Tooltip />
-                                  <Line
-                                    type="monotone"
-                                    dataKey="Marks"
-                                    stroke={currentConfig.accentColor || '#e11d48'}
-                                    strokeWidth={3}
-                                    dot={{ r: 4, fill: currentConfig.accentColor || '#e11d48' }}
-                                  />
-                                </LineChart>
-                              ) : ch.type === 'area' ? (
-                                <AreaChart
-                                  data={previewChartData}
-                                  margin={{ top: 10, right: 20, left: -10, bottom: 5 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <Tooltip />
-                                  <Area
-                                    type="monotone"
-                                    dataKey="Marks"
-                                    stroke={currentConfig.accentColor || '#e11d48'}
-                                    strokeWidth={2}
-                                    fillOpacity={0.3}
-                                    fill={currentConfig.accentColor || '#e11d48'}
-                                  />
-                                </AreaChart>
-                              ) : (
-                                <BarChart
-                                  data={previewChartData}
-                                  margin={{ top: 10, right: 10, left: -15, bottom: 5 }}
-                                >
-                                  <CartesianGrid
-                                    strokeDasharray="3 3"
-                                    vertical={false}
-                                    stroke="#cbd5e1"
-                                  />
-                                  <XAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <YAxis domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <Tooltip />
-                                  <Bar dataKey="Marks" radius={[4, 4, 0, 0]}>
-                                    {previewChartData.map((entry, index) => (
-                                      <Cell
-                                        key={`cell-${index}`}
-                                        fill={
-                                          entry.Marks >= 80
-                                            ? currentConfig.secondaryColor || '#059669'
-                                            : currentConfig.accentColor || '#e11d48'
-                                        }
-                                      />
-                                    ))}
-                                  </Bar>
-                                </BarChart>
-                              )}
+                                  {pieData.map((entry, index) => (
+                                    <Cell key={index} fill={entry.fill} />
+                                  ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Legend iconSize={isTight ? 7 : 8} wrapperStyle={{ fontSize: isTight ? 7.5 : 8, bottom: isTight ? -4 : 0 }} />
+                              </PieChart>
                             </ResponsiveContainer>
+                          );
+                        }
+
+                        if (t === 'horizontal_bar') {
+                          const hMargin = isTight
+                            ? { top: 1, right: showAnyLabel && placement.position === 'right' ? 26 : 4, left: 16, bottom: -2 }
+                            : { top: 2, right: showAnyLabel && placement.position === 'right' ? 36 : 10, left: 30, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <BarChart
+                                data={enrichedData}
+                                layout="vertical"
+                                margin={hMargin}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                                <YAxis type="category" dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} width={isTight ? 28 : 36} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Bar dataKey="value" radius={[0, 3, 3, 0]}>
+                                  {enrichedData.map((_, i) => (
+                                    <Cell key={i} fill={getColor(i)} />
+                                  ))}
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          );
+                        }
+
+                        if (t === 'stacked_bar') {
+                          const vMargin = isTight
+                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 2, right: 2, left: -22, bottom: -4 }
+                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 2, right: 5, left: -20, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <BarChart data={enrichedData} margin={vMargin}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
+                                <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Bar dataKey="value" stackId="a" fill={getColor(0)}>
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Bar>
+                                {enrichedData[0]?.Max && <Bar dataKey="Max" stackId="a" fill="#e2e8f0" />}
+                              </BarChart>
+                            </ResponsiveContainer>
+                          );
+                        }
+
+                        if (t === 'stacked_bar_h') {
+                          const hMargin = isTight
+                            ? { top: 1, right: showAnyLabel && placement.position === 'right' ? 26 : 4, left: 16, bottom: -2 }
+                            : { top: 2, right: showAnyLabel && placement.position === 'right' ? 36 : 10, left: 30, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <BarChart
+                                data={enrichedData}
+                                layout="vertical"
+                                margin={hMargin}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                                <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                                <YAxis type="category" dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} width={isTight ? 28 : 36} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Bar dataKey="value" stackId="a" fill={getColor(0)}>
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Bar>
+                                {enrichedData[0]?.Max && <Bar dataKey="Max" stackId="a" fill="#e2e8f0" />}
+                              </BarChart>
+                            </ResponsiveContainer>
+                          );
+                        }
+
+                        if (t === 'line') {
+                          const lineMargin = isTight
+                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
+                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <LineChart data={enrichedData} margin={lineMargin}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
+                                <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Line type="monotone" dataKey="value" stroke={baseColor} strokeWidth={2} dot={{ r: 3, fill: baseColor }}>
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Line>
+                              </LineChart>
+                            </ResponsiveContainer>
+                          );
+                        }
+
+                        if (t === 'area') {
+                          const areaMargin = isTight
+                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
+                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
+
+                          return (
+                            <ResponsiveContainer width="100%" height={h}>
+                              <AreaChart data={enrichedData} margin={areaMargin}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
+                                <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                <Area
+                                  type="monotone"
+                                  dataKey="value"
+                                  stroke={baseColor}
+                                  strokeWidth={2}
+                                  fillOpacity={0.25}
+                                  fill={baseColor}
+                                >
+                                  {showAnyLabel && (
+                                    <LabelList
+                                      dataKey="displayLabel"
+                                      position={placement.position}
+                                      offset={placement.offset}
+                                      fill={labelColor}
+                                      style={labelStyle}
+                                    />
+                                  )}
+                                </Area>
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          );
+                        }
+
+                        // Default: vertical bar — per-bar color from palette
+                        const vMargin = isTight
+                          ? { top: showAnyLabel && placement.position === 'top' ? 14 : 2, right: 2, left: -22, bottom: -4 }
+                          : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 5, left: -20, bottom: 2 };
+
+                        return (
+                          <ResponsiveContainer width="100%" height={h}>
+                            <BarChart data={enrichedData} margin={vMargin}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                              <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
+                              <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+                              <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                              <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+                                {enrichedData.map((_, index) => (
+                                  <Cell key={index} fill={getColor(index)} />
+                                ))}
+                                {showAnyLabel && (
+                                  <LabelList
+                                    dataKey="displayLabel"
+                                    position={placement.position}
+                                    offset={placement.offset}
+                                    fill={labelColor}
+                                    style={labelStyle}
+                                  />
+                                )}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        );
+                      };
+
+                      const colWidthClass = chartCols.length === 1 ? 'grid-cols-1' : chartCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+
+                      const chSt = { ...DEFAULT_BLOCK_STYLE, ...(ch.style || {}) };
+                      const isTight = !!ch.tightMargins;
+
+                      return (
+                        <div key="charts" className={`${isTight ? 'p-1.5 space-y-1' : 'p-3 space-y-2'} border border-slate-200 rounded-xl transition-all`}
+                          style={{ backgroundColor: chSt.background || '#f8fafc' }}>
+                          <div className={`grid ${colWidthClass} ${isTight ? 'gap-1.5' : 'gap-3'}`}>
+                            {chartCols.map((colCfg, colIdx) => (
+                              <div key={colIdx} className={isTight ? 'space-y-0.5' : 'space-y-1'}>
+                                {colCfg.title && (
+                                  <h5 className={`${isTight ? 'text-[9.5px] mb-0.5' : 'text-[10px] mb-1'} font-black text-dark-primary uppercase tracking-wider text-center`}>
+                                    {colCfg.title}
+                                  </h5>
+                                )}
+                                {colCfg.chartType === 'text'
+                                  ? <div style={{ height: `${chartH}px` }}>{renderSingleChart(colCfg, chartH, isTight)}</div>
+                                  : renderSingleChart(colCfg, chartH, isTight)
+                                }
+                              </div>
+                            ))}
                           </div>
                         </div>
                       );
@@ -3229,22 +4082,33 @@ const ReportCardDesigner = ({
                       if (!currentConfig.showTeacherRemarks) return null;
                       const rmk = currentConfig.remarksConfig || {};
                       const isCompact = blockSize === 'compact';
+                      const rmkSt = { ...DEFAULT_BLOCK_STYLE, ...(rmk.style || {}) };
 
                       return (
                         <div
                           key="remarks"
-                          className={`bg-amber-50/60 border border-amber-200 rounded-xl ${
-                            isCompact ? 'p-2 text-[11px]' : 'p-3 text-xs'
+                          className={`border border-amber-200 rounded-xl ${
+                            isCompact ? 'p-2' : 'p-3'
                           }`}
+                          style={{ backgroundColor: rmkSt.background || 'rgb(255 251 235 / 0.6)' }}
                         >
-                          <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider block mb-0.5">
+                          <span
+                            className="font-black uppercase tracking-wider block mb-0.5"
+                            style={{ fontSize: `${rmkSt.labelFontSize || 10}px`, color: rmkSt.labelColor || '#78350f' }}
+                          >
                             {rmk.title || 'Teacher Remarks & Recommendations'}:
                           </span>
-                          <p className="text-dark-primary font-medium italic">
-                            "{currentConfig.remarksText}"
+                          <p
+                            className="font-medium italic"
+                            style={{ fontSize: `${rmkSt.contentFontSize || 11}px`, color: rmkSt.contentColor || '#0f172a' }}
+                          >
+                            &quot;{currentConfig.remarksText}&quot;
                           </p>
                           {rmk.showPromotion && (
-                            <p className="mt-1 font-bold text-emerald-800 text-[10px] uppercase tracking-wider">
+                            <p
+                              className="mt-1 font-bold uppercase tracking-wider"
+                              style={{ fontSize: `${rmkSt.labelFontSize || 10}px`, color: rmkSt.contentColor || '#065f46' }}
+                            >
                               Status: Eligible for promotion to next grade level.
                             </p>
                           )}
@@ -3256,18 +4120,21 @@ const ReportCardDesigner = ({
                       if (!currentConfig.showSignatures) return null;
                       const sigCfg = currentConfig.signaturesConfig || {};
                       const isCompact = blockSize === 'compact';
+                      const sigSt = { ...DEFAULT_BLOCK_STYLE, ...(sigCfg.style || {}) };
 
                       return (
                         <div
                           key="signatures"
-                          className={`border-t-2 border-slate-300 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs ${
+                          className={`border-t-2 border-slate-300 grid grid-cols-2 sm:grid-cols-4 gap-4 text-center ${
                             isCompact ? 'pt-3' : 'pt-6'
                           }`}
+                          style={sigSt.background ? { backgroundColor: sigSt.background } : undefined}
                         >
                           {sigCfg.showClassTeacher !== false && (
                             <div className="space-y-1">
                               <div className="h-5 border-b border-dashed border-slate-400 mx-auto w-3/4" />
-                              <span className="text-[10px] font-bold text-dark-muted block uppercase">
+                              <span className="font-bold block uppercase"
+                                style={{ fontSize: `${sigSt.labelFontSize || 10}px`, color: sigSt.labelColor || '#64748b' }}>
                                 {currentConfig.signatures?.classTeacher || 'Class Teacher'}
                               </span>
                             </div>
@@ -3275,7 +4142,8 @@ const ReportCardDesigner = ({
                           {sigCfg.showCoordinator !== false && (
                             <div className="space-y-1">
                               <div className="h-5 border-b border-dashed border-slate-400 mx-auto w-3/4" />
-                              <span className="text-[10px] font-bold text-dark-muted block uppercase">
+                              <span className="font-bold block uppercase"
+                                style={{ fontSize: `${sigSt.labelFontSize || 10}px`, color: sigSt.labelColor || '#64748b' }}>
                                 {currentConfig.signatures?.coordinator || 'Academic Coordinator'}
                               </span>
                             </div>
@@ -3283,7 +4151,8 @@ const ReportCardDesigner = ({
                           {sigCfg.showPrincipal !== false && (
                             <div className="space-y-1">
                               <div className="h-5 border-b border-dashed border-slate-400 mx-auto w-3/4" />
-                              <span className="text-[10px] font-bold text-dark-muted block uppercase">
+                              <span className="font-bold block uppercase"
+                                style={{ fontSize: `${sigSt.labelFontSize || 10}px`, color: sigSt.labelColor || '#64748b' }}>
                                 {currentConfig.signatures?.principal || 'Principal'}
                               </span>
                             </div>
@@ -3291,7 +4160,8 @@ const ReportCardDesigner = ({
                           {sigCfg.showParent !== false && (
                             <div className="space-y-1">
                               <div className="h-5 border-b border-dashed border-slate-400 mx-auto w-3/4" />
-                              <span className="text-[10px] font-bold text-dark-muted block uppercase">
+                              <span className="font-bold block uppercase"
+                                style={{ fontSize: `${sigSt.labelFontSize || 10}px`, color: sigSt.labelColor || '#64748b' }}>
                                 {currentConfig.signatures?.parent || 'Parent / Guardian'}
                               </span>
                             </div>
