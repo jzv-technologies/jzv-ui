@@ -232,8 +232,45 @@ export const DEFAULT_CHART_COLUMN = {
   showLabels: false,           // show category / item name label on chart
   dataLabelColor: '#1e293b',   // customizable data label color
   dataLabelPosition: 'top',   // 'top'|'center'|'inside'|'insideTop'|'insideBottom'
+  showLegend: false,           // toggle legend display
+  legendPosition: 'bottom',    // 'top'|'bottom'|'left'|'right'
   maxScale: 'auto',            // 'auto'|'pct100'|'custom'
   maxScaleValue: 100,          // used when maxScale === 'custom'
+};
+
+// Maps legend positions (top/bottom/left/right) to Recharts Legend configuration props
+export const getLegendProps = (legendPos = 'bottom', isTight = false) => {
+  switch (legendPos) {
+    case 'top':
+      return {
+        verticalAlign: 'top',
+        align: 'center',
+        layout: 'horizontal',
+        wrapperStyle: { fontSize: isTight ? 7.5 : 8, paddingBottom: 2, top: 0 },
+      };
+    case 'left':
+      return {
+        verticalAlign: 'middle',
+        align: 'left',
+        layout: 'vertical',
+        wrapperStyle: { fontSize: isTight ? 7 : 7.5, paddingRight: 4, left: 0 },
+      };
+    case 'right':
+      return {
+        verticalAlign: 'middle',
+        align: 'right',
+        layout: 'vertical',
+        wrapperStyle: { fontSize: isTight ? 7 : 7.5, paddingLeft: 4, right: 0 },
+      };
+    case 'bottom':
+    default:
+      return {
+        verticalAlign: 'bottom',
+        align: 'center',
+        layout: 'horizontal',
+        wrapperStyle: { fontSize: isTight ? 7.5 : 8, paddingTop: 2, bottom: isTight ? -4 : 0 },
+      };
+  }
 };
 
 // Normalizes data label positioning across Cartesian (vertical/horizontal), Line, Area, and Pie/Donut charts
@@ -2389,8 +2426,8 @@ const ReportCardDesigner = ({
                                       </p>
                                     </div>
 
-                                    {/* ── Data Labels + Max Scale ── */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {/* ── Data Labels + Legend + Max Scale ── */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
                                       {/* Data Labels */}
                                       <div className="bg-white border border-light-border rounded-xl p-3 space-y-2.5">
@@ -2486,6 +2523,65 @@ const ReportCardDesigner = ({
                                             <p className="text-[8.5px] text-dark-muted mt-1 leading-tight">
                                               For Donut/Pie, &ldquo;Inside&rdquo; or &ldquo;Center&rdquo; positions labels directly within slices.
                                             </p>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Chart Legend */}
+                                      <div className="bg-white border border-light-border rounded-xl p-3 space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-[10px] font-black text-dark-slate flex items-center gap-1">
+                                            <i className="fas fa-list-ul text-rose-500 text-[9px]" />
+                                            Chart Legend
+                                          </label>
+                                          <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie')}
+                                            onClick={() => {
+                                              const cur = col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie');
+                                              updateCol(colIdx, { showLegend: !cur });
+                                            }}
+                                            className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${(col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie')) ? 'bg-rose-600' : 'bg-slate-300'}`}
+                                          >
+                                            <span className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${(col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie')) ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                                          </button>
+                                        </div>
+
+                                        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-100">
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie')}
+                                              onChange={e => updateCol(colIdx, { showLegend: e.target.checked })}
+                                              className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
+                                            />
+                                            <span className="text-[10px] font-bold text-dark-primary">Show Legend</span>
+                                          </label>
+                                        </div>
+
+                                        {/* Position selector: left, right, top, bottom */}
+                                        {(col.showLegend !== undefined ? !!col.showLegend : (col.chartType === 'donut' || col.chartType === 'pie')) && (
+                                          <div className="pt-1.5 border-t border-slate-100">
+                                            <label className="block text-[10px] font-bold text-dark-muted mb-1">Legend Position</label>
+                                            <div className="grid grid-cols-4 gap-1">
+                                              {[
+                                                { id: 'top', label: 'Top', icon: 'fa-arrow-up' },
+                                                { id: 'bottom', label: 'Bottom', icon: 'fa-arrow-down' },
+                                                { id: 'left', label: 'Left', icon: 'fa-arrow-left' },
+                                                { id: 'right', label: 'Right', icon: 'fa-arrow-right' },
+                                              ].map(pos => (
+                                                <button
+                                                  key={pos.id}
+                                                  type="button"
+                                                  onClick={() => updateCol(colIdx, { legendPosition: pos.id })}
+                                                  className={`py-1 px-1 rounded-lg text-[9px] flex flex-col items-center gap-0.5 border transition-all cursor-pointer ${(col.legendPosition || 'bottom') === pos.id ? 'bg-rose-50 border-rose-300 text-rose-700 font-black shadow-2xs' : 'bg-slate-50 border-slate-200 text-dark-muted hover:bg-slate-100'}`}
+                                                >
+                                                  <i className={`fas ${pos.icon} text-[7.5px]`} />
+                                                  <span>{pos.label}</span>
+                                                </button>
+                                              ))}
+                                            </div>
                                           </div>
                                         )}
                                       </div>
@@ -3771,6 +3867,47 @@ const ReportCardDesigner = ({
                           return [val, title];
                         };
 
+                        // ── Legend Setup: On/Off & Positioning (top, bottom, left, right) ──
+                        const hasLegend = colCfg.showLegend !== undefined
+                          ? !!colCfg.showLegend
+                          : (colCfg.chartType === 'donut' || colCfg.chartType === 'pie');
+                        const legendPos = colCfg.legendPosition || 'bottom';
+                        const legendProps = getLegendProps(legendPos, isTight);
+                        const legendPayload = enrichedData.map((d, i) => ({
+                          value: d.name,
+                          type: t === 'line' ? 'line' : 'circle',
+                          id: d.name,
+                          color: getColor(i),
+                        }));
+
+                        const getCartesianMargin = (kind) => {
+                          let top = isTight ? (showAnyLabel && placement.position === 'top' ? 14 : 2) : (showAnyLabel && placement.position === 'top' ? 16 : 5);
+                          let right = isTight ? 2 : 5;
+                          let left = isTight ? -22 : -20;
+                          let bottom = isTight ? -4 : 2;
+
+                          if (kind === 'horizontal') {
+                            top = isTight ? 1 : 2;
+                            right = isTight ? (showAnyLabel && placement.position === 'right' ? 26 : 4) : (showAnyLabel && placement.position === 'right' ? 36 : 10);
+                            left = isTight ? 16 : 30;
+                            bottom = isTight ? -2 : 2;
+                          } else if (kind === 'line' || kind === 'area') {
+                            top = isTight ? (showAnyLabel && placement.position === 'top' ? 14 : 3) : (showAnyLabel && placement.position === 'top' ? 16 : 5);
+                            right = isTight ? 4 : 10;
+                            left = isTight ? -22 : -20;
+                            bottom = isTight ? -4 : 2;
+                          }
+
+                          if (hasLegend) {
+                            if (legendPos === 'top') top += 18;
+                            else if (legendPos === 'bottom') bottom += 16;
+                            else if (legendPos === 'left') left += 48;
+                            else if (legendPos === 'right') right += 48;
+                          }
+
+                          return { top, right, left, bottom };
+                        };
+
                         if (t === 'text') {
                           return (
                             <div className={`flex flex-col ${isTight ? 'gap-0.5' : 'gap-1'} justify-center h-full px-1`}>
@@ -3792,6 +3929,15 @@ const ReportCardDesigner = ({
                           const outerR = isTight ? (isPieInside ? '90%' : '80%') : '70%';
                           const innerR = t === 'donut' ? (isTight ? '46%' : '40%') : 0;
                           const RADIAN = Math.PI / 180;
+
+                          let pieCx = '50%';
+                          let pieCy = '50%';
+                          if (hasLegend) {
+                            if (legendPos === 'left') pieCx = '62%';
+                            else if (legendPos === 'right') pieCx = '38%';
+                            else if (legendPos === 'top') pieCy = '58%';
+                            else if (legendPos === 'bottom') pieCy = '44%';
+                          }
 
                           const renderCustomPieLabel = (props) => {
                             const { cx, cy, midAngle, innerRadius, outerRadius, name, value, payload, x, y } = props;
@@ -3841,10 +3987,10 @@ const ReportCardDesigner = ({
                                   data={pieData}
                                   dataKey="value"
                                   nameKey="name"
-                                  cx="50%"
-                                  cy="50%"
+                                  cx={pieCx}
+                                  cy={pieCy}
                                   innerRadius={innerR}
-                                  outerRadius={outerR}
+                                  outerRadius={hasLegend ? outerR : (isTight ? (isPieInside ? '94%' : '84%') : '76%')}
                                   paddingAngle={isTight ? 1 : 2}
                                   label={showAnyLabel ? renderCustomPieLabel : undefined}
                                   labelLine={showAnyLabel && !isPieInside ? { stroke: labelColor, strokeWidth: 1 } : false}
@@ -3854,28 +4000,27 @@ const ReportCardDesigner = ({
                                   ))}
                                 </Pie>
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                <Legend iconSize={isTight ? 7 : 8} wrapperStyle={{ fontSize: isTight ? 7.5 : 8, bottom: isTight ? -4 : 0 }} />
+                                {hasLegend && (
+                                  <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />
+                                )}
                               </PieChart>
                             </ResponsiveContainer>
                           );
                         }
 
                         if (t === 'horizontal_bar') {
-                          const hMargin = isTight
-                            ? { top: 1, right: showAnyLabel && placement.position === 'right' ? 26 : 4, left: 16, bottom: -2 }
-                            : { top: 2, right: showAnyLabel && placement.position === 'right' ? 36 : 10, left: 30, bottom: 2 };
-
                           return (
                             <ResponsiveContainer width="100%" height={h}>
                               <BarChart
                                 data={enrichedData}
                                 layout="vertical"
-                                margin={hMargin}
+                                margin={getCartesianMargin('horizontal')}
                               >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                                 <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                                 <YAxis type="category" dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} width={isTight ? 28 : 36} />
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                                 <Bar dataKey="value" radius={[0, 3, 3, 0]}>
                                   {enrichedData.map((_, i) => (
                                     <Cell key={i} fill={getColor(i)} />
@@ -3896,17 +4041,14 @@ const ReportCardDesigner = ({
                         }
 
                         if (t === 'stacked_bar') {
-                          const vMargin = isTight
-                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 2, right: 2, left: -22, bottom: -4 }
-                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 2, right: 5, left: -20, bottom: 2 };
-
                           return (
                             <ResponsiveContainer width="100%" height={h}>
-                              <BarChart data={enrichedData} margin={vMargin}>
+                              <BarChart data={enrichedData} margin={getCartesianMargin('vertical')}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
                                 <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                                 <Bar dataKey="value" stackId="a" fill={getColor(0)}>
                                   {showAnyLabel && (
                                     <LabelList
@@ -3925,21 +4067,18 @@ const ReportCardDesigner = ({
                         }
 
                         if (t === 'stacked_bar_h') {
-                          const hMargin = isTight
-                            ? { top: 1, right: showAnyLabel && placement.position === 'right' ? 26 : 4, left: 16, bottom: -2 }
-                            : { top: 2, right: showAnyLabel && placement.position === 'right' ? 36 : 10, left: 30, bottom: 2 };
-
                           return (
                             <ResponsiveContainer width="100%" height={h}>
                               <BarChart
                                 data={enrichedData}
                                 layout="vertical"
-                                margin={hMargin}
+                                margin={getCartesianMargin('horizontal')}
                               >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
                                 <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                                 <YAxis type="category" dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} width={isTight ? 28 : 36} />
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                                 <Bar dataKey="value" stackId="a" fill={getColor(0)}>
                                   {showAnyLabel && (
                                     <LabelList
@@ -3958,17 +4097,14 @@ const ReportCardDesigner = ({
                         }
 
                         if (t === 'line') {
-                          const lineMargin = isTight
-                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
-                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
-
                           return (
                             <ResponsiveContainer width="100%" height={h}>
-                              <LineChart data={enrichedData} margin={lineMargin}>
+                              <LineChart data={enrichedData} margin={getCartesianMargin('line')}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                 <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
                                 <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                                 <Line type="monotone" dataKey="value" stroke={baseColor} strokeWidth={2} dot={{ r: 3, fill: baseColor }}>
                                   {showAnyLabel && (
                                     <LabelList
@@ -3986,17 +4122,14 @@ const ReportCardDesigner = ({
                         }
 
                         if (t === 'area') {
-                          const areaMargin = isTight
-                            ? { top: showAnyLabel && placement.position === 'top' ? 14 : 3, right: 4, left: -22, bottom: -4 }
-                            : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 10, left: -20, bottom: 2 };
-
                           return (
                             <ResponsiveContainer width="100%" height={h}>
-                              <AreaChart data={enrichedData} margin={areaMargin}>
+                              <AreaChart data={enrichedData} margin={getCartesianMargin('area')}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                 <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
                                 <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                                 <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                                 <Area
                                   type="monotone"
                                   dataKey="value"
@@ -4021,17 +4154,14 @@ const ReportCardDesigner = ({
                         }
 
                         // Default: vertical bar — per-bar color from palette
-                        const vMargin = isTight
-                          ? { top: showAnyLabel && placement.position === 'top' ? 14 : 2, right: 2, left: -22, bottom: -4 }
-                          : { top: showAnyLabel && placement.position === 'top' ? 16 : 5, right: 5, left: -20, bottom: 2 };
-
                         return (
                           <ResponsiveContainer width="100%" height={h}>
-                            <BarChart data={enrichedData} margin={vMargin}>
+                            <BarChart data={enrichedData} margin={getCartesianMargin('vertical')}>
                               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                               <XAxis dataKey="name" tick={{ fontSize: isTight ? 7.5 : 8, fontWeight: 700 }} />
                               <YAxis tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
                               <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
+                              {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={isTight ? 7 : 8} />}
                               <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                                 {enrichedData.map((_, index) => (
                                   <Cell key={index} fill={getColor(index)} />
