@@ -30,19 +30,27 @@ const ENTRY_STATUS_CONFIG = {
   },
 };
 
-const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = null }) => {
+const ExamResultsManager = ({
+  userRoles = [],
+  user,
+  teacherRecord,
+  initialTab = null,
+  allowedTabs = null,
+}) => {
   const canAccess = useCanAccess(userRoles);
 
   // Capability driven strictly by app_view_controller component
   const canManageAllMarks = canAccess('exam-results-status-override');
 
+  const isReportOnly = Array.isArray(allowedTabs) && allowedTabs.length === 1 && allowedTabs[0] === 'report';
+
   // Workspace Tabs registered in app_view_controller
-  const WORKSPACE_TABS = useMemo(
-    () => [
+  const WORKSPACE_TABS = useMemo(() => {
+    const allTabs = [
       {
         id: 'entry',
-        componentName: 'exam-results-tab-entry',
-        label: 'Results Entry',
+        componentName: 'exam-mark-entry-tab',
+        label: 'Marks Entry',
         icon: 'fa-clipboard-check',
       },
       {
@@ -54,20 +62,33 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
       {
         id: 'report',
         componentName: 'exam-results-tab-report',
-        label: 'Progress Reports',
+        label: 'Exam Reports',
         icon: 'fa-file-invoice',
       },
-    ],
-    []
-  );
+    ];
+
+    if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
+      return allTabs.filter((t) => allowedTabs.includes(t.id));
+    }
+    return allTabs;
+  }, [allowedTabs]);
 
   const availableTabs = useMemo(() => {
     return WORKSPACE_TABS.filter((tab) => canAccess(tab.componentName));
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
-    if (initialTab && canAccess(`exam-results-tab-${initialTab}`)) return initialTab;
-    if (canAccess('exam-results-tab-entry')) return 'entry';
+    if (initialTab) {
+      if (initialTab === 'entry' && canAccess('exam-mark-entry-tab') && (!allowedTabs || allowedTabs.includes('entry'))) return 'entry';
+      if (initialTab === 'summary' && canAccess('exam-results-tab-summary') && (!allowedTabs || allowedTabs.includes('summary'))) return 'summary';
+      if (initialTab === 'report' && canAccess('exam-results-tab-report') && (!allowedTabs || allowedTabs.includes('report'))) return 'report';
+      if (canAccess(`exam-results-tab-${initialTab}`) && (!allowedTabs || allowedTabs.includes(initialTab))) return initialTab;
+      if (canAccess(initialTab) && (!allowedTabs || allowedTabs.includes(initialTab))) return initialTab;
+    }
+    if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
+      return allowedTabs[0];
+    }
+    if (canAccess('exam-mark-entry-tab')) return 'entry';
     return availableTabs[0]?.id || 'entry';
   });
 
@@ -122,7 +143,6 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
   const [reportSelectedStudentIds, setReportSelectedStudentIds] = useState([]);
   const [reportTemplates, setReportTemplates] = useState([DEFAULT_TEMPLATE]);
   const [reportTemplateId, setReportTemplateId] = useState(DEFAULT_TEMPLATE.id);
-  const [isReportDesignerOpen, setIsReportDesignerOpen] = useState(false);
   const [paperSize, setPaperSize] = useState('a4');
   const [orientation, setOrientation] = useState('portrait');
 
@@ -204,6 +224,18 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!showSchemeModal && !showQuickFillModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        if (showSchemeModal) setShowSchemeModal(false);
+        if (showQuickFillModal) setShowQuickFillModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showSchemeModal, showQuickFillModal]);
 
   const refreshResults = useCallback(async () => {
     const { data } = await supabase.from('exam_results').select('*');
@@ -875,13 +907,19 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
         {/* Row 1: Title, Active Status, Exam Selector, and Refresh */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-base shadow-2xs shrink-0">
-              <i className="fas fa-clipboard-check" />
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shadow-2xs shrink-0 ${
+                isReportOnly
+                  ? 'bg-indigo-50 text-indigo-600'
+                  : 'bg-emerald-50 text-emerald-600'
+              }`}
+            >
+              <i className={`fas ${isReportOnly ? 'fa-file-invoice' : 'fa-clipboard-check'}`} />
             </div>
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-base sm:text-lg font-black text-dark-primary tracking-tight">
-                  Exam Results
+                  {isReportOnly ? 'Progress Reports' : 'Exam Results'}
                 </h1>
                 {selectedSchedule && (
                   <span
@@ -907,11 +945,13 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                 )}
               </div>
               <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
-                {canManageAllMarks
-                  ? 'Coordinator / Admin view — enter, review, or override marks for any subject'
-                  : teacherRecord?.name
-                    ? `Teacher view (${teacherRecord.name}) — enter marks for assigned invigilation subjects`
-                    : 'Enter and manage examination marks per subject and class'}
+                {isReportOnly
+                  ? 'Generate, customize, print, and export student examination report cards'
+                  : canManageAllMarks
+                    ? 'Coordinator / Admin view — enter, review, or override marks for any subject'
+                    : teacherRecord?.name
+                      ? `Teacher view (${teacherRecord.name}) — enter marks for assigned invigilation subjects`
+                      : 'Enter and manage examination marks per subject and class'}
               </p>
             </div>
           </div>
@@ -1269,17 +1309,6 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
                   fullWidth={false}
                 />
 
-                {/* Designer button */}
-                <button
-                  type="button"
-                  onClick={() => setIsReportDesignerOpen(true)}
-                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
-                  title="Design / Edit Template"
-                >
-                  <i className="fas fa-palette text-[10px]" />
-                  <span>Designer</span>
-                </button>
-
                 {/* Print button */}
                 <button
                   type="button"
@@ -1301,7 +1330,7 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
       <div className="w-full p-1 sm:p-2 md:p-3 " data-feature="exam-results-content">
         {/* Tab 1: Marks Entry Register */}
         {activeTab === 'entry' && (
-          <ConditionalBlock name="exam-results-tab-entry" roles={userRoles}>
+          <ConditionalBlock name="exam-mark-entry-tab" roles={userRoles}>
             {selectedScheduleId && selectedClassId ? (
               <div className="w-full space-y-4">
                 {activeResults.length > 0 ? (
@@ -1406,8 +1435,6 @@ const ExamResultsManager = ({ userRoles = [], user, teacherRecord, initialTab = 
               onSelectedStudentIdsChange={setReportSelectedStudentIds}
               selectedTemplateId={reportTemplateId}
               onSelectedTemplateIdChange={setReportTemplateId}
-              isDesignerOpen={isReportDesignerOpen}
-              onIsDesignerOpenChange={setIsReportDesignerOpen}
               onTemplatesLoaded={setReportTemplates}
               paperSize={paperSize}
               orientation={orientation}

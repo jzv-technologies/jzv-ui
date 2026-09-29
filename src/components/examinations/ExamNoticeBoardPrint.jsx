@@ -57,6 +57,17 @@ const ExamNoticeBoardPrint = ({
   const [noticeBoardConfig, setNoticeBoardConfig] = useState(null);
   const [configLoading, setConfigLoading] = useState(true);
 
+  useEffect(() => {
+    if (!showConfigModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setShowConfigModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showConfigModal, setShowConfigModal]);
+
   // Load saved config strictly via RPC call with local cache fallback
   useEffect(() => {
     const loadConfig = async () => {

@@ -52,6 +52,17 @@ const CompensationHistoryModal = ({
     }
   }, [employee]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !employee) return null;
 
   const handleHikeAmountChange = (amtVal) => {

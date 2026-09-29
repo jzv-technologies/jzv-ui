@@ -46,6 +46,17 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
   const [tempMappings, setTempMappings] = useState([]);
   const [showAllSubjects, setShowAllSubjects] = useState(false);
 
+  useEffect(() => {
+    if (!mappingBook) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setMappingBook(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mappingBook]);
+
   // Table filter, sort & visibility states for curriculum items
   const [lessonSearchQuery, setLessonSearchQuery] = useState('');
   const [lessonComplexityFilter, setLessonComplexityFilter] = useState('all');
@@ -211,10 +222,11 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
     setLoading(true);
     try {
       if (isSupabaseMode) {
-        await supabase
+        const { error: reactErr } = await supabase
           .from('syl_subjects')
           .update({ deactivated: false, deactivate: false })
           .eq('id', id);
+        if (reactErr) throw reactErr;
       }
       saveState({
         subjects: subjects.map((s) =>
@@ -512,7 +524,12 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
     );
 
     if (updates.classifications !== undefined) setClassifications(updates.classifications);
-    if (updates.subjects !== undefined) setSubjects(updates.subjects);
+    if (updates.subjects !== undefined) {
+      setSubjects(updates.subjects);
+      try {
+        sessionStorage.removeItem('jzv_session_subjects');
+      } catch (e) {}
+    }
     if (updates.books !== undefined) setBooks(updates.books);
     if (updates.syllabusData !== undefined) setSyllabusData(updates.syllabusData);
   };
@@ -890,21 +907,26 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
     try {
       if (data.type === 'edit') {
         if (data.level === 'subject') {
-          if (isSupabaseMode)
-            await supabase
+          if (isSupabaseMode) {
+            const { error: subErr } = await supabase
               .from('syl_subjects')
               .update({
                 name: data.name,
+                arabic_name: data.arabic_name !== undefined ? data.arabic_name : null,
                 classification_id: data.classificationId || null,
                 requires_teacher: data.requires_teacher,
               })
-              .eq('id', data.node.id);
+              .eq('id', data.node.id)
+              .select();
+            if (subErr) throw subErr;
+          }
           saveState({
             subjects: subjects.map((s) =>
               String(s.id) === String(data.node.id)
                 ? {
                     ...s,
                     name: data.name,
+                    arabic_name: data.arabic_name !== undefined ? data.arabic_name : null,
                     classification_id: data.classificationId || null,
                     requires_teacher: data.requires_teacher,
                   }
@@ -1044,23 +1066,28 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
           let newSub = {
             id: generateLocalId(),
             name: data.name,
+            arabic_name: data.arabic_name || null,
             classification_id: data.classificationId || null,
             requires_teacher: data.requires_teacher,
             deactivated: false,
             deactivate: false,
           };
           if (isSupabaseMode) {
-            const { data: res } = await supabase
+            const { data: res, error: addErr } = await supabase
               .from('syl_subjects')
               .insert([
                 {
                   name: data.name,
+                  arabic_name: data.arabic_name || null,
                   classification_id: data.classificationId || null,
                   requires_teacher: data.requires_teacher,
                 },
               ])
               .select();
-            newSub = res[0];
+            if (addErr) throw addErr;
+            if (res && res[0]) {
+              newSub = res[0];
+            }
           }
           saveState({ subjects: [...subjects, newSub] });
         } else if (data.level === 'book') {
@@ -1202,10 +1229,11 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
             const isSoft = nodeData?.isSoftDelete;
             if (isSoft) {
               if (isSupabaseMode) {
-                await supabase
+                const { error: deactErr } = await supabase
                   .from('syl_subjects')
                   .update({ deactivated: true, deactivate: true })
                   .eq('id', id);
+                if (deactErr) throw deactErr;
               }
               saveState({
                 subjects: subjects.map((s) =>
@@ -1214,7 +1242,10 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
               });
               showToast('Subject deactivated successfully', 'success');
             } else {
-              if (isSupabaseMode) await supabase.from('syl_subjects').delete().eq('id', id);
+              if (isSupabaseMode) {
+                const { error: delErr } = await supabase.from('syl_subjects').delete().eq('id', id);
+                if (delErr) throw delErr;
+              }
               saveState({ subjects: subjects.filter((s) => String(s.id) !== String(id)) });
               showToast('Subject deleted permanently', 'success');
             }
@@ -1374,10 +1405,11 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
     try {
       if (isSupabaseMode) {
         for (const item of mappingData) {
-          await supabase
+          const { error: mapErr } = await supabase
             .from('syl_subjects')
             .update({ classification_id: item.clsId })
             .eq('id', item.subId);
+          if (mapErr) throw mapErr;
         }
       }
       if (isSupabaseMode) await loadData();
@@ -1485,6 +1517,14 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
                     <span className={`truncate ${isSubDeactivated ? 'line-through' : ''}`}>
                       {sub.name}
                     </span>
+                    {sub.arabic_name && (
+                      <span
+                        className={`text-[11px] font-arabic shrink-0 ${isSelected ? 'text-white/80' : 'text-slate-500'}`}
+                        dir="rtl"
+                      >
+                        ({sub.arabic_name})
+                      </span>
+                    )}
                     {sub.requires_teacher !== false ? (
                       <i
                         className={`fas fa-user text-[10px] ${
@@ -2499,6 +2539,11 @@ const SyllabusManager = ({ role, user, teacherRecord, userRoles = [] }) => {
                       <h1 className="text-lg sm:text-xl font-black text-dark-primary tracking-tight">
                         {activeSubject.name}
                       </h1>
+                      {activeSubject.arabic_name && (
+                        <span className="text-base sm:text-lg font-bold text-slate-500 font-arabic" dir="rtl">
+                          ({activeSubject.arabic_name})
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs font-bold text-dark-muted">
                       Syllabus for{' '}
@@ -3075,6 +3120,9 @@ const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }
   const isEdit = type === 'edit';
 
   const [name, setName] = useState(isEdit ? pName || modal.node?.name || '' : '');
+  const [arabicName, setArabicName] = useState(
+    isEdit && level === 'subject' ? modal.node?.arabic_name || '' : ''
+  );
   const [classificationId, setClassificationId] = useState(
     isEdit && level === 'subject' ? modal.node?.classification_id || '' : ''
   );
@@ -3198,6 +3246,16 @@ const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }
     return `${action} Item`;
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (isEdit) {
@@ -3207,6 +3265,7 @@ const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }
         type: 'edit',
         level,
         name: name.trim(),
+        arabic_name: level === 'subject' ? arabicName.trim() || null : undefined,
         classificationId,
         requires_teacher: level === 'subject' ? requiresTeacher : undefined,
         hierarchyType: finalHierarchyType,
@@ -3232,6 +3291,7 @@ const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }
           type: 'add',
           level,
           name: name.trim(),
+          arabic_name: level === 'subject' ? arabicName.trim() || null : undefined,
           classificationId,
           requires_teacher: level === 'subject' ? requiresTeacher : undefined,
           hierarchyType: finalHierarchyType,
@@ -3310,6 +3370,22 @@ const SyllabusFormModal = ({ modal, classifications, subjects, onClose, onSave }
                   className="w-full px-4 py-2 border border-light-border rounded-xl"
                 />
               </div>
+              {level === 'subject' && (
+                <div>
+                  <label className="block text-xs font-bold text-dark-soft mb-1.5 flex items-center justify-between">
+                    <span>Arabic Name (الاسم بالعربية)</span>
+                    <span className="text-[10px] text-dark-muted font-normal">Optional</span>
+                  </label>
+                  <input
+                    type="text"
+                    dir="rtl"
+                    value={arabicName}
+                    onChange={(e) => setArabicName(e.target.value)}
+                    placeholder="مثال: الرياضيات"
+                    className="w-full px-4 py-2 border border-light-border rounded-xl font-arabic text-sm text-right focus:ring-2 focus:ring-brand-soft outline-none"
+                  />
+                </div>
+              )}
               {level === 'subject' && (
                 <>
                   <div>

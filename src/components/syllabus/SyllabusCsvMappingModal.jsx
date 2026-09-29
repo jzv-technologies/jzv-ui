@@ -49,6 +49,17 @@ const SyllabusCsvMappingModal = ({ isOpen, headers, previewRows, onClose, onImpo
     setPageCol(findBestMatch(['page_count', 'page count', 'pagecount', 'pages', 'page_col', 'page']));
   }, [isOpen, headers, hierarchy]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {

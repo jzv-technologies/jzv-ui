@@ -57,6 +57,17 @@ const ExamResultsEntryGrid = ({
   const latestEntriesRef = useRef(allEntries);
   latestEntriesRef.current = allEntries;
 
+  useEffect(() => {
+    if (!showQuickFillModal) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setShowQuickFillModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showQuickFillModal, setShowQuickFillModal]);
+
   // Load entries for all selected results from DB
   const loadAllEntries = useCallback(async () => {
     if (!results || results.length === 0) {

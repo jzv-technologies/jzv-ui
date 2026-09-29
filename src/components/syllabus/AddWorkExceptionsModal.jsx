@@ -42,6 +42,17 @@ const AddWorkExceptionsModal = ({ isOpen, onClose, onUpdate, user, fullName }) =
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const pendingRequests = requests.filter((r) => r.status === 'pending');

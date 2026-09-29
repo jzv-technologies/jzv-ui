@@ -134,6 +134,18 @@ const LessonPlanner = ({ user, teacherRecord, role = 'teacher' }) => {
     return dates;
   };
 
+  // Escape key handler for custom assign modal
+  useEffect(() => {
+    if (!assignModalTarget) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setAssignModalTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [assignModalTarget]);
+
   // Keep selection and target cache updated
   useEffect(() => {
     if (user?.id) {

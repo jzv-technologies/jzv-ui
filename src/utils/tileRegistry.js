@@ -49,6 +49,18 @@ export const TILE_METADATA_REGISTRY = {
     valid_access_roles: ['admin', 'management'],
     display_order: 35,
   },
+  'report-card-designer': {
+    title: 'Report Card Designer',
+    description:
+      'Customize layout, branding, grading scales, block order, and visual cards for examinations.',
+    icon: 'fa-palette',
+    buttonColor: 'bg-rose-600 text-white',
+    shadow: 'shadow-rose-200',
+    group: 'Administration',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'coordinator'],
+    display_order: 38,
+  },
 
   // ── Shared admin + management components ───────────────────────────
   'employee-management': {
@@ -254,10 +266,22 @@ export const TILE_METADATA_REGISTRY = {
     icon: 'fa-clipboard-check',
     buttonColor: 'bg-emerald-600 text-white',
     shadow: 'shadow-emerald-200',
-    group: 'Academics',
+    group: 'Examinations',
     action: 'subview',
     valid_access_roles: ['admin', 'management', 'teacher'],
     display_order: 85,
+  },
+  'report-card-designer': {
+    title: 'Report Card Designer',
+    description:
+      'Customize layout, branding, grading scales, block order, and visual cards for examinations.',
+    icon: 'fa-palette',
+    buttonColor: 'bg-rose-600 text-white',
+    shadow: 'shadow-rose-200',
+    group: 'Examinations',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'coordinator'],
+    display_order: 38,
   },
   dashboard: {
     title: 'Dashboard',
@@ -304,15 +328,17 @@ export const TILE_METADATA_REGISTRY = {
     action: 'subview',
   },
   'ward-exam-timetable': {
-    title: 'Ward Exam Timetable',
+    title: 'Exam Timetable',
     titleKey: 'role_portal.ward_exam_timetable.title',
     description: 'View the published examination schedule for your child.',
     descriptionKey: 'role_portal.ward_exam_timetable.description',
-    icon: 'fa-file-alt',
+    icon: 'fa-calendar-check',
     buttonColor: 'bg-rose-600 text-white',
     shadow: 'shadow-rose-200',
     group: 'Calendar and Schedules',
     action: 'subview',
+    valid_access_roles: ['parent', 'admin', 'management'],
+    display_order: 55,
   },
 
   // ── Candidate components ───────────────────────────────────────────
@@ -394,6 +420,13 @@ export const GROUP_CONFIGS = {
     badgeBg: 'bg-teal-50 text-teal-700 border border-teal-200',
     order: 60,
   },
+  Examinations: {
+    label: 'Examinations',
+    icon: 'fa-file-signature',
+    color: 'text-rose-600',
+    badgeBg: 'bg-rose-50 text-rose-700 border border-rose-200',
+    order: 35,
+  },
   'Complaints & Support': {
     label: 'Complaints & Support',
     icon: 'fa-headset',
@@ -467,7 +500,10 @@ export const resolveGroupInfo = (rawGroupName) => {
     lower === 'administration' ||
     lower === 'approvals' ||
     lower === 'admin settings' ||
-    lower === 'admin-settings'
+    lower === 'admin-settings' ||
+    lower === 'administration & system' ||
+    lower === 'administration and system' ||
+    lower === 'admin & system'
   ) {
     canonicalKey = 'Administration';
   } else if (
@@ -475,11 +511,13 @@ export const resolveGroupInfo = (rawGroupName) => {
     lower === 'academics' ||
     lower === 'curriculum' ||
     lower === 'academic & curriculam' ||
-    lower === 'academic & curriculum'
+    lower === 'academic & curriculum' ||
+    lower === 'academic and curriculum'
   ) {
     canonicalKey = 'Academics';
   } else if (
     lower === 'calendar and schedules' ||
+    lower === 'calendar & schedules' ||
     lower === 'schedules' ||
     lower === 'timetable' ||
     lower === 'calendar'
@@ -499,6 +537,12 @@ export const resolveGroupInfo = (rawGroupName) => {
     canonicalKey = 'Staff & Students';
   } else if (lower === 'testing' || lower === 'evaluations') {
     canonicalKey = 'Testing';
+  } else if (
+    lower === 'examinations' ||
+    lower === 'examination' ||
+    lower === 'exams'
+  ) {
+    canonicalKey = 'Examinations';
   } else if (
     lower === 'general' ||
     lower === 'complaints' ||

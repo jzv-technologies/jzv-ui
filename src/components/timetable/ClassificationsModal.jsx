@@ -254,7 +254,10 @@ const ClassificationsModal = ({
   const filteredSubjects = [...subjects]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter((sub) => {
-      const matchesSearch = sub.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        sub.name.toLowerCase().includes(q) ||
+        (sub.arabic_name && sub.arabic_name.toLowerCase().includes(q));
       if (!matchesSearch) return false;
       if (hideMapped) {
         const isMappedToOther =
@@ -544,7 +547,14 @@ const ClassificationsModal = ({
                                 onChange={() => handleToggleSubject(sub.id)}
                                 className="rounded text-brand-primary focus:ring-brand-soft w-4 h-4 shrink-0"
                               />
-                              <span className="text-xs text-dark-primary truncate">{sub.name}</span>
+                              <span className="text-xs text-dark-primary truncate flex items-center gap-1.5">
+                                <span>{sub.name}</span>
+                                {sub.arabic_name && (
+                                  <span className="text-[10px] text-slate-500 font-medium font-arabic shrink-0" dir="rtl">
+                                    ({sub.arabic_name})
+                                  </span>
+                                )}
+                              </span>
                             </span>
 
                             {/* Show if mapped elsewhere */}

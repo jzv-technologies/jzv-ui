@@ -13,7 +13,7 @@ export const generateLocalId = () => {
 export const renderSubjectOptionsGroupedByClassification = (
   subjectsList,
   classificationsList,
-  getOptionLabel = (sub) => sub.name,
+  getOptionLabel = (sub) => (sub.arabic_name ? `${sub.name} (${sub.arabic_name})` : sub.name),
   currentSelectedSubjectId = null
 ) => {
   const sortedClassifications = [...classificationsList].sort((a, b) =>
@@ -121,9 +121,13 @@ const GroupedSubjectMultiSelect = ({
   }, [controlWidth]);
 
   // Filter subjects based on search query
-  const filteredSubjects = subjects.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredSubjects = subjects.filter((s) => {
+    const q = search.toLowerCase();
+    return (
+      s.name.toLowerCase().includes(q) ||
+      (s.arabic_name && s.arabic_name.toLowerCase().includes(q))
+    );
+  });
 
   // Group filtered subjects by classification
   const grouped = useMemo(() => {
@@ -244,7 +248,14 @@ const GroupedSubjectMultiSelect = ({
                               onChange={() => handleToggleSubject(sub.id)}
                               className="rounded text-brand-primary focus:ring-brand-soft w-3.5 h-3.5"
                             />
-                            <span className="truncate flex-1">{sub.name}</span>
+                            <span className="truncate flex-1 flex items-center gap-1.5">
+                              <span>{sub.name}</span>
+                              {sub.arabic_name && (
+                                <span className="text-[10px] text-slate-500 font-medium font-arabic shrink-0" dir="rtl">
+                                  ({sub.arabic_name})
+                                </span>
+                              )}
+                            </span>
                           </label>
                         );
                       })}
@@ -280,11 +291,25 @@ export const TeacherMappingModal = ({
     }
   }, [teacher, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !teacher) return null;
 
   // Filter subjects based on search query and classification
   const filteredSubjects = subjects.filter((s) => {
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      s.name.toLowerCase().includes(q) ||
+      (s.arabic_name && s.arabic_name.toLowerCase().includes(q));
     const matchesCls =
       activeClsId === 'all' ||
       (activeClsId === 'unclassified'
@@ -541,7 +566,14 @@ export const TeacherMappingModal = ({
                             onChange={() => handleToggleSubject(sub.id)}
                             className="w-4 h-4 rounded text-brand-primary focus:ring-brand-primary border-gray-300 cursor-pointer"
                           />
-                          <span className="text-xs font-bold truncate flex-1">{sub.name}</span>
+                          <span className="text-xs font-bold truncate flex-1 flex items-center gap-1.5">
+                            <span>{sub.name}</span>
+                            {sub.arabic_name && (
+                              <span className="text-[11px] text-slate-500 font-medium font-arabic shrink-0" dir="rtl">
+                                ({sub.arabic_name})
+                              </span>
+                            )}
+                          </span>
                           {isSelected && (
                             <i className="fas fa-check-circle text-xs text-brand-primary shrink-0"></i>
                           )}
@@ -646,9 +678,15 @@ export const TeachersSetup = ({
         {matchedSubjects.slice(0, 4).map((s) => (
           <span
             key={s.id}
-            className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold bg-light-lbg border border-light-border text-dark-primary"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold bg-light-lbg border border-light-border text-dark-primary"
+            title={s.arabic_name ? `${s.name} (${s.arabic_name})` : s.name}
           >
-            {s.name}
+            <span>{s.name}</span>
+            {s.arabic_name && (
+              <span className="text-[10px] text-slate-500 font-medium font-arabic" dir="rtl">
+                ({s.arabic_name})
+              </span>
+            )}
           </span>
         ))}
         {matchedSubjects.length > 4 && (
@@ -665,7 +703,12 @@ export const TeachersSetup = ({
       const matchName = t.name.toLowerCase().includes(teacherSearch.toLowerCase());
       const matchSubjects = (t.subjects || []).some((subId) => {
         const sub = subjects.find((s) => String(s.id) === String(subId));
-        return sub && sub.name.toLowerCase().includes(teacherSearch.toLowerCase());
+        const q = teacherSearch.toLowerCase();
+        return (
+          sub &&
+          (sub.name.toLowerCase().includes(q) ||
+            (sub.arabic_name && sub.arabic_name.toLowerCase().includes(q)))
+        );
       });
       return matchName || matchSubjects;
     })
@@ -837,6 +880,17 @@ const ResolveDuplicatesModal = ({ isOpen, onClose, activeClass, duplicateGroups,
     setSelectedKeeps(initial);
   }, [duplicateGroups]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !duplicateGroups || duplicateGroups.length === 0) return null;
 
   const handleConfirmSave = () => {
@@ -890,7 +944,12 @@ const ResolveDuplicatesModal = ({ isOpen, onClose, activeClass, duplicateGroups,
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-dark-deepblue flex items-center gap-1.5">
                   <i className="fas fa-book text-amber-600 text-[11px]" />
-                  {group.subjectName}
+                  <span>{group.subjectName}</span>
+                  {group.subjectArabicName && (
+                    <span className="text-[11px] text-slate-500 font-medium font-arabic" dir="rtl">
+                      ({group.subjectArabicName})
+                    </span>
+                  )}
                 </span>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
                   {group.assignments.length} Teachers Mapped
@@ -1020,8 +1079,9 @@ export const ClassesSetup = ({
       Object.keys(map[cid]).forEach((sid) => {
         if (map[cid][sid].length > 1) {
           if (!duplicates[cid]) duplicates[cid] = [];
-          const subName =
-            subjects.find((s) => String(s.id) === String(sid))?.name || 'Unknown Subject';
+          const subObj = subjects.find((s) => String(s.id) === String(sid));
+          const subName = subObj?.name || 'Unknown Subject';
+          const subArabicName = subObj?.arabic_name;
           const assList = map[cid][sid].map((ass) => {
             const tName =
               teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name ||
@@ -1037,6 +1097,7 @@ export const ClassesSetup = ({
           duplicates[cid].push({
             subjectId: sid,
             subjectName: subName,
+            subjectArabicName: subArabicName,
             assignments: assList,
           });
         }
@@ -1407,9 +1468,9 @@ export const ClassesSetup = ({
                     </tr>
                   ) : (
                     activeAssignments.map((ass) => {
-                      const subName =
-                        subjects.find((s) => String(s.id) === String(ass.subject_id))?.name ||
-                        'Unknown Subject';
+                      const subObj = subjects.find((s) => String(s.id) === String(ass.subject_id));
+                      const subName = subObj?.name || 'Unknown Subject';
+                      const subArabicName = subObj?.arabic_name;
                       const tName =
                         teachers.find((t) => String(t.id) === String(ass.teacher_id))?.name ||
                         'Unknown Teacher';
@@ -1433,6 +1494,11 @@ export const ClassesSetup = ({
                           <td className="py-2.5 px-4 font-bold text-dark-primary">
                             <span className="flex items-center gap-2">
                               <span>{subName}</span>
+                              {subArabicName && (
+                                <span className="text-[11px] text-slate-500 font-medium font-arabic" dir="rtl">
+                                  ({subArabicName})
+                                </span>
+                              )}
                               {isDuplicate && (
                                 <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300">
                                   <i className="fas fa-exclamation-triangle mr-1 text-[8px]" />

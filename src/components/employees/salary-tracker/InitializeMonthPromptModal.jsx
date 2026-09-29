@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const InitializeMonthPromptModal = ({
   isOpen,
@@ -10,6 +10,19 @@ const InitializeMonthPromptModal = ({
   onInitializeSingle,
   initializing = false,
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        if (!initializing) {
+          onClose?.();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, initializing]);
+
   if (!isOpen || !monthObj || !employee) return null;
 
   const monthLabel = monthObj.label || `${monthObj.month}/${monthObj.year}`;

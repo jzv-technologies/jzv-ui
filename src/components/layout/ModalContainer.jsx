@@ -30,6 +30,16 @@ const ModalContainer = ({
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closeModal]);
+
   // 1. EARLY RETURN: If there's no modal or card, don't even try to render the HTML.
   // This prevents the "cannot read bgcontent of undefined" error.
   if (!activeModal || !activeCard) return null;

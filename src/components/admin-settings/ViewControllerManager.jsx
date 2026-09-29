@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
-import { TILE_METADATA_REGISTRY } from '../../utils/tileRegistry';
+import { TILE_METADATA_REGISTRY, GROUP_CONFIGS } from '../../utils/tileRegistry';
 import { invalidateViewConfigCache } from '../../hooks/useViewConfig';
 import ConfirmModal from '../ConfirmModal';
 import Translate from '../Translate';
@@ -235,6 +235,546 @@ const getRoleBadgeClasses = (colorName) => {
 
 const COMPONENT_TYPES = ['tile', 'tab', 'subview', 'variable'];
 
+const STANDARD_PARENT_CONTAINERS = [
+  { name: 'Calendar and Schedules', label: 'Calendar & Schedules', icon: 'fa-calendar-alt', desc: 'Schedules, Timetables, Academic Calendars' },
+  { name: 'Academic & Curriculum', label: 'Academic & Curriculum', icon: 'fa-book-open', desc: 'Syllabus, Books, Lessons, Curricula' },
+  { name: 'Administration', label: 'Administration', icon: 'fa-shield-halved', desc: 'System settings, access control, user management' },
+  { name: 'Staff & Students', label: 'Staff & Students', icon: 'fa-graduation-cap', desc: 'Student records, employee directory, attendance' },
+  { name: 'Examinations', label: 'Examinations', icon: 'fa-file-signature', desc: 'Exam schedules, mark entry, results, report cards' },
+  { name: 'Testing', label: 'Evaluations & Tests', icon: 'fa-vial', desc: 'Online evaluations, entrance tests' },
+  { name: 'General', label: 'General', icon: 'fa-cubes', desc: 'Tickets, requests, general portal services' },
+  { name: 'Complaints & Support', label: 'Complaints & Support', icon: 'fa-headset', desc: 'Help desk, issue tickets' },
+  { name: 'Personal', label: 'Personal Information', icon: 'fa-user-circle', desc: 'Personal profile, self-service' },
+  { name: 'Display', label: 'Display Systems', icon: 'fa-tv', desc: 'Public displays, announcements' },
+];
+
+/**
+ * Interactive Combobox component for Parent Name that dynamically prompts
+ * suggestions based on the selected Type (tile, tab, subview, variable).
+ */
+const ParentNameCombobox = ({ value = '', onChange, type = 'tile', configs = [] }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeCategory, setActiveCategory] = useState('recommended');
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  useEffect(() => {
+    setActiveCategory('recommended');
+    setSearchTerm('');
+  }, [type]);
+
+  const { containers, tiles, tabs, subviews, allComponents } = useMemo(() => {
+    const containerMap = new Map();
+    STANDARD_PARENT_CONTAINERS.forEach((c) => containerMap.set(c.name, c));
+
+    // Also pick up any custom parent_name from tile configs
+    configs.forEach((c) => {
+      if (c.type === 'tile' && c.parent_name) {
+        const cleaned = String(c.parent_name).trim();
+        if (cleaned && !containerMap.has(cleaned)) {
+          containerMap.set(cleaned, {
+            name: cleaned,
+            label: cleaned,
+            icon: 'fa-folder-tree',
+            desc: 'Configured Parent Container',
+          });
+        }
+      }
+    });
+
+    const containerList = Array.from(containerMap.values()).map((c) => ({
+      value: c.name,
+      label: c.label || c.name,
+      displayName: c.name,
+      desc: c.desc,
+      type: 'container',
+      icon: c.icon,
+    }));
+
+    const tileList = configs
+      .filter((c) => c.type === 'tile')
+      .map((c) => {
+        const meta = TILE_METADATA_REGISTRY[c.component_name] || {};
+        return {
+          value: c.component_name,
+          label: c.display_name || meta.title || c.component_name,
+          displayName: c.display_name || meta.title,
+          type: 'tile',
+          icon: c.icon || meta.icon || 'fa-cubes',
+        };
+      });
+
+    const tabList = configs
+      .filter((c) => c.type === 'tab')
+      .map((c) => ({
+        value: c.component_name,
+        label: c.display_name || c.component_name,
+        displayName: c.display_name,
+        type: 'tab',
+        icon: 'fa-folder',
+      }));
+
+    const subviewList = configs
+      .filter((c) => c.type === 'subview')
+      .map((c) => ({
+        value: c.component_name,
+        label: c.display_name || c.component_name,
+        displayName: c.display_name,
+        type: 'subview',
+        icon: 'fa-layer-group',
+      }));
+
+    return {
+      containers: containerList,
+      tiles: tileList,
+      tabs: tabList,
+      subviews: subviewList,
+      allComponents: [...tabList, ...tileList, ...subviewList],
+    };
+  }, [configs]);
+
+  const { recommendedItems, recommendedTitle, helperBadge, placeholderText } = useMemo(() => {
+    if (type === 'tile') {
+      return {
+        recommendedItems: containers,
+        recommendedTitle: 'Available Parent Containers',
+        helperBadge: 'Parent Containers (Groups)',
+        placeholderText: 'Select or type Parent Container (e.g. Calendar and Schedules)',
+      };
+    }
+    if (type === 'tab') {
+      return {
+        recommendedItems: tiles,
+        recommendedTitle: 'Available Tile Names (Parent Tile)',
+        helperBadge: 'Parent Tile Names',
+        placeholderText: 'Select or type Parent Tile name (e.g. exam-schedule)',
+      };
+    }
+    if (type === 'subview') {
+      return {
+        recommendedItems: tabs,
+        recommendedTitle: 'Available Tab Names',
+        helperBadge: 'Parent Tabs & Components',
+        placeholderText: 'Select or type Parent Tab name',
+      };
+    }
+    return {
+      recommendedItems: allComponents,
+      recommendedTitle: 'All Component Names',
+      helperBadge: 'All Components (Tabs, Tiles, Subviews)',
+      placeholderText: 'Select or type component name',
+    };
+  }, [type, containers, tiles, tabs, subviews, allComponents]);
+
+  const displayedItems = useMemo(() => {
+    let baseList = [];
+    if (activeCategory === 'recommended') {
+      baseList = recommendedItems;
+    } else if (activeCategory === 'containers') {
+      baseList = containers;
+    } else if (activeCategory === 'tiles') {
+      baseList = tiles;
+    } else if (activeCategory === 'tabs') {
+      baseList = tabs;
+    } else if (activeCategory === 'subviews') {
+      baseList = subviews;
+    } else {
+      baseList = [...tabs, ...tiles, ...subviews, ...containers];
+    }
+
+    if (!searchTerm.trim()) return baseList;
+    const q = searchTerm.toLowerCase().trim();
+    return baseList.filter(
+      (item) =>
+        item.value.toLowerCase().includes(q) ||
+        (item.label && item.label.toLowerCase().includes(q)) ||
+        (item.displayName && item.displayName.toLowerCase().includes(q)) ||
+        (item.desc && item.desc.toLowerCase().includes(q))
+    );
+  }, [activeCategory, recommendedItems, containers, tiles, tabs, subviews, searchTerm]);
+
+  const quickChips = useMemo(() => {
+    return recommendedItems.slice(0, 4);
+  }, [recommendedItems]);
+
+  const handleSelect = (itemVal) => {
+    onChange(itemVal);
+    setIsOpen(false);
+  };
+
+  const getTypeBadge = (itemType) => {
+    switch (itemType) {
+      case 'container':
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'tile':
+        return 'bg-orange-50 text-orange-700 border-orange-200';
+      case 'tab':
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'subview':
+        return 'bg-teal-50 text-teal-700 border-teal-200';
+      default:
+        return 'bg-gray-50 text-gray-700 border-gray-200';
+    }
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-xs font-bold text-dark-deepblue">
+          Parent Name <span className="text-gray-400 font-normal">({type})</span>
+        </label>
+        <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+          {helperBadge}
+        </span>
+      </div>
+
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          list={`parent-suggestions-${type}`}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholderText}
+          className="w-full pl-3 pr-16 py-2 rounded-xl border border-light-border text-xs focus:outline-none focus:border-purple-500 font-mono transition-colors"
+        />
+
+        {/* Clear and Toggle Buttons */}
+        <div className="absolute right-2 flex items-center gap-1">
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="text-gray-400 hover:text-gray-600 p-1 text-[11px] rounded transition-colors cursor-pointer"
+              title="Clear"
+            >
+              <i className="fas fa-times" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={`p-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+              isOpen
+                ? 'bg-purple-100 text-purple-700'
+                : 'text-gray-400 hover:text-purple-600 hover:bg-gray-100'
+            }`}
+            title="Browse suggestions"
+          >
+            <i className={`fas fa-chevron-down text-[10px] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* HTML5 Datalist for native input suggestions */}
+      <datalist id={`parent-suggestions-${type}`}>
+        {recommendedItems.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label !== opt.value ? opt.label : ''}
+          </option>
+        ))}
+      </datalist>
+
+      {/* Quick Select Chips */}
+      {quickChips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          <span className="text-[10px] text-gray-400 font-medium">Quick pick:</span>
+          {quickChips.map((chip) => {
+            const isSelected = value === chip.value;
+            return (
+              <button
+                key={chip.value}
+                type="button"
+                onClick={() => handleSelect(chip.value)}
+                className={`text-[10px] px-2 py-0.5 rounded-lg border font-medium transition-all cursor-pointer truncate max-w-[160px] ${
+                  isSelected
+                    ? 'bg-purple-600 border-purple-600 text-white shadow-xs'
+                    : 'bg-white border-light-border text-dark-slate hover:bg-purple-50 hover:border-purple-300'
+                }`}
+                title={chip.label}
+              >
+                {chip.value}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Popover Dropdown */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-light-border rounded-2xl shadow-2xl z-50 p-2.5 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+          {/* Popover Header & Search */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[11px] font-bold text-dark-deepblue">
+              <span className="flex items-center gap-1.5 text-purple-800">
+                <i className="fas fa-list-check text-purple-600" />
+                {recommendedTitle}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+              >
+                <i className="fas fa-times" />
+              </button>
+            </div>
+
+            {/* Popover Search Bar */}
+            <div className="relative">
+              <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Filter suggestions..."
+                className="w-full pl-7 pr-3 py-1 rounded-lg border border-light-border text-xs focus:outline-none focus:border-purple-500 bg-gray-50 focus:bg-white"
+                autoFocus
+              />
+            </div>
+
+            {/* Filter Category Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 pt-0.5 text-[10px] scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setActiveCategory('recommended')}
+                className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                  activeCategory === 'recommended'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Recommended
+              </button>
+              {type === 'tile' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('containers')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'containers'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Containers ({containers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('all')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'all'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All Components
+                  </button>
+                </>
+              ) : type === 'tab' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('tiles')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'tiles'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Tiles ({tiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('all')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'all'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All Components
+                  </button>
+                </>
+              ) : type === 'subview' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('tabs')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'tabs'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Tabs ({tabs.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('tiles')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'tiles'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Tiles ({tiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('subviews')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'subviews'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Subviews ({subviews.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('all')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'all'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('all')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'all'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    All ({allComponents.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('tabs')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'tabs'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Tabs ({tabs.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('tiles')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'tiles'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Tiles ({tiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('subviews')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'subviews'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Subviews ({subviews.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCategory('containers')}
+                    className={`px-2 py-0.5 rounded-md font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      activeCategory === 'containers'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    Containers ({containers.length})
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Scrollable list of suggestions */}
+          <div className="max-h-56 overflow-y-auto space-y-1 pr-1 divide-y divide-gray-100">
+            {displayedItems.length === 0 ? (
+              <div className="py-4 text-center text-xs text-gray-400">
+                No matching suggestions. You can type any custom name.
+              </div>
+            ) : (
+              displayedItems.map((item) => {
+                const isSelected = value === item.value;
+                return (
+                  <div
+                    key={`${item.type}-${item.value}`}
+                    onClick={() => handleSelect(item.value)}
+                    className={`pt-1 pb-1 px-2 rounded-xl flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                      isSelected ? 'bg-purple-50 border border-purple-200' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-[10px] text-gray-600 shrink-0">
+                        <i className={`fas ${item.icon || 'fa-folder'}`} />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-xs text-dark-deepblue truncate">
+                            {item.value}
+                          </span>
+                          {isSelected && (
+                            <i className="fas fa-check text-[10px] text-green-600" />
+                          )}
+                        </div>
+                        {item.displayName && item.displayName !== item.value && (
+                          <p className="text-[10px] text-gray-500 truncate">
+                            {item.displayName}
+                          </p>
+                        )}
+                        {item.desc && (
+                          <p className="text-[9px] text-gray-400 truncate">
+                            {item.desc}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border shrink-0 ${getTypeBadge(item.type)}`}>
+                      {item.type}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="pt-1.5 border-t border-light-border/60 flex items-center justify-between text-[10px] text-gray-400">
+            <span>Tip: Custom names typed into the input are preserved.</span>
+            <span>{displayedItems.length} available</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ViewControllerManager = () => {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -269,7 +809,7 @@ export const ViewControllerManager = () => {
     component_name: '',
     type: 'tile',
     display_name: '',
-    parent_name: 'admin-only',
+    parent_name: 'Calendar and Schedules',
     display_order: 10,
     is_active: true,
     default_access: 'none',
@@ -281,6 +821,23 @@ export const ViewControllerManager = () => {
 
   // Delete confirm modal
   const [confirmConfig, setConfirmConfig] = useState(null);
+
+  useEffect(() => {
+    if (!isModalOpen && !isRoleModalOpen && !confirmConfig) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        if (confirmConfig) {
+          setConfirmConfig(null);
+        } else if (isRoleModalOpen) {
+          setIsRoleModalOpen(false);
+        } else if (isModalOpen) {
+          setIsModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isRoleModalOpen, confirmConfig]);
 
   // Fetch configs from Supabase
   const fetchConfigs = useCallback(async () => {
@@ -589,7 +1146,7 @@ export const ViewControllerManager = () => {
         component_name: item.component_name,
         type: item.type || 'tile',
         display_name: item.display_name || '',
-        parent_name: item.parent_name || 'admin-only',
+        parent_name: item.parent_name || '',
         display_order: item.display_order ?? 10,
         is_active: item.is_active ?? true,
         default_access: item.default_access || 'none',
@@ -605,7 +1162,7 @@ export const ViewControllerManager = () => {
         component_name: '',
         type: 'tile',
         display_name: '',
-        parent_name: 'admin-only',
+        parent_name: 'Calendar and Schedules',
         display_order: maxOrder + 10,
         is_active: true,
         default_access: 'none',
@@ -633,7 +1190,7 @@ export const ViewControllerManager = () => {
         component_name: cleanName,
         type: formData.type,
         display_name: formData.display_name.trim() || null,
-        parent_name: formData.parent_name.trim() || 'general',
+        parent_name: formData.parent_name ? formData.parent_name.trim() : (formData.type === 'tile' ? 'General' : null),
         display_order: Number(formData.display_order) || 0,
         is_active: Boolean(formData.is_active),
         default_access: formData.default_access,
@@ -1199,13 +1756,19 @@ export const ViewControllerManager = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-dark-deepblue mb-1">Type</label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs bg-white focus:outline-none focus:border-purple-500"
+                    onChange={(e) => {
+                      const nextType = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        type: nextType,
+                      }));
+                    }}
+                    className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs bg-white focus:outline-none focus:border-purple-500 font-semibold"
                   >
                     {COMPONENT_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -1226,21 +1789,6 @@ export const ViewControllerManager = () => {
                     className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs focus:outline-none focus:border-purple-500"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-dark-deepblue mb-1">
-                    Parent Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.parent_name}
-                    onChange={(e) => setFormData({ ...formData, parent_name: e.target.value })}
-                    placeholder="e.g. timetable, syllabus"
-                    className="w-full px-3.5 py-2 rounded-xl border border-light-border text-xs focus:outline-none focus:border-purple-500"
-                  />
-                </div>
 
                 <div>
                   <label className="block text-xs font-bold text-dark-deepblue mb-1">
@@ -1256,6 +1804,14 @@ export const ViewControllerManager = () => {
                   </select>
                 </div>
               </div>
+
+              {/* Dynamic Parent Name Combobox */}
+              <ParentNameCombobox
+                value={formData.parent_name}
+                onChange={(val) => setFormData({ ...formData, parent_name: val })}
+                type={formData.type}
+                configs={configs}
+              />
 
               <div>
                 <label className="block text-xs font-bold text-dark-deepblue mb-1">

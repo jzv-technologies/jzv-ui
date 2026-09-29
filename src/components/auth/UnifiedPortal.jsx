@@ -23,6 +23,8 @@ import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
+import ReportCardDesigner from '../examinations/ReportCardDesigner';
+import ConditionalBlock from '../portal-shared/ConditionalBlock';
 
 // Shared subview containers
 import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewContainer';
@@ -75,16 +77,26 @@ export const UnifiedPortal = ({
   };
 
   // Group tiles by their parent_name
-  // Requirement 2: If the group has only one tile inside, then direct tile to be displayed
+  // Group tiles under their respective Parent container based on app_view_controller configuration
   const { multiTileGroups, directTiles } = useMemo(() => {
     if (!displayedTiles || displayedTiles.length === 0) {
       return { multiTileGroups: [], directTiles: [] };
     }
 
     const groupMap = new Map();
+    const direct = [];
 
     displayedTiles.forEach((tile) => {
-      const groupInfo = resolveGroupInfo(tile.parent_name);
+      const rawParent = tile.parent_name ? String(tile.parent_name).trim() : '';
+      const lowerParent = rawParent.toLowerCase();
+
+      // If tile has explicitly no parent or is designated direct/standalone
+      if (!rawParent || lowerParent === 'direct' || lowerParent === 'none') {
+        direct.push(tile);
+        return;
+      }
+
+      const groupInfo = resolveGroupInfo(rawParent);
       const groupKey = groupInfo.key;
 
       if (!groupMap.has(groupKey)) {
@@ -103,21 +115,14 @@ export const UnifiedPortal = ({
     });
 
     const multi = [];
-    const direct = [];
 
-    // Separate multi-tile groups from single-tile groups
+    // All tiles configured under a Parent container are displayed under their respective Parent container
     groupMap.forEach((entry) => {
       entry.tiles.sort((a, b) => (a.display_order ?? 50) - (b.display_order ?? 50));
-
-      if (entry.tiles.length > 1) {
-        multi.push(entry);
-      } else {
-        // Only 1 tile inside this group -> direct tile to be displayed
-        direct.push(entry.tiles[0]);
-      }
+      multi.push(entry);
     });
 
-    // Sort multi-tile groups by configured group order or min display_order
+    // Sort parent groups by configured group order or min display_order
     multi.sort((a, b) => (a.info.order ?? a.minDisplayOrder) - (b.info.order ?? b.minDisplayOrder));
 
     // Sort direct tiles by display_order
@@ -506,19 +511,59 @@ export const UnifiedPortal = ({
       case 'exam-results':
         return (
           <div data-feature="exam-results">
-            <ExamResultsManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
+            <ExamResultsManager
+              user={user}
+              userRoles={userRoles}
+              teacherRecord={teacherRecord}
+              allowedTabs={['entry', 'summary']}
+            />
           </div>
         );
 
       case 'exam-progress-report':
         return (
-          <div data-feature="exam-results">
+          <div data-feature="exam-progress-report">
             <ExamResultsManager
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
+              allowedTabs={['report']}
               initialTab="report"
             />
+          </div>
+        );
+
+      case 'report-card-designer':
+      case 'exam-report-designer':
+        return (
+          <div data-feature="report-card-designer" className="w-full">
+            <ConditionalBlock
+              name="report-card-designer"
+              roles={userRoles}
+              fallback={
+                <div className="text-center py-16 bg-white rounded-3xl border border-light-border p-8 max-w-xl mx-auto shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-2xl mx-auto mb-4">
+                    <i className="fas fa-lock" />
+                  </div>
+                  <h3 className="text-lg font-bold text-dark-deepblue mb-2">Access Restricted</h3>
+                  <p className="text-xs text-dark-muted mb-6">
+                    You do not have permission to access the Report Card Designer.
+                  </p>
+                  <button
+                    onClick={() => setSubView(null)}
+                    className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    <i className="fas fa-arrow-left mr-2" />
+                    Back to Portal
+                  </button>
+                </div>
+              }
+            >
+              <ReportCardDesigner
+                userRoles={userRoles}
+                onClose={() => setSubView(null)}
+              />
+            </ConditionalBlock>
           </div>
         );
 
@@ -641,7 +686,7 @@ export const UnifiedPortal = ({
                                     <i className={`fas ${group.info.icon} ${group.info.color}`}></i>
                                   </div>
                                   <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                                    {group.tiles.length} features
+                                    {group.tiles.length} {group.tiles.length === 1 ? 'feature' : 'features'}
                                   </span>
                                 </div>
 

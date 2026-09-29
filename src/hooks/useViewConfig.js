@@ -5,7 +5,7 @@ import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 import { sortRolesByPriority } from '../utils/roleUtils';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v10';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v14';
 
 const readSessionCache = () => {
   try {
@@ -18,6 +18,10 @@ const readSessionCache = () => {
     sessionStorage.removeItem('jzv_view_config_cache_v7');
     sessionStorage.removeItem('jzv_view_config_cache_v8');
     sessionStorage.removeItem('jzv_view_config_cache_v9');
+    sessionStorage.removeItem('jzv_view_config_cache_v10');
+    sessionStorage.removeItem('jzv_view_config_cache_v11');
+    sessionStorage.removeItem('jzv_view_config_cache_v12');
+    sessionStorage.removeItem('jzv_view_config_cache_v13');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
@@ -31,7 +35,9 @@ const readSessionCache = () => {
       !names.has('exam-results') ||
       !names.has('exam-sched-tab-setup') ||
       !names.has('exam-sched-slot-edit') ||
+      (!names.has('exam-mark-entry-tab') && !names.has('exam-results-tab-entry')) ||
       !names.has('exam-results-tab-report') ||
+      !names.has('ward-exam-timetable') ||
       !names.has('student-tab-records') ||
       !names.has('student-tab-fees') ||
       !names.has('emp-tab-records')
@@ -215,7 +221,7 @@ export const useViewConfig = () => {
           component_name: item.component_name,
           type: 'tile',
           parent_name:
-            (item.parent_name && item.parent_name.toLowerCase() !== 'admin settings'
+            (item.parent_name
               ? String(item.parent_name)
                   .replace(/[\r\n]+/g, ' ')
                   .trim()
@@ -302,7 +308,13 @@ export const useViewConfig = () => {
       if (!userRoles || userRoles.length === 0) return false;
 
       // 1. Search in viewConfigs loaded from DB
-      const config = viewConfigs.find((c) => c.component_name === componentName);
+      let config = viewConfigs.find((c) => c.component_name === componentName);
+      // Support alias between exam-mark-entry-tab and legacy exam-results-tab-entry
+      if (!config && componentName === 'exam-mark-entry-tab') {
+        config = viewConfigs.find((c) => c.component_name === 'exam-results-tab-entry');
+      } else if (!config && componentName === 'exam-results-tab-entry') {
+        config = viewConfigs.find((c) => c.component_name === 'exam-mark-entry-tab');
+      }
       if (config) {
         if (!config.is_active) return false;
         return hasAccess(config.valid_access_roles, config.default_access, userRoles);
@@ -315,8 +327,11 @@ export const useViewConfig = () => {
         );
       }
 
-      // Builtin fallback for exam-results-tab-report & exam-results-import
+      // Builtin fallback for exam results tabs
       if (
+        componentName === 'exam-mark-entry-tab' ||
+        componentName === 'exam-results-tab-entry' ||
+        componentName === 'exam-results-tab-summary' ||
         componentName === 'exam-results-tab-report' ||
         componentName === 'exam-results-import' ||
         componentName === 'exam-progress-report'
@@ -333,6 +348,17 @@ export const useViewConfig = () => {
       if (componentName === 'ward-exam-timetable' || componentName === 'exam-sched-tab-parent') {
         return userRoles.some((r) =>
           ['parent', 'admin', 'management'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
+      // Builtin fallback for report-card-designer
+      if (
+        componentName === 'report-card-designer' ||
+        componentName === 'exam-report-designer' ||
+        componentName === 'report-card-designer-edit'
+      ) {
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator'].includes(String(r).toLowerCase().trim())
         );
       }
 

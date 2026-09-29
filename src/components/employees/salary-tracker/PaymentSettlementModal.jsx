@@ -29,6 +29,17 @@ const PaymentSettlementModal = ({
     setDeleteTargetIndex(null);
   }, [selectedPaymentItem]);
 
+  useEffect(() => {
+    if (!selectedPaymentItem) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setSelectedPaymentItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPaymentItem, setSelectedPaymentItem]);
+
   if (!selectedPaymentItem) return null;
 
   // Breakdown calculations

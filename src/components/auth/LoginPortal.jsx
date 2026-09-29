@@ -27,6 +27,18 @@ const LoginPortal = ({ isOpen, onClose, user, userRoles, rolesLoading, loginAsPa
     }
   }, [isOpen]);
 
+  // Handle Escape key to close
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Handle post-login behaviour: redirect to unified portal v2 or show pending
   useEffect(() => {
     if (user && isOpen && !rolesLoading) {

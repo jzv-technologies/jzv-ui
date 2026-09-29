@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const BulkImportModal = ({
   isCsvImportOpen,
@@ -9,6 +9,18 @@ const BulkImportModal = ({
   handleBulkImportSubmit,
   saving,
 }) => {
+  useEffect(() => {
+    if (!isCsvImportOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setIsCsvImportOpen(false);
+        setCsvPreviewRows([]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCsvImportOpen, setIsCsvImportOpen, setCsvPreviewRows]);
+
   if (!isCsvImportOpen) return null;
 
   const handleDownloadTemplate = () => {

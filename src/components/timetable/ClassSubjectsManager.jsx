@@ -257,7 +257,7 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
                   <optgroup key={group} label={group}>
                     {subs.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name}
+                        {s.name} {s.arabic_name ? `(${s.arabic_name})` : ''}
                       </option>
                     ))}
                   </optgroup>
@@ -322,8 +322,13 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
                     <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
 
                     {/* Subject name */}
-                    <span className="flex-1 text-xs font-semibold text-dark-deepblue truncate">
-                      {sub?.name ?? `Subject #${cs.subject_id}`}
+                    <span className="flex-1 text-xs font-semibold text-dark-deepblue truncate flex items-center gap-1.5">
+                      <span>{sub?.name ?? `Subject #${cs.subject_id}`}</span>
+                      {sub?.arabic_name && (
+                        <span className="text-[11px] text-slate-500 font-medium font-arabic" dir="rtl">
+                          ({sub.arabic_name})
+                        </span>
+                      )}
                     </span>
 
                     {/* Notes */}

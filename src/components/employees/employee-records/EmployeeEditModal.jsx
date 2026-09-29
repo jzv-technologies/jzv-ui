@@ -62,7 +62,20 @@ const EmployeeEditModal = ({
   switchRecordDirect,
   showToast,
 }) => {
-  if (!modalMode || (modalMode !== 'add' && modalMode !== 'edit' && modalMode !== 'self_edit')) {
+  const isOpen = modalMode === 'add' || modalMode === 'edit' || modalMode === 'self_edit';
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setModalMode(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, setModalMode]);
+
+  if (!isOpen) {
     return null;
   }
 

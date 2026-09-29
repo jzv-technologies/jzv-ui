@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const ExtrasUpdateModal = ({
   selectedExtrasItem,
@@ -13,6 +13,17 @@ const ExtrasUpdateModal = ({
   saving,
   canUpdateSalaryTracker,
 }) => {
+  useEffect(() => {
+    if (!selectedExtrasItem) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setSelectedExtrasItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedExtrasItem, setSelectedExtrasItem]);
+
   if (!selectedExtrasItem) return null;
 
   return (

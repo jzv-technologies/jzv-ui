@@ -85,6 +85,17 @@ const ImportMarksModal = ({
     return map;
   }, [subjects, results]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Load existing entries for these results so we know who already has marks
   useEffect(() => {
     if (!isOpen || results.length === 0) return;

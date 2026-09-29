@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { showToast } from '../../utils/toast';
 
@@ -32,6 +32,17 @@ const StudentBulkImportModal = ({
   const [updateMode, setUpdateMode] = useState('full'); // 'full' | 'selected'
   const [selectedColumns, setSelectedColumns] = useState(IMPORTABLE_COLUMNS.map((c) => c.key));
   const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Toggle single column for 'selected' update mode
   const handleToggleColumn = (colKey) => {

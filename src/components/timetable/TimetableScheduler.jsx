@@ -758,7 +758,8 @@ const TimetableScheduler = ({
                           String(a.class_id) === String(classId) &&
                           String(a.subject_id) === String(sub.id)
                       );
-                      return isMapped ? `${sub.name} (Assigned to Class)` : sub.name;
+                      const baseLabel = sub.arabic_name ? `${sub.name} (${sub.arabic_name})` : sub.name;
+                      return isMapped ? `${baseLabel} (Assigned to Class)` : baseLabel;
                     },
                     selectedSubjectId
                   )}

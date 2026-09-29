@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MultiSelectRolesDropdown from './MultiSelectRolesDropdown';
 import { SYSTEM_ROLES, normalizeRoles } from '../../../utils/roleUtils';
 
@@ -47,6 +47,18 @@ const UserRolesManagementModal = ({
   saving,
 }) => {
   const [editingRoles, setEditingRoles] = useState([]);
+
+  useEffect(() => {
+    if (!isUserRolesModalOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        setIsUserRolesModalOpen(false);
+        setEditingAuthUser(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isUserRolesModalOpen, setIsUserRolesModalOpen, setEditingAuthUser]);
 
   if (!isUserRolesModalOpen) return null;
 

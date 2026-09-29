@@ -807,17 +807,17 @@ const ExamClassSummaryView = ({
                       <div className="overflow-x-auto rounded-xl border border-light-border">
                         <table className="w-full text-left border-collapse table-auto">
                           <thead>
-                            <tr className="bg-slate-100/80 border-b border-light-border text-[10px] sm:text-[11px] font-bold text-dark-muted uppercase tracking-wider">
+                            <tr className="bg-slate-100/80 border-b border-light-border text-[10px] sm:text-xs font-bold text-dark-muted uppercase tracking-wider">
                               {/* Subject Header */}
                               <th
                                 onClick={() => handleSort('subject')}
                                 className="py-2.5 sm:py-3 px-2 sm:px-4 cursor-pointer hover:text-dark-primary transition-colors select-none"
                                 data-feature-sort="subject"
                               >
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 sm:gap-1.5">
                                   <span>Subject</span>
                                   <i
-                                    className={`fas text-[8px] ${
+                                    className={`fas text-[8px] sm:text-[9px] ${
                                       sortConfig.key === 'subject'
                                         ? sortConfig.direction === 'asc'
                                           ? 'fa-sort-up text-emerald-600'
@@ -831,13 +831,13 @@ const ExamClassSummaryView = ({
                               {/* Status Header */}
                               <th
                                 onClick={() => handleSort('status')}
-                                className="py-2.5 sm:py-3 px-1.5 sm:px-3 cursor-pointer hover:text-dark-primary transition-colors select-none"
+                                className="py-2.5 sm:py-3 px-1.5 sm:px-4 cursor-pointer hover:text-dark-primary transition-colors select-none"
                                 data-feature-sort="status"
                               >
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 sm:gap-1.5">
                                   <span>Status</span>
                                   <i
-                                    className={`fas text-[8px] ${
+                                    className={`fas text-[8px] sm:text-[9px] ${
                                       sortConfig.key === 'status'
                                         ? sortConfig.direction === 'asc'
                                           ? 'fa-sort-up text-emerald-600'
@@ -848,17 +848,17 @@ const ExamClassSummaryView = ({
                                 </div>
                               </th>
 
-                              {/* Pass Header (Requirement 3: Pass should be P) */}
+                              {/* Pass Header (P on mobile, Pass on desktop) */}
                               <th
                                 onClick={() => handleSort('pass')}
-                                className="py-2.5 sm:py-3 px-1 sm:px-3 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
-                                title="Pass (P)"
+                                className="py-2.5 sm:py-3 px-1 sm:px-4 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
                                 data-feature-sort="pass"
                               >
-                                <div className="flex items-center justify-center gap-1">
-                                  <span>P</span>
+                                <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+                                  <span className="inline sm:hidden">P</span>
+                                  <span className="hidden sm:inline">Pass</span>
                                   <i
-                                    className={`fas text-[8px] ${
+                                    className={`fas text-[8px] sm:text-[9px] ${
                                       sortConfig.key === 'pass'
                                         ? sortConfig.direction === 'asc'
                                           ? 'fa-sort-up text-emerald-600'
@@ -869,17 +869,17 @@ const ExamClassSummaryView = ({
                                 </div>
                               </th>
 
-                              {/* Fail Header (Requirement 4: Fail should be F) */}
+                              {/* Fail Header (F on mobile, Fail on desktop) */}
                               <th
                                 onClick={() => handleSort('fail')}
-                                className="py-2.5 sm:py-3 px-1 sm:px-3 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
-                                title="Fail (F)"
+                                className="py-2.5 sm:py-3 px-1 sm:px-4 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
                                 data-feature-sort="fail"
                               >
-                                <div className="flex items-center justify-center gap-1">
-                                  <span>F</span>
+                                <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+                                  <span className="inline sm:hidden">F</span>
+                                  <span className="hidden sm:inline">Fail</span>
                                   <i
-                                    className={`fas text-[8px] ${
+                                    className={`fas text-[8px] sm:text-[9px] ${
                                       sortConfig.key === 'fail'
                                         ? sortConfig.direction === 'asc'
                                           ? 'fa-sort-up text-emerald-600'
@@ -890,17 +890,17 @@ const ExamClassSummaryView = ({
                                 </div>
                               </th>
 
-                              {/* Absent Header (Requirement 5: Absent should be A) */}
+                              {/* Absent Header (A on mobile, Absent on desktop) */}
                               <th
                                 onClick={() => handleSort('absent')}
-                                className="py-2.5 sm:py-3 px-1 sm:px-3 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
-                                title="Absent (A)"
+                                className="py-2.5 sm:py-3 px-1 sm:px-4 cursor-pointer hover:text-dark-primary transition-colors select-none text-center"
                                 data-feature-sort="absent"
                               >
-                                <div className="flex items-center justify-center gap-1">
-                                  <span>A</span>
+                                <div className="flex items-center justify-center gap-1 sm:gap-1.5">
+                                  <span className="inline sm:hidden">A</span>
+                                  <span className="hidden sm:inline">Absent</span>
                                   <i
-                                    className={`fas text-[8px] ${
+                                    className={`fas text-[8px] sm:text-[9px] ${
                                       sortConfig.key === 'absent'
                                         ? sortConfig.direction === 'asc'
                                           ? 'fa-sort-up text-emerald-600'
@@ -912,7 +912,7 @@ const ExamClassSummaryView = ({
                               </th>
 
                               {/* Action Header */}
-                              <th className="py-2.5 sm:py-3 px-1 sm:px-3 text-center whitespace-nowrap" title="Action">
+                              <th className="py-2.5 sm:py-3 px-1 sm:px-4 text-center whitespace-nowrap" title="Action">
                                 <span>Action</span>
                               </th>
                             </tr>
@@ -936,14 +936,14 @@ const ExamClassSummaryView = ({
                                   key={sub.id}
                                   className="hover:bg-slate-50/70 transition-colors group"
                                 >
-                                  {/* Column 1: Subject (Requirement 1: change the max and pass as pass/max number only) */}
+                                  {/* Column 1: Subject */}
                                   <td className="py-2 sm:py-3 px-2 sm:px-4">
                                     <div className="flex items-center gap-1.5 sm:gap-2">
-                                      <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 hidden sm:flex items-center justify-center text-[10px] shrink-0">
+                                      <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg bg-slate-100 text-slate-600 hidden sm:flex items-center justify-center text-xs shrink-0">
                                         <i className="fas fa-book-open" />
                                       </div>
                                       <div className="min-w-0">
-                                        <div className="flex items-center gap-1">
+                                        <div className="flex items-center gap-1 sm:gap-1.5">
                                           <span
                                             className="font-black text-dark-primary text-xs sm:text-sm truncate block"
                                             title={sub.name}
@@ -951,13 +951,19 @@ const ExamClassSummaryView = ({
                                             {sub.name}
                                           </span>
                                           {sub.isAdHoc && (
-                                            <span className="text-[8px] font-black uppercase px-1 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                                            <span className="text-[8px] sm:text-[9px] font-black uppercase px-1 sm:px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
                                               Ad-Hoc
                                             </span>
                                           )}
                                         </div>
+                                        {/* Desktop view */}
+                                        <p className="text-[11px] text-dark-muted font-medium mt-0.5 hidden sm:block">
+                                          Max: <strong>{row.maxMarks}</strong>
+                                          {row.passMarks ? ` · Pass: ${row.passMarks}` : ''}
+                                        </p>
+                                        {/* Mobile view */}
                                         <p
-                                          className="text-[10px] sm:text-[11px] text-dark-muted font-bold mt-0.5"
+                                          className="text-[10px] text-dark-muted font-bold mt-0.5 sm:hidden"
                                           title={`Pass: ${row.passMarks} / Max: ${row.maxMarks}`}
                                         >
                                           {row.passMarks}/{row.maxMarks}
@@ -966,34 +972,93 @@ const ExamClassSummaryView = ({
                                     </div>
                                   </td>
 
-                                  {/* Column 2: Status (Requirement 2: Status only three letters Com, Pen, Inp and just %) */}
-                                  <td className="py-2 sm:py-3 px-1.5 sm:px-3">
+                                  {/* Column 2: Status */}
+                                  <td className="py-2 sm:py-3 px-1.5 sm:px-4">
+                                    {/* Desktop view */}
+                                    <div className="hidden sm:block space-y-1.5 max-w-[150px]">
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${cfg.color}`}
+                                      >
+                                        <i className={`fas ${cfg.icon} text-[8px]`} />
+                                        {cfg.label}
+                                      </span>
+                                      <div className="flex items-center justify-between text-[10px] text-dark-muted font-semibold">
+                                        <span>Evaluated</span>
+                                        <span>
+                                          {row.evaluatedCount} / {row.totalStudents} ({row.progressPct}%)
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                                        <div
+                                          className={`h-full rounded-full transition-all duration-300 ${
+                                            row.progressPct === 100
+                                              ? 'bg-emerald-500'
+                                              : row.progressPct > 0
+                                                ? 'bg-amber-500'
+                                                : 'bg-slate-300'
+                                          }`}
+                                          style={{ width: `${row.progressPct}%` }}
+                                        />
+                                      </div>
+                                    </div>
+
+                                    {/* Mobile view */}
                                     <div
-                                      className="flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
+                                      className="flex sm:hidden items-center gap-1 whitespace-nowrap"
                                       title={`${cfg.label || statusShort}: ${row.evaluatedCount}/${row.totalStudents} evaluated (${row.progressPct}%)`}
                                     >
                                       <span
-                                        className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-black uppercase border ${cfg.color}`}
+                                        className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${cfg.color}`}
                                       >
                                         {statusShort}
                                       </span>
-                                      <span className="text-[10px] sm:text-xs font-bold text-dark-primary">
+                                      <span className="text-[10px] font-bold text-dark-primary">
                                         {row.progressPct}%
                                       </span>
                                     </div>
                                   </td>
 
-                                  {/* Column 3: Pass (Requirement 3: Pass should be P, show only count no %) */}
-                                  <td className="py-2 sm:py-3 px-1 sm:px-3 text-center whitespace-nowrap">
-                                    <span className="inline-flex items-center justify-center min-w-[22px] sm:min-w-[28px] px-1.5 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                  {/* Column 3: Pass */}
+                                  <td className="py-2 sm:py-3 px-1 sm:px-4 text-center whitespace-nowrap">
+                                    {/* Desktop view */}
+                                    <div className="hidden sm:inline-flex flex-col items-center">
+                                      <span className="inline-flex items-center justify-center min-w-[32px] px-2.5 py-0.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                                        {row.passCount}
+                                      </span>
+                                      {row.evaluatedCount > 0 && (
+                                        <span className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                                          {Math.round((row.passCount / row.evaluatedCount) * 100)}%
+                                        </span>
+                                      )}
+                                    </div>
+                                    {/* Mobile view */}
+                                    <span className="sm:hidden inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded-md text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
                                       {row.passCount}
                                     </span>
                                   </td>
 
-                                  {/* Column 4: Fail (Requirement 4: Fail should be F, show only count no %) */}
-                                  <td className="py-2 sm:py-3 px-1 sm:px-3 text-center whitespace-nowrap">
+                                  {/* Column 4: Fail */}
+                                  <td className="py-2 sm:py-3 px-1 sm:px-4 text-center whitespace-nowrap">
+                                    {/* Desktop view */}
+                                    <div className="hidden sm:inline-flex flex-col items-center">
+                                      <span
+                                        className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-0.5 rounded-lg text-xs font-black shadow-2xs ${
+                                          row.failCount > 0
+                                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                            : 'bg-slate-50 text-slate-500 border border-slate-200'
+                                        }`}
+                                      >
+                                        {row.failCount}
+                                      </span>
+                                      {row.evaluatedCount > 0 && row.failCount > 0 && (
+                                        <span className="text-[10px] text-rose-600 font-bold mt-0.5">
+                                          {Math.round((row.failCount / row.evaluatedCount) * 100)}%
+                                        </span>
+                                      )}
+                                    </div>
+                                    {/* Mobile view */}
                                     <span
-                                      className={`inline-flex items-center justify-center min-w-[22px] sm:min-w-[28px] px-1.5 py-0.5 rounded-md text-xs font-black shadow-2xs ${
+                                      className={`sm:hidden inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded-md text-xs font-black shadow-2xs ${
                                         row.failCount > 0
                                           ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                           : 'bg-slate-50 text-slate-500 border border-slate-200'
@@ -1003,10 +1068,28 @@ const ExamClassSummaryView = ({
                                     </span>
                                   </td>
 
-                                  {/* Column 5: Absent (Requirement 5: Absent should be A, show only count no %) */}
-                                  <td className="py-2 sm:py-3 px-1 sm:px-3 text-center whitespace-nowrap">
+                                  {/* Column 5: Absent */}
+                                  <td className="py-2 sm:py-3 px-1 sm:px-4 text-center whitespace-nowrap">
+                                    {/* Desktop view */}
+                                    <div className="hidden sm:inline-flex flex-col items-center">
+                                      <span
+                                        className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-0.5 rounded-lg text-xs font-black shadow-2xs ${
+                                          row.absentCount > 0
+                                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                            : 'bg-slate-50 text-slate-500 border border-slate-200'
+                                        }`}
+                                      >
+                                        {row.absentCount}
+                                      </span>
+                                      {row.evaluatedCount > 0 && row.absentCount > 0 && (
+                                        <span className="text-[10px] text-amber-600 font-bold mt-0.5">
+                                          {Math.round((row.absentCount / row.evaluatedCount) * 100)}%
+                                        </span>
+                                      )}
+                                    </div>
+                                    {/* Mobile view */}
                                     <span
-                                      className={`inline-flex items-center justify-center min-w-[22px] sm:min-w-[28px] px-1.5 py-0.5 rounded-md text-xs font-black shadow-2xs ${
+                                      className={`sm:hidden inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded-md text-xs font-black shadow-2xs ${
                                         row.absentCount > 0
                                           ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                           : 'bg-slate-50 text-slate-500 border border-slate-200'
@@ -1017,15 +1100,15 @@ const ExamClassSummaryView = ({
                                   </td>
 
                                   {/* Column 6: Action icon (to open in Entry Register) */}
-                                  <td className="py-2 sm:py-3 px-1 sm:px-3 text-center whitespace-nowrap">
+                                  <td className="py-2 sm:py-3 px-1 sm:px-4 text-center whitespace-nowrap">
                                     <button
                                       type="button"
                                       onClick={() => onOpenEntryRegister(cls.id, sub.id)}
-                                      className="inline-flex items-center justify-center w-7 h-7 sm:w-auto sm:px-2.5 sm:py-1 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer group/btn"
+                                      className="inline-flex items-center justify-center gap-1.5 w-7 h-7 sm:w-auto sm:px-3 sm:py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-lg sm:rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer group/btn"
                                       title={`Open Entry Register for ${cls.name} - ${sub.name}`}
                                     >
                                       <i className="fas fa-edit text-xs transition-transform group-hover/btn:scale-110" />
-                                      <span className="hidden md:inline ml-1.5">Entry</span>
+                                      <span className="hidden sm:inline">Entry Register</span>
                                     </button>
                                   </td>
                                 </tr>

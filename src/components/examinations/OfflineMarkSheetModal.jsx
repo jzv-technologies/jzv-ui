@@ -1,5 +1,5 @@
 // src/components/examinations/OfflineMarkSheetModal.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * OfflineMarkSheetModal
@@ -25,6 +25,17 @@ const OfflineMarkSheetModal = ({
   const [orientation, setOrientation] = useState(subjects.length > 5 ? 'landscape' : 'portrait');
   const [blankSubjectCount, setBlankSubjectCount] = useState(5);
   const [extraBlankRows, setExtraBlankRows] = useState(2);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
