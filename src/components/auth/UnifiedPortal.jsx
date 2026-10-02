@@ -515,7 +515,7 @@ export const UnifiedPortal = ({
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
-              allowedTabs={['entry', 'summary']}
+              allowedTabs={['entry', 'summary', 'attendance', 'remarks']}
             />
           </div>
         );

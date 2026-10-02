@@ -6,6 +6,7 @@ import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
+import ExamRemarksModal from './ExamRemarksModal';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
 import {
   DEFAULT_TEMPLATE,
@@ -79,6 +80,12 @@ const ReportCardGenerator = ({
   paperSize: propPaperSize = 'a4',
   orientation: propOrientation = 'portrait',
   hideControlBar = false,
+  isAttendanceModalOpen: propIsAttendanceModalOpen,
+  onAttendanceModalOpenChange,
+  isRemarksModalOpen: propIsRemarksModalOpen,
+  onRemarksModalOpenChange,
+  onAttendanceCountChange,
+  onRemarksCountChange,
 }) => {
   // Access control — driven by app_view_controller, no hardcoded role checks
   const canAccess = useCanAccess(userRoles);
@@ -206,8 +213,20 @@ const ReportCardGenerator = ({
   const [results, setResults] = useState([]);
   const [entries, setEntries] = useState([]);
   const [attendanceMap, setAttendanceMap] = useState({});
-  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [internalAttendanceModalOpen, setInternalAttendanceModalOpen] = useState(false);
+  const isAttendanceModalOpen =
+    propIsAttendanceModalOpen !== undefined
+      ? propIsAttendanceModalOpen
+      : internalAttendanceModalOpen;
+  const setIsAttendanceModalOpen = (val) => {
+    setInternalAttendanceModalOpen(val);
+    onAttendanceModalOpenChange?.(val);
+  };
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    onAttendanceCountChange?.(Object.keys(attendanceMap).length);
+  }, [attendanceMap, onAttendanceCountChange]);
 
   // Load attendance records for current selected schedule
   const fetchAttendance = async () => {
@@ -492,49 +511,93 @@ const ReportCardGenerator = ({
 
   // Per-student Teacher Remarks & Recommendations Map
   const [studentRemarksMap, setStudentRemarksMap] = useState({});
-  const [isRemarksModalOpen, setIsRemarksModalOpen] = useState(false);
-  const [selectedRemarksStudentId, setSelectedRemarksStudentId] = useState('');
-  const [remarksForm, setRemarksForm] = useState({ remarks: '', recommendations: '' });
+  const [internalRemarksModalOpen, setInternalRemarksModalOpen] = useState(false);
+  const isRemarksModalOpen =
+    propIsRemarksModalOpen !== undefined ? propIsRemarksModalOpen : internalRemarksModalOpen;
+  const setIsRemarksModalOpen = (val) => {
+    setInternalRemarksModalOpen(val);
+    onRemarksModalOpenChange?.(val);
+  };
 
-  // Sync selectedRemarksStudentId when students change or modal opens
-  useEffect(() => {
-    if (displayedStudents.length > 0 && !selectedRemarksStudentId) {
-      setSelectedRemarksStudentId(String(displayedStudents[0].id));
+  // Load remarks records for current selected schedule
+  const fetchRemarks = async () => {
+    if (!selectedScheduleId) {
+      setStudentRemarksMap({});
+      return;
     }
-  }, [displayedStudents, selectedRemarksStudentId]);
+    try {
+      const { data: remData, error: remErr } = await supabase
+        .from('exam_student_remarks')
+        .select('*')
+        .eq('schedule_id', selectedScheduleId);
 
-  // Sync remarksForm when selected student changes
-  useEffect(() => {
-    if (selectedRemarksStudentId) {
-      const existing = studentRemarksMap[selectedRemarksStudentId] || {};
-      setRemarksForm({
-        remarks:
-          existing.remarks !== undefined ? existing.remarks : activeTemplate.remarksText || '',
-        recommendations:
-          existing.recommendations !== undefined
-            ? existing.recommendations
-            : activeTemplate.remarksConfig?.recommendationsText || '',
+      const map = {};
+      const storageKey = `jzv_exam_remarks_${selectedScheduleId}`;
+      const local = localStorage.getItem(storageKey);
+      const localMap = local ? JSON.parse(local) : {};
+
+      const currentStudents = students.length > 0 ? students : propStudents || [];
+
+      if (!remErr && Array.isArray(remData) && remData.length > 0) {
+        remData.forEach((item) => {
+          const adm = String(item.admission_no || '').trim().toLowerCase();
+          const entry = {
+            remarks: item.remarks || '',
+            recommendations: item.recommendations || '',
+          };
+          if (adm) map[adm] = entry;
+          const matched = currentStudents.find(
+            (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+          );
+          if (matched) {
+            map[String(matched.id)] = entry;
+          }
+        });
+      }
+
+      // Merge local cache
+      Object.entries(localMap).forEach(([admKey, entry]) => {
+        const adm = String(admKey).trim().toLowerCase();
+        if (!map[adm]) map[adm] = entry;
+        const matched = currentStudents.find(
+          (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+        );
+        if (matched && !map[String(matched.id)]) {
+          map[String(matched.id)] = entry;
+        }
       });
+
+      setStudentRemarksMap(map);
+    } catch (e) {
+      console.warn('[ReportCardGenerator] fetchRemarks exception:', e);
+      const storageKey = `jzv_exam_remarks_${selectedScheduleId}`;
+      const local = localStorage.getItem(storageKey);
+      if (local) {
+        try {
+          const localMap = JSON.parse(local);
+          const map = {};
+          const currentStudents = students.length > 0 ? students : propStudents || [];
+          Object.entries(localMap).forEach(([admKey, entry]) => {
+            const adm = String(admKey).trim().toLowerCase();
+            map[adm] = entry;
+            const matched = currentStudents.find(
+              (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+            );
+            if (matched) map[String(matched.id)] = entry;
+          });
+          setStudentRemarksMap(map);
+        } catch (_) {}
+      }
     }
-  }, [selectedRemarksStudentId, studentRemarksMap, activeTemplate]);
-
-  const handleSaveRemarksForStudent = () => {
-    if (!selectedRemarksStudentId) return;
-    setStudentRemarksMap((prev) => ({
-      ...prev,
-      [selectedRemarksStudentId]: { ...remarksForm },
-    }));
-    showToast.success('Remarks & recommendations updated for student');
   };
 
-  const handleApplyRemarksToAll = () => {
-    const updated = { ...studentRemarksMap };
-    displayedStudents.forEach((s) => {
-      updated[String(s.id)] = { ...remarksForm };
-    });
-    setStudentRemarksMap(updated);
-    showToast.success(`Applied to all ${displayedStudents.length} students`);
-  };
+  useEffect(() => {
+    fetchRemarks();
+  }, [selectedScheduleId, students]);
+
+  useEffect(() => {
+    onRemarksCountChange?.(Object.keys(studentRemarksMap).length);
+  }, [studentRemarksMap, onRemarksCountChange]);
 
   return (
     <div className="space-y-6" data-feature="progress-report-generator">
@@ -3251,183 +3314,20 @@ const ReportCardGenerator = ({
         </div>
       )}
 
-      {/* ── Teacher Remarks & Recommendations Per-Student Modal ── */}
-      {isRemarksModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto print:hidden">
-          <div className="bg-white rounded-2xl shadow-2xl border border-light-border w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                  <i className="fas fa-comment-dots text-white text-base" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black tracking-tight">
-                    Teacher Remarks &amp; Recommendations
-                  </h3>
-                  <p className="text-xs text-amber-100 font-medium">
-                    Personalize remarks or apply bulk feedback across students
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRemarksModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors cursor-pointer"
-              >
-                <i className="fas fa-times text-sm" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-4 overflow-y-auto flex-1">
-              {/* Student Selector */}
-              <div>
-                <label className="block text-xs font-black uppercase text-dark-primary tracking-wider mb-1.5 flex items-center gap-1.5">
-                  <i className="fas fa-user-graduate text-amber-600" />
-                  Select Student
-                </label>
-                <select
-                  value={selectedRemarksStudentId}
-                  onChange={(e) => setSelectedRemarksStudentId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all cursor-pointer"
-                >
-                  {displayedStudents.map((s) => {
-                    const hasCustom = !!studentRemarksMap[String(s.id)];
-                    return (
-                      <option key={s.id} value={String(s.id)}>
-                        {s.student_name || `Student #${s.id}`}{' '}
-                        {s.admission_number ? `(${s.admission_number})` : ''}{' '}
-                        {hasCustom ? '★ (Custom)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {/* Remarks Textarea */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase text-dark-primary tracking-wider flex items-center gap-1.5">
-                    <i className="fas fa-quote-left text-amber-600" />
-                    Teacher's Remarks
-                  </label>
-                  <span className="text-[10px] text-dark-muted font-semibold">
-                    Shown in Remarks block
-                  </span>
-                </div>
-                <textarea
-                  rows={3}
-                  value={remarksForm.remarks}
-                  onChange={(e) => setRemarksForm((prev) => ({ ...prev, remarks: e.target.value }))}
-                  placeholder="Enter custom remarks for this student..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all resize-y"
-                />
-
-                {/* Quick Remarks Chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[10px] font-bold text-dark-muted self-center mr-1">
-                    Quick presets:
-                  </span>
-                  {[
-                    'Exceptional academic performance and brilliant conduct.',
-                    'Consistent effort and active participation in class discussions.',
-                    'Good potential; encourage more daily revisions and practice.',
-                    'Shows great improvement in analytical problem solving.',
-                    'Needs regular attendance and timely coursework submission.',
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setRemarksForm((prev) => ({ ...prev, remarks: preset }))}
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer text-left"
-                    >
-                      + {preset.length > 35 ? preset.slice(0, 32) + '…' : preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recommendations Textarea */}
-              <div className="space-y-1.5 pt-2 border-t border-light-border/70">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-black uppercase text-dark-primary tracking-wider flex items-center gap-1.5">
-                    <i className="fas fa-lightbulb text-amber-600" />
-                    Recommendations &amp; Action Plan
-                  </label>
-                  <span className="text-[10px] text-dark-muted font-semibold">
-                    Shown under Recommendations
-                  </span>
-                </div>
-                <textarea
-                  rows={2}
-                  value={remarksForm.recommendations}
-                  onChange={(e) =>
-                    setRemarksForm((prev) => ({ ...prev, recommendations: e.target.value }))
-                  }
-                  placeholder="Enter recommendations or leave blank..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all resize-y"
-                />
-
-                {/* Quick Recommendations Chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[10px] font-bold text-dark-muted self-center mr-1">
-                    Quick presets:
-                  </span>
-                  {[
-                    'Encouraged to read scientific periodicals and literature.',
-                    'Recommend 30 minutes daily practice in core mathematics.',
-                    'Practice mock tests to enhance examination time management.',
-                    'Participate actively in extracurricular STEM and debate clubs.',
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() =>
-                        setRemarksForm((prev) => ({ ...prev, recommendations: preset }))
-                      }
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer text-left"
-                    >
-                      + {preset.length > 35 ? preset.slice(0, 32) + '…' : preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-3.5 bg-slate-50 border-t border-light-border flex items-center justify-between shrink-0">
-              <button
-                type="button"
-                onClick={handleApplyRemarksToAll}
-                className="px-3 py-1.5 text-xs font-bold text-dark-slate hover:text-dark-primary bg-white hover:bg-slate-100 border border-light-border rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-                title="Copy current remarks and recommendations to all displayed students"
-              >
-                <i className="fas fa-users text-amber-600 text-[11px]" />
-                <span>Apply to All ({displayedStudents.length})</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRemarksModalOpen(false)}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-dark-muted hover:text-dark-primary transition-colors cursor-pointer"
-                >
-                  Done
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveRemarksForStudent}
-                  className="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                >
-                  <i className="fas fa-check text-[11px]" />
-                  <span>Save for this Student</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Remarks & Feedback Modal (Individual Edit with Next/Prev and Bulk Upload) ── */}
+      <ExamRemarksModal
+        isOpen={isRemarksModalOpen}
+        onClose={() => setIsRemarksModalOpen(false)}
+        schedule={selectedSchedule}
+        students={students}
+        displayedStudents={displayedStudents}
+        studentRemarksMap={studentRemarksMap}
+        onSaveSuccess={(updatedMap) => {
+          setStudentRemarksMap(updatedMap);
+          fetchRemarks();
+        }}
+        activeTemplate={activeTemplate}
+      />
 
       {/* Attendance Upload Modal */}
       <ExamAttendanceUploadModal
@@ -3435,6 +3335,8 @@ const ReportCardGenerator = ({
         onClose={() => setIsAttendanceModalOpen(false)}
         schedule={selectedSchedule}
         students={students}
+        displayedStudents={displayedStudents}
+        attendanceMap={attendanceMap}
         onUploadSuccess={() => {
           fetchAttendance();
         }}

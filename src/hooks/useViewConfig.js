@@ -5,7 +5,7 @@ import { TILE_METADATA_REGISTRY } from '../utils/tileRegistry';
 import { CARD_THEMES } from '../utils/cardTheme';
 import { sortRolesByPriority } from '../utils/roleUtils';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v14';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v15';
 
 const readSessionCache = () => {
   try {
@@ -22,6 +22,7 @@ const readSessionCache = () => {
     sessionStorage.removeItem('jzv_view_config_cache_v11');
     sessionStorage.removeItem('jzv_view_config_cache_v12');
     sessionStorage.removeItem('jzv_view_config_cache_v13');
+    sessionStorage.removeItem('jzv_view_config_cache_v14');
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
     if (!rawCache) return null;
     const cachedData = JSON.parse(rawCache);
@@ -332,9 +333,15 @@ export const useViewConfig = () => {
         componentName === 'exam-mark-entry-tab' ||
         componentName === 'exam-results-tab-entry' ||
         componentName === 'exam-results-tab-summary' ||
+        componentName === 'exam-results-tab-attendance' ||
+        componentName === 'exam-results-tab-remarks' ||
         componentName === 'exam-results-tab-report' ||
         componentName === 'exam-results-import' ||
-        componentName === 'exam-progress-report'
+        componentName === 'exam-progress-report' ||
+        componentName === 'exam-attendance-upload' ||
+        componentName === 'exam-attendance-edit' ||
+        componentName === 'exam-remarks-upload' ||
+        componentName === 'exam-remarks-edit'
       ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>

@@ -11,6 +11,10 @@ import ImportMarksModal from './ImportMarksModal';
 import { getAdminConfig } from '../../utils/adminConfigUtils';
 import { DEFAULT_TEMPLATE } from '../examinations/ReportCardDesigner';
 import ExamClassSummaryView from './ExamClassSummaryView';
+import ExamAttendanceTabView from './ExamAttendanceTabView';
+import ExamRemarksTabView from './ExamRemarksTabView';
+import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
+import ExamRemarksModal from './ExamRemarksModal';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -47,6 +51,17 @@ const ExamResultsManager = ({
 
   // Workspace Tabs registered in app_view_controller
   const WORKSPACE_TABS = useMemo(() => {
+    if (isReportOnly) {
+      return [
+        {
+          id: 'report',
+          componentName: 'exam-results-tab-report',
+          label: 'Exam Reports',
+          icon: 'fa-file-invoice',
+        },
+      ];
+    }
+
     const allTabs = [
       {
         id: 'entry',
@@ -61,10 +76,16 @@ const ExamResultsManager = ({
         icon: 'fa-chart-pie',
       },
       {
-        id: 'report',
-        componentName: 'exam-results-tab-report',
-        label: 'Exam Reports',
-        icon: 'fa-file-invoice',
+        id: 'attendance',
+        componentName: 'exam-results-tab-attendance',
+        label: 'Attendance',
+        icon: 'fa-calendar-check',
+      },
+      {
+        id: 'remarks',
+        componentName: 'exam-results-tab-remarks',
+        label: 'Remarks & Feedback',
+        icon: 'fa-comment-dots',
       },
     ];
 
@@ -72,10 +93,30 @@ const ExamResultsManager = ({
       return allTabs.filter((t) => allowedTabs.includes(t.id));
     }
     return allTabs;
-  }, [allowedTabs]);
+  }, [allowedTabs, isReportOnly]);
 
   const availableTabs = useMemo(() => {
-    return WORKSPACE_TABS.filter((tab) => canAccess(tab.componentName));
+    return WORKSPACE_TABS.filter((tab) => {
+      if (tab.id === 'attendance') {
+        return (
+          canAccess('exam-results-tab-attendance') ||
+          canAccess('exam-attendance-tab') ||
+          canAccess('exam-attendance-upload') ||
+          canAccess('exam-mark-entry-tab') ||
+          canAccess('exam-results')
+        );
+      }
+      if (tab.id === 'remarks') {
+        return (
+          canAccess('exam-results-tab-remarks') ||
+          canAccess('exam-remarks-tab') ||
+          canAccess('exam-remarks-upload') ||
+          canAccess('exam-mark-entry-tab') ||
+          canAccess('exam-results')
+        );
+      }
+      return canAccess(tab.componentName);
+    });
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -92,6 +133,10 @@ const ExamResultsManager = ({
         (!allowedTabs || allowedTabs.includes('summary'))
       )
         return 'summary';
+      if (initialTab === 'attendance' && (!allowedTabs || allowedTabs.includes('attendance')))
+        return 'attendance';
+      if (initialTab === 'remarks' && (!allowedTabs || allowedTabs.includes('remarks')))
+        return 'remarks';
       if (
         initialTab === 'report' &&
         canAccess('exam-results-tab-report') &&
@@ -137,6 +182,11 @@ const ExamResultsManager = ({
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
+  // Class selection for Attendance & Remarks tabs (supports single, multiple, or all classes)
+  const [attendanceClassIds, setAttendanceClassIds] = useState([]);
+  const [remarksClassIds, setRemarksClassIds] = useState([]);
+  const attendanceTabRef = useRef(null);
+  const remarksTabRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [showAdHocForm, setShowAdHocForm] = useState(false);
   const [adHocSubjectId, setAdHocSubjectId] = useState('');
@@ -166,6 +216,10 @@ const ExamResultsManager = ({
   const [reportTemplateId, setReportTemplateId] = useState(DEFAULT_TEMPLATE.id);
   const [paperSize, setPaperSize] = useState('a4');
   const [orientation, setOrientation] = useState('portrait');
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isRemarksModalOpen, setIsRemarksModalOpen] = useState(false);
+  const [attendanceCount, setAttendanceCount] = useState(0);
+  const [remarksCount, setRemarksCount] = useState(0);
 
   // Save Mode & Quick Fill State (moved from ExamResultsEntryGrid)
   const [saveMode, setSaveMode] = useState('auto');
@@ -210,7 +264,8 @@ const ExamResultsManager = ({
         supabase
           .from('students')
           .select('id, student_name, admission_no, class_id, enrollment')
-          .order('student_name')
+          .order('class_id', { ascending: true })
+          .order('student_name', { ascending: true })
       ),
       safe(
         supabase
@@ -1014,29 +1069,56 @@ const ExamResultsManager = ({
 
         {/* Row 2: Workspace Tabs & Consolidated Filters */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-2.5 flex-wrap" data-feature-filter={activeTab}>
-            {/* Workspace Tabs (if both entry and summary are enabled) */}
+          <div
+            className="flex items-center gap-2.5 flex-wrap w-full md:w-auto"
+            data-feature-filter={activeTab}
+          >
+            {/* Workspace Tabs */}
             {availableTabs.length > 1 && (
-              <div
-                className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto mr-1"
-                data-feature-tab="exam-results-tabs"
-              >
-                {availableTabs.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                      activeTab === tab.id
-                        ? 'bg-white text-emerald-700 shadow-xs'
-                        : 'text-dark-muted hover:text-dark-primary'
-                    }`}
+              <>
+                {/* Mobile: Dropdown (shown only on small screens when > 3 tabs) */}
+                {availableTabs.length > 3 && (
+                  <div
+                    className="sm:hidden relative w-full mb-1"
+                    data-feature-tab="exam-results-tabs-mobile"
                   >
-                    <i className={`fas ${tab.icon} text-[10px]`} />
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
-              </div>
+                    <select
+                      value={activeTab}
+                      onChange={(e) => setActiveTab(e.target.value)}
+                      className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
+                    >
+                      {availableTabs.map((tab) => (
+                        <option key={tab.id} value={tab.id}>
+                          {tab.label}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-muted pointer-events-none" />
+                  </div>
+                )}
+
+                {/* Desktop: Pill tabs */}
+                <div
+                  className={`${availableTabs.length > 3 ? 'hidden sm:flex' : 'flex'} items-center gap-1 bg-slate-100/80 p-1 rounded-xl overflow-x-auto no-scrollbar mr-1 shrink-0`}
+                  data-feature-tab="exam-results-tabs"
+                >
+                  {availableTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                        activeTab === tab.id
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-dark-muted hover:text-dark-primary'
+                      }`}
+                    >
+                      <i className={`fas ${tab.icon} text-[10px]`} />
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
             {/* Class Selector Dropdown: Filters class in summary tab or selects class for entry/report */}
@@ -1071,7 +1153,9 @@ const ExamResultsManager = ({
                   <span>{isAllExpanded ? 'Collapse All' : 'Expand All'}</span>
                 </button>
               </div>
-            ) : (
+            ) : activeTab === 'attendance' ||
+              activeTab ===
+                'remarks' /* Attendance and Remarks tabs provide their dedicated multi-class selector and toolbar */ ? null : (
               <MultiSelectDropdown
                 label="Class"
                 icon="fa-chalkboard-user"
@@ -1343,6 +1427,44 @@ const ExamResultsManager = ({
                   <i className="fas fa-print text-xs" />
                   <span>Print / Export PDF</span>
                 </button>
+
+                {/* Upload Attendance — gated by app_view_controller: exam-attendance-upload */}
+                {canAccess('exam-attendance-upload') && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAttendanceModalOpen(true)}
+                    disabled={!selectedScheduleId}
+                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0 shadow-2xs"
+                    title="Upload and manage student examination attendance records"
+                    data-feature-filter="exam-attendance-upload-btn"
+                  >
+                    <i className="fas fa-calendar-check text-indigo-600 text-xs" />
+                    <span>Upload Attendance</span>
+                    {attendanceCount > 0 && (
+                      <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-black">
+                        {attendanceCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {/* Remarks & Feedback */}
+                <button
+                  type="button"
+                  onClick={() => setIsRemarksModalOpen(true)}
+                  disabled={!selectedScheduleId || classStudents.length === 0}
+                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0 shadow-2xs"
+                  title="Manage and upload student remarks & feedback"
+                  data-feature-filter="exam-remarks-feedback-btn"
+                >
+                  <i className="fas fa-comment-dots text-amber-600 text-xs" />
+                  <span>Remarks & Feedback</span>
+                  {remarksCount > 0 && (
+                    <span className="px-1.5 py-0.2 bg-amber-600 text-white rounded-full text-[10px] font-black">
+                      {remarksCount}
+                    </span>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -1447,6 +1569,69 @@ const ExamResultsManager = ({
           </ConditionalBlock>
         )}
 
+        {/* Tab 3: Attendance Management */}
+        {activeTab === 'attendance' && (
+          <ConditionalBlock
+            name="exam-results-tab-attendance"
+            roles={userRoles}
+            fallback={
+              <ExamAttendanceTabView
+                schedule={selectedSchedule}
+                schedules={schedules}
+                classes={classes}
+                students={students}
+                userRoles={userRoles}
+                selectedClassIds={attendanceClassIds}
+                onClassIdsChange={setAttendanceClassIds}
+                onOpenUploadModal={() => setIsAttendanceModalOpen(true)}
+              />
+            }
+          >
+            <ExamAttendanceTabView
+              schedule={selectedSchedule}
+              schedules={schedules}
+              classes={classes}
+              students={students}
+              userRoles={userRoles}
+              selectedClassIds={attendanceClassIds}
+              onClassIdsChange={setAttendanceClassIds}
+              onOpenUploadModal={() => setIsAttendanceModalOpen(true)}
+            />
+          </ConditionalBlock>
+        )}
+
+        {/* Tab 4: Remarks & Feedback Management */}
+        {activeTab === 'remarks' && (
+          <ConditionalBlock
+            name="exam-results-tab-remarks"
+            roles={userRoles}
+            fallback={
+              <ExamRemarksTabView
+                schedule={selectedSchedule}
+                schedules={schedules}
+                classes={classes}
+                students={students}
+                userRoles={userRoles}
+                selectedClassIds={remarksClassIds}
+                onClassIdsChange={setRemarksClassIds}
+                onOpenUploadModal={() => setIsRemarksModalOpen(true)}
+              />
+            }
+          >
+            <ExamRemarksTabView
+              schedule={selectedSchedule}
+              schedules={schedules}
+              classes={classes}
+              students={students}
+              userRoles={userRoles}
+              selectedClassIds={remarksClassIds}
+              onClassIdsChange={setRemarksClassIds}
+              onOpenUploadModal={() => setIsRemarksModalOpen(true)}
+            />
+          </ConditionalBlock>
+        )}
+
+        {/* Tab 5: Exam Reports */}
         {activeTab === 'report' && (
           <ConditionalBlock name="exam-results-tab-report" roles={userRoles}>
             <ReportCardGenerator
@@ -1465,6 +1650,12 @@ const ExamResultsManager = ({
               paperSize={paperSize}
               orientation={orientation}
               hideControlBar={true}
+              isAttendanceModalOpen={isAttendanceModalOpen}
+              onAttendanceModalOpenChange={setIsAttendanceModalOpen}
+              isRemarksModalOpen={isRemarksModalOpen}
+              onRemarksModalOpenChange={setIsRemarksModalOpen}
+              onAttendanceCountChange={setAttendanceCount}
+              onRemarksCountChange={setRemarksCount}
             />
           </ConditionalBlock>
         )}
@@ -1800,6 +1991,48 @@ const ExamResultsManager = ({
           students={classStudents}
           onImportSuccess={async () => {
             await refreshResults();
+          }}
+        />
+      )}
+
+      {/* Attendance Upload Modal */}
+      {isAttendanceModalOpen && (
+        <ExamAttendanceUploadModal
+          isOpen={isAttendanceModalOpen}
+          onClose={() => setIsAttendanceModalOpen(false)}
+          schedule={selectedSchedule}
+          students={students}
+          displayedStudents={
+            activeTab === 'entry' || activeTab === 'report'
+              ? classStudents
+              : attendanceClassIds.length > 0 && !attendanceClassIds.includes('all')
+                ? students.filter((s) => attendanceClassIds.includes(String(s.class_id)))
+                : students
+          }
+          onUploadSuccess={async () => {
+            await refreshResults();
+            showToast('Attendance updated successfully', 'success');
+          }}
+        />
+      )}
+
+      {/* Remarks & Feedback Modal */}
+      {isRemarksModalOpen && (
+        <ExamRemarksModal
+          isOpen={isRemarksModalOpen}
+          onClose={() => setIsRemarksModalOpen(false)}
+          schedule={selectedSchedule}
+          students={students}
+          displayedStudents={
+            activeTab === 'entry' || activeTab === 'report'
+              ? classStudents
+              : remarksClassIds.length > 0 && !remarksClassIds.includes('all')
+                ? students.filter((s) => remarksClassIds.includes(String(s.class_id)))
+                : students
+          }
+          onSaveSuccess={async () => {
+            await refreshResults();
+            showToast('Remarks updated successfully', 'success');
           }}
         />
       )}
