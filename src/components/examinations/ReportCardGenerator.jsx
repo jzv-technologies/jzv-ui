@@ -622,44 +622,6 @@ const ReportCardGenerator = ({
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap self-end lg:self-auto">
-              {/* Upload Attendance — gated by app_view_controller: exam-attendance-upload */}
-              {canUploadAttendance && (
-                <button
-                  type="button"
-                  onClick={() => setIsAttendanceModalOpen(true)}
-                  disabled={!selectedScheduleId}
-                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <i className="fas fa-calendar-check text-indigo-600" />
-                  <span>Upload Attendance</span>
-                  {Object.keys(attendanceMap).length > 0 && (
-                    <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-black">
-                      {Object.keys(attendanceMap).length}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (displayedStudents.length > 0 && !selectedRemarksStudentId) {
-                    setSelectedRemarksStudentId(String(displayedStudents[0].id));
-                  }
-                  setIsRemarksModalOpen(true);
-                }}
-                disabled={displayedStudents.length === 0}
-                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <i className="fas fa-comment-dots text-amber-600" />
-                <span>Remarks & Feedback</span>
-                {Object.keys(studentRemarksMap).length > 0 && (
-                  <span className="px-1.5 py-0.2 bg-amber-600 text-white rounded-full text-[10px] font-black">
-                    {Object.keys(studentRemarksMap).length}
-                  </span>
-                )}
-              </button>
-
               <button
                 type="button"
                 onClick={handlePrint}

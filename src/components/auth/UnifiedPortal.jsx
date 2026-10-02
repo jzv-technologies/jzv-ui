@@ -521,6 +521,9 @@ export const UnifiedPortal = ({
         );
 
       case 'exam-progress-report':
+      case 'progress-report':
+      case 'progress-reports':
+      case 'exam-report':
         return (
           <div data-feature="exam-progress-report">
             <ExamResultsManager

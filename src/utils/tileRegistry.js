@@ -283,6 +283,30 @@ export const TILE_METADATA_REGISTRY = {
     valid_access_roles: ['admin', 'management', 'coordinator'],
     display_order: 38,
   },
+  'exam-progress-report': {
+    title: 'Progress Reports',
+    description:
+      'Generate, customize, print, and export student examination report cards.',
+    icon: 'fa-file-invoice',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Examinations',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
+    display_order: 86,
+  },
+  'progress-report': {
+    title: 'Progress Reports',
+    description:
+      'Generate, customize, print, and export student examination report cards.',
+    icon: 'fa-file-invoice',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Examinations',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
+    display_order: 86,
+  },
   dashboard: {
     title: 'Dashboard',
     description: 'View syllabus progress, activity, and attention-required insights.',

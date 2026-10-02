@@ -21,8 +21,9 @@ const ExamRemarksModal = ({
   studentRemarksMap = {},
   onSaveSuccess,
   activeTemplate = {},
+  initialMode = 'individual',
 }) => {
-  const [modalMode, setModalMode] = useState('individual'); // 'individual' | 'upload'
+  const [modalMode, setModalMode] = useState(initialMode); // 'individual' | 'upload'
   const [activeTab, setActiveTab] = useState('file'); // 'file' | 'paste' for upload mode
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [remarksForm, setRemarksForm] = useState({ remarks: '', recommendations: '' });
@@ -40,12 +41,15 @@ const ExamRemarksModal = ({
     return studentList.findIndex((s) => String(s.id) === String(selectedStudentId));
   }, [studentList, selectedStudentId]);
 
-  // Sync selectedStudentId when modal opens
+  // Sync selectedStudentId & modalMode when modal opens
   useEffect(() => {
-    if (isOpen && studentList.length > 0 && !selectedStudentId) {
-      setSelectedStudentId(String(studentList[0].id));
+    if (isOpen) {
+      setModalMode(initialMode);
+      if (studentList.length > 0 && !selectedStudentId) {
+        setSelectedStudentId(String(studentList[0].id));
+      }
     }
-  }, [isOpen, studentList, selectedStudentId]);
+  }, [isOpen, initialMode, studentList, selectedStudentId]);
 
   // Sync form state when selected student changes
   useEffect(() => {

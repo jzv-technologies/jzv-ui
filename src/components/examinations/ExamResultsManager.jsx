@@ -47,7 +47,12 @@ const ExamResultsManager = ({
   const canManageAllMarks = canAccess('exam-results-status-override');
 
   const isReportOnly =
-    Array.isArray(allowedTabs) && allowedTabs.length === 1 && allowedTabs[0] === 'report';
+    initialTab === 'report' ||
+    (Array.isArray(allowedTabs) && allowedTabs.length === 1 && allowedTabs[0] === 'report') ||
+    (Array.isArray(allowedTabs) &&
+      allowedTabs.includes('report') &&
+      !allowedTabs.includes('entry') &&
+      !allowedTabs.includes('attendance'));
 
   // Workspace Tabs registered in app_view_controller
   const WORKSPACE_TABS = useMemo(() => {
@@ -56,7 +61,7 @@ const ExamResultsManager = ({
         {
           id: 'report',
           componentName: 'exam-results-tab-report',
-          label: 'Exam Reports',
+          label: 'Progress Reports',
           icon: 'fa-file-invoice',
         },
       ];
@@ -120,6 +125,7 @@ const ExamResultsManager = ({
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (isReportOnly || initialTab === 'report') return 'report';
     if (initialTab) {
       if (
         initialTab === 'entry' &&
@@ -187,6 +193,7 @@ const ExamResultsManager = ({
   const [remarksClassIds, setRemarksClassIds] = useState([]);
   const attendanceTabRef = useRef(null);
   const remarksTabRef = useRef(null);
+  const [remarksModalMode, setRemarksModalMode] = useState('individual');
   const [loading, setLoading] = useState(true);
   const [showAdHocForm, setShowAdHocForm] = useState(false);
   const [adHocSubjectId, setAdHocSubjectId] = useState('');
@@ -1153,9 +1160,132 @@ const ExamResultsManager = ({
                   <span>{isAllExpanded ? 'Collapse All' : 'Expand All'}</span>
                 </button>
               </div>
-            ) : activeTab === 'attendance' ||
-              activeTab ===
-                'remarks' /* Attendance and Remarks tabs provide their dedicated multi-class selector and toolbar */ ? null : (
+            ) : activeTab === 'attendance' ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Attendance Multi-Class Filter */}
+                <div className="min-w-[170px] max-w-[260px]">
+                  <MultiSelectDropdown
+                    label="Class"
+                    icon="fa-chalkboard-user"
+                    disabled={!selectedScheduleId}
+                    options={classes.map((c) => ({
+                      id: String(c.id),
+                      label: c.name,
+                    }))}
+                    selected={attendanceClassIds}
+                    onChange={setAttendanceClassIds}
+                    placeholder="All Classes"
+                    fullWidth={false}
+                  />
+                </div>
+
+                {/* Upload Attendance Button */}
+                {(canAccess('exam-attendance-upload') ||
+                  canAccess('exam-mark-entry-tab') ||
+                  canAccess('exam-results')) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAttendanceModalOpen(true)}
+                    disabled={!selectedScheduleId}
+                    className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                    title="Upload Attendance from Excel or CSV"
+                  >
+                    <i className="fas fa-file-arrow-up text-indigo-600 text-xs" />
+                    <span>Upload Attendance</span>
+                  </button>
+                )}
+
+                {/* Export Attendance Button */}
+                <button
+                  type="button"
+                  onClick={() => attendanceTabRef.current?.exportData?.()}
+                  disabled={!selectedScheduleId}
+                  className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-gray-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Export Attendance to Excel"
+                >
+                  <i className="fas fa-file-excel text-emerald-600 text-xs" />
+                  <span>Export</span>
+                </button>
+
+                {/* Refresh Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await attendanceTabRef.current?.refresh?.();
+                    showToast('Attendance refreshed', 'success');
+                  }}
+                  disabled={!selectedScheduleId}
+                  className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl border border-gray-250 bg-white hover:bg-slate-50 text-dark-muted hover:text-dark-primary transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50"
+                  title="Refresh Attendance"
+                >
+                  <i className="fas fa-sync-alt text-xs" />
+                </button>
+              </div>
+            ) : activeTab === 'remarks' ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Remarks Multi-Class Filter */}
+                <div className="min-w-[170px] max-w-[260px]">
+                  <MultiSelectDropdown
+                    label="Class"
+                    icon="fa-chalkboard-user"
+                    disabled={!selectedScheduleId}
+                    options={classes.map((c) => ({
+                      id: String(c.id),
+                      label: c.name,
+                    }))}
+                    selected={remarksClassIds}
+                    onChange={setRemarksClassIds}
+                    placeholder="All Classes"
+                    fullWidth={false}
+                  />
+                </div>
+
+                {/* Upload Remarks Button */}
+                {(canAccess('exam-remarks-upload') ||
+                  canAccess('exam-mark-entry-tab') ||
+                  canAccess('exam-results')) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemarksModalMode('upload');
+                      setIsRemarksModalOpen(true);
+                    }}
+                    disabled={!selectedScheduleId}
+                    className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                    title="Upload Remarks & Feedback from Excel or CSV"
+                  >
+                    <i className="fas fa-file-arrow-up text-amber-600 text-xs" />
+                    <span>Upload Remarks</span>
+                  </button>
+                )}
+
+                {/* Export Remarks Button */}
+                <button
+                  type="button"
+                  onClick={() => remarksTabRef.current?.exportData?.()}
+                  disabled={!selectedScheduleId}
+                  className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-white hover:bg-slate-50 text-dark-slate border border-gray-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title="Export Remarks to Excel"
+                >
+                  <i className="fas fa-file-excel text-emerald-600 text-xs" />
+                  <span>Export</span>
+                </button>
+
+                {/* Refresh Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await remarksTabRef.current?.refresh?.();
+                    showToast('Remarks refreshed', 'success');
+                  }}
+                  disabled={!selectedScheduleId}
+                  className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center rounded-xl border border-gray-250 bg-white hover:bg-slate-50 text-dark-muted hover:text-dark-primary transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50"
+                  title="Refresh Remarks"
+                >
+                  <i className="fas fa-sync-alt text-xs" />
+                </button>
+              </div>
+            ) : (
               <MultiSelectDropdown
                 label="Class"
                 icon="fa-chalkboard-user"
@@ -1576,6 +1706,7 @@ const ExamResultsManager = ({
             roles={userRoles}
             fallback={
               <ExamAttendanceTabView
+                ref={attendanceTabRef}
                 schedule={selectedSchedule}
                 schedules={schedules}
                 classes={classes}
@@ -1588,6 +1719,7 @@ const ExamResultsManager = ({
             }
           >
             <ExamAttendanceTabView
+              ref={attendanceTabRef}
               schedule={selectedSchedule}
               schedules={schedules}
               classes={classes}
@@ -1607,6 +1739,7 @@ const ExamResultsManager = ({
             roles={userRoles}
             fallback={
               <ExamRemarksTabView
+                ref={remarksTabRef}
                 schedule={selectedSchedule}
                 schedules={schedules}
                 classes={classes}
@@ -1614,11 +1747,15 @@ const ExamResultsManager = ({
                 userRoles={userRoles}
                 selectedClassIds={remarksClassIds}
                 onClassIdsChange={setRemarksClassIds}
-                onOpenUploadModal={() => setIsRemarksModalOpen(true)}
+                onOpenUploadModal={() => {
+                  setRemarksModalMode('upload');
+                  setIsRemarksModalOpen(true);
+                }}
               />
             }
           >
             <ExamRemarksTabView
+              ref={remarksTabRef}
               schedule={selectedSchedule}
               schedules={schedules}
               classes={classes}
@@ -1626,7 +1763,10 @@ const ExamResultsManager = ({
               userRoles={userRoles}
               selectedClassIds={remarksClassIds}
               onClassIdsChange={setRemarksClassIds}
-              onOpenUploadModal={() => setIsRemarksModalOpen(true)}
+              onOpenUploadModal={() => {
+                setRemarksModalMode('upload');
+                setIsRemarksModalOpen(true);
+              }}
             />
           </ConditionalBlock>
         )}
@@ -2010,6 +2150,7 @@ const ExamResultsManager = ({
                 : students
           }
           onUploadSuccess={async () => {
+            await attendanceTabRef.current?.refresh?.();
             await refreshResults();
             showToast('Attendance updated successfully', 'success');
           }}
@@ -2030,7 +2171,9 @@ const ExamResultsManager = ({
                 ? students.filter((s) => remarksClassIds.includes(String(s.class_id)))
                 : students
           }
+          initialMode={remarksModalMode}
           onSaveSuccess={async () => {
+            await remarksTabRef.current?.refresh?.();
             await refreshResults();
             showToast('Remarks updated successfully', 'success');
           }}
