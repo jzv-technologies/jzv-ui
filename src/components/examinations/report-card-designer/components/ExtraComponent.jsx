@@ -6,11 +6,18 @@ import { ColorPicker } from '../ColorPicker';
  * Older templates stored a single `extraComponentConfig` object; newer ones store an
  * `extraComponentLayers` array. Both shapes are returned as an array of layers.
  */
-export const getExtraComponentLayers = (config = {}, legacyId = 'wm-0') =>
-  config.extraComponentLayers ||
-  (config.extraComponentConfig
-    ? [{ ...config.extraComponentConfig, layer: 'background', id: legacyId }]
-    : []);
+export const getExtraComponentLayers = (config = {}, legacyId = 'wm-0') => {
+  if (Array.isArray(config.extraComponentLayers) && config.extraComponentLayers.length > 0) {
+    return config.extraComponentLayers;
+  }
+  if (config.extraComponentConfig) {
+    return [{ ...config.extraComponentConfig, layer: 'background', id: legacyId }];
+  }
+  if (config.watermarkConfig) {
+    return [{ ...config.watermarkConfig, layer: 'background', id: legacyId }];
+  }
+  return [];
+};
 
 /**
  * <ExtraComponentLayers />
@@ -20,7 +27,7 @@ export const getExtraComponentLayers = (config = {}, legacyId = 'wm-0') =>
  * Renders nothing when `currentConfig.showExtraComponent` is off.
  */
 export const ExtraComponentLayers = ({ currentConfig, position = 'background' }) => {
-  if (!currentConfig?.showExtraComponent) return null;
+  if (!currentConfig?.showExtraComponent && !currentConfig?.showWatermark) return null;
 
   const isBackground = position === 'background';
   const layers = getExtraComponentLayers(currentConfig, 'wm-legacy');
@@ -35,7 +42,7 @@ export const ExtraComponentLayers = ({ currentConfig, position = 'background' })
           key={lyr.id || `${isBackground ? 'bg' : 'fg'}-${idx}`}
           className={`absolute pointer-events-none select-none ${
             isBackground ? 'z-0' : 'z-30'
-          } flex items-center justify-center`}
+          } flex items-center justify-center print:print-color-adjust-exact`}
           style={{
             left: `${lyr.xPos ?? 50}%`,
             top: `${lyr.yPos ?? 50}%`,

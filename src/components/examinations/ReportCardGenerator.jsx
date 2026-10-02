@@ -6,8 +6,8 @@ import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
-import ExamRemarksModal from './ExamRemarksModal';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
+import { ExtraComponentLayers } from './report-card-designer/components/ExtraComponent';
 import {
   DEFAULT_TEMPLATE,
   DEFAULT_GRADING_SCALE,
@@ -973,45 +973,8 @@ const ReportCardGenerator = ({
                 }}
                 className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
               >
-                {/* Background Watermark / Logo Layer */}
-                {activeTemplate.showWatermark && (
-                  <div
-                    className="absolute pointer-events-none select-none z-0 flex items-center justify-center print:print-color-adjust-exact"
-                    style={{
-                      left: `${activeTemplate.watermarkConfig?.xPos ?? 50}%`,
-                      top: `${activeTemplate.watermarkConfig?.yPos ?? 50}%`,
-                      transform: `translate(-50%, -50%) rotate(${activeTemplate.watermarkConfig?.rotate ?? 0}deg)`,
-                      opacity: (activeTemplate.watermarkConfig?.opacity ?? 15) / 100,
-                    }}
-                  >
-                    {activeTemplate.watermarkConfig?.type === 'image' &&
-                    activeTemplate.watermarkConfig?.imageUrl ? (
-                      <img
-                        src={activeTemplate.watermarkConfig.imageUrl}
-                        alt="Watermark"
-                        style={{
-                          width: `${activeTemplate.watermarkConfig?.size ?? 250}px`,
-                          maxWidth: '90vw',
-                          objectFit: 'contain',
-                        }}
-                      />
-                    ) : (
-                      <span
-                        style={{
-                          fontSize: `${activeTemplate.watermarkConfig?.size ?? 50}px`,
-                          color: activeTemplate.watermarkConfig?.color || '#0f172a',
-                          fontWeight: 900,
-                          letterSpacing: '0.1em',
-                          textTransform: 'uppercase',
-                          whiteSpace: 'nowrap',
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        {activeTemplate.watermarkConfig?.text || 'JAMIA ZAYTOONAH'}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* ── ExtraComponent / Logo Layers: Background layers (z-0, behind content) ── */}
+                <ExtraComponentLayers currentConfig={activeTemplate} position="background" />
 
                 <div
                   className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
@@ -3270,6 +3233,9 @@ const ReportCardGenerator = ({
                     </div>
                   )}
                 </div>
+
+                {/* ── ExtraComponent / Logo Layers: Foreground layers (z-30, above content) ── */}
+                <ExtraComponentLayers currentConfig={activeTemplate} position="foreground" />
               </div>
             );
           })}

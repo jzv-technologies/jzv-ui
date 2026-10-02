@@ -351,6 +351,14 @@ export const mergeConfig = (base, override) => ({
     ...base.extraComponentConfig,
     ...(override?.extraComponentConfig || {}),
   },
+  extraComponentLayers:
+    override?.extraComponentLayers ??
+    base?.extraComponentLayers ??
+    (override?.extraComponentConfig
+      ? [{ ...override.extraComponentConfig, layer: 'background', id: 'wm-0' }]
+      : base?.extraComponentConfig
+        ? [{ ...base.extraComponentConfig, layer: 'background', id: 'wm-0' }]
+        : []),
   showAttendanceBar: override?.showAttendanceBar ?? base.showAttendanceBar ?? true,
   attendanceBarConfig: {
     ...base.attendanceBarConfig,

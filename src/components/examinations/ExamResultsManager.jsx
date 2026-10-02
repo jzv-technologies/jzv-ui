@@ -1557,44 +1557,6 @@ const ExamResultsManager = ({
                   <i className="fas fa-print text-xs" />
                   <span>Print / Export PDF</span>
                 </button>
-
-                {/* Upload Attendance — gated by app_view_controller: exam-attendance-upload */}
-                {canAccess('exam-attendance-upload') && (
-                  <button
-                    type="button"
-                    onClick={() => setIsAttendanceModalOpen(true)}
-                    disabled={!selectedScheduleId}
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0 shadow-2xs"
-                    title="Upload and manage student examination attendance records"
-                    data-feature-filter="exam-attendance-upload-btn"
-                  >
-                    <i className="fas fa-calendar-check text-indigo-600 text-xs" />
-                    <span>Upload Attendance</span>
-                    {attendanceCount > 0 && (
-                      <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-black">
-                        {attendanceCount}
-                      </span>
-                    )}
-                  </button>
-                )}
-
-                {/* Remarks & Feedback */}
-                <button
-                  type="button"
-                  onClick={() => setIsRemarksModalOpen(true)}
-                  disabled={!selectedScheduleId || classStudents.length === 0}
-                  className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0 shadow-2xs"
-                  title="Manage and upload student remarks & feedback"
-                  data-feature-filter="exam-remarks-feedback-btn"
-                >
-                  <i className="fas fa-comment-dots text-amber-600 text-xs" />
-                  <span>Remarks & Feedback</span>
-                  {remarksCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-amber-600 text-white rounded-full text-[10px] font-black">
-                      {remarksCount}
-                    </span>
-                  )}
-                </button>
               </div>
             )}
           </div>
