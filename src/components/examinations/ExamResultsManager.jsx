@@ -4,12 +4,12 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import ExamResultsEntryGrid from './ExamResultsEntryGrid';
-import ReportCardGenerator from './ReportCardGenerator';
+import ReportCardGenerator from '../examinations/ReportCardGenerator';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import OfflineMarkSheetModal from './OfflineMarkSheetModal';
 import ImportMarksModal from './ImportMarksModal';
 import { getAdminConfig } from '../../utils/adminConfigUtils';
-import { DEFAULT_TEMPLATE } from './ReportCardDesigner';
+import { DEFAULT_TEMPLATE } from '../examinations/ReportCardDesigner';
 import ExamClassSummaryView from './ExamClassSummaryView';
 
 const ENTRY_STATUS_CONFIG = {
@@ -42,7 +42,8 @@ const ExamResultsManager = ({
   // Capability driven strictly by app_view_controller component
   const canManageAllMarks = canAccess('exam-results-status-override');
 
-  const isReportOnly = Array.isArray(allowedTabs) && allowedTabs.length === 1 && allowedTabs[0] === 'report';
+  const isReportOnly =
+    Array.isArray(allowedTabs) && allowedTabs.length === 1 && allowedTabs[0] === 'report';
 
   // Workspace Tabs registered in app_view_controller
   const WORKSPACE_TABS = useMemo(() => {
@@ -79,11 +80,31 @@ const ExamResultsManager = ({
 
   const [activeTab, setActiveTab] = useState(() => {
     if (initialTab) {
-      if (initialTab === 'entry' && canAccess('exam-mark-entry-tab') && (!allowedTabs || allowedTabs.includes('entry'))) return 'entry';
-      if (initialTab === 'summary' && canAccess('exam-results-tab-summary') && (!allowedTabs || allowedTabs.includes('summary'))) return 'summary';
-      if (initialTab === 'report' && canAccess('exam-results-tab-report') && (!allowedTabs || allowedTabs.includes('report'))) return 'report';
-      if (canAccess(`exam-results-tab-${initialTab}`) && (!allowedTabs || allowedTabs.includes(initialTab))) return initialTab;
-      if (canAccess(initialTab) && (!allowedTabs || allowedTabs.includes(initialTab))) return initialTab;
+      if (
+        initialTab === 'entry' &&
+        canAccess('exam-mark-entry-tab') &&
+        (!allowedTabs || allowedTabs.includes('entry'))
+      )
+        return 'entry';
+      if (
+        initialTab === 'summary' &&
+        canAccess('exam-results-tab-summary') &&
+        (!allowedTabs || allowedTabs.includes('summary'))
+      )
+        return 'summary';
+      if (
+        initialTab === 'report' &&
+        canAccess('exam-results-tab-report') &&
+        (!allowedTabs || allowedTabs.includes('report'))
+      )
+        return 'report';
+      if (
+        canAccess(`exam-results-tab-${initialTab}`) &&
+        (!allowedTabs || allowedTabs.includes(initialTab))
+      )
+        return initialTab;
+      if (canAccess(initialTab) && (!allowedTabs || allowedTabs.includes(initialTab)))
+        return initialTab;
     }
     if (Array.isArray(allowedTabs) && allowedTabs.length > 0) {
       return allowedTabs[0];
@@ -372,7 +393,7 @@ const ExamResultsManager = ({
           while (hasMore) {
             const { data, error } = await supabase
               .from('exam_result_entries')
-              .select('id, result_id, student_id, marks_obtained, is_absent')
+              .select('id, result_id, student_id, admission_no, marks_obtained, is_absent')
               .in('result_id', chunkIds)
               .range(from, from + pageSize - 1);
 
@@ -740,7 +761,11 @@ const ExamResultsManager = ({
         const res = classResultsIndex[String(sub.id)];
         const entry = entriesToUse.find(
           (e) =>
-            String(e.result_id) === String(res?.id) && String(e.student_id) === String(student.id)
+            String(e.result_id) === String(res?.id) &&
+            // Join by admission_no (preferred) or fall back to student_id for legacy rows
+            (e.admission_no
+              ? String(e.admission_no) === String(student.admission_no)
+              : String(e.student_id) === String(student.id))
         );
         if (entry?.is_absent) {
           rowVals.push('"ABSENT"');
@@ -899,7 +924,7 @@ const ExamResultsManager = ({
 
   return (
     <div
-      className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300"
+      className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300 print:min-h-0 print:p-0 print:m-0 print:block"
       data-feature="exam-results"
     >
       {/* ── 1. Top Header Block ── */}
@@ -909,9 +934,7 @@ const ExamResultsManager = ({
           <div className="flex items-center gap-3">
             <div
               className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shadow-2xs shrink-0 ${
-                isReportOnly
-                  ? 'bg-indigo-50 text-indigo-600'
-                  : 'bg-emerald-50 text-emerald-600'
+                isReportOnly ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'
               }`}
             >
               <i className={`fas ${isReportOnly ? 'fa-file-invoice' : 'fa-clipboard-check'}`} />
@@ -1327,7 +1350,10 @@ const ExamResultsManager = ({
       </div>
 
       {/* ── 2. Tab Content Areas ── */}
-      <div className="w-full p-1 sm:p-2 md:p-3 " data-feature="exam-results-content">
+      <div
+        className="w-full p-1 sm:p-2 md:p-3 print:p-0 print:m-0"
+        data-feature="exam-results-content"
+      >
         {/* Tab 1: Marks Entry Register */}
         {activeTab === 'entry' && (
           <ConditionalBlock name="exam-mark-entry-tab" roles={userRoles}>

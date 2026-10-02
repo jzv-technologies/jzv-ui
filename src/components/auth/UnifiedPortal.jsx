@@ -559,10 +559,7 @@ export const UnifiedPortal = ({
                 </div>
               }
             >
-              <ReportCardDesigner
-                userRoles={userRoles}
-                onClose={() => setSubView(null)}
-              />
+              <ReportCardDesigner userRoles={userRoles} onClose={() => setSubView(null)} />
             </ConditionalBlock>
           </div>
         );
@@ -686,7 +683,8 @@ export const UnifiedPortal = ({
                                     <i className={`fas ${group.info.icon} ${group.info.color}`}></i>
                                   </div>
                                   <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                                    {group.tiles.length} {group.tiles.length === 1 ? 'feature' : 'features'}
+                                    {group.tiles.length}{' '}
+                                    {group.tiles.length === 1 ? 'feature' : 'features'}
                                   </span>
                                 </div>
 

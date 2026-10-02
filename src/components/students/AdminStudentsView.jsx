@@ -97,6 +97,7 @@ const AdminStudentsView = ({
     admission_no: '',
     edsoft_id: '',
     student_name: '',
+    arabic_name: '',
     father_name: '',
     birth_date: '',
     age: '',
@@ -274,6 +275,7 @@ const AdminStudentsView = ({
     const savePayload = {
       admission_no: formData.admission_no.trim(),
       student_name: formData.student_name.trim(),
+      arabic_name: formData.arabic_name ? formData.arabic_name.trim() : null,
       father_name: formData.father_name.trim(),
       mobile1: formData.mobile1.trim(),
       mobile2: formData.mobile2.trim(),
@@ -441,6 +443,7 @@ const AdminStudentsView = ({
             updateMode === 'full'
               ? [
                   'student_name',
+                  'arabic_name',
                   'father_name',
                   'mobile1',
                   'mobile2',
@@ -489,6 +492,7 @@ const AdminStudentsView = ({
           const insertPayload = {
             admission_no: r.admission_no,
             student_name: r.student_name || 'New Student',
+            arabic_name: r.arabic_name || null,
             father_name: r.father_name || '',
             mobile1: r.mobile1 || '',
             mobile2: r.mobile2 || '',
@@ -538,6 +542,7 @@ const AdminStudentsView = ({
             updateMode === 'full'
               ? [
                   'student_name',
+                  'arabic_name',
                   'father_name',
                   'mobile1',
                   'mobile2',
@@ -565,6 +570,7 @@ const AdminStudentsView = ({
             id: newId,
             admission_no: r.admission_no,
             student_name: r.student_name || 'New Student',
+            arabic_name: r.arabic_name || '',
             father_name: r.father_name || '',
             mobile1: r.mobile1 || '',
             mobile2: r.mobile2 || '',
@@ -604,6 +610,7 @@ const AdminStudentsView = ({
       admission_no: '',
       edsoft_id: '',
       student_name: '',
+      arabic_name: '',
       father_name: '',
       birth_date: '',
       age: '',
@@ -627,6 +634,7 @@ const AdminStudentsView = ({
         admission_no: original.admission_no || '',
         edsoft_id: original.edsoft_id || '',
         student_name: original.student_name || '',
+        arabic_name: original.arabic_name || '',
         father_name: original.father_name || '',
         birth_date: original.birth_date || '',
         age: original.age || '',
@@ -679,6 +687,7 @@ const AdminStudentsView = ({
         'Admission No': s.admission_no || '',
         'Edsoft ID': s.edsoft_id || '',
         'Student Name': s.student_name || '',
+        'Arabic Name': s.arabic_name || '',
         Class: cls ? cls.name : 'Unassigned',
         'Father Name': s.father_name || '',
         'Mobile 1': s.mobile1 || '',
@@ -706,6 +715,9 @@ const AdminStudentsView = ({
       mapped = mapped.filter(
         (s) =>
           String(s['Student Name'] || '')
+            .toLowerCase()
+            .includes(q) ||
+          String(s['Arabic Name'] || '')
             .toLowerCase()
             .includes(q) ||
           String(s['Admission No'] || '')
@@ -745,6 +757,7 @@ const AdminStudentsView = ({
       'Admission No': r['Admission No'],
       'Edsoft ID': r['Edsoft ID'],
       'Student Name': r['Student Name'],
+      'Arabic Name': r['Arabic Name'],
       Class: r['Class'],
       'Father Name': r['Father Name'],
       'Mobile 1': r['Mobile 1'],
@@ -1260,6 +1273,22 @@ const AdminStudentsView = ({
                         setFormData((prev) => ({ ...prev, student_name: e.target.value }))
                       }
                       className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-dark-deepblue mb-1.5 flex items-center justify-between">
+                      <span>Arabic Name (الاسم بالعربية)</span>
+                      <span className="text-[10px] text-dark-muted font-normal">Optional</span>
+                    </label>
+                    <input
+                      type="text"
+                      dir="rtl"
+                      placeholder="اسم الطالب بالعربية"
+                      value={formData.arabic_name}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, arabic_name: e.target.value }))
+                      }
+                      className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-green-dark focus:ring-4 focus:ring-green-50 outline-none transition-all text-sm font-semibold text-dark-primary font-arabic text-right"
                     />
                   </div>
                   <div>

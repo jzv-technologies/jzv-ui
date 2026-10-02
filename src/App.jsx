@@ -122,7 +122,7 @@ const App = () => {
 
 
   return (
-    <div id="dashboard-section" className={isDisplayBoard ? "min-h-screen bg-[#064e3b]" : "min-h-screen pb-16"}>
+    <div id="dashboard-section" className={isDisplayBoard ? "min-h-screen bg-[#064e3b]" : "min-h-screen pb-16 print:min-h-0 print:pb-0"}>
       {!isDisplayBoard && (
         <Header
           user={user}

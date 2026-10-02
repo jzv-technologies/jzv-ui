@@ -92,9 +92,10 @@ const ExamResultsEntryGrid = ({
 
       (data || []).forEach((entry) => {
         const rId = String(entry.result_id);
-        const sId = String(entry.student_id);
+        // Use admission_no as the join key if present, fall back to student_id for legacy rows
+        const sKey = entry.admission_no ? String(entry.admission_no) : String(entry.student_id);
         if (entriesMap[rId]) {
-          entriesMap[rId][sId] = entry;
+          entriesMap[rId][sKey] = entry;
         }
       });
 
@@ -132,6 +133,7 @@ const ExamResultsEntryGrid = ({
           const payload = {
             result_id: Number(resultId),
             student_id: Number(studentId),
+            admission_no: students.find((s) => String(s.id) === String(studentId))?.admission_no || null,
             marks_obtained:
               isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
                 ? null
@@ -190,7 +192,7 @@ const ExamResultsEntryGrid = ({
 
       const currentResEntries = allEntries[String(targetResult.id)] || {};
       const unfilledStudents = students.filter((stu) => {
-        const e = currentResEntries[String(stu.id)];
+        const e = currentResEntries[String(stu.admission_no || stu.id)];
         return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
       });
 
@@ -202,10 +204,11 @@ const ExamResultsEntryGrid = ({
 
       try {
         const promises = unfilledStudents.map((stu) => {
-          const existing = currentResEntries[String(stu.id)];
+          const existing = currentResEntries[String(stu.admission_no || stu.id)];
           const payload = {
             result_id: targetResult.id,
             student_id: stu.id,
+            admission_no: stu.admission_no || null,
             marks_obtained: Number(value),
             is_absent: false,
           };
@@ -249,6 +252,7 @@ const ExamResultsEntryGrid = ({
         const payload = {
           result_id: Number(resultId),
           student_id: Number(studentId),
+          admission_no: students.find((s) => String(s.id) === String(studentId))?.admission_no || null,
           marks_obtained:
             isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
               ? null
@@ -283,22 +287,23 @@ const ExamResultsEntryGrid = ({
           });
         }
 
-        // Check if all students for this result are filled
+        // Check if all students for this result are filled (keyed by admission_no)
+        const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
         const updatedEntries = {
           ...currentResultEntries,
-          [String(studentId)]: { ...(existing || {}), ...payload },
+          [stuKey]: { ...(existing || {}), ...payload },
         };
-        const allStudentIds = students.map((s) => String(s.id));
-        const allFilled = allStudentIds.every((sId) => {
-          const e = updatedEntries[sId];
+        const allStudentKeys = students.map((s) => String(s.admission_no || s.id));
+        const allFilled = allStudentKeys.every((sKey) => {
+          const e = updatedEntries[sKey];
           return e && (e.is_absent || (e.marks_obtained !== null && e.marks_obtained !== ''));
         });
 
         if (allFilled && onStatusUpdate) {
           onStatusUpdate(Number(resultId), 'completed');
         } else if (
-          allStudentIds.some((sId) => {
-            const e = updatedEntries[sId];
+          allStudentKeys.some((sKey) => {
+            const e = updatedEntries[sKey];
             return e && (e.is_absent || e.marks_obtained !== null);
           }) &&
           onStatusUpdate
@@ -325,11 +330,12 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = currentRes[String(studentId)] || {
+      const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
+      const existing = currentRes[stuKey] || {
         student_id: studentId,
         result_id: resultId,
       };
-      currentRes[String(studentId)] = { ...existing, marks_obtained: value, is_absent: false };
+      currentRes[stuKey] = { ...existing, marks_obtained: value, is_absent: false };
       next[String(resultId)] = currentRes;
       return next;
     });
@@ -364,11 +370,12 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = currentRes[String(studentId)] || {
+      const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
+      const existing = currentRes[stuKey] || {
         student_id: studentId,
         result_id: resultId,
       };
-      currentRes[String(studentId)] = {
+      currentRes[stuKey] = {
         ...existing,
         is_absent: newAbsent,
         marks_obtained: newAbsent ? '' : existing.marks_obtained,
@@ -448,10 +455,11 @@ const ExamResultsEntryGrid = ({
 
     try {
       const promises = unfilled.map((stu) => {
-        const existing = currentResEntries[String(stu.id)];
+        const existing = currentResEntries[String(stu.admission_no || stu.id)];
         const payload = {
           result_id: targetResult.id,
           student_id: stu.id,
+          admission_no: stu.admission_no || null,
           marks_obtained: null,
           is_absent: true,
           remarks: 'Absent',
@@ -480,7 +488,7 @@ const ExamResultsEntryGrid = ({
       let filled = 0;
       students.forEach((stu) => {
         total++;
-        const e = resEntries[String(stu.id)];
+        const e = resEntries[String(stu.admission_no || stu.id)];
         if (e) {
           if (e.is_absent || (e.marks_obtained !== '' && e.marks_obtained !== null)) {
             filled++;
@@ -516,7 +524,7 @@ const ExamResultsEntryGrid = ({
       const resEntries = allEntries[String(r.id)] || {};
       students.forEach((stu) => {
         totalPossible++;
-        const e = resEntries[String(stu.id)];
+        const e = resEntries[String(stu.admission_no || stu.id)];
         if (e) {
           if (e.is_absent) {
             totalFilled++;
@@ -694,8 +702,9 @@ const ExamResultsEntryGrid = ({
                       {/* Subject Mark Columns */}
                       {results.map((result, colIdx) => {
                         const canEdit = canEditMap[result.id];
-                        const cellKey = `${result.id}_${stu.id}`;
-                        const entry = allEntries[String(result.id)]?.[String(stu.id)];
+                        const stuKey = String(stu.admission_no || stu.id);
+                        const cellKey = `${result.id}_${stuKey}`;
+                        const entry = allEntries[String(result.id)]?.[stuKey];
                         const isSaving = savingCells.has(cellKey);
 
                         const marks = entry?.marks_obtained;

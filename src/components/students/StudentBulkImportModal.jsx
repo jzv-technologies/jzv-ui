@@ -4,6 +4,7 @@ import { showToast } from '../../utils/toast';
 
 const IMPORTABLE_COLUMNS = [
   { key: 'student_name', label: 'Student Name' },
+  { key: 'arabic_name', label: 'Arabic Name (الاسم بالعربية)' },
   { key: 'father_name', label: 'Father Name' },
   { key: 'mobile1', label: 'Mobile 1' },
   { key: 'mobile2', label: 'Mobile 2' },
@@ -115,6 +116,7 @@ const StudentBulkImportModal = ({
         'adm_no'
       );
       const student_name = getVal('student_name', 'Student Name', 'Name', 'name', 'student');
+      const arabic_name = getVal('arabic_name', 'Arabic Name', 'ArabicName', 'arabic', 'الاسم بالعربية', 'اسم الطالب');
       const father_name = getVal(
         'father_name',
         'Father Name',
@@ -254,6 +256,7 @@ const StudentBulkImportModal = ({
     const headers = [
       'admission_no',
       'student_name',
+      'arabic_name',
       'father_name',
       'mobile1',
       'mobile2',
@@ -270,6 +273,7 @@ const StudentBulkImportModal = ({
     const sampleRow1 = [
       '105',
       'Ayaan Khan',
+      'أيان خان',
       'Farooq Khan',
       '9876543210',
       '9876543211',
@@ -286,6 +290,7 @@ const StudentBulkImportModal = ({
     const sampleRow2 = [
       '101',
       'Zayd Ahmed',
+      'زيد أحمد',
       'Abdur Rahman',
       '7339398700',
       '9876543220',
@@ -318,6 +323,7 @@ const StudentBulkImportModal = ({
       {
         admission_no: '105',
         student_name: 'Ayaan Khan',
+        arabic_name: 'أيان خان',
         father_name: 'Farooq Khan',
         mobile1: '9876543210',
         mobile2: '9876543211',
@@ -333,6 +339,7 @@ const StudentBulkImportModal = ({
       {
         admission_no: '101',
         student_name: 'Zayd Ahmed',
+        arabic_name: 'زيد أحمد',
         father_name: 'Abdur Rahman',
         mobile1: '7339398700',
         mobile2: '9876543220',
@@ -648,6 +655,7 @@ const StudentBulkImportModal = ({
                       <th className="p-2.5">Action</th>
                       <th className="p-2.5">Admission No</th>
                       <th className="p-2.5">Student Name</th>
+                      <th className="p-2.5">Arabic Name</th>
                       <th className="p-2.5">Father Name</th>
                       <th className="p-2.5">Class</th>
                       <th className="p-2.5">Mobile 1</th>
@@ -674,6 +682,9 @@ const StudentBulkImportModal = ({
                           <td className="p-2.5 font-bold text-dark-primary">{r.admission_no}</td>
                           <td className="p-2.5 font-bold text-dark-primary">
                             {r.student_name || '—'}
+                          </td>
+                          <td className="p-2.5 text-dark-soft font-arabic" dir="rtl">
+                            {r.arabic_name || '—'}
                           </td>
                           <td className="p-2.5 text-dark-soft">{r.father_name || '—'}</td>
                           <td className="p-2.5 text-dark-soft">

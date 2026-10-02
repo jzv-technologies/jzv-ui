@@ -252,7 +252,7 @@ const PortalLayout = ({
   const isFullWidth = true;
 
   return (
-    <div className="min-h-screen flex flex-col bg-transparent">
+    <div className="min-h-screen flex flex-col bg-transparent print:min-h-0 print:block print:p-0 print:m-0">
       <Breadcrumbs />
       <main
         className={

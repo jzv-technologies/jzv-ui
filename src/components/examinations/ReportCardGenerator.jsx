@@ -4,15 +4,27 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
+import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
+import { useCanAccess } from '../portal-shared/ConditionalBlock';
 import {
   DEFAULT_TEMPLATE,
   DEFAULT_GRADING_SCALE,
   DEFAULT_CHART_COLUMN,
   DEFAULT_MOCK_CLASSIFICATIONS,
+  DEFAULT_BLOCK_STYLE,
+  DEFAULT_TABLE_COLUMN_HEADERS,
+  DEFAULT_BLOCK_TITLES,
+  renderBlockTitle,
   calculateGrade,
   getActiveTableColumns,
   getLabelPlacement,
   getLegendProps,
+  getBlockBackgroundStyle,
+  getBlockBleedStyles,
+  BLOCK_DEFAULT_BG,
+  hexToRgba,
+  formatDataLabel,
 } from './ReportCardDesigner';
 import {
   BarChart,
@@ -68,6 +80,10 @@ const ReportCardGenerator = ({
   orientation: propOrientation = 'portrait',
   hideControlBar = false,
 }) => {
+  // Access control — driven by app_view_controller, no hardcoded role checks
+  const canAccess = useCanAccess(userRoles);
+  const canUploadAttendance = canAccess('exam-attendance-upload');
+
   const [internalPaperSize, setInternalPaperSize] = useState('a4');
   const [internalOrientation, setInternalOrientation] = useState('portrait');
   const paperSize = propPaperSize || internalPaperSize;
@@ -76,7 +92,9 @@ const ReportCardGenerator = ({
   const [internalSchedules, setInternalSchedules] = useState(schedules);
   const [internalClasses, setInternalClasses] = useState(classes);
   const [internalSubjects, setInternalSubjects] = useState(subjects);
-  const [internalClassifications, setInternalClassifications] = useState(DEFAULT_MOCK_CLASSIFICATIONS);
+  const [internalClassifications, setInternalClassifications] = useState(
+    DEFAULT_MOCK_CLASSIFICATIONS
+  );
 
   const [selectedScheduleId, setSelectedScheduleId] = useState(
     initialScheduleId ? String(initialScheduleId) : schedules[0]?.id ? String(schedules[0].id) : ''
@@ -145,7 +163,10 @@ const ReportCardGenerator = ({
           const { data: subData } = await supabase.from('syl_subjects').select('*').order('name');
           if (subData) setInternalSubjects(subData);
         }
-        const { data: clsData } = await supabase.from('syl_classifications').select('*').order('name');
+        const { data: clsData } = await supabase
+          .from('syl_classifications')
+          .select('*')
+          .order('name');
         if (clsData && clsData.length > 0) setInternalClassifications(clsData);
       } catch (err) {
         console.error('Failed to load master data in ReportCardGenerator:', err);
@@ -184,7 +205,60 @@ const ReportCardGenerator = ({
   const [students, setStudents] = useState([]);
   const [results, setResults] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [attendanceMap, setAttendanceMap] = useState({});
+  const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Load attendance records for current selected schedule
+  const fetchAttendance = async () => {
+    if (!selectedScheduleId) {
+      setAttendanceMap({});
+      return;
+    }
+    try {
+      const { data: attData, error: attErr } = await supabase
+        .from('exam_attendance_entries')
+        .select('*')
+        .eq('schedule_id', selectedScheduleId);
+
+      let list = [];
+      if (!attErr && Array.isArray(attData) && attData.length > 0) {
+        list = attData;
+      } else {
+        const local = localStorage.getItem(`jzv_exam_attendance_${selectedScheduleId}`);
+        if (local) {
+          try {
+            list = JSON.parse(local);
+          } catch (_) {}
+        }
+      }
+      const map = {};
+      list.forEach((item) => {
+        if (item.admission_no) {
+          map[String(item.admission_no).trim().toLowerCase()] = item;
+        }
+      });
+      setAttendanceMap(map);
+    } catch (e) {
+      const local = localStorage.getItem(`jzv_exam_attendance_${selectedScheduleId}`);
+      if (local) {
+        try {
+          const list = JSON.parse(local);
+          const map = {};
+          list.forEach((item) => {
+            if (item.admission_no) {
+              map[String(item.admission_no).trim().toLowerCase()] = item;
+            }
+          });
+          setAttendanceMap(map);
+        } catch (_) {}
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [selectedScheduleId]);
 
   // Load saved templates strictly via RPC call with localStorage cache fallback
   useEffect(() => {
@@ -288,18 +362,17 @@ const ReportCardGenerator = ({
 
   // Determine which students to render cards for
   const displayedStudents = useMemo(() => {
-    if (studentSelectionMode === 'all') return students;
-    if (selectedStudentIds === undefined || selectedStudentIds === null) {
-      return students;
+    // If specific student IDs are provided (e.g. from parent filter)
+    if (selectedStudentIds && Array.isArray(selectedStudentIds) && selectedStudentIds.length > 0) {
+      const stringIds = new Set(selectedStudentIds.map(String));
+      return students.filter((s) => stringIds.has(String(s.id)));
     }
-    if (selectedStudentIds.length === 0) {
+    // If studentSelectionMode is explicitly 'selected' but no students were selected
+    if (studentSelectionMode === 'selected') {
       return [];
     }
-    if (selectedStudentIds.length === students.length) {
-      return students;
-    }
-    const stringIds = new Set(selectedStudentIds.map(String));
-    return students.filter((s) => stringIds.has(String(s.id)));
+    // Default: all students in class
+    return students;
   }, [students, studentSelectionMode, selectedStudentIds]);
 
   // Compute calculated metrics & ranks across all students in class
@@ -317,7 +390,11 @@ const ReportCardGenerator = ({
         const sub = internalSubjects.find((s) => String(s.id) === String(result.subject_id));
         const entry = entries.find(
           (e) =>
-            String(e.result_id) === String(result.id) && String(e.student_id) === String(student.id)
+            String(e.result_id) === String(result.id) &&
+            // Join by admission_no (preferred) or fall back to student_id for legacy rows
+            (e.admission_no
+              ? String(e.admission_no) === String(student.admission_no)
+              : String(e.student_id) === String(student.id))
         );
 
         const isAbsent = Boolean(entry?.is_absent);
@@ -399,6 +476,65 @@ const ReportCardGenerator = ({
     window.print();
   };
 
+  // Exact physical page height (minus 1mm margin of error) to guarantee 1 single page per card
+  const cardPrintHeight = useMemo(() => {
+    const size = String(paperSize || 'a4').toLowerCase();
+    const isLandscape = orientation === 'landscape';
+    const specs = {
+      a4: { portrait: '296mm', landscape: '209mm' },
+      letter: { portrait: '10.95in', landscape: '8.45in' },
+      legal: { portrait: '13.95in', landscape: '8.45in' },
+      a3: { portrait: '419mm', landscape: '296mm' },
+    };
+    const spec = specs[size] || specs.a4;
+    return isLandscape ? spec.landscape : spec.portrait;
+  }, [paperSize, orientation]);
+
+  // Per-student Teacher Remarks & Recommendations Map
+  const [studentRemarksMap, setStudentRemarksMap] = useState({});
+  const [isRemarksModalOpen, setIsRemarksModalOpen] = useState(false);
+  const [selectedRemarksStudentId, setSelectedRemarksStudentId] = useState('');
+  const [remarksForm, setRemarksForm] = useState({ remarks: '', recommendations: '' });
+
+  // Sync selectedRemarksStudentId when students change or modal opens
+  useEffect(() => {
+    if (displayedStudents.length > 0 && !selectedRemarksStudentId) {
+      setSelectedRemarksStudentId(String(displayedStudents[0].id));
+    }
+  }, [displayedStudents, selectedRemarksStudentId]);
+
+  // Sync remarksForm when selected student changes
+  useEffect(() => {
+    if (selectedRemarksStudentId) {
+      const existing = studentRemarksMap[selectedRemarksStudentId] || {};
+      setRemarksForm({
+        remarks:
+          existing.remarks !== undefined ? existing.remarks : activeTemplate.remarksText || '',
+        recommendations:
+          existing.recommendations !== undefined
+            ? existing.recommendations
+            : activeTemplate.remarksConfig?.recommendationsText || '',
+      });
+    }
+  }, [selectedRemarksStudentId, studentRemarksMap, activeTemplate]);
+
+  const handleSaveRemarksForStudent = () => {
+    if (!selectedRemarksStudentId) return;
+    setStudentRemarksMap((prev) => ({
+      ...prev,
+      [selectedRemarksStudentId]: { ...remarksForm },
+    }));
+    showToast.success('Remarks & recommendations updated for student');
+  };
+
+  const handleApplyRemarksToAll = () => {
+    const updated = { ...studentRemarksMap };
+    displayedStudents.forEach((s) => {
+      updated[String(s.id)] = { ...remarksForm };
+    });
+    setStudentRemarksMap(updated);
+    showToast.success(`Applied to all ${displayedStudents.length} students`);
+  };
 
   return (
     <div className="space-y-6" data-feature="progress-report-generator">
@@ -423,6 +559,44 @@ const ReportCardGenerator = ({
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2 flex-wrap self-end lg:self-auto">
+              {/* Upload Attendance — gated by app_view_controller: exam-attendance-upload */}
+              {canUploadAttendance && (
+                <button
+                  type="button"
+                  onClick={() => setIsAttendanceModalOpen(true)}
+                  disabled={!selectedScheduleId}
+                  className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-300 rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <i className="fas fa-calendar-check text-indigo-600" />
+                  <span>Upload Attendance</span>
+                  {Object.keys(attendanceMap).length > 0 && (
+                    <span className="px-1.5 py-0.2 bg-indigo-600 text-white rounded-full text-[10px] font-black">
+                      {Object.keys(attendanceMap).length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (displayedStudents.length > 0 && !selectedRemarksStudentId) {
+                    setSelectedRemarksStudentId(String(displayedStudents[0].id));
+                  }
+                  setIsRemarksModalOpen(true);
+                }}
+                disabled={displayedStudents.length === 0}
+                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold shadow-xs transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <i className="fas fa-comment-dots text-amber-600" />
+                <span>Remarks & Feedback</span>
+                {Object.keys(studentRemarksMap).length > 0 && (
+                  <span className="px-1.5 py-0.2 bg-amber-600 text-white rounded-full text-[10px] font-black">
+                    {Object.keys(studentRemarksMap).length}
+                  </span>
+                )}
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrint}
@@ -493,17 +667,17 @@ const ReportCardGenerator = ({
               <label className="block text-[11px] font-bold text-dark-slate mb-1">
                 Active Template
               </label>
-                <select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
-                >
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-primary outline-none"
+              >
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -574,11 +748,39 @@ const ReportCardGenerator = ({
               html, body {
                 margin: 0 !important;
                 padding: 0 !important;
+                border: none !important;
+                box-sizing: border-box !important;
+                min-height: 0 !important;
+                height: auto !important;
                 background: #ffffff !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                overflow: visible !important;
               }
-              header, nav, aside, footer, [data-feature-filter], [data-feature-tab], .print\\:hidden {
+              #root,
+              #root > div,
+              #dashboard-section,
+              main,
+              [data-feature="exam-progress-report"],
+              [data-feature="exam-results"],
+              [data-feature="exam-results-content"],
+              [data-feature="progress-report-generator"],
+              .min-h-screen,
+              .animate-in {
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                box-shadow: none !important;
+                min-height: 0 !important;
+                height: auto !important;
+                max-height: none !important;
+                display: block !important;
+                transform: none !important;
+                animation: none !important;
+                background: transparent !important;
+                overflow: visible !important;
+              }
+              header, nav, aside, footer, [data-feature-filter], [data-feature-tab], .print\\:hidden, button.print\\:hidden {
                 display: none !important;
               }
               .print-cards-container {
@@ -586,35 +788,81 @@ const ReportCardGenerator = ({
                 margin: 0 !important;
                 padding: 0 !important;
                 width: 100% !important;
+                min-height: 0 !important;
+                height: auto !important;
+                border: none !important;
+              }
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
               .progress-report-card-page {
-                width: 100vw !important;
-                height: 100vh !important;
-                max-height: 100vh !important;
-                page-break-after: always !important;
-                break-after: page !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                height: ${cardPrintHeight} !important;
+                max-height: ${cardPrintHeight} !important;
                 box-sizing: border-box !important;
                 margin: 0 !important;
-                padding: ${orientation === 'landscape' ? '5mm 7mm' : '7mm 8mm'} !important;
+                padding: ${orientation === 'landscape' ? '5mm 7mm' : '6mm 8mm'} !important;
+                --page-pad-x: ${orientation === 'landscape' ? '7mm' : '8mm'} !important;
+                --page-pad-y: ${orientation === 'landscape' ? '5mm' : '6mm'} !important;
                 border: none !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: flex-start !important;
-                gap: ${orientation === 'landscape' ? '2mm' : '2.5mm'} !important;
                 overflow: hidden !important;
                 background: #ffffff !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-before: auto !important;
+                break-before: auto !important;
+              }
+              [data-bleed-page="true"] {
+                margin-left: calc(-1 * var(--page-pad-x, 8mm)) !important;
+                margin-right: calc(-1 * var(--page-pad-x, 8mm)) !important;
+                padding-left: var(--page-pad-x, 8mm) !important;
+                padding-right: var(--page-pad-x, 8mm) !important;
+                width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
+                max-width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
+                box-sizing: border-box !important;
+              }
+              [data-bleed-top="true"] {
+                margin-top: calc(-1 * var(--page-pad-y, 6mm)) !important;
+                padding-top: calc(var(--page-pad-y, 6mm) + 2mm) !important;
+              }
+              [data-bleed-bottom="true"] {
+                margin-bottom: calc(-1 * var(--page-pad-y, 6mm)) !important;
+                padding-bottom: calc(var(--page-pad-y, 6mm) + 2mm) !important;
+              }
+              .progress-report-card-page:not(:last-child) {
+                page-break-after: always !important;
+                break-after: page !important;
+              }
+              .progress-report-card-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+              }
+              .progress-report-card-page > .relative.z-10 {
+                display: flex !important;
+                flex-direction: column !important;
+                flex: 1 1 0% !important;
+                width: 100% !important;
+                min-height: 0 !important;
+                box-sizing: border-box !important;
+                gap: ${activeTemplate.blockSpacing !== undefined ? `${(activeTemplate.blockSpacing * 0.22).toFixed(1)}mm` : orientation === 'landscape' ? '2mm' : '2.5mm'} !important;
               }
               .progress-report-card-page > * {
                 margin-top: 0 !important;
                 margin-bottom: 0 !important;
               }
+              .progress-report-card-page .report-card-signatures-wrapper {
+                margin-top: auto !important;
+              }
               .progress-report-card-page .report-card-signatures {
                 margin-top: auto !important;
-                padding-top: 2.5mm !important;
+                padding-top: 2mm !important;
               }
               .progress-report-card-page table {
                 font-size: 9.5px !important;
@@ -625,7 +873,27 @@ const ReportCardGenerator = ({
               }
             }
           `}</style>
-          {displayedStudents.map((student, studentIdx) => {
+          {displayedStudents.map((rawStudent, studentIdx) => {
+            const admKey = String(rawStudent.admission_no || rawStudent.admission_number || '')
+              .trim()
+              .toLowerCase();
+            const att = attendanceMap[admKey];
+            const student = att
+              ? {
+                  ...rawStudent,
+                  total_working_days:
+                    att.total_days ||
+                    Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0),
+                  present_days: Number(att.present || 0),
+                  absent_days: Number(att.absent || 0),
+                  leave_days: Number(att.on_leave || 0),
+                  attendance:
+                    Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0) >
+                    0
+                      ? `${Math.round((Number(att.present || 0) / (Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0))) * 100)}%`
+                      : rawStudent.attendance || '—',
+                }
+              : rawStudent;
             const metrics = studentMetricsMap[String(student.id)] || {};
             const subjectScores = metrics.subjectScores || [];
 
@@ -674,1220 +942,2503 @@ const ReportCardGenerator = ({
             return (
               <div
                 key={student.id}
-                className="bg-white border-2 border-slate-900 rounded-3xl p-6 sm:p-8 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto space-y-4 print:space-y-0"
+                style={{
+                  '--page-pad-x': '24px',
+                  '--page-pad-y': '24px',
+                }}
+                className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
               >
-                {/* ── Render Blocks according to activeTemplate.blockOrder ── */}
-                {activeTemplate.blockOrder.map((blockKey) => {
-                  switch (blockKey) {
-                    case 'schoolHeader': {
-                      if (!activeTemplate.showSchoolHeader) return null;
-                      const hdr = activeTemplate.schoolHeader || {};
-                      const isCompact = hdr.size === 'compact';
-                      const isLarge = hdr.size === 'large';
+                {/* Background Watermark / Logo Layer */}
+                {activeTemplate.showWatermark && (
+                  <div
+                    className="absolute pointer-events-none select-none z-0 flex items-center justify-center print:print-color-adjust-exact"
+                    style={{
+                      left: `${activeTemplate.watermarkConfig?.xPos ?? 50}%`,
+                      top: `${activeTemplate.watermarkConfig?.yPos ?? 50}%`,
+                      transform: `translate(-50%, -50%) rotate(${activeTemplate.watermarkConfig?.rotate ?? 0}deg)`,
+                      opacity: (activeTemplate.watermarkConfig?.opacity ?? 15) / 100,
+                    }}
+                  >
+                    {activeTemplate.watermarkConfig?.type === 'image' &&
+                    activeTemplate.watermarkConfig?.imageUrl ? (
+                      <img
+                        src={activeTemplate.watermarkConfig.imageUrl}
+                        alt="Watermark"
+                        style={{
+                          width: `${activeTemplate.watermarkConfig?.size ?? 250}px`,
+                          maxWidth: '90vw',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          fontSize: `${activeTemplate.watermarkConfig?.size ?? 50}px`,
+                          color: activeTemplate.watermarkConfig?.color || '#0f172a',
+                          fontWeight: 900,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {activeTemplate.watermarkConfig?.text || 'JAMIA ZAYTOONAH'}
+                      </span>
+                    )}
+                  </div>
+                )}
 
-                      return (
-                        <div
-                          key="schoolHeader"
-                          className={`border-b-2 border-slate-900 text-center space-y-1 print:space-y-0.5 relative ${
-                            isCompact
-                              ? 'pb-2 print:pb-0.5'
+                <div
+                  className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
+                  style={{ gap: `${activeTemplate.blockSpacing ?? 12}px` }}
+                >
+                  {/* ── Render Blocks according to activeTemplate.blockOrder ── */}
+                  {activeTemplate.blockOrder.map((blockKey) => {
+                    const getBlockStyleObj = () => {
+                      switch (blockKey) {
+                        case 'schoolHeader':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.schoolHeader?.style || {}),
+                          };
+                        case 'studentInfo':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.studentInfoConfig?.style || {}),
+                          };
+                        case 'attendanceBar':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.attendanceBarConfig?.style || {}),
+                          };
+                        case 'subjectTable':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.subjectTableConfig?.style || {}),
+                          };
+                        case 'summaryCalculations':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.summaryConfig?.style || {}),
+                          };
+                        case 'charts':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.chartConfig?.style || {}),
+                          };
+                        case 'remarks':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.remarksConfig?.style || {}),
+                          };
+                        case 'signatures':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.signaturesConfig?.style || {}),
+                          };
+                        default:
+                          return DEFAULT_BLOCK_STYLE;
+                      }
+                    };
+
+                    const blockSt = getBlockStyleObj();
+                    const bleed = getBlockBleedStyles(blockSt, blockKey);
+
+                    const blockContent = (() => {
+                      switch (blockKey) {
+                        case 'schoolHeader': {
+                          if (!activeTemplate.showSchoolHeader) return null;
+                          const hdr = activeTemplate.schoolHeader || {};
+                          const isCompact = hdr.size === 'compact';
+                          const isLarge = hdr.size === 'large';
+                          const hdrSt = { ...DEFAULT_BLOCK_STYLE, ...(hdr.style || {}) };
+                          const logoSize = hdr?.logoSize
+                            ? Number(hdr.logoSize)
+                            : isCompact
+                              ? 32
                               : isLarge
-                                ? 'pb-4 print:pb-2'
-                                : 'pb-3 print:pb-1'
-                          }`}
-                        >
-                          {hdr.showHeaderImage && hdr.headerImageUrl && (
-                            <div className="w-full mb-2 print:mb-1 overflow-hidden">
-                              <img
-                                src={hdr.headerImageUrl}
-                                alt="School Header Banner"
-                                className="w-full h-auto object-contain max-h-48 print:max-h-28 rounded-lg mx-auto block"
+                                ? 64
+                                : 48;
+                          const logoAlign = hdr?.logoAlign || 'center';
+                          const logoVAlign = hdr?.logoVerticalAlign || 'above';
+                          const logoOffsetY = hdr?.logoOffsetY ? Number(hdr.logoOffsetY) : 0;
+
+                          const logoEl =
+                            hdr.showLogo !== false && hdr.logoUrl ? (
+                              <div
+                                className={`flex ${
+                                  logoAlign === 'left'
+                                    ? 'justify-start'
+                                    : logoAlign === 'right'
+                                      ? 'justify-end'
+                                      : 'justify-center'
+                                }`}
+                                style={{
+                                  transform: logoOffsetY
+                                    ? `translateY(${logoOffsetY}px)`
+                                    : undefined,
+                                }}
+                              >
+                                <img
+                                  src={hdr.logoUrl}
+                                  alt="School Logo"
+                                  style={{ height: `${logoSize}px` }}
+                                  className="object-contain print:print-color-adjust-exact"
+                                />
+                              </div>
+                            ) : null;
+
+                          const textContentEl = (
+                            <div
+                              className={`space-y-1 print:space-y-0.5 ${
+                                logoAlign === 'left' && logoVAlign === 'inline'
+                                  ? 'text-left'
+                                  : logoAlign === 'right' && logoVAlign === 'inline'
+                                    ? 'text-right'
+                                    : 'text-center'
+                              }`}
+                            >
+                              {hdr.showTitle !== false && hdr.title && (
+                                <h1
+                                  className={`font-black tracking-tight uppercase ${
+                                    isCompact
+                                      ? 'text-lg print:text-xs'
+                                      : isLarge
+                                        ? 'text-2xl print:text-lg'
+                                        : 'text-xl sm:text-2xl print:text-base'
+                                  }`}
+                                  style={{
+                                    color:
+                                      hdrSt.contentColor || activeTemplate.accentColor || '#0f172a',
+                                    fontSize: hdrSt.contentFontSize
+                                      ? `${hdrSt.contentFontSize}px`
+                                      : undefined,
+                                  }}
+                                >
+                                  {hdr.title}
+                                </h1>
+                              )}
+                              {hdr.showSubtitle !== false && hdr.subtitle && (
+                                <p
+                                  className="text-xs print:text-[8.5px] font-bold uppercase tracking-wider"
+                                  style={{
+                                    fontSize: `${hdrSt.labelFontSize || 11}px`,
+                                    color: hdrSt.labelColor || '#64748b',
+                                  }}
+                                >
+                                  {hdr.subtitle}
+                                </p>
+                              )}
+                              {hdr.showAddress !== false && hdr.address && (
+                                <p
+                                  className="text-[10px] print:text-[7.5px] font-semibold"
+                                  style={{
+                                    fontSize: `${hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 10}px`,
+                                    color: hdrSt.labelColor || '#94a3b8',
+                                  }}
+                                >
+                                  {hdr.address}
+                                </p>
+                              )}
+                              {hdr.showExamTitle !== false && (
+                                <div className="pt-1 print:pt-0.5">
+                                  <span
+                                    className="inline-block px-3 py-0.5 print:py-0.2 print:px-2 rounded-full text-white text-[10px] print:text-[8px] font-black uppercase tracking-widest"
+                                    style={{
+                                      backgroundColor: activeTemplate.accentColor || '#0f172a',
+                                    }}
+                                  >
+                                    {selectedSchedule?.name ||
+                                      hdr.examTitle ||
+                                      'Official Progress Report'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+
+                          return (
+                            <div
+                              key="schoolHeader"
+                              className={`${!bleed.isPageWidth ? 'border-b-2 border-slate-900 print:border-b' : ''} space-y-1 print:space-y-0.5 relative ${
+                                isCompact
+                                  ? 'pb-2 print:pb-0.5'
+                                  : isLarge
+                                    ? 'pb-4 print:pb-2'
+                                    : 'pb-3 print:pb-1'
+                              }`}
+                              style={bleed.innerBgStyle('transparent')}
+                            >
+                              {hdr.showHeaderImage && hdr.headerImageUrl && (
+                                <div className="w-full mb-2 print:mb-1 overflow-hidden">
+                                  <img
+                                    src={hdr.headerImageUrl}
+                                    alt="School Header Banner"
+                                    className="w-full h-auto object-contain max-h-48 print:max-h-28 rounded-lg mx-auto block"
+                                  />
+                                </div>
+                              )}
+
+                              {logoVAlign === 'above' && logoEl}
+
+                              {logoVAlign === 'inline' ? (
+                                <div
+                                  className={`flex items-center gap-3 ${
+                                    logoAlign === 'right'
+                                      ? 'flex-row-reverse'
+                                      : logoAlign === 'left'
+                                        ? 'flex-row'
+                                        : 'flex-row justify-center'
+                                  }`}
+                                >
+                                  {logoEl}
+                                  <div className="flex-1 min-w-0">{textContentEl}</div>
+                                </div>
+                              ) : (
+                                textContentEl
+                              )}
+
+                              {logoVAlign === 'below' && logoEl}
+                            </div>
+                          );
+                        }
+
+                        case 'studentInfo': {
+                          if (!activeTemplate.showStudentInfo) return null;
+                          const flds = activeTemplate.studentFields || {};
+                          const stuCfg = activeTemplate.studentInfoConfig || {};
+                          const isCompact = stuCfg.size === 'compact';
+                          const isLarge = stuCfg.size === 'large';
+                          const cols = stuCfg.columns || 4;
+                          const colClass =
+                            cols === 2
+                              ? 'sm:grid-cols-2'
+                              : cols === 3
+                                ? 'sm:grid-cols-3'
+                                : 'sm:grid-cols-4';
+                          const siSt = { ...DEFAULT_BLOCK_STYLE, ...(stuCfg.style || {}) };
+                          const siLabelStyle = {
+                            fontSize: `${siSt.labelFontSize || (isCompact ? 8.5 : 9.5)}px`,
+                            color: siSt.labelColor || '#64748b',
+                          };
+                          const siValueStyle = {
+                            fontSize: `${siSt.contentFontSize || (isCompact ? 10.5 : 12)}px`,
+                            color: siSt.contentColor || '#0f172a',
+                          };
+
+                          return (
+                            <div
+                              key="studentInfo"
+                              className={`border border-slate-200 rounded-2xl print:rounded-lg grid grid-cols-2 ${colClass} ${
+                                isCompact
+                                  ? 'p-2.5 print:p-1.5 gap-2 print:gap-1 text-[11px] print:text-[8.5px]'
+                                  : isLarge
+                                    ? 'p-4 print:p-2.5 gap-3 print:gap-2 text-xs print:text-[10.5px]'
+                                    : 'p-3.5 print:p-2 gap-2.5 print:gap-1.5 text-xs print:text-[10px]'
+                              }`}
+                              style={bleed.innerBgStyle('#f8fafc')}
+                            >
+                              {flds.name !== false && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Student Name
+                                  </span>
+                                  <span className="font-black" style={siValueStyle}>
+                                    {student.student_name}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.admissionNo !== false && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Admission No
+                                  </span>
+                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                    {student.admission_no}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.className !== false && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Class & Section
+                                  </span>
+                                  <span
+                                    className="font-bold"
+                                    style={{
+                                      ...siValueStyle,
+                                      color: siSt.contentColor || '#be123c',
+                                    }}
+                                  >
+                                    {selectedClass?.name || `Class ${student.class_id}`}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.rollNo !== false && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Roll No
+                                  </span>
+                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                    #{student.roll_no || studentIdx + 1}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.fatherName && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Father / Guardian
+                                  </span>
+                                  <span className="font-bold" style={siValueStyle}>
+                                    {student.father_name || '—'}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.dob && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Date of Birth
+                                  </span>
+                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                    {student.dob || '—'}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.gender && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Gender
+                                  </span>
+                                  <span className="font-bold" style={siValueStyle}>
+                                    {student.gender || '—'}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.bloodGroup && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Blood Group
+                                  </span>
+                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                    {student.blood_group || '—'}
+                                  </span>
+                                </div>
+                              )}
+                              {flds.attendance && (
+                                <div>
+                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                    Attendance
+                                  </span>
+                                  <span
+                                    className="font-mono font-bold"
+                                    style={{
+                                      ...siValueStyle,
+                                      color: siSt.contentColor || '#047857',
+                                    }}
+                                  >
+                                    {student.attendance || '—'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        case 'attendanceBar': {
+                          if (!activeTemplate.showAttendanceBar) return null;
+                          return (
+                            <div key="attendanceBar">
+                              <AttendanceHorizontalStackBar
+                                student={student}
+                                config={activeTemplate.attendanceBarConfig}
+                                isCompact={activeTemplate.attendanceBarConfig?.size === 'compact'}
                               />
                             </div>
-                          )}
-                          {hdr.showLogo !== false && hdr.logoUrl && (
-                            <img
-                              src={hdr.logoUrl}
-                              alt="School Logo"
-                              className={`mx-auto mb-1 print:mb-0 object-contain ${
-                                isCompact
-                                  ? 'max-h-8 print:max-h-6'
-                                  : isLarge
-                                    ? 'max-h-16 print:max-h-10'
-                                    : 'max-h-12 print:max-h-8'
-                              }`}
-                            />
-                          )}
-                          {hdr.showTitle !== false && hdr.title && (
-                            <h1
-                              className={`font-black tracking-tight uppercase text-dark-primary ${
-                                isCompact
-                                  ? 'text-lg print:text-xs'
-                                  : isLarge
-                                    ? 'text-2xl print:text-lg'
-                                    : 'text-xl sm:text-2xl print:text-base'
-                              }`}
-                              style={{ color: activeTemplate.accentColor || '#0f172a' }}
+                          );
+                        }
+
+                        case 'subjectTable': {
+                          if (!activeTemplate.showSubjectTable) return null;
+                          const tbl = activeTemplate.subjectTableConfig || {};
+                          const tblSt = { ...DEFAULT_BLOCK_STYLE, ...(tbl.style || {}) };
+                          const isCompact = tbl.size === 'compact';
+                          const isSpacious = tbl.size === 'spacious';
+                          const cellPad = isCompact
+                            ? 'py-1 print:py-0.5 px-2 print:px-1'
+                            : isSpacious
+                              ? 'py-2 print:py-1 px-3 print:px-2'
+                              : 'py-1.5 print:py-0.5 px-2.5 print:px-1.5';
+                          const fontClass = isCompact
+                            ? 'text-[10px] print:text-[8.5px]'
+                            : isSpacious
+                              ? 'text-xs print:text-[10.5px]'
+                              : 'text-xs print:text-[9.5px]';
+                          const activeCols = getActiveTableColumns(tbl);
+
+                          const showOutline = tbl.showOutlineBorder !== false;
+                          const outlineStyle = showOutline
+                            ? `${tbl.outlineBorderWidth || 1}px ${tbl.outlineBorderStyle || 'solid'} ${tbl.outlineBorderColor || '#cbd5e1'}`
+                            : 'none';
+
+                          const showInline = tbl.showInlineBorders !== false;
+                          const inlineBorderBottom = showInline
+                            ? `1px ${tbl.inlineBorderStyle || 'solid'} ${tbl.inlineBorderColor || '#e2e8f0'}`
+                            : 'none';
+                          const inlineBorderRight = showInline
+                            ? `1px ${tbl.inlineBorderStyle || 'solid'} ${tbl.inlineBorderColor || '#e2e8f0'}`
+                            : 'none';
+
+                          const bandedBg = tbl.bandedRows
+                            ? hexToRgba(
+                                tbl.bandedRowColor || '#f8fafc',
+                                (tbl.bandedRowOpacity ?? 50) / 100
+                              )
+                            : 'transparent';
+
+                          const tblLabelStyle = {
+                            fontSize: `${tblSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                            color: tblSt.labelColor || undefined,
+                          };
+                          const tblValueStyle = {
+                            fontSize: `${tblSt.contentFontSize || (isCompact ? 10 : 11)}px`,
+                            color: tblSt.contentColor || undefined,
+                          };
+
+                          return (
+                            <div
+                              key="subjectTable"
+                              className="space-y-1.5 print:space-y-1"
+                              style={bleed.innerBgStyle('transparent')}
                             >
-                              {hdr.title}
-                            </h1>
-                          )}
-                          {hdr.showSubtitle !== false && hdr.subtitle && (
-                            <p className="text-xs print:text-[8.5px] font-bold text-dark-muted uppercase tracking-wider">
-                              {hdr.subtitle}
-                            </p>
-                          )}
-                          {hdr.showAddress !== false && hdr.address && (
-                            <p className="text-[10px] print:text-[7.5px] font-semibold text-slate-500">
-                              {hdr.address}
-                            </p>
-                          )}
-                          {hdr.showExamTitle !== false && (
-                            <div className="pt-1 print:pt-0.5">
-                              <span
-                                className="inline-block px-3 py-0.5 print:py-0.2 print:px-2 rounded-full text-white text-[10px] print:text-[8px] font-black uppercase tracking-widest"
-                                style={{ backgroundColor: activeTemplate.accentColor || '#0f172a' }}
+                              <div
+                                className="overflow-x-auto rounded-xl print:rounded-lg"
+                                style={{ border: outlineStyle }}
                               >
-                                {selectedSchedule?.name || hdr.examTitle || 'Official Progress Report'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    case 'studentInfo': {
-                      if (!activeTemplate.showStudentInfo) return null;
-                      const flds = activeTemplate.studentFields || {};
-                      const stuCfg = activeTemplate.studentInfoConfig || {};
-                      const isCompact = stuCfg.size === 'compact';
-                      const isLarge = stuCfg.size === 'large';
-                      const cols = stuCfg.columns || 4;
-                      const colClass =
-                        cols === 2
-                          ? 'sm:grid-cols-2'
-                          : cols === 3
-                            ? 'sm:grid-cols-3'
-                            : 'sm:grid-cols-4';
-
-                      return (
-                        <div
-                          key="studentInfo"
-                          className={`bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg grid grid-cols-2 ${colClass} ${
-                            isCompact
-                              ? 'p-2.5 print:p-1.5 gap-2 print:gap-1 text-[11px] print:text-[8.5px]'
-                              : isLarge
-                                ? 'p-4 print:p-2.5 gap-3 print:gap-2 text-xs print:text-[10.5px]'
-                                : 'p-3.5 print:p-2 gap-2.5 print:gap-1.5 text-xs print:text-[10px]'
-                          }`}
-                        >
-                          {flds.name !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Student Name
-                              </span>
-                              <span className="font-black text-dark-primary text-sm print:text-xs">
-                                {student.student_name}
-                              </span>
-                            </div>
-                          )}
-                          {flds.admissionNo !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Admission No
-                              </span>
-                              <span className="font-mono font-bold text-dark-primary">
-                                {student.admission_no}
-                              </span>
-                            </div>
-                          )}
-                          {flds.className !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Class & Section
-                              </span>
-                              <span className="font-bold text-rose-700">
-                                {selectedClass?.name || `Class ${student.class_id}`}
-                              </span>
-                            </div>
-                          )}
-                          {flds.rollNo !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Roll No
-                              </span>
-                              <span className="font-mono font-bold text-dark-primary">
-                                {student.roll_no || studentIdx + 1}
-                              </span>
-                            </div>
-                          )}
-                          {flds.fatherName && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Father / Guardian
-                              </span>
-                              <span className="font-bold text-dark-slate">
-                                {student.father_name || '—'}
-                              </span>
-                            </div>
-                          )}
-                          {flds.dob && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Date of Birth
-                              </span>
-                              <span className="font-mono font-bold text-dark-slate">
-                                {student.dob || '—'}
-                              </span>
-                            </div>
-                          )}
-                          {flds.gender && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Gender
-                              </span>
-                              <span className="font-bold text-dark-slate">
-                                {student.gender || '—'}
-                              </span>
-                            </div>
-                          )}
-                          {flds.bloodGroup && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Blood Group
-                              </span>
-                              <span className="font-mono font-bold text-dark-slate">
-                                {student.blood_group || '—'}
-                              </span>
-                            </div>
-                          )}
-                          {flds.attendance && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                                Attendance
-                              </span>
-                              <span className="font-mono font-bold text-emerald-700">
-                                {student.attendance || '—'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    case 'subjectTable': {
-                      if (!activeTemplate.showSubjectTable) return null;
-                      const tbl = activeTemplate.subjectTableConfig || {};
-                      const isCompact = tbl.size === 'compact';
-                      const isSpacious = tbl.size === 'spacious';
-                      const cellPad = isCompact
-                        ? 'py-1 print:py-0.5 px-2 print:px-1'
-                        : isSpacious
-                          ? 'py-2 print:py-1 px-3 print:px-2'
-                          : 'py-1.5 print:py-0.5 px-2.5 print:px-1.5';
-                      const fontClass = isCompact
-                        ? 'text-[10px] print:text-[8.5px]'
-                        : isSpacious
-                          ? 'text-xs print:text-[10.5px]'
-                          : 'text-xs print:text-[9.5px]';
-                      const activeCols = getActiveTableColumns(tbl);
-
-                      return (
-                        <div key="subjectTable" className="space-y-1.5 print:space-y-1">
-                          <h3 className="text-xs print:text-[9px] font-black text-dark-primary uppercase tracking-wider">
-                            Academic Marks Register
-                          </h3>
-                          <div className="overflow-x-auto rounded-xl border border-slate-900 print:rounded-lg">
-                            <table className={`w-full ${fontClass} border-collapse`}>
-                              <thead>
-                                <tr
-                                  className="text-white font-black text-[10px] print:text-[8.5px] uppercase tracking-wider"
-                                  style={{ backgroundColor: activeTemplate.accentColor || '#0f172a' }}
-                                >
-                                  {activeCols.map((colId) => {
-                                    if (colId === 'subject') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-left`}>
-                                          Subject
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'arabicName') {
-                                      return (
-                                        <th
-                                          key={colId}
-                                          className={`${cellPad} text-center font-arabic`}
-                                          dir="rtl"
-                                        >
-                                          المادة (Arabic)
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'maxMarks') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-20 print:w-14`}>
-                                          Max Marks
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'passMarks') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-20 print:w-14`}>
-                                          Pass Marks
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'marksObtained') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-24 print:w-16`}>
-                                          Marks Obtained
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'percentage') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-16 print:w-12`}>
-                                          %
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'grade') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-16 print:w-12`}>
-                                          Grade
-                                        </th>
-                                      );
-                                    }
-                                    if (colId === 'status') {
-                                      return (
-                                        <th key={colId} className={`${cellPad} text-center w-20 print:w-14`}>
-                                          Status
-                                        </th>
-                                      );
-                                    }
-                                    return null;
-                                  })}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-200">
-                                {/* Grouped Sections */}
-                                {groupedSections.map((grp) => (
-                                  <React.Fragment key={grp.groupName}>
-                                    <tr className="bg-slate-100 font-black text-[11px] print:text-[9px] text-dark-primary">
-                                      <td
-                                        colSpan={activeCols.length}
-                                        className="py-1 print:py-0.5 px-2.5 print:px-1.5 uppercase tracking-wider bg-rose-50/70 text-rose-900 border-y border-rose-200"
-                                      >
-                                        <i className="fas fa-layer-group text-[10px] mr-1.5 text-rose-600" />
-                                        <span>Group: {grp.groupName}</span>
-                                        <span className="ml-3 font-normal text-[10px] print:text-[8px] text-dark-muted">
-                                          (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} · {grp.groupPct}%)
-                                        </span>
-                                      </td>
+                                <table className={`w-full ${fontClass} border-collapse`}>
+                                  <thead>
+                                    <tr
+                                      className="font-black text-[10px] print:text-[8.5px] uppercase tracking-wider"
+                                      style={{
+                                        backgroundColor:
+                                          activeTemplate.subjectTableConfig?.headerBgColor ||
+                                          activeTemplate.accentColor ||
+                                          '#0f172a',
+                                        borderBottom: inlineBorderBottom,
+                                        ...tblLabelStyle,
+                                        color:
+                                          activeTemplate.subjectTableConfig?.headerTextColor ||
+                                          '#ffffff',
+                                      }}
+                                    >
+                                      {activeCols.map((colId, cIdx) => {
+                                        const isLast = cIdx === activeCols.length - 1;
+                                        const thBorder =
+                                          !isLast && showInline
+                                            ? { borderRight: inlineBorderRight }
+                                            : {};
+                                        const headerText =
+                                          activeTemplate.subjectTableConfig?.columnLabels?.[
+                                            colId
+                                          ] ||
+                                          DEFAULT_TABLE_COLUMN_HEADERS[colId] ||
+                                          colId;
+                                        if (colId === 'subject') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-left`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'arabicName') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center font-arabic`}
+                                              dir="rtl"
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'maxMarks') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-20 print:w-14`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'passMarks') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-20 print:w-14`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'marksObtained') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-24 print:w-16`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'percentage') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-16 print:w-12`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'grade') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-16 print:w-12`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        if (colId === 'status') {
+                                          return (
+                                            <th
+                                              key={colId}
+                                              className={`${cellPad} text-center w-20 print:w-14`}
+                                              style={thBorder}
+                                            >
+                                              {headerText}
+                                            </th>
+                                          );
+                                        }
+                                        return null;
+                                      })}
                                     </tr>
-                                    {grp.members.map((s) => (
-                                      <tr key={s.subjectId} className="hover:bg-slate-50/50">
-                                        {activeCols.map((colId) => {
-                                          if (colId === 'subject') {
-                                            return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} font-bold text-dark-primary pl-5 print:pl-3`}
-                                              >
-                                                • {s.subjectName}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'arabicName') {
-                                            return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
-                                                dir="rtl"
-                                              >
-                                                {s.arabicName || '—'}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'maxMarks') {
-                                            return (
-                                              <td key={colId} className={`${cellPad} text-center font-mono`}>
-                                                {s.maxMarks}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'passMarks') {
-                                            return (
-                                              <td key={colId} className={`${cellPad} text-center font-mono`}>
-                                                {s.passMarks || '—'}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'marksObtained') {
-                                            return (
-                                              <td
-                                                key={colId}
-                                                className={`${cellPad} text-center font-black ${
-                                                  s.status === 'FAIL'
-                                                    ? 'text-rose-600'
-                                                    : s.isAbsent
-                                                      ? 'text-amber-600'
-                                                      : 'text-dark-primary'
-                                                }`}
-                                              >
-                                                {s.marksObtained}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'percentage') {
-                                            return (
-                                              <td key={colId} className={`${cellPad} text-center font-mono font-bold text-dark-slate`}>
-                                                {typeof s.marksObtained === 'number' && s.maxMarks > 0
-                                                  ? `${Math.round((s.marksObtained / s.maxMarks) * 100)}%`
-                                                  : '—'}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'grade') {
-                                            return (
-                                              <td key={colId} className={`${cellPad} text-center font-bold text-emerald-700`}>
-                                                {s.grade}
-                                              </td>
-                                            );
-                                          }
-                                          if (colId === 'status') {
-                                            return (
-                                              <td key={colId} className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}>
-                                                <span className={s.status === 'PASS' ? 'text-emerald-700' : 'text-rose-700'}>
-                                                  {s.status}
-                                                </span>
-                                              </td>
-                                            );
-                                          }
-                                          return null;
-                                        })}
-                                      </tr>
-                                    ))}
-                                  </React.Fragment>
-                                ))}
-
-                                {/* Ungrouped Individual Subjects */}
-                                {ungroupedScores.map((s, uIdx) => (
-                                  <tr
-                                    key={s.subjectId}
-                                    className={
-                                      tbl.bandedRows && uIdx % 2 === 1
-                                        ? 'bg-slate-50/60'
-                                        : 'hover:bg-slate-50/50'
-                                    }
-                                  >
-                                    {activeCols.map((colId) => {
-                                      if (colId === 'subject') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} font-bold text-dark-primary`}>
-                                            {s.subjectName}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'arabicName') {
-                                        return (
+                                  </thead>
+                                  <tbody>
+                                    {/* Grouped Sections */}
+                                    {groupedSections.map((grp) => (
+                                      <React.Fragment key={grp.groupName}>
+                                        <tr
+                                          className="font-black text-[11px] print:text-[9px] text-dark-primary"
+                                          style={{
+                                            backgroundColor: hexToRgba('#ffe4e6', 0.6),
+                                            borderBottom: inlineBorderBottom,
+                                          }}
+                                        >
                                           <td
-                                            key={colId}
-                                            className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
-                                            dir="rtl"
+                                            colSpan={activeCols.length}
+                                            className="py-1 print:py-0.5 px-2.5 print:px-1.5 uppercase tracking-wider text-rose-900"
                                           >
-                                            {s.arabicName || '—'}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'maxMarks') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} text-center font-mono`}>
-                                            {s.maxMarks}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'passMarks') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} text-center font-mono`}>
-                                            {s.passMarks || '—'}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'marksObtained') {
-                                        return (
-                                          <td
-                                            key={colId}
-                                            className={`${cellPad} text-center font-black ${
-                                              s.status === 'FAIL'
-                                                ? 'text-rose-600'
-                                                : s.isAbsent
-                                                  ? 'text-amber-600'
-                                                  : 'text-dark-primary'
-                                            }`}
-                                          >
-                                            {s.marksObtained}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'percentage') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} text-center font-mono font-bold text-dark-slate`}>
-                                            {typeof s.marksObtained === 'number' && s.maxMarks > 0
-                                              ? `${Math.round((s.marksObtained / s.maxMarks) * 100)}%`
-                                              : '—'}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'grade') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} text-center font-bold text-emerald-700`}>
-                                            {s.grade}
-                                          </td>
-                                        );
-                                      }
-                                      if (colId === 'status') {
-                                        return (
-                                          <td key={colId} className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}>
-                                            <span className={s.status === 'PASS' ? 'text-emerald-700' : 'text-rose-700'}>
-                                              {s.status}
+                                            <i className="fas fa-layer-group text-[10px] mr-1.5 text-rose-600" />
+                                            <span>Group: {grp.groupName}</span>
+                                            <span className="ml-3 font-normal text-[10px] print:text-[8px] text-dark-muted">
+                                              (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} ·{' '}
+                                              {grp.groupPct}%)
                                             </span>
                                           </td>
-                                        );
-                                      }
-                                      return null;
+                                        </tr>
+                                        {grp.members.map((s) => (
+                                          <tr
+                                            key={s.subjectId}
+                                            className="hover:bg-slate-50/50"
+                                            style={{ borderBottom: inlineBorderBottom }}
+                                          >
+                                            {activeCols.map((colId, cIdx) => {
+                                              const isLast = cIdx === activeCols.length - 1;
+                                              const tdBorder =
+                                                !isLast && showInline
+                                                  ? { borderRight: inlineBorderRight }
+                                                  : {};
+                                              if (colId === 'subject') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} font-bold text-dark-primary pl-5 print:pl-3`}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
+                                                  >
+                                                    • {s.subjectName}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'arabicName') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                                                    dir="rtl"
+                                                    style={tdBorder}
+                                                  >
+                                                    {s.arabicName || '—'}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'maxMarks') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-mono`}
+                                                    style={tdBorder}
+                                                  >
+                                                    {s.maxMarks}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'passMarks') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-mono`}
+                                                    style={tdBorder}
+                                                  >
+                                                    {s.passMarks || '—'}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'marksObtained') {
+                                                const pct =
+                                                  s.maxMarks > 0 &&
+                                                  typeof s.marksObtained === 'number'
+                                                    ? Math.min(
+                                                        100,
+                                                        Math.max(
+                                                          0,
+                                                          Math.round(
+                                                            (s.marksObtained / s.maxMarks) * 100
+                                                          )
+                                                        )
+                                                      )
+                                                    : 0;
+                                                const showBar =
+                                                  Boolean(tbl.showMarksBarFill) && pct > 0;
+                                                const isVert = tbl.marksBarDirection === 'vertical';
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-black relative overflow-hidden ${
+                                                      s.status === 'FAIL'
+                                                        ? 'text-rose-600'
+                                                        : s.isAbsent
+                                                          ? 'text-amber-600'
+                                                          : 'text-dark-primary'
+                                                    }`}
+                                                    style={tdBorder}
+                                                  >
+                                                    {showBar && (
+                                                      <div
+                                                        className="absolute pointer-events-none transition-all print:print-color-adjust-exact"
+                                                        style={{
+                                                          width: isVert ? '100%' : `${pct}%`,
+                                                          height: isVert ? `${pct}%` : '100%',
+                                                          left: 0,
+                                                          bottom: 0,
+                                                          top: isVert ? 'auto' : 0,
+                                                          backgroundColor:
+                                                            tbl.marksBarColor || '#10b981',
+                                                          opacity:
+                                                            (tbl.marksBarOpacity !== undefined
+                                                              ? Number(tbl.marksBarOpacity)
+                                                              : 25) / 100,
+                                                        }}
+                                                      />
+                                                    )}
+                                                    <span className="relative z-10">
+                                                      {s.marksObtained}
+                                                    </span>
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'percentage') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
+                                                    style={tdBorder}
+                                                  >
+                                                    {typeof s.marksObtained === 'number' &&
+                                                    s.maxMarks > 0
+                                                      ? `${Math.round((s.marksObtained / s.maxMarks) * 100)}%`
+                                                      : '—'}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'grade') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-bold text-emerald-700`}
+                                                    style={tdBorder}
+                                                  >
+                                                    {s.grade}
+                                                  </td>
+                                                );
+                                              }
+                                              if (colId === 'status') {
+                                                return (
+                                                  <td
+                                                    key={colId}
+                                                    className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}
+                                                    style={tdBorder}
+                                                  >
+                                                    <span
+                                                      className={
+                                                        s.status === 'PASS'
+                                                          ? 'text-emerald-700'
+                                                          : 'text-rose-700'
+                                                      }
+                                                    >
+                                                      {s.status}
+                                                    </span>
+                                                  </td>
+                                                );
+                                              }
+                                              return null;
+                                            })}
+                                          </tr>
+                                        ))}
+                                      </React.Fragment>
+                                    ))}
+
+                                    {/* Ungrouped Individual Subjects */}
+                                    {ungroupedScores.map((s, uIdx) => {
+                                      const rowBg =
+                                        tbl.bandedRows && uIdx % 2 === 1 ? bandedBg : 'transparent';
+                                      return (
+                                        <tr
+                                          key={s.subjectId}
+                                          style={{
+                                            backgroundColor: rowBg,
+                                            borderBottom: inlineBorderBottom,
+                                          }}
+                                        >
+                                          {activeCols.map((colId, cIdx) => {
+                                            const isLast = cIdx === activeCols.length - 1;
+                                            const tdBorder =
+                                              !isLast && showInline
+                                                ? { borderRight: inlineBorderRight }
+                                                : {};
+                                            if (colId === 'subject') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} font-bold text-dark-primary`}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
+                                                >
+                                                  {s.subjectName}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'arabicName') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                                                  dir="rtl"
+                                                  style={tdBorder}
+                                                >
+                                                  {s.arabicName || '—'}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'maxMarks') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-mono`}
+                                                  style={tdBorder}
+                                                >
+                                                  {s.maxMarks}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'passMarks') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-mono`}
+                                                  style={tdBorder}
+                                                >
+                                                  {s.passMarks || '—'}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'marksObtained') {
+                                              const pct =
+                                                s.maxMarks > 0 &&
+                                                typeof s.marksObtained === 'number'
+                                                  ? Math.min(
+                                                      100,
+                                                      Math.max(
+                                                        0,
+                                                        Math.round(
+                                                          (s.marksObtained / s.maxMarks) * 100
+                                                        )
+                                                      )
+                                                    )
+                                                  : 0;
+                                              const showBar =
+                                                Boolean(tbl.showMarksBarFill) && pct > 0;
+                                              const isVert = tbl.marksBarDirection === 'vertical';
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-black relative overflow-hidden ${
+                                                    s.status === 'FAIL'
+                                                      ? 'text-rose-600'
+                                                      : s.isAbsent
+                                                        ? 'text-amber-600'
+                                                        : 'text-dark-primary'
+                                                  }`}
+                                                  style={tdBorder}
+                                                >
+                                                  {showBar && (
+                                                    <div
+                                                      className="absolute pointer-events-none transition-all print:print-color-adjust-exact"
+                                                      style={{
+                                                        width: isVert ? '100%' : `${pct}%`,
+                                                        height: isVert ? `${pct}%` : '100%',
+                                                        left: 0,
+                                                        bottom: 0,
+                                                        top: isVert ? 'auto' : 0,
+                                                        backgroundColor:
+                                                          tbl.marksBarColor || '#10b981',
+                                                        opacity:
+                                                          (tbl.marksBarOpacity !== undefined
+                                                            ? Number(tbl.marksBarOpacity)
+                                                            : 25) / 100,
+                                                      }}
+                                                    />
+                                                  )}
+                                                  <span className="relative z-10">
+                                                    {s.marksObtained}
+                                                  </span>
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'percentage') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
+                                                  style={tdBorder}
+                                                >
+                                                  {typeof s.marksObtained === 'number' &&
+                                                  s.maxMarks > 0
+                                                    ? `${Math.round((s.marksObtained / s.maxMarks) * 100)}%`
+                                                    : '—'}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'grade') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-bold text-emerald-700`}
+                                                  style={tdBorder}
+                                                >
+                                                  {s.grade}
+                                                </td>
+                                              );
+                                            }
+                                            if (colId === 'status') {
+                                              return (
+                                                <td
+                                                  key={colId}
+                                                  className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}
+                                                  style={tdBorder}
+                                                >
+                                                  <span
+                                                    className={
+                                                      s.status === 'PASS'
+                                                        ? 'text-emerald-700'
+                                                        : 'text-rose-700'
+                                                    }
+                                                  >
+                                                    {s.status}
+                                                  </span>
+                                                </td>
+                                              );
+                                            }
+                                            return null;
+                                          })}
+                                        </tr>
+                                      );
                                     })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    case 'summaryCalculations': {
-                      if (!activeTemplate.showSummaryCalculations) return null;
-                      const sum = activeTemplate.summaryConfig || {};
-                      const isCompact = sum.size === 'compact';
-                      const isLarge = sum.size === 'large';
-
-                      return (
-                        <div
-                          key="summaryCalculations"
-                          className={`bg-slate-900 text-white rounded-2xl print:rounded-lg grid grid-cols-2 sm:grid-cols-5 gap-2.5 print:gap-1 text-center ${
-                            isCompact
-                              ? 'p-2.5 print:p-1'
-                              : isLarge
-                                ? 'p-4.5 print:p-2'
-                                : 'p-3.5 print:p-1.5'
-                          }`}
-                        >
-                          {sum.showGrandTotal !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] text-slate-300 font-bold uppercase block">
-                                Grand Total
-                              </span>
-                              <span className={`font-black text-white ${isCompact ? 'text-sm print:text-[11px]' : 'text-base print:text-xs'}`}>
-                                {metrics.totalObtained} / {metrics.totalMax}
-                              </span>
+                                  </tbody>
+                                </table>
+                              </div>
                             </div>
-                          )}
-                          {sum.showPercentage !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] text-slate-300 font-bold uppercase block">
-                                Percentage
-                              </span>
-                              <span className={`font-black text-emerald-400 ${isCompact ? 'text-sm print:text-[11px]' : 'text-base print:text-xs'}`}>
-                                {metrics.percentage}%
-                              </span>
-                            </div>
-                          )}
-                          {sum.showGrade !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] text-slate-300 font-bold uppercase block">
-                                Overall Grade
-                              </span>
-                              <span className={`font-black text-amber-400 ${isCompact ? 'text-sm print:text-[11px]' : 'text-base print:text-xs'}`}>
-                                {metrics.overallGrade}
-                              </span>
-                            </div>
-                          )}
-                          {sum.showClassRank !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] text-slate-300 font-bold uppercase block">
-                                Class Rank
-                              </span>
-                              <span className={`font-black text-white font-mono ${isCompact ? 'text-sm print:text-[11px]' : 'text-base print:text-xs'}`}>
-                                #{metrics.classRank}
-                              </span>
-                            </div>
-                          )}
-                          {sum.showPassFail !== false && (
-                            <div>
-                              <span className="text-[10px] print:text-[7.5px] text-slate-300 font-bold uppercase block">
-                                Result
-                              </span>
-                              <span
-                                className={`font-black ${
-                                  metrics.status === 'PASS' ? 'text-emerald-400' : 'text-rose-400'
-                                } ${isCompact ? 'text-sm print:text-[11px]' : 'text-base print:text-xs'}`}
-                              >
-                                {metrics.status}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
+                          );
+                        }
 
-                    case 'charts': {
-                      if (!activeTemplate.showCharts || chartData.length === 0) return null;
-                      const ch = activeTemplate.chartConfig || {};
+                        case 'summaryCalculations': {
+                          if (!activeTemplate.showSummaryCalculations) return null;
+                          const sum = activeTemplate.summaryConfig || {};
+                          const sumStyle = { ...DEFAULT_BLOCK_STYLE, ...(sum.style || {}) };
+                          const isCompact = sum.size === 'compact';
+                          const itemOrder =
+                            sum.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
 
-                      // If multi-column charts are defined, render them
-                      if (ch.columns && ch.columns.length > 0) {
-                        const chartCols = ch.columns;
-                        const colWidthClass = chartCols.length === 1 ? 'grid-cols-1' : chartCols.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
-                        const chartH = ch.height || (ch.size === 'compact' ? 120 : ch.size === 'large' ? 220 : 160);
-                        const accentColor = activeTemplate.accentColor || '#e11d48';
-                        const PALETTE = ['#e11d48', '#059669', '#7c3aed', '#0284c7', '#d97706', '#db2777', '#0891b2'];
-
-                        const isPercentage = (colCfg) => {
-                          const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
-                          const agg = colCfg.aggregation || 'none';
-                          if (d === 'subject_pct' || d === 'overall_pct') return true;
-                          if (d === 'subject_classification' && agg !== 'sum' && agg !== 'max') return true;
-                          return false;
-                        };
-
-                        const buildColData = (colCfg) => {
-                          const d = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
-                          const agg = colCfg.aggregation || 'none';
-
-                          if (d === 'subject_marks') {
-                            return subjectScores.map(s => ({
-                              name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
-                              fullName: s.subjectName,
-                              value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
-                              Max: s.maxMarks,
-                            }));
-                          }
-
-                          if (d === 'subject_pct') {
-                            return subjectScores.map(s => ({
-                              name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
-                              fullName: s.subjectName,
-                              value: s.maxMarks > 0 && typeof s.marksObtained === 'number' ? Math.round((s.marksObtained / s.maxMarks) * 100) : 0,
-                              Max: 100,
-                            }));
-                          }
-
-                          if (d === 'subject_classification') {
-                            const groupsMap = new Map();
-                            subjectScores.forEach(s => {
-                              const key = s.classificationName || 'General';
-                              if (!groupsMap.has(key)) groupsMap.set(key, []);
-                              groupsMap.get(key).push(s);
-                            });
-
-                            const result = [];
-                            groupsMap.forEach((subList, groupName) => {
-                              const totalObt = subList.reduce((acc, curr) => acc + (typeof curr.marksObtained === 'number' ? curr.marksObtained : 0), 0);
-                              const totalMax = subList.reduce((acc, curr) => acc + (Number(curr.maxMarks) || 0), 0);
-                              const count = subList.length;
-
-                              let val = 0;
-                              if (agg === 'sum') {
-                                val = Math.round(totalObt);
-                              } else if (agg === 'max') {
-                                val = Math.max(...subList.map(s => typeof s.marksObtained === 'number' ? s.marksObtained : 0));
-                              } else {
-                                val = totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : 0;
-                              }
-
-                              result.push({
-                                name: groupName.length > 12 ? groupName.slice(0, 10) + '…' : groupName,
-                                fullName: `${groupName} (${count} subjects)`,
-                                value: val,
-                                count,
-                                Max: agg === 'sum' ? totalMax : 100,
-                              });
-                            });
-                            return result;
-                          }
-
-                          if (d === 'grade_classification') {
-                            const scale = Array.isArray(activeTemplate.gradingScale) && activeTemplate.gradingScale.length > 0
-                              ? activeTemplate.gradingScale
-                              : DEFAULT_GRADING_SCALE;
-
-                            const counts = {};
-                            scale.forEach(g => { counts[g.grade] = 0; });
-                            subjectScores.forEach(s => {
-                              if (s.grade && s.grade !== '—') {
-                                counts[s.grade] = (counts[s.grade] || 0) + 1;
-                              }
-                            });
-
-                            const isPieOrDonut = colCfg.chartType === 'pie' || colCfg.chartType === 'donut';
-                            const gradeEntries = scale.map(g => ({
-                              name: g.grade,
-                              fullName: `Grade ${g.grade}`,
-                              value: counts[g.grade] || 0,
-                            }));
-
-                            const nonZero = gradeEntries.filter(g => g.value > 0);
-                            return (isPieOrDonut || nonZero.length >= 3) ? (nonZero.length > 0 ? nonZero : gradeEntries) : gradeEntries;
-                          }
-
-                          if (d === 'attendance') {
-                            const attVal = Number(String(student.attendance || '').replace(/[^0-9.]/g, '')) || 95;
-                            return [
-                              { name: 'Present', value: attVal, Max: 100 },
-                              { name: 'Absent', value: Math.max(0, 100 - attVal), Max: 100 },
-                            ];
-                          }
-
-                          if (d === 'overall_pct') {
-                            const pct = Number(metrics.percentage) || 0;
-                            return [
-                              { name: 'Score', value: Math.round(pct), Max: 100 },
-                              { name: 'Remaining', value: Math.max(0, 100 - Math.round(pct)), Max: 100 },
-                            ];
-                          }
-
-                          return subjectScores.map(s => ({
-                            name: s.subjectName.slice(0, 6),
-                            fullName: s.subjectName,
-                            value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
-                            Max: s.maxMarks,
-                          }));
-                        };
-
-                        const isTight = !!ch.tightMargins;
-
-                        const renderPrintChart = (colCfg, h, tight = false) => {
-                          const data = buildColData(colCfg);
-                          const t = colCfg.chartType || 'bar';
-                          const pctMode = isPercentage(colCfg);
-                          const cd = colCfg.chartData === 'classification' ? 'grade_classification' : (colCfg.chartData || 'subject_marks');
-
-                          const userColors = Array.isArray(colCfg.colors) ? colCfg.colors.filter(Boolean) : [];
-                          const randomHsl = (i) => `hsl(${Math.round((i * 137.508) % 360)}, 65%, 52%)`;
-                          const getColor = (i) => {
-                            if (userColors.length > 0) return i < userColors.length ? userColors[i] : randomHsl(i);
-                            return PALETTE[i % PALETTE.length];
-                          };
-                          const baseColor = getColor(0) || accentColor;
-
-                          const showValues = colCfg.showValues !== undefined ? !!colCfg.showValues : !!colCfg.showDataLabels;
-                          const showLabels = !!colCfg.showLabels;
-                          const showAnyLabel = showValues || showLabels;
-                          const labelColor = colCfg.dataLabelColor || '#1e293b';
-                          const rawPos = colCfg.dataLabelPosition || 'top';
-                          const placement = getLabelPlacement(t, rawPos);
-                          const labelStyle = { fontSize: tight ? 8.5 : 8, fontWeight: 700, fill: labelColor };
-
-                          const enrichedData = data.map((d) => {
-                            const fVal = pctMode ? `${d.value}%` : `${d.value}`;
-                            const nameStr = d.name || '';
-                            let displayLabel = '';
-                            if (showValues && showLabels) {
-                              displayLabel = `${nameStr}: ${fVal}`;
-                            } else if (showLabels) {
-                              displayLabel = nameStr;
-                            } else if (showValues) {
-                              displayLabel = fVal;
-                            }
-                            return {
-                              ...d,
-                              formattedValue: fVal,
-                              displayLabel,
-                            };
-                          });
-
-                          const scaleType = colCfg.maxScale || 'auto';
-                          const axisMax = scaleType === 'pct100' ? 100 : scaleType === 'custom' ? (Number(colCfg.maxScaleValue) || 100) : 'auto';
-                          const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
-
-                          const tooltipFormatter = (val, name, item) => {
-                            const title = item?.payload?.fullName || name;
-                            if (pctMode) return [`${val}%`, title];
-                            if (cd === 'grade_classification') return [`${val} subjects`, title];
-                            if (item?.payload?.Max) return [`${val} / ${item.payload.Max}`, title];
-                            return [val, title];
+                          const SUMMARY_VALUES = {
+                            showGrandTotal: {
+                              label: 'Grand Total',
+                              value: `${metrics.totalObtained ?? '—'} / ${metrics.totalMax ?? '—'}`,
+                              color: '',
+                            },
+                            showPercentage: {
+                              label: 'Percentage',
+                              value:
+                                typeof metrics.percentage === 'number'
+                                  ? `${metrics.percentage}%`
+                                  : metrics.percentage || '—',
+                              color: sumStyle.contentColor || '#34d399',
+                            },
+                            showGrade: {
+                              label: 'Overall Grade',
+                              value: metrics.overallGrade || '—',
+                              color: sumStyle.contentColor || '#fbbf24',
+                            },
+                            showClassRank: {
+                              label: 'Class Rank',
+                              value: metrics.classRank ? `#${metrics.classRank}` : '—',
+                              color: '',
+                            },
+                            showPassFail: {
+                              label: 'Result',
+                              value: metrics.status || '—',
+                              color:
+                                metrics.status === 'PASS'
+                                  ? sumStyle.contentColor || '#34d399'
+                                  : '#f87171',
+                            },
+                            showTotalSubjects: {
+                              label: 'Total Subjects',
+                              value: String(subjectScores.length || 0),
+                              color: '',
+                            },
                           };
 
-                          // ── Legend Setup: On/Off & Positioning (top, bottom, left, right) ──
-                          const hasLegend = colCfg.showLegend !== undefined
-                            ? !!colCfg.showLegend
-                            : (colCfg.chartType === 'donut' || colCfg.chartType === 'pie');
-                          const legendPos = colCfg.legendPosition || 'bottom';
-                          const legendProps = getLegendProps(legendPos, tight);
-                          const legendPayload = enrichedData.map((d, i) => ({
-                            value: d.name,
-                            type: t === 'line' ? 'line' : 'circle',
-                            id: d.name,
-                            color: getColor(i),
-                          }));
+                          const visibleItems = itemOrder.filter((k) => sum[k]);
+                          const numCols =
+                            sum.columns > 0 ? sum.columns : Math.min(visibleItems.length, 5);
+                          const gridCols =
+                            numCols <= 1
+                              ? 'grid-cols-1'
+                              : numCols === 2
+                                ? 'grid-cols-2'
+                                : numCols === 3
+                                  ? 'grid-cols-3'
+                                  : numCols === 4
+                                    ? 'grid-cols-4'
+                                    : numCols === 5
+                                      ? 'grid-cols-5'
+                                      : 'grid-cols-6';
 
-                          const getCartesianMargin = (kind) => {
-                            let top = tight ? (showAnyLabel && placement.position === 'top' ? 14 : 2) : (showAnyLabel && placement.position === 'top' ? 16 : 5);
-                            let right = tight ? 2 : 5;
-                            let left = tight ? -22 : -20;
-                            let bottom = tight ? -4 : 2;
-
-                            if (kind === 'horizontal') {
-                              top = tight ? 1 : 2;
-                              right = tight ? (showAnyLabel && placement.position === 'right' ? 26 : 4) : (showAnyLabel && placement.position === 'right' ? 36 : 10);
-                              left = tight ? 16 : 30;
-                              bottom = tight ? -2 : 2;
-                            } else if (kind === 'line' || kind === 'area') {
-                              top = tight ? (showAnyLabel && placement.position === 'top' ? 14 : 3) : (showAnyLabel && placement.position === 'top' ? 16 : 5);
-                              right = tight ? 4 : 10;
-                              left = tight ? -22 : -20;
-                              bottom = tight ? -4 : 2;
-                            }
-
-                            if (hasLegend) {
-                              if (legendPos === 'top') top += 18;
-                              else if (legendPos === 'bottom') bottom += 16;
-                              else if (legendPos === 'left') left += 48;
-                              else if (legendPos === 'right') right += 48;
-                            }
-
-                            return { top, right, left, bottom };
-                          };
-
-                          if (t === 'text') {
-                            return (
-                              <div className={`flex flex-col ${tight ? 'gap-0.5' : 'gap-1'} justify-center h-full px-1`}>
-                                {enrichedData.slice(0, 6).map((d, i) => (
-                                  <div key={i} className="flex items-center justify-between text-[9px] font-bold">
-                                    <span className="text-dark-muted truncate max-w-[60%]">{d.name}</span>
-                                    <span className="font-black" style={{ color: baseColor }}>
-                                      {d.value}{pctMode ? '%' : cd === 'grade_classification' ? ' subs' : ''}
+                          return (
+                            <div
+                              key="summaryCalculations"
+                              className={`rounded-2xl print:rounded-lg grid ${gridCols} gap-2.5 print:gap-1 text-center border border-slate-700/50 ${
+                                isCompact ? 'p-2.5 print:p-1 text-xs' : 'p-3.5 print:p-1.5 text-sm'
+                              }`}
+                              style={bleed.innerBgStyle('#0f172a')}
+                            >
+                              {visibleItems.map((key) => {
+                                const item = SUMMARY_VALUES[key];
+                                if (!item) return null;
+                                return (
+                                  <div key={key}>
+                                    <span
+                                      className="font-bold uppercase block"
+                                      style={{
+                                        fontSize: `${sumStyle.labelFontSize || (isCompact ? 8 : 9)}px`,
+                                        color: sumStyle.labelColor || '#94a3b8',
+                                      }}
+                                    >
+                                      {item.label}
+                                    </span>
+                                    <span
+                                      className="font-black font-mono"
+                                      style={{
+                                        color: item.color || sumStyle.contentColor || '#ffffff',
+                                        fontSize: `${sumStyle.contentFontSize || (isCompact ? 12 : 14)}px`,
+                                      }}
+                                    >
+                                      {item.value}
                                     </span>
                                   </div>
-                                ))}
-                              </div>
-                            );
-                          }
+                                );
+                              })}
+                            </div>
+                          );
+                        }
 
-                          if (t === 'donut' || t === 'pie') {
-                            const isPieInside = placement.isInside;
-                            const pieData = enrichedData.map((d, i) => ({ ...d, fill: getColor(i) }));
-                            const outerR = tight ? (isPieInside ? '90%' : '80%') : '70%';
-                            const innerR = t === 'donut' ? (tight ? '46%' : '40%') : 0;
-                            const RADIAN = Math.PI / 180;
+                        case 'charts': {
+                          if (!activeTemplate.showCharts || chartData.length === 0) return null;
+                          const ch = activeTemplate.chartConfig || {};
 
-                            let pieCx = '50%';
-                            let pieCy = '50%';
-                            if (hasLegend) {
-                              if (legendPos === 'left') pieCx = '62%';
-                              else if (legendPos === 'right') pieCx = '38%';
-                              else if (legendPos === 'top') pieCy = '58%';
-                              else if (legendPos === 'bottom') pieCy = '44%';
-                            }
+                          // If multi-column charts are defined, render them
+                          if (ch.columns && ch.columns.length > 0) {
+                            const chartCols = ch.columns;
+                            const chartH =
+                              ch.height ||
+                              (ch.size === 'compact' ? 120 : ch.size === 'large' ? 220 : 160);
+                            const accentColor = activeTemplate.accentColor || '#e11d48';
+                            const PALETTE = [
+                              '#e11d48',
+                              '#059669',
+                              '#7c3aed',
+                              '#0284c7',
+                              '#d97706',
+                              '#db2777',
+                              '#0891b2',
+                            ];
 
-                            const renderCustomPieLabel = (props) => {
-                              const { cx, cy, midAngle, innerRadius, outerRadius, name, value, payload, x, y } = props;
-                              const text = payload?.displayLabel || (showValues && showLabels ? `${name}: ${value}` : showLabels ? `${name}` : `${value}`);
-                              if (!text) return null;
+                            const isPercentage = (colCfg) => {
+                              const d =
+                                colCfg.chartData === 'classification'
+                                  ? 'grade_classification'
+                                  : colCfg.chartData || 'subject_marks';
+                              const agg = colCfg.aggregation || 'none';
+                              if (d === 'subject_pct' || d === 'overall_pct') return true;
+                              if (d === 'subject_classification' && agg !== 'sum' && agg !== 'max')
+                                return true;
+                              return false;
+                            };
 
-                              if (isPieInside) {
-                                const ir = Number(innerRadius) || 0;
-                                const or = Number(outerRadius) || 60;
-                                const r = ir + (or - ir) * (t === 'donut' ? 0.52 : 0.6);
-                                const lx = cx + r * Math.cos(-midAngle * RADIAN);
-                                const ly = cy + r * Math.sin(-midAngle * RADIAN);
+                            const buildColData = (colCfg) => {
+                              const d =
+                                colCfg.chartData === 'classification'
+                                  ? 'grade_classification'
+                                  : colCfg.chartData || 'subject_marks';
+                              const agg = colCfg.aggregation || 'none';
+
+                              if (d === 'subject_marks') {
+                                return subjectScores.map((s) => ({
+                                  name:
+                                    s.subjectName.length > 8
+                                      ? s.subjectName.slice(0, 7) + '…'
+                                      : s.subjectName,
+                                  fullName: s.subjectName,
+                                  value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
+                                  Max: s.maxMarks,
+                                }));
+                              }
+
+                              if (d === 'subject_pct') {
+                                return subjectScores.map((s) => ({
+                                  name:
+                                    s.subjectName.length > 8
+                                      ? s.subjectName.slice(0, 7) + '…'
+                                      : s.subjectName,
+                                  fullName: s.subjectName,
+                                  value:
+                                    s.maxMarks > 0 && typeof s.marksObtained === 'number'
+                                      ? Math.round((s.marksObtained / s.maxMarks) * 100)
+                                      : 0,
+                                  Max: 100,
+                                }));
+                              }
+
+                              if (d === 'subject_classification') {
+                                const groupsMap = new Map();
+                                subjectScores.forEach((s) => {
+                                  const key = s.classificationName || 'General';
+                                  if (!groupsMap.has(key)) groupsMap.set(key, []);
+                                  groupsMap.get(key).push(s);
+                                });
+
+                                const result = [];
+                                groupsMap.forEach((subList, groupName) => {
+                                  const totalObt = subList.reduce(
+                                    (acc, curr) =>
+                                      acc +
+                                      (typeof curr.marksObtained === 'number'
+                                        ? curr.marksObtained
+                                        : 0),
+                                    0
+                                  );
+                                  const totalMax = subList.reduce(
+                                    (acc, curr) => acc + (Number(curr.maxMarks) || 0),
+                                    0
+                                  );
+                                  const count = subList.length;
+
+                                  let val = 0;
+                                  if (agg === 'sum') {
+                                    val = Math.round(totalObt);
+                                  } else if (agg === 'max') {
+                                    val = Math.max(
+                                      ...subList.map((s) =>
+                                        typeof s.marksObtained === 'number' ? s.marksObtained : 0
+                                      )
+                                    );
+                                  } else {
+                                    val =
+                                      totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : 0;
+                                  }
+
+                                  result.push({
+                                    name:
+                                      groupName.length > 12
+                                        ? groupName.slice(0, 10) + '…'
+                                        : groupName,
+                                    fullName: `${groupName} (${count} subjects)`,
+                                    value: val,
+                                    count,
+                                    Max: agg === 'sum' ? totalMax : 100,
+                                  });
+                                });
+                                return result;
+                              }
+
+                              if (d === 'grade_classification') {
+                                const scale =
+                                  Array.isArray(activeTemplate.gradingScale) &&
+                                  activeTemplate.gradingScale.length > 0
+                                    ? activeTemplate.gradingScale
+                                    : DEFAULT_GRADING_SCALE;
+
+                                const counts = {};
+                                scale.forEach((g) => {
+                                  counts[g.grade] = 0;
+                                });
+                                subjectScores.forEach((s) => {
+                                  if (s.grade && s.grade !== '—') {
+                                    counts[s.grade] = (counts[s.grade] || 0) + 1;
+                                  }
+                                });
+
+                                const isPieOrDonut =
+                                  colCfg.chartType === 'pie' || colCfg.chartType === 'donut';
+                                const gradeEntries = scale.map((g) => ({
+                                  name: g.grade,
+                                  fullName: `Grade ${g.grade}`,
+                                  value: counts[g.grade] || 0,
+                                }));
+
+                                const nonZero = gradeEntries.filter((g) => g.value > 0);
+                                return isPieOrDonut || nonZero.length >= 3
+                                  ? nonZero.length > 0
+                                    ? nonZero
+                                    : gradeEntries
+                                  : gradeEntries;
+                              }
+
+                              if (d === 'attendance') {
+                                const attVal =
+                                  Number(
+                                    String(student.attendance || '').replace(/[^0-9.]/g, '')
+                                  ) || 95;
+                                return [
+                                  { name: 'Present', value: attVal, Max: 100 },
+                                  { name: 'Absent', value: Math.max(0, 100 - attVal), Max: 100 },
+                                ];
+                              }
+
+                              if (d === 'overall_pct') {
+                                const pct = Number(metrics.percentage) || 0;
+                                return [
+                                  { name: 'Score', value: Math.round(pct), Max: 100 },
+                                  {
+                                    name: 'Remaining',
+                                    value: Math.max(0, 100 - Math.round(pct)),
+                                    Max: 100,
+                                  },
+                                ];
+                              }
+
+                              return subjectScores.map((s) => ({
+                                name: s.subjectName.slice(0, 6),
+                                fullName: s.subjectName,
+                                value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
+                                Max: s.maxMarks,
+                              }));
+                            };
+
+                            const isTight = !!ch.tightMargins;
+
+                            const renderPrintChart = (colCfg, h, tight = false) => {
+                              const data = buildColData(colCfg);
+                              const t = colCfg.chartType || 'bar';
+                              const pctMode = isPercentage(colCfg);
+                              const cd =
+                                colCfg.chartData === 'classification'
+                                  ? 'grade_classification'
+                                  : colCfg.chartData || 'subject_marks';
+
+                              const userColors = Array.isArray(colCfg.colors)
+                                ? colCfg.colors.filter(Boolean)
+                                : [];
+                              const randomHsl = (i) =>
+                                `hsl(${Math.round((i * 137.508) % 360)}, 65%, 52%)`;
+                              const getColor = (i) => {
+                                if (userColors.length > 0)
+                                  return i < userColors.length ? userColors[i] : randomHsl(i);
+                                return PALETTE[i % PALETTE.length];
+                              };
+                              const baseColor = getColor(0) || accentColor;
+
+                              const showValues = !!colCfg.showValues;
+                              const showLabels = !!colCfg.showLabels;
+                              const showAnyLabel = showValues || showLabels;
+                              const labelColor = colCfg.dataLabelColor || '#1e293b';
+                              const rawPos = colCfg.dataLabelPosition || 'top';
+                              const placement = getLabelPlacement(t, rawPos);
+                              const labelSeparator = colCfg.dataLabelSeparator || 'colon';
+
+                              const enrichedData = data.map((d) => {
+                                const fVal = pctMode ? `${d.value}%` : `${d.value}`;
+                                const nameStr = d.name || '';
+                                const displayLabel = formatDataLabel(
+                                  nameStr,
+                                  fVal,
+                                  labelSeparator,
+                                  showValues,
+                                  showLabels
+                                );
+                                return {
+                                  ...d,
+                                  formattedValue: fVal,
+                                  displayLabel,
+                                };
+                              });
+
+                              const scaleType = colCfg.maxScale || 'auto';
+                              const axisMax =
+                                scaleType === 'pct100'
+                                  ? 100
+                                  : scaleType === 'custom'
+                                    ? Number(colCfg.maxScaleValue) || 100
+                                    : 'auto';
+                              const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
+
+                              const tooltipFormatter = (val, name, item) => {
+                                const title = item?.payload?.fullName || name;
+                                if (pctMode) return [`${val}%`, title];
+                                if (cd === 'grade_classification')
+                                  return [`${val} subjects`, title];
+                                if (item?.payload?.Max)
+                                  return [`${val} / ${item.payload.Max}`, title];
+                                return [val, title];
+                              };
+
+                              // ── Legend Setup: On/Off & Positioning ──
+                              const hasLegend =
+                                colCfg.showLegend !== undefined
+                                  ? !!colCfg.showLegend
+                                  : colCfg.chartType === 'donut' || colCfg.chartType === 'pie';
+                              const legendPos = colCfg.legendPosition || 'bottom';
+                              const legendProps = getLegendProps(legendPos, tight);
+                              const legendPayload = enrichedData.map((d, i) => ({
+                                value: d.name,
+                                type: t === 'line' ? 'line' : 'circle',
+                                id: d.name,
+                                color: getColor(i),
+                              }));
+
+                              // Recharts Legend text formatter with configurable color
+                              const renderLegendText = (value, entry) => {
+                                const mode = colCfg.legendTextColorMode || 'data_labels_color';
+                                const textColor =
+                                  mode === 'chart_color'
+                                    ? entry.color || entry.payload?.fill || baseColor
+                                    : colCfg.dataLabelColor || '#1e293b';
+                                return (
+                                  <span
+                                    className="recharts-legend-item-text font-bold"
+                                    style={{ color: textColor }}
+                                  >
+                                    {value}
+                                  </span>
+                                );
+                              };
+
+                              const getCartesianMargin = (kind) => {
+                                let top = tight
+                                  ? showAnyLabel && placement.position === 'top'
+                                    ? 14
+                                    : 2
+                                  : showAnyLabel && placement.position === 'top'
+                                    ? 16
+                                    : 5;
+                                let right = tight ? 4 : 8;
+                                let left = tight ? -20 : -16;
+                                let bottom = tight ? -2 : 2;
+
+                                if (kind === 'horizontal') {
+                                  top = tight ? 2 : 4;
+                                  right = tight
+                                    ? showAnyLabel && placement.position === 'right'
+                                      ? 24
+                                      : 8
+                                    : showAnyLabel && placement.position === 'right'
+                                      ? 32
+                                      : 12;
+                                  left = tight ? 4 : 8;
+                                  bottom = tight ? 2 : 4;
+                                } else if (kind === 'line' || kind === 'area') {
+                                  top = tight
+                                    ? showAnyLabel && placement.position === 'top'
+                                      ? 14
+                                      : 3
+                                    : showAnyLabel && placement.position === 'top'
+                                      ? 16
+                                      : 5;
+                                  right = tight ? 4 : 10;
+                                  left = tight ? -20 : -16;
+                                  bottom = tight ? -2 : 2;
+                                }
+
+                                if (hasLegend) {
+                                  if (legendPos === 'top') top += 18;
+                                  else if (legendPos === 'bottom') bottom += 16;
+                                  else if (legendPos === 'left') left += 40;
+                                  else if (legendPos === 'right') right += 40;
+                                }
+
+                                return { top, right, left, bottom };
+                              };
+
+                              // Custom SVG Label Renderer for multi-line (line break) and bounded positioning
+                              const renderSvgLabel = (props) => {
+                                const { x, y, width, height, value } = props;
+                                if (!value && value !== 0) return null;
+                                const str = String(value);
+                                if (!str) return null;
+
+                                if (str.includes('\n')) {
+                                  const lines = str.split('\n');
+                                  let tx = x + (width ? width / 2 : 0);
+                                  let ty = y + (height ? height / 2 : 0);
+                                  let anchor = 'middle';
+
+                                  if (t === 'horizontal_bar' || t === 'stacked_bar_h') {
+                                    if (placement.position === 'right') {
+                                      tx = x + (width || 0) + 4;
+                                      ty = y + (height ? height / 2 : 0);
+                                      anchor = 'start';
+                                    } else if (placement.position === 'insideRight') {
+                                      tx = x + (width || 0) - 4;
+                                      ty = y + (height ? height / 2 : 0);
+                                      anchor = 'end';
+                                    }
+                                  } else {
+                                    if (placement.position === 'top') {
+                                      ty = y - 4;
+                                    }
+                                  }
+
+                                  return (
+                                    <text
+                                      x={tx}
+                                      y={ty - (lines.length - 1) * 4.5}
+                                      fill={labelColor}
+                                      textAnchor={anchor}
+                                      dominantBaseline="central"
+                                      fontSize={tight ? 7.5 : 8}
+                                      fontWeight={700}
+                                    >
+                                      {lines.map((line, idx) => (
+                                        <tspan key={idx} x={tx} dy={idx === 0 ? 0 : '1.15em'}>
+                                          {line}
+                                        </tspan>
+                                      ))}
+                                    </text>
+                                  );
+                                }
+
+                                let tx = x + (width ? width / 2 : 0);
+                                let ty = y + (height ? height / 2 : 0);
+                                let anchor = 'middle';
+
+                                if (t === 'horizontal_bar' || t === 'stacked_bar_h') {
+                                  if (placement.position === 'right') {
+                                    tx = x + (width || 0) + 4;
+                                    anchor = 'start';
+                                  } else if (placement.position === 'insideRight') {
+                                    tx = x + (width || 0) - 4;
+                                    anchor = 'end';
+                                  }
+                                } else if (placement.position === 'top') {
+                                  ty = y - 5;
+                                }
+
                                 return (
                                   <text
-                                    x={lx}
-                                    y={ly}
+                                    x={tx}
+                                    y={ty}
                                     fill={labelColor}
-                                    textAnchor="middle"
+                                    textAnchor={anchor}
                                     dominantBaseline="central"
-                                    fontSize={tight ? 8.5 : 8}
+                                    fontSize={tight ? 7.5 : 8}
                                     fontWeight={700}
                                   >
-                                    {text}
+                                    {str}
                                   </text>
+                                );
+                              };
+
+                              if (t === 'text') {
+                                return (
+                                  <div
+                                    className={`flex flex-col ${tight ? 'gap-0.5' : 'gap-1'} justify-center h-full px-1`}
+                                  >
+                                    {enrichedData.slice(0, 6).map((d, i) => (
+                                      <div
+                                        key={i}
+                                        className="flex items-center justify-between text-[9px] font-bold"
+                                      >
+                                        <span className="text-dark-muted truncate max-w-[60%]">
+                                          {d.name}
+                                        </span>
+                                        <span className="font-black" style={{ color: baseColor }}>
+                                          {d.value}
+                                          {pctMode
+                                            ? '%'
+                                            : cd === 'grade_classification'
+                                              ? ' subs'
+                                              : ''}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              }
+
+                              if (t === 'donut' || t === 'pie') {
+                                const isPieInside = placement.isInside;
+                                const pieData = enrichedData.map((d, i) => ({
+                                  ...d,
+                                  fill: getColor(i),
+                                }));
+                                const outerR = tight ? (isPieInside ? '90%' : '80%') : '70%';
+                                const innerR = t === 'donut' ? (tight ? '46%' : '40%') : 0;
+                                const RADIAN = Math.PI / 180;
+                                const piePaddingAngle =
+                                  colCfg.sliceGap !== undefined
+                                    ? Number(colCfg.sliceGap)
+                                    : tight
+                                      ? 1
+                                      : 2;
+                                const defaultOuterR = hasLegend
+                                  ? outerR
+                                  : tight
+                                    ? isPieInside
+                                      ? '94%'
+                                      : '84%'
+                                    : '76%';
+                                const effectiveOuterR = colCfg.pieSizePercent
+                                  ? `${colCfg.pieSizePercent}%`
+                                  : defaultOuterR;
+                                const effectiveInnerR =
+                                  t === 'donut'
+                                    ? colCfg.donutHolePercent
+                                      ? `${colCfg.donutHolePercent}%`
+                                      : innerR
+                                    : 0;
+
+                                let pieCx = '50%';
+                                let pieCy = '50%';
+                                if (hasLegend) {
+                                  if (legendPos === 'left') pieCx = '62%';
+                                  else if (legendPos === 'right') pieCx = '38%';
+                                  else if (legendPos === 'top') pieCy = '58%';
+                                  else if (legendPos === 'bottom') pieCy = '44%';
+                                }
+
+                                const renderCustomPieLabel = (props) => {
+                                  const {
+                                    cx,
+                                    cy,
+                                    midAngle,
+                                    innerRadius,
+                                    outerRadius,
+                                    payload,
+                                    x,
+                                    y,
+                                  } = props;
+                                  const text = payload?.displayLabel || '';
+                                  if (!text) return null;
+
+                                  if (isPieInside) {
+                                    const ir = Number(innerRadius) || 0;
+                                    const or = Number(outerRadius) || 60;
+                                    const r = ir + (or - ir) * (t === 'donut' ? 0.52 : 0.6);
+                                    const lx = cx + r * Math.cos(-midAngle * RADIAN);
+                                    const ly = cy + r * Math.sin(-midAngle * RADIAN);
+
+                                    if (text.includes('\n')) {
+                                      const lines = text.split('\n');
+                                      return (
+                                        <text
+                                          x={lx}
+                                          y={ly - (lines.length - 1) * 4.5}
+                                          fill={labelColor}
+                                          textAnchor="middle"
+                                          dominantBaseline="central"
+                                          fontSize={tight ? 8 : 7.5}
+                                          fontWeight={700}
+                                        >
+                                          {lines.map((l, i) => (
+                                            <tspan key={i} x={lx} dy={i === 0 ? 0 : '1.15em'}>
+                                              {l}
+                                            </tspan>
+                                          ))}
+                                        </text>
+                                      );
+                                    }
+
+                                    return (
+                                      <text
+                                        x={lx}
+                                        y={ly}
+                                        fill={labelColor}
+                                        textAnchor="middle"
+                                        dominantBaseline="central"
+                                        fontSize={tight ? 8.5 : 8}
+                                        fontWeight={700}
+                                      >
+                                        {text}
+                                      </text>
+                                    );
+                                  }
+
+                                  if (text.includes('\n')) {
+                                    const lines = text.split('\n');
+                                    const anchor = x > cx ? 'start' : 'end';
+                                    return (
+                                      <text
+                                        x={x}
+                                        y={y - (lines.length - 1) * 4.5}
+                                        fill={labelColor}
+                                        textAnchor={anchor}
+                                        dominantBaseline="central"
+                                        fontSize={8}
+                                        fontWeight={700}
+                                      >
+                                        {lines.map((l, i) => (
+                                          <tspan key={i} x={x} dy={i === 0 ? 0 : '1.15em'}>
+                                            {l}
+                                          </tspan>
+                                        ))}
+                                      </text>
+                                    );
+                                  }
+
+                                  return (
+                                    <text
+                                      x={x}
+                                      y={y}
+                                      fill={labelColor}
+                                      textAnchor={x > cx ? 'start' : 'end'}
+                                      dominantBaseline="central"
+                                      fontSize={8}
+                                      fontWeight={700}
+                                    >
+                                      {text}
+                                    </text>
+                                  );
+                                };
+
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <PieChart>
+                                      <Pie
+                                        data={pieData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        cx={pieCx}
+                                        cy={pieCy}
+                                        innerRadius={effectiveInnerR}
+                                        outerRadius={effectiveOuterR}
+                                        paddingAngle={piePaddingAngle}
+                                        label={showAnyLabel ? renderCustomPieLabel : undefined}
+                                        labelLine={
+                                          showAnyLabel && !isPieInside
+                                            ? { stroke: labelColor, strokeWidth: 1 }
+                                            : false
+                                        }
+                                      >
+                                        {pieData.map((entry, index) => (
+                                          <Cell key={index} fill={entry.fill} />
+                                        ))}
+                                      </Pie>
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                );
+                              }
+
+                              if (t === 'horizontal_bar') {
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <BarChart
+                                      data={enrichedData}
+                                      layout="vertical"
+                                      margin={getCartesianMargin('horizontal')}
+                                      barGap={
+                                        colCfg.barGap !== undefined ? Number(colCfg.barGap) : 4
+                                      }
+                                      barCategoryGap={colCfg.barCategoryGap || '15%'}
+                                    >
+                                      <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        horizontal={false}
+                                        stroke="#e2e8f0"
+                                      />
+                                      <XAxis
+                                        type="number"
+                                        tick={{ fontSize: tight ? 7.5 : 8 }}
+                                        domain={axisDomain}
+                                      />
+                                      <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                        width={tight ? 32 : 40}
+                                      />
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                      <Bar
+                                        dataKey="value"
+                                        barSize={
+                                          colCfg.barSize ? Number(colCfg.barSize) : undefined
+                                        }
+                                        radius={
+                                          colCfg.barRadius !== undefined
+                                            ? [
+                                                0,
+                                                Number(colCfg.barRadius),
+                                                Number(colCfg.barRadius),
+                                                0,
+                                              ]
+                                            : [0, 3, 3, 0]
+                                        }
+                                      >
+                                        {enrichedData.map((_, i) => (
+                                          <Cell key={i} fill={getColor(i)} />
+                                        ))}
+                                        {showAnyLabel && (
+                                          <LabelList
+                                            dataKey="displayLabel"
+                                            content={renderSvgLabel}
+                                          />
+                                        )}
+                                      </Bar>
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                );
+                              }
+
+                              if (t === 'stacked_bar') {
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <BarChart
+                                      data={enrichedData}
+                                      margin={getCartesianMargin('vertical')}
+                                      barGap={
+                                        colCfg.barGap !== undefined ? Number(colCfg.barGap) : 4
+                                      }
+                                      barCategoryGap={colCfg.barCategoryGap || '15%'}
+                                    >
+                                      <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        vertical={false}
+                                        stroke="#e2e8f0"
+                                      />
+                                      <XAxis
+                                        dataKey="name"
+                                        tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                      />
+                                      <YAxis
+                                        tick={{ fontSize: tight ? 7.5 : 8 }}
+                                        domain={axisDomain}
+                                      />
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                      <Bar
+                                        dataKey="value"
+                                        stackId="a"
+                                        fill={getColor(0)}
+                                        barSize={
+                                          colCfg.barSize ? Number(colCfg.barSize) : undefined
+                                        }
+                                        radius={
+                                          colCfg.barRadius !== undefined
+                                            ? [
+                                                Number(colCfg.barRadius),
+                                                Number(colCfg.barRadius),
+                                                0,
+                                                0,
+                                              ]
+                                            : undefined
+                                        }
+                                      >
+                                        {showAnyLabel && (
+                                          <LabelList
+                                            dataKey="displayLabel"
+                                            content={renderSvgLabel}
+                                          />
+                                        )}
+                                      </Bar>
+                                      {enrichedData[0]?.Max && (
+                                        <Bar dataKey="Max" stackId="a" fill="#e2e8f0" />
+                                      )}
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                );
+                              }
+
+                              if (t === 'stacked_bar_h') {
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <BarChart
+                                      data={enrichedData}
+                                      layout="vertical"
+                                      margin={getCartesianMargin('horizontal')}
+                                      barGap={
+                                        colCfg.barGap !== undefined ? Number(colCfg.barGap) : 4
+                                      }
+                                      barCategoryGap={colCfg.barCategoryGap || '15%'}
+                                    >
+                                      <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        horizontal={false}
+                                        stroke="#e2e8f0"
+                                      />
+                                      <XAxis
+                                        type="number"
+                                        tick={{ fontSize: tight ? 7.5 : 8 }}
+                                        domain={axisDomain}
+                                      />
+                                      <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                        width={tight ? 32 : 40}
+                                      />
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                      <Bar
+                                        dataKey="value"
+                                        stackId="a"
+                                        fill={getColor(0)}
+                                        barSize={
+                                          colCfg.barSize ? Number(colCfg.barSize) : undefined
+                                        }
+                                        radius={
+                                          colCfg.barRadius !== undefined
+                                            ? [
+                                                0,
+                                                Number(colCfg.barRadius),
+                                                Number(colCfg.barRadius),
+                                                0,
+                                              ]
+                                            : undefined
+                                        }
+                                      >
+                                        {showAnyLabel && (
+                                          <LabelList
+                                            dataKey="displayLabel"
+                                            content={renderSvgLabel}
+                                          />
+                                        )}
+                                      </Bar>
+                                      {enrichedData[0]?.Max && (
+                                        <Bar dataKey="Max" stackId="a" fill="#e2e8f0" />
+                                      )}
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                );
+                              }
+
+                              if (t === 'line') {
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <LineChart
+                                      data={enrichedData}
+                                      margin={getCartesianMargin('line')}
+                                    >
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                      <XAxis
+                                        dataKey="name"
+                                        tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                      />
+                                      <YAxis
+                                        tick={{ fontSize: tight ? 7.5 : 8 }}
+                                        domain={axisDomain}
+                                      />
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                      <Line
+                                        type="monotone"
+                                        dataKey="value"
+                                        stroke={baseColor}
+                                        strokeWidth={
+                                          colCfg.lineWidth ? Number(colCfg.lineWidth) : 2
+                                        }
+                                        dot={{
+                                          r:
+                                            colCfg.dotSize !== undefined
+                                              ? Number(colCfg.dotSize)
+                                              : 3,
+                                          fill: baseColor,
+                                        }}
+                                      >
+                                        {showAnyLabel && (
+                                          <LabelList
+                                            dataKey="displayLabel"
+                                            content={renderSvgLabel}
+                                          />
+                                        )}
+                                      </Line>
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                );
+                              }
+
+                              if (t === 'area') {
+                                return (
+                                  <ResponsiveContainer width="100%" height={h}>
+                                    <AreaChart
+                                      data={enrichedData}
+                                      margin={getCartesianMargin('area')}
+                                    >
+                                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                                      <XAxis
+                                        dataKey="name"
+                                        tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                      />
+                                      <YAxis
+                                        tick={{ fontSize: tight ? 7.5 : 8 }}
+                                        domain={axisDomain}
+                                      />
+                                      <Tooltip
+                                        contentStyle={{ fontSize: 9 }}
+                                        formatter={tooltipFormatter}
+                                      />
+                                      {hasLegend && (
+                                        <Legend
+                                          payload={legendPayload}
+                                          {...legendProps}
+                                          iconSize={tight ? 7 : 8}
+                                          formatter={renderLegendText}
+                                        />
+                                      )}
+                                      <Area
+                                        type="monotone"
+                                        dataKey="value"
+                                        stroke={baseColor}
+                                        strokeWidth={
+                                          colCfg.lineWidth ? Number(colCfg.lineWidth) : 2
+                                        }
+                                        fillOpacity={0.25}
+                                        fill={baseColor}
+                                      >
+                                        {showAnyLabel && (
+                                          <LabelList
+                                            dataKey="displayLabel"
+                                            content={renderSvgLabel}
+                                          />
+                                        )}
+                                      </Area>
+                                    </AreaChart>
+                                  </ResponsiveContainer>
                                 );
                               }
 
                               return (
-                                <text
-                                  x={x}
-                                  y={y}
-                                  fill={labelColor}
-                                  textAnchor={x > cx ? 'start' : 'end'}
-                                  dominantBaseline="central"
-                                  fontSize={8}
-                                  fontWeight={700}
-                                >
-                                  {text}
-                                </text>
+                                <ResponsiveContainer width="100%" height={h}>
+                                  <BarChart
+                                    data={enrichedData}
+                                    margin={getCartesianMargin('vertical')}
+                                    barGap={colCfg.barGap !== undefined ? Number(colCfg.barGap) : 4}
+                                    barCategoryGap={colCfg.barCategoryGap || '15%'}
+                                  >
+                                    <CartesianGrid
+                                      strokeDasharray="3 3"
+                                      vertical={false}
+                                      stroke="#e2e8f0"
+                                    />
+                                    <XAxis
+                                      dataKey="name"
+                                      tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }}
+                                    />
+                                    <YAxis
+                                      tick={{ fontSize: tight ? 7.5 : 8 }}
+                                      domain={axisDomain}
+                                    />
+                                    <Tooltip
+                                      contentStyle={{ fontSize: 9 }}
+                                      formatter={tooltipFormatter}
+                                    />
+                                    <Bar
+                                      dataKey="value"
+                                      barSize={colCfg.barSize ? Number(colCfg.barSize) : undefined}
+                                      radius={
+                                        colCfg.barRadius !== undefined
+                                          ? [
+                                              Number(colCfg.barRadius),
+                                              Number(colCfg.barRadius),
+                                              0,
+                                              0,
+                                            ]
+                                          : [3, 3, 0, 0]
+                                      }
+                                    >
+                                      {enrichedData.map((_, index) => (
+                                        <Cell key={index} fill={getColor(index)} />
+                                      ))}
+                                      {showAnyLabel && (
+                                        <LabelList
+                                          dataKey="displayLabel"
+                                          content={renderSvgLabel}
+                                        />
+                                      )}
+                                    </Bar>
+                                  </BarChart>
+                                </ResponsiveContainer>
                               );
                             };
 
-                            return (
-                              <ResponsiveContainer width="100%" height={h}>
-                                <PieChart>
-                                  <Pie
-                                    data={pieData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx={pieCx}
-                                    cy={pieCy}
-                                    innerRadius={innerR}
-                                    outerRadius={hasLegend ? outerR : (tight ? (isPieInside ? '94%' : '84%') : '76%')}
-                                    paddingAngle={tight ? 1 : 2}
-                                    label={showAnyLabel ? renderCustomPieLabel : undefined}
-                                    labelLine={showAnyLabel && !isPieInside ? { stroke: labelColor, strokeWidth: 1 } : false}
-                                  >
-                                    {pieData.map((entry, index) => (
-                                      <Cell key={index} fill={entry.fill} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                  {hasLegend && (
-                                    <Legend payload={legendPayload} {...legendProps} iconSize={tight ? 7 : 8} />
-                                  )}
-                                </PieChart>
-                              </ResponsiveContainer>
-                            );
-                          }
+                            const totalCols = chartCols.length;
+                            const gridTemplateStyle =
+                              totalCols > 1
+                                ? {
+                                    gridTemplateColumns: chartCols
+                                      .map(
+                                        (c) =>
+                                          `minmax(0, ${c.widthPercent || Math.round(100 / totalCols)}fr)`
+                                      )
+                                      .join(' '),
+                                  }
+                                : undefined;
 
-                          if (t === 'horizontal_bar') {
+                            const chSt = { ...DEFAULT_BLOCK_STYLE, ...(ch.style || {}) };
+
                             return (
-                              <ResponsiveContainer width="100%" height={h}>
-                                <BarChart
-                                  data={enrichedData}
-                                  layout="vertical"
-                                  margin={getCartesianMargin('horizontal')}
+                              <div
+                                key="charts"
+                                className={`${isTight ? 'p-1.5 print:p-0.5 space-y-1 print:space-y-0.5' : 'p-3 print:p-1.5 space-y-1.5 print:space-y-0.5'} border border-slate-200 rounded-2xl print:rounded-lg transition-all`}
+                                style={bleed.innerBgStyle('#f8fafc')}
+                              >
+                                <div
+                                  className={`grid ${totalCols === 1 ? 'grid-cols-1' : ''} ${isTight ? 'gap-1.5 print:gap-1' : 'gap-3'}`}
+                                  style={gridTemplateStyle}
                                 >
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                  <XAxis type="number" tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
-                                  <YAxis type="category" dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} width={tight ? 28 : 36} />
-                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                  {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={tight ? 7 : 8} />}
-                                  <Bar dataKey="value" radius={[0, 3, 3, 0]}>
-                                    {enrichedData.map((_, i) => (
-                                      <Cell key={i} fill={getColor(i)} />
-                                    ))}
-                                    {showAnyLabel && (
-                                      <LabelList
-                                        dataKey="displayLabel"
-                                        position={placement.position}
-                                        offset={placement.offset}
-                                        fill={labelColor}
-                                        style={labelStyle}
-                                      />
-                                    )}
-                                  </Bar>
-                                </BarChart>
-                              </ResponsiveContainer>
+                                  {chartCols.map((colCfg, colIdx) => {
+                                    const colH = colCfg.height ? Number(colCfg.height) : chartH;
+                                    return (
+                                      <div
+                                        key={colIdx}
+                                        className={`${isTight ? 'space-y-0.5' : 'space-y-1'} min-w-0 w-full overflow-hidden`}
+                                      >
+                                        {colCfg.title && (
+                                          <h5
+                                            className={`${isTight ? 'text-[9.5px] print:text-[7.5px] mb-0.5' : 'text-[10px] print:text-[8px] mb-1'} font-black text-dark-primary uppercase tracking-wider text-center`}
+                                          >
+                                            {colCfg.title}
+                                          </h5>
+                                        )}
+                                        <div style={{ height: `${colH}px` }}>
+                                          {renderPrintChart(colCfg, colH, isTight)}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             );
                           }
+                          return null;
+                        }
 
-                          if (t === 'line') {
-                            return (
-                              <ResponsiveContainer width="100%" height={h}>
-                                <LineChart data={enrichedData} margin={getCartesianMargin('line')}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                  <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
-                                  <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
-                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                  {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={tight ? 7 : 8} />}
-                                  <Line type="monotone" dataKey="value" stroke={baseColor} strokeWidth={2} dot={{ r: 3, fill: baseColor }}>
-                                    {showAnyLabel && (
-                                      <LabelList
-                                        dataKey="displayLabel"
-                                        position={placement.position}
-                                        offset={placement.offset}
-                                        fill={labelColor}
-                                        style={labelStyle}
-                                      />
-                                    )}
-                                  </Line>
-                                </LineChart>
-                              </ResponsiveContainer>
-                            );
-                          }
+                        case 'remarks': {
+                          if (!activeTemplate.showTeacherRemarks) return null;
+                          const rmk = activeTemplate.remarksConfig || {};
+                          const isCompact = rmk.size === 'compact';
+                          const rmkSt = { ...DEFAULT_BLOCK_STYLE, ...(rmk.style || {}) };
 
-                          if (t === 'area') {
-                            return (
-                              <ResponsiveContainer width="100%" height={h}>
-                                <AreaChart data={enrichedData} margin={getCartesianMargin('area')}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                  <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
-                                  <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
-                                  <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                  {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={tight ? 7 : 8} />}
-                                  <Area
-                                    type="monotone"
-                                    dataKey="value"
-                                    stroke={baseColor}
-                                    strokeWidth={2}
-                                    fillOpacity={0.25}
-                                    fill={baseColor}
-                                  >
-                                    {showAnyLabel && (
-                                      <LabelList
-                                        dataKey="displayLabel"
-                                        position={placement.position}
-                                        offset={placement.offset}
-                                        fill={labelColor}
-                                        style={labelStyle}
-                                      />
-                                    )}
-                                  </Area>
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            );
-                          }
+                          const studentRemarks = studentRemarksMap[String(student.id)] || {};
+                          const effectiveRemarks =
+                            studentRemarks.remarks !== undefined
+                              ? studentRemarks.remarks
+                              : activeTemplate.remarksText ||
+                                'Consistently demonstrates strong academic performance, active class participation, and excellent problem-solving skills.';
+                          const effectiveRecommendations =
+                            studentRemarks.recommendations !== undefined
+                              ? studentRemarks.recommendations
+                              : rmk.recommendationsText ||
+                                'Encouraged to read broader scientific journals and continue regular practice in advanced mathematics.';
 
                           return (
-                            <ResponsiveContainer width="100%" height={h}>
-                              <BarChart data={enrichedData} margin={getCartesianMargin('vertical')}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="name" tick={{ fontSize: tight ? 7.5 : 8, fontWeight: 700 }} />
-                                <YAxis tick={{ fontSize: tight ? 7.5 : 8 }} domain={axisDomain} />
-                                <Tooltip contentStyle={{ fontSize: 9 }} formatter={tooltipFormatter} />
-                                {hasLegend && <Legend payload={legendPayload} {...legendProps} iconSize={tight ? 7 : 8} />}
-                                <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                                  {enrichedData.map((_, index) => (
-                                    <Cell key={index} fill={getColor(index)} />
-                                  ))}
-                                  {showAnyLabel && (
-                                    <LabelList
-                                      dataKey="displayLabel"
-                                      position={placement.position}
-                                      offset={placement.offset}
-                                      fill={labelColor}
-                                      style={labelStyle}
-                                    />
-                                  )}
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                          );
-                        };
+                            <div
+                              key="remarks"
+                              className={`border border-amber-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5 relative group ${
+                                isCompact ? 'p-2 print:p-1' : 'p-3.5 print:p-1.5'
+                              }`}
+                              style={bleed.innerBgStyle('rgb(255 251 235 / 0.6)')}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className="text-[10px] print:text-[7.5px] font-black uppercase tracking-wider block"
+                                  style={{
+                                    color: rmkSt.labelColor || '#78350f',
+                                    fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                  }}
+                                >
+                                  {rmk.title || "Teacher's Remarks"}:
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRemarksStudentId(String(student.id));
+                                    setRemarksForm({
+                                      remarks: effectiveRemarks,
+                                      recommendations: effectiveRecommendations,
+                                    });
+                                    setIsRemarksModalOpen(true);
+                                  }}
+                                  className="print:hidden text-[9px] font-bold text-amber-800 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200 px-2 py-0.5 rounded cursor-pointer transition-colors flex items-center gap-1 opacity-80 group-hover:opacity-100"
+                                  title="Edit remarks for this student"
+                                >
+                                  <i className="fas fa-edit text-[8px]" />
+                                  <span>Edit Remarks</span>
+                                </button>
+                              </div>
+                              <p
+                                className="text-xs print:text-[9.5px] italic font-medium"
+                                style={{
+                                  color: rmkSt.contentColor || '#0f172a',
+                                  fontSize: `${rmkSt.contentFontSize || (isCompact ? 10 : 11)}px`,
+                                }}
+                              >
+                                &quot;{effectiveRemarks}&quot;
+                              </p>
 
-                        return (
-                          <div
-                            key="charts"
-                            className={`${isTight ? 'p-1.5 print:p-0.5 space-y-1 print:space-y-0.5' : 'p-3 print:p-1.5 space-y-1.5 print:space-y-0.5'} bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg transition-all`}
-                          >
-                            <div className={`grid ${colWidthClass} ${isTight ? 'gap-1.5 print:gap-1' : 'gap-3'}`}>
-                              {chartCols.map((colCfg, colIdx) => (
-                                <div key={colIdx} className={isTight ? 'space-y-0.5' : 'space-y-1'}>
-                                  {colCfg.title && (
-                                    <h5 className={`${isTight ? 'text-[9.5px] print:text-[7.5px] mb-0.5' : 'text-[10px] print:text-[8px] mb-1'} font-black text-dark-primary uppercase tracking-wider text-center`}>
-                                      {colCfg.title}
-                                    </h5>
-                                  )}
-                                  <div style={{ height: `${chartH}px` }}>
-                                    {renderPrintChart(colCfg, chartH, isTight)}
-                                  </div>
+                              {rmk.showRecommendations !== false && effectiveRecommendations && (
+                                <div className="pt-1.5 border-t border-amber-200/60 print:pt-0.5">
+                                  <span
+                                    className="text-[10px] print:text-[7.5px] font-black uppercase tracking-wider block"
+                                    style={{
+                                      color: rmkSt.labelColor || '#78350f',
+                                      fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                    }}
+                                  >
+                                    {rmk.recommendationsTitle || 'Recommendations'}:
+                                  </span>
+                                  <p
+                                    className="text-xs print:text-[9.5px] italic font-medium"
+                                    style={{
+                                      color: rmkSt.contentColor || '#0f172a',
+                                      fontSize: `${rmkSt.contentFontSize || (isCompact ? 10 : 11)}px`,
+                                    }}
+                                  >
+                                    &quot;{effectiveRecommendations}&quot;
+                                  </p>
+                                </div>
+                              )}
+
+                              {rmk.showPromotion && (
+                                <p
+                                  className="mt-1 font-bold uppercase tracking-wider"
+                                  style={{
+                                    fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                    color: rmkSt.contentColor || '#065f46',
+                                  }}
+                                >
+                                  Status: Eligible for promotion to next grade level.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        case 'signatures': {
+                          if (!activeTemplate.showSignatures) return null;
+                          const sigCfg = activeTemplate.signaturesConfig || {};
+                          const sigSt = { ...DEFAULT_BLOCK_STYLE, ...(sigCfg.style || {}) };
+                          const isCompact = sigCfg.size === 'compact';
+                          const isTall = sigCfg.size === 'tall';
+                          const ptClass = isCompact
+                            ? 'pt-3 print:pt-1.5'
+                            : isTall
+                              ? 'pt-8 print:pt-3'
+                              : 'pt-6 print:pt-2';
+
+                          const isSig1 =
+                            sigCfg.showSignature1 !== undefined ? !!sigCfg.showSignature1 : true;
+                          const isSig2 =
+                            sigCfg.showSignature2 !== undefined ? !!sigCfg.showSignature2 : true;
+                          const isSig3 =
+                            sigCfg.showSignature3 !== undefined ? !!sigCfg.showSignature3 : true;
+                          const isSig4 =
+                            sigCfg.showSignature4 !== undefined ? !!sigCfg.showSignature4 : true;
+
+                          const activeSigs = [
+                            isSig1 && {
+                              id: 'signature1',
+                              title: activeTemplate.signatures?.signature1 || 'Signature 1',
+                              subtitle: 'Signature',
+                            },
+                            isSig2 && {
+                              id: 'signature2',
+                              title: activeTemplate.signatures?.signature2 || 'Signature 2',
+                              subtitle: 'Signature',
+                            },
+                            isSig3 && {
+                              id: 'signature3',
+                              title: activeTemplate.signatures?.signature3 || 'Signature 3',
+                              subtitle: 'Seal & Signature',
+                            },
+                            isSig4 && {
+                              id: 'signature4',
+                              title: activeTemplate.signatures?.signature4 || 'Signature 4',
+                              subtitle: 'Signature',
+                            },
+                          ].filter(Boolean);
+
+                          if (activeSigs.length === 0) return null;
+
+                          return (
+                            <div
+                              key="signatures"
+                              className={`report-card-signatures ${ptClass} grid gap-4 print:gap-2 text-center text-xs print:text-[8.5px] ${
+                                activeSigs.length === 1 ? 'max-w-xs mx-auto' : ''
+                              }`}
+                              style={{
+                                gridTemplateColumns: `repeat(${activeSigs.length}, minmax(0, 1fr))`,
+                                ...bleed.innerBgStyle('transparent'),
+                              }}
+                            >
+                              {activeSigs.map((sig) => (
+                                <div
+                                  key={sig.id}
+                                  className="border-t border-slate-900 pt-1.5 print:pt-0.5 space-y-0.5"
+                                >
+                                  <span
+                                    className="font-bold text-dark-slate block truncate"
+                                    style={{
+                                      fontSize: `${sigSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                      color: sigSt.labelColor || undefined,
+                                    }}
+                                  >
+                                    {sig.title}
+                                  </span>
+                                  <span className="text-[10px] print:text-[7.5px] text-dark-muted">
+                                    {sig.subtitle}
+                                  </span>
                                 </div>
                               ))}
                             </div>
-                          </div>
-                        );
+                          );
+                        }
+
+                        default:
+                          return null;
                       }
+                    })();
 
-                      // Legacy single chart fallback
-                      const chartHClass =
-                        ch.size === 'compact'
-                          ? 'h-32 print:h-20'
-                          : ch.size === 'large'
-                            ? 'h-52 print:h-34'
-                            : `h-44 ${orientation === 'landscape' ? 'print:h-22' : 'print:h-28'}`;
+                    if (!blockContent) return null;
 
-                      return (
-                        <div
-                          key="charts"
-                          className="p-3 print:p-1.5 bg-slate-50 border border-slate-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5"
-                        >
-                          <h4 className="text-xs print:text-[8.5px] font-black text-dark-primary uppercase tracking-wider text-center">
-                            {ch.title || 'Subject Performance Analysis'}
-                          </h4>
-                          <div className={`${chartHClass} w-full`}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              {ch.type === 'horizontal_bar' ? (
-                                <BarChart
-                                  data={chartData}
-                                  layout="vertical"
-                                  margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
-                                >
-                                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#cbd5e1" />
-                                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 9 }} />
-                                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} width={70} />
-                                  <Tooltip formatter={(value, name, item) => [`${value} / ${item.payload.Max}`, item.payload.fullName]} />
-                                  <Bar dataKey="Marks" fill={activeTemplate.accentColor || '#e11d48'} radius={[0, 4, 4, 0]}>
-                                    {chartData.map((entry, index) => (
-                                      <Cell
-                                        key={`cell-${index}`}
-                                        fill={entry.Marks >= 75 ? activeTemplate.secondaryColor || '#059669' : activeTemplate.accentColor || '#e11d48'}
-                                      />
-                                    ))}
-                                  </Bar>
-                                </BarChart>
-                              ) : ch.type === 'radar' ? (
-                                <RadarChart outerRadius={55} data={chartData}>
-                                  <PolarGrid stroke="#cbd5e1" />
-                                  <PolarAngleAxis dataKey="name" tick={{ fontSize: 9, fontWeight: 700 }} />
-                                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8 }} />
-                                  <Radar name="Marks" dataKey="Marks" stroke={activeTemplate.accentColor || '#e11d48'} fill={activeTemplate.accentColor || '#e11d48'} fillOpacity={0.4} />
-                                  <Tooltip formatter={(value, name, item) => [`${value} / ${item.payload.Max}`, item.payload.fullName]} />
-                                </RadarChart>
-                              ) : ch.type === 'line' ? (
-                                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
-                                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-                                  <Tooltip formatter={(value, name, item) => [`${value} / ${item.payload.Max}`, item.payload.fullName]} />
-                                  <Line type="monotone" dataKey="Marks" stroke={activeTemplate.accentColor || '#e11d48'} strokeWidth={3} dot={{ r: 4, fill: activeTemplate.accentColor || '#e11d48' }} />
-                                </LineChart>
-                              ) : ch.type === 'area' ? (
-                                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
-                                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-                                  <Tooltip formatter={(value, name, item) => [`${value} / ${item.payload.Max}`, item.payload.fullName]} />
-                                  <Area type="monotone" dataKey="Marks" stroke={activeTemplate.accentColor || '#e11d48'} fill={activeTemplate.accentColor || '#e11d48'} fillOpacity={0.25} />
-                                </AreaChart>
-                              ) : (
-                                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                                  <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 700 }} interval={0} />
-                                  <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
-                                  <Tooltip formatter={(value, name, item) => [`${value} / ${item.payload.Max}`, item.payload.fullName]} />
-                                  <Bar dataKey="Marks" fill={activeTemplate.accentColor || '#e11d48'} radius={[4, 4, 0, 0]}>
-                                    {chartData.map((entry, index) => (
-                                      <Cell
-                                        key={`cell-${index}`}
-                                        fill={entry.Marks >= 75 ? activeTemplate.secondaryColor || '#059669' : activeTemplate.accentColor || '#e11d48'}
-                                      />
-                                    ))}
-                                  </Bar>
-                                </BarChart>
-                              )}
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      );
-                    }
+                    return (
+                      <div
+                        key={blockKey}
+                        className={`relative transition-all ${!bleed.isPageWidth ? 'w-full' : ''} ${blockKey === 'signatures' ? 'mt-auto report-card-signatures-wrapper' : ''}`}
+                        style={bleed.wrapperStyle}
+                        {...bleed.wrapperAttrs}
+                      >
+                        {renderBlockTitle(blockSt, DEFAULT_BLOCK_TITLES[blockKey])}
+                        {blockContent}
+                      </div>
+                    );
+                  })}
 
-                    case 'remarks': {
-                      if (!activeTemplate.showTeacherRemarks) return null;
-                      const rmk = activeTemplate.remarksConfig || {};
-                      const isCompact = rmk.size === 'compact';
-
-                      return (
-                        <div
-                          key="remarks"
-                          className={`bg-amber-50/60 border border-amber-200 rounded-2xl print:rounded-lg space-y-1 print:space-y-0.5 ${
-                            isCompact ? 'p-2 print:p-1' : 'p-3.5 print:p-1.5'
-                          }`}
-                        >
-                          <span className="text-[10px] print:text-[7.5px] font-bold text-dark-muted uppercase block">
-                            {rmk.title || 'Teacher / Institution Remarks'}
+                  {/* Optional Grading Scale Legend on Printed Card */}
+                  {activeTemplate.showGradingScale && activeTemplate.gradingScale?.length > 0 && (
+                    <div className="pt-2 print:pt-1 border-t border-slate-200 print:border-slate-300">
+                      <span className="text-[9px] print:text-[7px] font-black uppercase text-dark-muted block mb-0.5">
+                        Grading Criteria Legend:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5 text-[9px] print:text-[7px] text-dark-slate">
+                        {activeTemplate.gradingScale.map((g) => (
+                          <span
+                            key={g.grade}
+                            className="bg-slate-100 print:bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200 font-bold"
+                          >
+                            <strong>{g.grade}</strong> ({g.minPercentage}% - {g.maxPercentage}%
+                            {g.description ? ` · ${g.description}` : ''})
                           </span>
-                          <p className="text-xs print:text-[9.5px] text-dark-slate italic">
-                            "{activeTemplate.remarksText}"
-                          </p>
-                          {rmk.showPromotion && (
-                            <p className="mt-1 font-bold text-emerald-800 text-[10px] print:text-[8px] uppercase tracking-wider">
-                              Status: Eligible for promotion to next grade level.
-                            </p>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    case 'signatures': {
-                      if (!activeTemplate.showSignatures) return null;
-                      const sigCfg = activeTemplate.signaturesConfig || {};
-                      const isCompact = sigCfg.size === 'compact';
-                      const isTall = sigCfg.size === 'tall';
-                      const ptClass = isCompact
-                        ? 'pt-3 print:pt-1.5'
-                        : isTall
-                          ? 'pt-8 print:pt-3'
-                          : 'pt-6 print:pt-2';
-
-                      return (
-                        <div
-                          key="signatures"
-                          className={`report-card-signatures ${ptClass} print:mt-auto grid grid-cols-2 sm:grid-cols-4 gap-4 print:gap-2 text-center text-xs print:text-[8.5px]`}
-                        >
-                          {sigCfg.showClassTeacher !== false && (
-                            <div className="border-t border-slate-900 pt-1.5 print:pt-0.5">
-                              <span className="font-bold text-dark-slate block truncate">
-                                {activeTemplate.signatures?.classTeacher || 'Class Teacher'}
-                              </span>
-                              <span className="text-[10px] print:text-[7.5px] text-dark-muted">Signature</span>
-                            </div>
-                          )}
-                          {sigCfg.showCoordinator !== false && (
-                            <div className="border-t border-slate-900 pt-1.5 print:pt-0.5">
-                              <span className="font-bold text-dark-slate block truncate">
-                                {activeTemplate.signatures?.coordinator || 'Academic Coordinator'}
-                              </span>
-                              <span className="text-[10px] print:text-[7.5px] text-dark-muted">Signature</span>
-                            </div>
-                          )}
-                          {sigCfg.showPrincipal !== false && (
-                            <div className="border-t border-slate-900 pt-1.5 print:pt-0.5">
-                              <span className="font-bold text-dark-slate block truncate">
-                                {activeTemplate.signatures?.principal || 'Principal'}
-                              </span>
-                              <span className="text-[10px] print:text-[7.5px] text-dark-muted">Seal & Signature</span>
-                            </div>
-                          )}
-                          {sigCfg.showParent !== false && (
-                            <div className="border-t border-slate-900 pt-1.5 print:pt-0.5">
-                              <span className="font-bold text-dark-slate block truncate">
-                                {activeTemplate.signatures?.parent || 'Parent / Guardian'}
-                              </span>
-                              <span className="text-[10px] print:text-[7.5px] text-dark-muted">Signature</span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    default:
-                      return null;
-                  }
-                })}
-
-                {/* Optional Grading Scale Legend on Printed Card */}
-                {activeTemplate.showGradingScale && activeTemplate.gradingScale?.length > 0 && (
-                  <div className="pt-2 print:pt-1 border-t border-slate-200 print:border-slate-300">
-                    <span className="text-[9px] print:text-[7px] font-black uppercase text-dark-muted block mb-0.5">
-                      Grading Criteria Legend:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5 text-[9px] print:text-[7px] text-dark-slate">
-                      {activeTemplate.gradingScale.map((g) => (
-                        <span key={g.grade} className="bg-slate-100 print:bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200 font-bold">
-                          <strong>{g.grade}</strong> ({g.minPercentage}% - {g.maxPercentage}%{g.description ? ` · ${g.description}` : ''})
-                        </span>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
+      {/* ── Teacher Remarks & Recommendations Per-Student Modal ── */}
+      {isRemarksModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto print:hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-light-border w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                  <i className="fas fa-comment-dots text-white text-base" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight">
+                    Teacher Remarks &amp; Recommendations
+                  </h3>
+                  <p className="text-xs text-amber-100 font-medium">
+                    Personalize remarks or apply bulk feedback across students
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRemarksModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center text-white transition-colors cursor-pointer"
+              >
+                <i className="fas fa-times text-sm" />
+              </button>
+            </div>
 
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Student Selector */}
+              <div>
+                <label className="block text-xs font-black uppercase text-dark-primary tracking-wider mb-1.5 flex items-center gap-1.5">
+                  <i className="fas fa-user-graduate text-amber-600" />
+                  Select Student
+                </label>
+                <select
+                  value={selectedRemarksStudentId}
+                  onChange={(e) => setSelectedRemarksStudentId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all cursor-pointer"
+                >
+                  {displayedStudents.map((s) => {
+                    const hasCustom = !!studentRemarksMap[String(s.id)];
+                    return (
+                      <option key={s.id} value={String(s.id)}>
+                        {s.student_name || `Student #${s.id}`}{' '}
+                        {s.admission_number ? `(${s.admission_number})` : ''}{' '}
+                        {hasCustom ? '★ (Custom)' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Remarks Textarea */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-dark-primary tracking-wider flex items-center gap-1.5">
+                    <i className="fas fa-quote-left text-amber-600" />
+                    Teacher's Remarks
+                  </label>
+                  <span className="text-[10px] text-dark-muted font-semibold">
+                    Shown in Remarks block
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={remarksForm.remarks}
+                  onChange={(e) => setRemarksForm((prev) => ({ ...prev, remarks: e.target.value }))}
+                  placeholder="Enter custom remarks for this student..."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all resize-y"
+                />
+
+                {/* Quick Remarks Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-dark-muted self-center mr-1">
+                    Quick presets:
+                  </span>
+                  {[
+                    'Exceptional academic performance and brilliant conduct.',
+                    'Consistent effort and active participation in class discussions.',
+                    'Good potential; encourage more daily revisions and practice.',
+                    'Shows great improvement in analytical problem solving.',
+                    'Needs regular attendance and timely coursework submission.',
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setRemarksForm((prev) => ({ ...prev, remarks: preset }))}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer text-left"
+                    >
+                      + {preset.length > 35 ? preset.slice(0, 32) + '…' : preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recommendations Textarea */}
+              <div className="space-y-1.5 pt-2 border-t border-light-border/70">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-dark-primary tracking-wider flex items-center gap-1.5">
+                    <i className="fas fa-lightbulb text-amber-600" />
+                    Recommendations &amp; Action Plan
+                  </label>
+                  <span className="text-[10px] text-dark-muted font-semibold">
+                    Shown under Recommendations
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  value={remarksForm.recommendations}
+                  onChange={(e) =>
+                    setRemarksForm((prev) => ({ ...prev, recommendations: e.target.value }))
+                  }
+                  placeholder="Enter recommendations or leave blank..."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-light-border bg-slate-50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all resize-y"
+                />
+
+                {/* Quick Recommendations Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-dark-muted self-center mr-1">
+                    Quick presets:
+                  </span>
+                  {[
+                    'Encouraged to read scientific periodicals and literature.',
+                    'Recommend 30 minutes daily practice in core mathematics.',
+                    'Practice mock tests to enhance examination time management.',
+                    'Participate actively in extracurricular STEM and debate clubs.',
+                  ].map((preset, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() =>
+                        setRemarksForm((prev) => ({ ...prev, recommendations: preset }))
+                      }
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors cursor-pointer text-left"
+                    >
+                      + {preset.length > 35 ? preset.slice(0, 32) + '…' : preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-slate-50 border-t border-light-border flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={handleApplyRemarksToAll}
+                className="px-3 py-1.5 text-xs font-bold text-dark-slate hover:text-dark-primary bg-white hover:bg-slate-100 border border-light-border rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                title="Copy current remarks and recommendations to all displayed students"
+              >
+                <i className="fas fa-users text-amber-600 text-[11px]" />
+                <span>Apply to All ({displayedStudents.length})</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRemarksModalOpen(false)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-dark-muted hover:text-dark-primary transition-colors cursor-pointer"
+                >
+                  Done
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRemarksForStudent}
+                  className="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-95 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <i className="fas fa-check text-[11px]" />
+                  <span>Save for this Student</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Upload Modal */}
+      <ExamAttendanceUploadModal
+        isOpen={isAttendanceModalOpen}
+        onClose={() => setIsAttendanceModalOpen(false)}
+        schedule={selectedSchedule}
+        students={students}
+        onUploadSuccess={() => {
+          fetchAttendance();
+        }}
+      />
     </div>
   );
 };

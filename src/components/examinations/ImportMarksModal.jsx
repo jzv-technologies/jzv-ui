@@ -107,7 +107,7 @@ const ImportMarksModal = ({
 
         const { data, error } = await supabase
           .from('exam_result_entries')
-          .select('id, result_id, student_id, marks_obtained, is_absent')
+          .select('id, result_id, student_id, admission_no, marks_obtained, is_absent')
           .in('result_id', resultIds);
 
         if (error) throw error;
@@ -115,9 +115,10 @@ const ImportMarksModal = ({
         const map = {};
         (data || []).forEach((e) => {
           const rId = String(e.result_id);
-          const sId = String(e.student_id);
+          // Use admission_no as map key if available, fall back to student_id for legacy rows
+          const sKey = e.admission_no ? String(e.admission_no) : String(e.student_id);
           if (!map[rId]) map[rId] = {};
-          map[rId][sId] = e;
+          map[rId][sKey] = e;
         });
         setExistingEntriesMap(map);
       } catch (err) {
@@ -367,6 +368,7 @@ const ImportMarksModal = ({
         const payload = {
           result_id: Number(item.resultId),
           student_id: Number(item.student.id),
+          admission_no: item.student.admission_no || null,
           marks_obtained: item.isAbsent ? null : item.marksObtained,
           is_absent: Boolean(item.isAbsent),
         };

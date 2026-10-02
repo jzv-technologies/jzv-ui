@@ -85,8 +85,8 @@ This plan covers 10 major requirement areas across Exam Schedule (Teacher View, 
 
 **Files to create:**
 
-- `src/components/examinations/ProgressReportGenerator.jsx`
-- `src/components/examinations/ProgressReportDesigner.jsx` (drag-drop with `dnd-kit`)
+- `src/components/examinations/ReportCardGenerator.jsx`
+- `src/components/examinations/ReportCardDesigner.jsx` (drag-drop with `dnd-kit`)
 - `src/components/examinations/ProgressReportPreview.jsx`
 - Database: New table `exam_progress_report_templates`
 
