@@ -50,12 +50,6 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
         label: 'Notice Board Print',
         icon: 'fa-print',
       },
-      {
-        id: 'parent_ward',
-        componentName: 'exam-sched-tab-parent',
-        label: 'Ward Schedule',
-        icon: 'fa-calendar-day',
-      },
     ],
     []
   );
@@ -70,7 +64,6 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     if (canAccess('exam-sched-tab-teacher')) return 'teacher';
     if (canAccess('exam-sched-tab-coverage')) return 'coverage';
     if (canAccess('exam-sched-tab-notice-print')) return 'notice_print';
-    if (canAccess('exam-sched-tab-parent')) return 'parent_ward';
     return availableTabs[0]?.id || 'scheduler';
   });
 
@@ -156,7 +149,9 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
 
     if (dbClasses.length > 0) {
       setSelectedClassIds((prev) => (prev.length > 0 ? prev : [String(dbClasses[0].id)]));
-      setNoticeBoardClassIds((prev) => (prev.length > 0 ? prev : dbClasses.map((c) => String(c.id))));
+      setNoticeBoardClassIds((prev) =>
+        prev.length > 0 ? prev : dbClasses.map((c) => String(c.id))
+      );
     }
   }, []);
 
@@ -246,15 +241,6 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     await loadExamData();
     showToast('Exam data refreshed', 'success');
   };
-
-  // If user only has access to parent ward view, direct them exclusively to the Parent Ward Schedule view
-  if (availableTabs.length === 1 && availableTabs[0].id === 'parent_ward') {
-    return (
-      <div className="w-full p-4 sm:p-6">
-        <ParentExamTimetableView user={user} classes={classes} subjects={subjects} />
-      </div>
-    );
-  }
 
   if (loading || canAccess.loading) {
     return (
@@ -599,10 +585,6 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 </button>
               </div>
             )}
-
-            {activeTab === 'parent_ward' && (
-              <span className="text-xs font-bold text-dark-muted">Parent Ward Exam Schedule</span>
-            )}
           </div>
         </div>
       </div>
@@ -728,12 +710,6 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 </p>
               </div>
             )}
-          </ConditionalBlock>
-        )}
-
-        {activeTab === 'parent_ward' && (
-          <ConditionalBlock name="exam-sched-tab-parent" roles={userRoles}>
-            <ParentExamTimetableView user={user} classes={classes} subjects={subjects} />
           </ConditionalBlock>
         )}
       </div>
