@@ -185,7 +185,6 @@ const ExamResultsManager = ({
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [slots, setSlots] = useState([]);
-  const [classSubjects, setClassSubjects] = useState([]);
   const [classAssignments, setClassAssignments] = useState([]);
 
   // Exam results
@@ -194,6 +193,17 @@ const ExamResultsManager = ({
   // UI state
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
+
+  // Lazy-load bookkeeping. Results/slots are fetched per schedule, and only for the tabs
+  // that read them; teachers/assignments only for the Marks Entry tab.
+  const [scheduleDataFor, setScheduleDataFor] = useState(null); // schedule id whose results+slots are loaded
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [entrySupportReady, setEntrySupportReady] = useState(false);
+  const entrySupportStarted = useRef(false);
+  const scheduleFetchSeq = useRef(0);
+  const needsScheduleData = activeTab === 'entry' || activeTab === 'summary';
+  const needsEntrySupport = activeTab === 'entry';
+  const scheduleReady = Boolean(selectedScheduleId) && scheduleDataFor === String(selectedScheduleId);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
   // Class selection for Attendance & Remarks tabs (supports single, multiple, or all classes)
   const [attendanceClassIds, setAttendanceClassIds] = useState([]);
@@ -251,6 +261,8 @@ const ExamResultsManager = ({
   const [summaryClassFilter, setSummaryClassFilter] = useState('');
   const [isAllExpanded, setIsAllExpanded] = useState(true);
 
+  // Core master data only (small tables needed by every tab). Everything schedule- or
+  // tab-specific is loaded lazily by the effects below.
   const loadAll = useCallback(async () => {
     setLoading(true);
     const safe = async (query) => {
@@ -262,17 +274,7 @@ const ExamResultsManager = ({
       }
     };
 
-    const [
-      dbSchedules,
-      dbClasses,
-      dbSubjects,
-      dbStudents,
-      dbTeachers,
-      dbSlots,
-      dbClassSubjects,
-      dbClassAssignments,
-      dbResults,
-    ] = await Promise.all([
+    const [dbSchedules, dbClasses, dbSubjects, dbStudents] = await Promise.all([
       safe(supabase.from('exam_schedules').select('*').order('start_date', { ascending: false })),
       safe(supabase.from('classes').select('*').order('name')),
       safe(supabase.from('syl_subjects').select('*').order('name')),
@@ -283,32 +285,15 @@ const ExamResultsManager = ({
           .order('class_id', { ascending: true })
           .order('student_name', { ascending: true })
       ),
-      safe(
-        supabase
-          .from('employees')
-          .select('id, name, is_active, is_teacher')
-          .eq('is_teacher', true)
-          .eq('is_active', true)
-          .order('name')
-      ),
-      safe(supabase.from('exam_schedule_slots').select('*')),
-      safe(supabase.from('class_subjects').select('*')),
-      safe(supabase.from('class_assignments').select('*')),
-      safe(supabase.from('exam_results').select('*')),
     ]);
 
     setSchedules(dbSchedules);
     setClasses(dbClasses);
     setSubjects(dbSubjects);
     setStudents(dbStudents);
-    setTeachers(dbTeachers);
-    setSlots(dbSlots);
-    setClassSubjects(dbClassSubjects);
-    setClassAssignments(dbClassAssignments);
-    setResults(dbResults);
 
     // Functional update: keeps loadAll stable (no selectedScheduleId dependency) so the
-    // whole 9-table load below runs once instead of re-running when the schedule is auto-selected.
+    // master data load runs once instead of re-running when the schedule is auto-selected.
     if (dbSchedules.length > 0) {
       setSelectedScheduleId((prev) => prev || String(dbSchedules[0].id));
     }
@@ -318,6 +303,72 @@ const ExamResultsManager = ({
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  // Lazy-load exam_results and exam_schedule_slots scoped to the selected schedule
+  useEffect(() => {
+    if (!needsScheduleData || !selectedScheduleId) return;
+    if (scheduleDataFor === String(selectedScheduleId)) return;
+
+    const currentSeq = ++scheduleFetchSeq.current;
+    const fetchScheduleData = async () => {
+      setScheduleLoading(true);
+      try {
+        const [slotsRes, resultsRes] = await Promise.all([
+          supabase
+            .from('exam_schedule_slots')
+            .select('*')
+            .eq('schedule_id', Number(selectedScheduleId)),
+          supabase
+            .from('exam_results')
+            .select('*')
+            .eq('schedule_id', Number(selectedScheduleId)),
+        ]);
+
+        if (currentSeq !== scheduleFetchSeq.current) return;
+
+        setSlots(slotsRes.data || []);
+        setResults(resultsRes.data || []);
+        setScheduleDataFor(String(selectedScheduleId));
+      } catch (err) {
+        console.error('Failed to load schedule results & slots:', err);
+      } finally {
+        if (currentSeq === scheduleFetchSeq.current) {
+          setScheduleLoading(false);
+        }
+      }
+    };
+
+    fetchScheduleData();
+  }, [needsScheduleData, selectedScheduleId, scheduleDataFor]);
+
+  // Lazy-load teachers and class_assignments on-demand only for Marks Entry tab
+  useEffect(() => {
+    if (!needsEntrySupport || entrySupportStarted.current) return;
+    entrySupportStarted.current = true;
+
+    const fetchEntrySupport = async () => {
+      try {
+        const [teachersRes, assignmentsRes] = await Promise.all([
+          supabase
+            .from('employees')
+            .select('id, name, is_active, is_teacher')
+            .eq('is_teacher', true)
+            .eq('is_active', true)
+            .order('name'),
+          supabase.from('class_assignments').select('*'),
+        ]);
+
+        setTeachers(teachersRes.data || []);
+        setClassAssignments(assignmentsRes.data || []);
+        setEntrySupportReady(true);
+      } catch (err) {
+        console.error('Failed to load entry support data (teachers & assignments):', err);
+        setEntrySupportReady(true);
+      }
+    };
+
+    fetchEntrySupport();
+  }, [needsEntrySupport]);
 
   useEffect(() => {
     if (!showSchemeModal && !showQuickFillModal) return;
@@ -332,9 +383,25 @@ const ExamResultsManager = ({
   }, [showSchemeModal, showQuickFillModal]);
 
   const refreshResults = useCallback(async () => {
-    const { data } = await supabase.from('exam_results').select('*');
-    setResults(data || []);
-  }, []);
+    if (!selectedScheduleId) return;
+    try {
+      const [slotsRes, resultsRes] = await Promise.all([
+        supabase
+          .from('exam_schedule_slots')
+          .select('*')
+          .eq('schedule_id', Number(selectedScheduleId)),
+        supabase
+          .from('exam_results')
+          .select('*')
+          .eq('schedule_id', Number(selectedScheduleId)),
+      ]);
+      setSlots(slotsRes.data || []);
+      setResults(resultsRes.data || []);
+      setScheduleDataFor(String(selectedScheduleId));
+    } catch (err) {
+      console.error('Failed to refresh schedule results:', err);
+    }
+  }, [selectedScheduleId]);
 
   // Save All Pending Changes (for manual save mode)
   const saveAllPendingChanges = useCallback(async () => {
@@ -673,9 +740,9 @@ const ExamResultsManager = ({
       .filter(Boolean);
   }, [activeResults, subjects]);
 
-  // Ensure DB rows exist for all selected subjects
+  // Ensure DB rows exist for all selected subjects (only runs once schedule results are fully loaded)
   useEffect(() => {
-    if (!selectedScheduleId || !selectedClassId || selectedSubjectIds.length === 0) return;
+    if (!selectedScheduleId || !selectedClassId || selectedSubjectIds.length === 0 || !scheduleReady) return;
     const initMissing = async () => {
       let created = false;
       for (const sId of selectedSubjectIds) {
@@ -696,6 +763,7 @@ const ExamResultsManager = ({
     classResultsIndex,
     ensureResult,
     refreshResults,
+    scheduleReady,
   ]);
 
   // Active slots and permission determination for each selected subject
@@ -1438,8 +1506,9 @@ const ExamResultsManager = ({
                   }))}
                   selected={selectedSubjectIds}
                   onChange={setSelectedSubjectIds}
-                  placeholder="Select subjects..."
+                  placeholder={scheduleReady ? "Select subjects..." : "Loading subjects..."}
                   fullWidth={false}
+                  disabled={!scheduleReady}
                 />
               </div>
             )}
@@ -1694,7 +1763,16 @@ const ExamResultsManager = ({
           <ConditionalBlock name="exam-mark-entry-tab" roles={userRoles}>
             {selectedScheduleId && selectedClassId ? (
               <div className="w-full space-y-4">
-                {activeResults.length > 0 ? (
+                {!scheduleReady || !entrySupportReady ? (
+                  <div className="flex items-center justify-center py-20 bg-white border border-light-border rounded-2xl shadow-xs">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-dark-muted font-medium">
+                        Loading examination marks and teacher allocation...
+                      </p>
+                    </div>
+                  </div>
+                ) : activeResults.length > 0 ? (
                   <ExamResultsEntryGrid
                     results={activeResults}
                     subjects={activeSubjects}
@@ -1755,30 +1833,41 @@ const ExamResultsManager = ({
         {/* Tab 2: Class Summary & Analytics */}
         {activeTab === 'summary' && (
           <ConditionalBlock name="exam-results-tab-summary" roles={userRoles}>
-            <ExamClassSummaryView
-              schedules={schedules}
-              selectedScheduleId={selectedScheduleId}
-              classes={classes}
-              subjects={subjects}
-              students={students}
-              slots={slots}
-              results={results}
-              summaryEntries={summaryEntries}
-              summaryLoading={summaryLoading}
-              onOpenEntryRegister={(classId, subjectId) => {
-                setSelectedClassId(String(classId));
-                setSelectedSubjectIds([String(subjectId)]);
-                setActiveTab('entry');
-              }}
-              onRefresh={async () => {
-                await refreshResults();
-                showToast('Results refreshed', 'success');
-              }}
-              userRoles={userRoles}
-              ENTRY_STATUS_CONFIG={ENTRY_STATUS_CONFIG}
-              filterClassId={summaryClassFilter}
-              isAllExpanded={isAllExpanded}
-            />
+            {!scheduleReady ? (
+              <div className="flex items-center justify-center py-20 bg-white border border-light-border rounded-2xl shadow-xs">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-dark-muted font-medium">
+                    Loading examination summary data...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <ExamClassSummaryView
+                schedules={schedules}
+                selectedScheduleId={selectedScheduleId}
+                classes={classes}
+                subjects={subjects}
+                students={students}
+                slots={slots}
+                results={results}
+                summaryEntries={summaryEntries}
+                summaryLoading={summaryLoading || scheduleLoading}
+                onOpenEntryRegister={(classId, subjectId) => {
+                  setSelectedClassId(String(classId));
+                  setSelectedSubjectIds([String(subjectId)]);
+                  setActiveTab('entry');
+                }}
+                onRefresh={async () => {
+                  await refreshResults();
+                  showToast('Results refreshed', 'success');
+                }}
+                userRoles={userRoles}
+                ENTRY_STATUS_CONFIG={ENTRY_STATUS_CONFIG}
+                filterClassId={summaryClassFilter}
+                isAllExpanded={isAllExpanded}
+              />
+            )}
           </ConditionalBlock>
         )}
 
