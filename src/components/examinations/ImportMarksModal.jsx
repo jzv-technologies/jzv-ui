@@ -115,10 +115,9 @@ const ImportMarksModal = ({
         const map = {};
         (data || []).forEach((e) => {
           const rId = String(e.result_id);
-          // Use admission_no as map key if available, fall back to student_id for legacy rows
-          const sKey = e.admission_no ? String(e.admission_no) : String(e.student_id);
           if (!map[rId]) map[rId] = {};
-          map[rId][sKey] = e;
+          if (e.student_id) map[rId][String(e.student_id)] = e;
+          if (e.admission_no) map[rId][String(e.admission_no)] = e;
         });
         setExistingEntriesMap(map);
       } catch (err) {
@@ -278,7 +277,10 @@ const ImportMarksModal = ({
 
         // Check if mark already exists in DB
         const resId = String(subMeta.resultId);
-        const existing = student ? existingEntriesMap[resId]?.[String(student.id)] : null;
+        const existing = student
+          ? existingEntriesMap[resId]?.[String(student.id)] ||
+            (student.admission_no ? existingEntriesMap[resId]?.[String(student.admission_no)] : null)
+          : null;
         const hasExistingMark =
           existing && (existing.marks_obtained !== null || existing.is_absent);
 
@@ -382,8 +384,10 @@ const ImportMarksModal = ({
           if (error) failCount++;
           else successCount++;
         } else {
-          // Insert new
-          const { error } = await supabase.from('exam_result_entries').insert(payload);
+          // Upsert new or existing by unique constraint
+          const { error } = await supabase
+            .from('exam_result_entries')
+            .upsert(payload, { onConflict: 'result_id,student_id' });
           if (error) failCount++;
           else successCount++;
         }

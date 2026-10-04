@@ -11,8 +11,7 @@ import { useAuth } from '../../hooks/useAuth';
  * @returns {(componentName: string) => boolean}
  */
 export const useCanAccess = (overrideRoles) => {
-  const { userRoles: authUserRoles } = useAuth();
-  const { isFeatureEnabled } = useViewConfig();
+  const { userRoles: authUserRoles, loading: authLoading } = useAuth();
 
   const effectiveRoles = useMemo(() => {
     return Array.isArray(overrideRoles) && overrideRoles.length > 0
@@ -20,13 +19,19 @@ export const useCanAccess = (overrideRoles) => {
       : authUserRoles || [];
   }, [overrideRoles, authUserRoles]);
 
-  return useCallback(
+  const { isFeatureEnabled, loading: configLoading } = useViewConfig(effectiveRoles);
+
+  const canAccess = useCallback(
     (componentName) => {
       if (!componentName) return true;
       return isFeatureEnabled(componentName, effectiveRoles);
     },
     [isFeatureEnabled, effectiveRoles]
   );
+
+  canAccess.loading = Boolean(configLoading || (effectiveRoles.length === 0 && authLoading));
+
+  return canAccess;
 };
 
 /**

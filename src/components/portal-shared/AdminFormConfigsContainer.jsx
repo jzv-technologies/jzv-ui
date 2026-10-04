@@ -20,9 +20,10 @@ export const AdminFormConfigsContainer = ({ onBack }) => {
     setDbTableMissing(false);
     setAppsScriptError('');
     try {
-      const { data: supabaseConfigs, error: configsError } = await supabase
-        .from('dynamic_form_configs')
-        .select('*');
+      // Use RPC function for admin access to all dynamic form configs
+      const { data: supabaseConfigs, error: configsError } = await supabase.rpc(
+        'get_all_dynamic_form_configs'
+      );
       if (configsError) {
         if (configsError.code === '42P01') setDbTableMissing(true);
         throw configsError;

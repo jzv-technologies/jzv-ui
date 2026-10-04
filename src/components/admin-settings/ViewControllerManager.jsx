@@ -236,16 +236,66 @@ const getRoleBadgeClasses = (colorName) => {
 const COMPONENT_TYPES = ['tile', 'tab', 'subview', 'variable'];
 
 const STANDARD_PARENT_CONTAINERS = [
-  { name: 'Calendar and Schedules', label: 'Calendar & Schedules', icon: 'fa-calendar-alt', desc: 'Schedules, Timetables, Academic Calendars' },
-  { name: 'Academic & Curriculum', label: 'Academic & Curriculum', icon: 'fa-book-open', desc: 'Syllabus, Books, Lessons, Curricula' },
-  { name: 'Administration', label: 'Administration', icon: 'fa-shield-halved', desc: 'System settings, access control, user management' },
-  { name: 'Staff & Students', label: 'Staff & Students', icon: 'fa-graduation-cap', desc: 'Student records, employee directory, attendance' },
-  { name: 'Examinations', label: 'Examinations', icon: 'fa-file-signature', desc: 'Exam schedules, mark entry, results, report cards' },
-  { name: 'Testing', label: 'Evaluations & Tests', icon: 'fa-vial', desc: 'Online evaluations, entrance tests' },
-  { name: 'General', label: 'General', icon: 'fa-cubes', desc: 'Tickets, requests, general portal services' },
-  { name: 'Complaints & Support', label: 'Complaints & Support', icon: 'fa-headset', desc: 'Help desk, issue tickets' },
-  { name: 'Personal', label: 'Personal Information', icon: 'fa-user-circle', desc: 'Personal profile, self-service' },
-  { name: 'Display', label: 'Display Systems', icon: 'fa-tv', desc: 'Public displays, announcements' },
+  {
+    name: 'Calendar and Schedules',
+    label: 'Calendar & Schedules',
+    icon: 'fa-calendar-alt',
+    desc: 'Schedules, Timetables, Academic Calendars',
+  },
+  {
+    name: 'Academic & Curriculum',
+    label: 'Academic & Curriculum',
+    icon: 'fa-book-open',
+    desc: 'Syllabus, Books, Lessons, Curricula',
+  },
+  {
+    name: 'Administration',
+    label: 'Administration',
+    icon: 'fa-shield-halved',
+    desc: 'System settings, access control, user management',
+  },
+  {
+    name: 'Staff & Students',
+    label: 'Staff & Students',
+    icon: 'fa-graduation-cap',
+    desc: 'Student records, employee directory, attendance',
+  },
+  {
+    name: 'Examinations',
+    label: 'Examinations',
+    icon: 'fa-file-signature',
+    desc: 'Exam schedules, mark entry, results, report cards',
+  },
+  {
+    name: 'Testing',
+    label: 'Evaluations & Tests',
+    icon: 'fa-vial',
+    desc: 'Online evaluations, entrance tests',
+  },
+  {
+    name: 'General',
+    label: 'General',
+    icon: 'fa-cubes',
+    desc: 'Tickets, requests, general portal services',
+  },
+  {
+    name: 'Complaints & Support',
+    label: 'Complaints & Support',
+    icon: 'fa-headset',
+    desc: 'Help desk, issue tickets',
+  },
+  {
+    name: 'Personal',
+    label: 'Personal Information',
+    icon: 'fa-user-circle',
+    desc: 'Personal profile, self-service',
+  },
+  {
+    name: 'Display',
+    label: 'Display Systems',
+    icon: 'fa-tv',
+    desc: 'Public displays, announcements',
+  },
 ];
 
 /**
@@ -471,7 +521,9 @@ const ParentNameCombobox = ({ value = '', onChange, type = 'tile', configs = [] 
             }`}
             title="Browse suggestions"
           >
-            <i className={`fas fa-chevron-down text-[10px] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <i
+              className={`fas fa-chevron-down text-[10px] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+            />
           </button>
         </div>
       </div>
@@ -740,23 +792,19 @@ const ParentNameCombobox = ({ value = '', onChange, type = 'tile', configs = [] 
                           <span className="font-mono font-bold text-xs text-dark-deepblue truncate">
                             {item.value}
                           </span>
-                          {isSelected && (
-                            <i className="fas fa-check text-[10px] text-green-600" />
-                          )}
+                          {isSelected && <i className="fas fa-check text-[10px] text-green-600" />}
                         </div>
                         {item.displayName && item.displayName !== item.value && (
-                          <p className="text-[10px] text-gray-500 truncate">
-                            {item.displayName}
-                          </p>
+                          <p className="text-[10px] text-gray-500 truncate">{item.displayName}</p>
                         )}
                         {item.desc && (
-                          <p className="text-[9px] text-gray-400 truncate">
-                            {item.desc}
-                          </p>
+                          <p className="text-[9px] text-gray-400 truncate">{item.desc}</p>
                         )}
                       </div>
                     </div>
-                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border shrink-0 ${getTypeBadge(item.type)}`}>
+                    <span
+                      className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded border shrink-0 ${getTypeBadge(item.type)}`}
+                    >
                       {item.type}
                     </span>
                   </div>
@@ -843,11 +891,8 @@ export const ViewControllerManager = () => {
   const fetchConfigs = useCallback(async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('app_view_controller')
-        .select('*')
-        .order('display_order', { ascending: true })
-        .order('type', { ascending: true });
+      // Use RPC function for admin access to all app_view_controller entries
+      const { data, error } = await supabase.rpc('get_all_app_view_controller');
 
       if (error) throw error;
       setConfigs(data || []);
@@ -1190,7 +1235,11 @@ export const ViewControllerManager = () => {
         component_name: cleanName,
         type: formData.type,
         display_name: formData.display_name.trim() || null,
-        parent_name: formData.parent_name ? formData.parent_name.trim() : (formData.type === 'tile' ? 'General' : null),
+        parent_name: formData.parent_name
+          ? formData.parent_name.trim()
+          : formData.type === 'tile'
+            ? 'General'
+            : null,
         display_order: Number(formData.display_order) || 0,
         is_active: Boolean(formData.is_active),
         default_access: formData.default_access,
@@ -1284,7 +1333,10 @@ export const ViewControllerManager = () => {
   }, [configs, simulatorRole]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-4 animate-in fade-in duration-300" data-feature="avc-admin-manager">
+    <div
+      className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-4 animate-in fade-in duration-300"
+      data-feature="avc-admin-manager"
+    >
       {/* Compact Top Action Toolbar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-light-border shadow-xs">
         <div className="flex items-center gap-2.5">
@@ -1433,7 +1485,10 @@ export const ViewControllerManager = () => {
       )}
 
       {/* Main Table Card */}
-      <div className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs" data-feature="avc-admin-manager-content">
+      <div
+        className="bg-white border border-light-border rounded-2xl sm:rounded-3xl overflow-hidden shadow-xs"
+        data-feature="avc-admin-manager-content"
+      >
         {loading ? (
           <div className="py-20 text-center">
             <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -1458,7 +1513,10 @@ export const ViewControllerManager = () => {
                 </tr>
 
                 {/* Column Filter Row */}
-                <tr className="border-b border-light-border bg-purple-50/20 text-xs" data-feature-filter="avc-table">
+                <tr
+                  className="border-b border-light-border bg-purple-50/20 text-xs"
+                  data-feature-filter="avc-table"
+                >
                   {/* Order column filter / Clear All */}
                   <th className="p-2 text-center">
                     {hasActiveFilters && (

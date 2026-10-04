@@ -230,12 +230,13 @@ const ExamAttendanceUploadModal = ({
   // Handle direct in-table editing of a student's attendance fields
   const handleUpdateStudentField = (admNorm, field, value) => {
     const num = Math.max(0, parseInt(value, 10) || 0);
-    const existing = unsavedEdits[admNorm] || liveAttendanceMap[admNorm] || {
-      present: 0,
-      absent: 0,
-      on_leave: 0,
-      total_days: 0,
-    };
+    const existing = unsavedEdits[admNorm] ||
+      liveAttendanceMap[admNorm] || {
+        present: 0,
+        absent: 0,
+        on_leave: 0,
+        total_days: 0,
+      };
 
     const updated = {
       ...existing,
@@ -250,12 +251,13 @@ const ExamAttendanceUploadModal = ({
   };
 
   const handleStepStudentField = (admNorm, field, delta) => {
-    const existing = unsavedEdits[admNorm] || liveAttendanceMap[admNorm] || {
-      present: 0,
-      absent: 0,
-      on_leave: 0,
-      total_days: 0,
-    };
+    const existing = unsavedEdits[admNorm] ||
+      liveAttendanceMap[admNorm] || {
+        present: 0,
+        absent: 0,
+        on_leave: 0,
+        total_days: 0,
+      };
     const currentVal = existing[field] || 0;
     const newVal = Math.max(0, currentVal + delta);
     handleUpdateStudentField(admNorm, field, newVal);
@@ -326,12 +328,13 @@ const ExamAttendanceUploadModal = ({
   const handleExportCurrentAttendance = () => {
     const rows = studentList.map((s, idx) => {
       const adm = s.admission_no || s.admission_number || '';
-      const rec = unsavedEdits[normalize(adm)] || liveAttendanceMap[normalize(adm)] || {
-        present: 0,
-        absent: 0,
-        on_leave: 0,
-        total_days: 0,
-      };
+      const rec = unsavedEdits[normalize(adm)] ||
+        liveAttendanceMap[normalize(adm)] || {
+          present: 0,
+          absent: 0,
+          on_leave: 0,
+          total_days: 0,
+        };
       const tot = rec.present + rec.absent + rec.on_leave;
       const pct = tot > 0 ? Math.round((rec.present / tot) * 100) : 0;
       return {
@@ -366,12 +369,13 @@ const ExamAttendanceUploadModal = ({
     const newEdits = { ...unsavedEdits };
     studentList.forEach((s) => {
       const adm = normalize(s.admission_no || s.admission_number);
-      const existing = newEdits[adm] || liveAttendanceMap[adm] || {
-        present: totalWorkingDays,
-        absent: 0,
-        on_leave: 0,
-        total_days: totalWorkingDays,
-      };
+      const existing = newEdits[adm] ||
+        liveAttendanceMap[adm] || {
+          present: totalWorkingDays,
+          absent: 0,
+          on_leave: 0,
+          total_days: totalWorkingDays,
+        };
 
       const present = existing.present > 0 ? existing.present : totalWorkingDays;
       const on_leave = existing.on_leave || 0;
@@ -399,9 +403,7 @@ const ExamAttendanceUploadModal = ({
       headers.find((h) => {
         const cleanH = h.toLowerCase().trim();
         return lower.some(
-          (c) =>
-            cleanH === c ||
-            cleanH.replace(/[^a-z0-9]/g, '') === c.replace(/[^a-z0-9]/g, '')
+          (c) => cleanH === c || cleanH.replace(/[^a-z0-9]/g, '') === c.replace(/[^a-z0-9]/g, '')
         );
       }) || ''
     );
@@ -459,7 +461,7 @@ const ExamAttendanceUploadModal = ({
         absent,
         on_leave,
         total_days,
-        pct: total_days > 0 ? Math.round((present / total_days) * 100) : (present > 0 ? 100 : 0),
+        pct: total_days > 0 ? Math.round((present / total_days) * 100) : present > 0 ? 100 : 0,
         isMatched: !!matchedStudent,
       });
     });
@@ -585,7 +587,9 @@ const ExamAttendanceUploadModal = ({
       setMissingFieldNames(missing);
       setShowMappingPanel(true);
       setParsedRows([]);
-      setMappingError(`Mandatory column(s) [${missing.join(', ')}] could not be detected. Please select the matching columns.`);
+      setMappingError(
+        `Mandatory column(s) [${missing.join(', ')}] could not be detected. Please select the matching columns.`
+      );
       showToast(
         `Mandatory column(s) [${missing.join(', ')}] not found in file. Please map the columns.`,
         'warning'
@@ -621,7 +625,9 @@ const ExamAttendanceUploadModal = ({
 
     const uniqueCols = new Set(selectedCols);
     if (uniqueCols.size !== selectedCols.length) {
-      setMappingError('Duplicate column mappings detected. Each attendance field must map to a unique column.');
+      setMappingError(
+        'Duplicate column mappings detected. Each attendance field must map to a unique column.'
+      );
       showToast('Each target field must map to a unique column.', 'error');
       return;
     }
@@ -851,9 +857,7 @@ const ExamAttendanceUploadModal = ({
                 </span>
                 <span className="text-slate-300">•</span>
                 <span>Enrolled:</span>
-                <span className="font-bold text-emerald-700">
-                  {kpis.total} Students
-                </span>
+                <span className="font-bold text-emerald-700">{kpis.total} Students</span>
                 <span className="text-slate-300">•</span>
                 <span>Recorded:</span>
                 <span className="font-bold text-emerald-700">
@@ -878,27 +882,6 @@ const ExamAttendanceUploadModal = ({
                 <i className="fas fa-cloud-arrow-up text-xs" />
                 <span>Upload / Import</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setMainView('students')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  mainView === 'students'
-                    ? 'bg-white text-emerald-700 shadow-xs'
-                    : 'text-dark-muted hover:text-dark-primary'
-                }`}
-              >
-                <i className="fas fa-users-viewfinder text-xs" />
-                <span>View Students &amp; Attendance</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                    mainView === 'students'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-slate-300/80 text-dark-slate'
-                  }`}
-                >
-                  {kpis.recorded}/{kpis.total}
-                </span>
-              </button>
             </div>
 
             <button
@@ -912,395 +895,6 @@ const ExamAttendanceUploadModal = ({
         </div>
 
         {/* ── View 1: Enrolled Students & Attendance ── */}
-        {mainView === 'students' && (
-          <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1">
-            {/* KPI Stat Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-slate-50 border border-light-border rounded-2xl p-3.5 space-y-1">
-                <span className="text-[10px] font-bold text-dark-muted uppercase tracking-wider block">
-                  Enrolled Students
-                </span>
-                <div className="text-xl font-black text-dark-primary flex items-baseline gap-1">
-                  <span>{kpis.total}</span>
-                  <span className="text-xs text-dark-muted font-normal">Students</span>
-                </div>
-              </div>
-
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 space-y-1">
-                <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
-                  Attendance Recorded
-                </span>
-                <div className="text-xl font-black text-emerald-700 flex items-baseline gap-1">
-                  <span>{kpis.recorded}</span>
-                  <span className="text-xs text-emerald-600 font-bold">
-                    ({kpis.total > 0 ? Math.round((kpis.recorded / kpis.total) * 100) : 0}%)
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-1">
-                <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block">
-                  Class Avg Attendance
-                </span>
-                <div className="text-xl font-black text-blue-700 flex items-baseline gap-1">
-                  <span>{kpis.avg}%</span>
-                  <span className="text-xs text-blue-600 font-normal">Average</span>
-                </div>
-              </div>
-
-              <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3.5 space-y-1">
-                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                  Perfect Attendance (100%)
-                </span>
-                <div className="text-xl font-black text-amber-700 flex items-baseline gap-1">
-                  <span>{kpis.perfect}</span>
-                  <span className="text-xs text-amber-600 font-normal">Students</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter and Action Bar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-2xl border border-light-border">
-              {/* Search */}
-              <div className="relative flex-1 min-w-[200px]">
-                <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
-                <input
-                  type="text"
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                  placeholder="Search student by name, admission no, or roll..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-light-border bg-white text-dark-primary outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                />
-              </div>
-
-              {/* Status Filters */}
-              <div className="flex items-center gap-1 shrink-0 overflow-x-auto pb-1 sm:pb-0">
-                {[
-                  { id: 'all', label: 'All', count: kpis.total },
-                  { id: 'recorded', label: 'Recorded', count: kpis.recorded },
-                  { id: 'missing', label: 'Missing', count: kpis.total - kpis.recorded },
-                  { id: 'low', label: 'Low (<75%)', count: kpis.low },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setAttendanceFilter(f.id)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                      attendanceFilter === f.id
-                        ? 'bg-emerald-600 text-white shadow-2xs'
-                        : 'bg-white text-dark-muted hover:text-dark-primary border border-light-border'
-                    }`}
-                  >
-                    <span>{f.label}</span>
-                    <span
-                      className={`text-[10px] px-1 rounded-full ${
-                        attendanceFilter === f.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-dark-slate'
-                      }`}
-                    >
-                      {f.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Quick Actions */}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleSetWorkingDaysForAll}
-                  className="px-2.5 py-1 text-xs font-bold text-dark-slate bg-white hover:bg-slate-100 border border-light-border rounded-xl transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
-                  title="Set uniform working days for all students"
-                >
-                  <i className="fas fa-calculator text-slate-500 text-[10px]" />
-                  <span>Set Working Days</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportCurrentAttendance}
-                  className="px-2.5 py-1 text-xs font-bold text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-300 rounded-xl transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
-                  title="Export student attendance to Excel spreadsheet"
-                >
-                  <i className="fas fa-file-excel text-emerald-600 text-xs" />
-                  <span>Export</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMainView('upload')}
-                  className="px-3 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all flex items-center gap-1 cursor-pointer shadow-xs"
-                >
-                  <i className="fas fa-cloud-arrow-up text-[10px]" />
-                  <span>Upload File</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Students Table */}
-            <div className="border border-light-border rounded-2xl bg-white overflow-hidden shadow-2xs">
-              <div className="max-h-[50vh] overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-dark-muted font-black text-[10px] uppercase tracking-wider sticky top-0 border-b border-light-border z-10">
-                      <th className="py-2.5 px-3">#</th>
-                      <th className="py-2.5 px-3">Student Name</th>
-                      <th className="py-2.5 px-3">Admission No</th>
-                      <th className="py-2.5 px-3 text-center">Present</th>
-                      <th className="py-2.5 px-3 text-center">Absent</th>
-                      <th className="py-2.5 px-3 text-center">On Leave</th>
-                      <th className="py-2.5 px-3 text-center">Total Days</th>
-                      <th className="py-2.5 px-3 text-center">Attendance %</th>
-                      <th className="py-2.5 px-3 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-light-border font-medium">
-                    {filteredStudents.length === 0 ? (
-                      <tr>
-                        <td colSpan={9} className="py-10 text-center text-dark-muted">
-                          <div className="space-y-1.5">
-                            <i className="fas fa-user-slash text-2xl text-slate-300" />
-                            <p className="text-xs font-bold text-dark-slate">No students found</p>
-                            <p className="text-[11px] text-dark-muted">
-                              Try adjusting your search query or filter selection.
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredStudents.map((s, idx) => {
-                        const admNorm = normalize(s.admission_no || s.admission_number);
-                        const isEdited = !!unsavedEdits[admNorm];
-                        const record = unsavedEdits[admNorm] || liveAttendanceMap[admNorm] || {
-                          present: 0,
-                          absent: 0,
-                          on_leave: 0,
-                          total_days: 0,
-                        };
-                        const tot = record.present + record.absent + record.on_leave;
-                        const pct = tot > 0 ? Math.round((record.present / tot) * 100) : (record.present > 0 ? 100 : 0);
-                        const hasData = tot > 0 || record.present > 0;
-
-                        return (
-                          <tr
-                            key={s.id || admNorm || idx}
-                            className={`transition-colors hover:bg-slate-50/80 ${
-                              isEdited ? 'bg-amber-50/40' : ''
-                            }`}
-                          >
-                            <td className="py-2 px-3 text-dark-muted font-mono text-[11px]">
-                              {idx + 1}
-                            </td>
-
-                            {/* Student Name */}
-                            <td className="py-2 px-3">
-                              <div className="flex items-center gap-2">
-                                <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0">
-                                  {s.student_name ? s.student_name.charAt(0).toUpperCase() : 'S'}
-                                </div>
-                                <div className="min-w-0">
-                                  <span className="font-bold text-dark-primary block truncate">
-                                    {s.student_name || 'Unnamed Student'}
-                                  </span>
-                                  {s.roll_no && (
-                                    <span className="text-[10px] text-dark-muted block">
-                                      Roll: #{s.roll_no}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-
-                            {/* Admission No */}
-                            <td className="py-2 px-3 font-mono font-bold text-dark-slate text-[11px]">
-                              {s.admission_no || s.admission_number || '—'}
-                            </td>
-
-                            {/* Present Days with inline controls */}
-                            <td className="py-1.5 px-2 text-center">
-                              <div className="inline-flex items-center justify-center border border-light-border rounded-lg bg-white overflow-hidden shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'present', -1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={record.present}
-                                  onChange={(e) =>
-                                    handleUpdateStudentField(admNorm, 'present', e.target.value)
-                                  }
-                                  className="w-11 h-6 text-center text-xs font-bold text-emerald-700 font-mono outline-none border-x border-light-border bg-transparent"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'present', 1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* Absent Days with inline controls */}
-                            <td className="py-1.5 px-2 text-center">
-                              <div className="inline-flex items-center justify-center border border-light-border rounded-lg bg-white overflow-hidden shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'absent', -1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={record.absent}
-                                  onChange={(e) =>
-                                    handleUpdateStudentField(admNorm, 'absent', e.target.value)
-                                  }
-                                  className="w-11 h-6 text-center text-xs font-bold text-rose-600 font-mono outline-none border-x border-light-border bg-transparent"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'absent', 1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* On Leave Days with inline controls */}
-                            <td className="py-1.5 px-2 text-center">
-                              <div className="inline-flex items-center justify-center border border-light-border rounded-lg bg-white overflow-hidden shadow-2xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'on_leave', -1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={record.on_leave}
-                                  onChange={(e) =>
-                                    handleUpdateStudentField(admNorm, 'on_leave', e.target.value)
-                                  }
-                                  className="w-11 h-6 text-center text-xs font-bold text-amber-600 font-mono outline-none border-x border-light-border bg-transparent"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepStudentField(admNorm, 'on_leave', 1)}
-                                  className="w-5 h-6 text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center text-[10px] cursor-pointer"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* Total Days */}
-                            <td className="py-2 px-3 text-center font-bold text-dark-slate font-mono text-[11px]">
-                              {tot}
-                            </td>
-
-                            {/* Attendance % */}
-                            <td className="py-2 px-3 text-center">
-                              {hasData ? (
-                                <span
-                                  className={`inline-block px-2 py-0.5 rounded-md font-mono font-bold text-[11px] ${
-                                    pct >= 90
-                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                      : pct >= 75
-                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  }`}
-                                >
-                                  {pct}%
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400 font-mono italic">
-                                  —
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Status */}
-                            <td className="py-2 px-3 text-right">
-                              {isEdited ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                                  <i className="fas fa-pencil text-[9px]" />
-                                  Unsaved
-                                </span>
-                              ) : hasData ? (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                  <i className="fas fa-check text-[9px]" />
-                                  Recorded
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
-                                  Pending
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Unsaved Changes Banner */}
-            {Object.keys(unsavedEdits).length > 0 && (
-              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 flex items-center justify-between gap-3 animate-in fade-in duration-150">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center text-sm shadow-2xs">
-                    <i className="fas fa-floppy-disk" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-black text-amber-950 block">
-                      Unsaved Attendance Changes
-                    </span>
-                    <span className="text-[11px] text-amber-800">
-                      You have modified attendance records for {Object.keys(unsavedEdits).length} student(s).
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setUnsavedEdits({})}
-                    className="px-3 py-1.5 text-xs font-bold text-dark-muted hover:text-dark-primary bg-white border border-light-border rounded-xl cursor-pointer"
-                  >
-                    Discard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveStudentEdits}
-                    disabled={saving}
-                    className="px-4 py-1.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
-                  >
-                    {saving ? (
-                      <>
-                        <i className="fas fa-spinner fa-spin text-xs" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="fas fa-check text-xs" />
-                        <span>Save Attendance Changes ({Object.keys(unsavedEdits).length})</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* ── View 2: Upload / Import Attendance ── */}
         {mainView === 'upload' && (
@@ -1357,19 +951,19 @@ const ExamAttendanceUploadModal = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('file')}
-                className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 rounded-xl ${
+                className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'file'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-dark-muted hover:text-dark-primary hover:bg-slate-100'
                 }`}
               >
                 <i className="fas fa-file-arrow-up" />
-                <span>Spreadsheet File (.xlsx, .csv)</span>
+                <span>File (.xlsx, .csv)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('paste')}
-                className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 rounded-xl ${
+                className={`px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   activeTab === 'paste'
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-dark-muted hover:text-dark-primary hover:bg-slate-100'
@@ -1452,38 +1046,9 @@ const ExamAttendanceUploadModal = ({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-xs sm:text-sm font-black text-dark-primary tracking-tight">
-                          Map File Columns to Attendance Fields
+                          Map Columns to Fields
                         </h4>
-                        {missingMandatory ? (
-                          <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-rose-600 text-white shadow-2xs flex items-center gap-1">
-                            <i className="fas fa-exclamation-circle text-[9px]" />
-                            Mandatory Mapping Required
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            Adjusting Columns
-                          </span>
-                        )}
                       </div>
-                      <p className="text-xs text-dark-muted font-medium mt-0.5">
-                        {missingMandatory ? (
-                          <span>
-                            The required column(s){' '}
-                            <strong className="text-rose-700 font-black">
-                              {missingFieldNames.join(' and ')}
-                            </strong>{' '}
-                            were not detected automatically in{' '}
-                            <strong className="text-dark-primary">{fileName || 'your file'}</strong>.
-                            Please select the matching columns below to proceed:
-                          </span>
-                        ) : (
-                          <span>
-                            Review or adjust how columns from{' '}
-                            <strong className="text-dark-primary">{fileName || 'your file'}</strong>{' '}
-                            are mapped to attendance fields:
-                          </span>
-                        )}
-                      </p>
                     </div>
                   </div>
 
@@ -1561,7 +1126,9 @@ const ExamAttendanceUploadModal = ({
                         </option>
                       ))}
                     </select>
-                    <span className="text-[10px] text-dark-muted block">Days attended / present</span>
+                    <span className="text-[10px] text-dark-muted block">
+                      Days attended / present
+                    </span>
                   </div>
 
                   {/* 3. Absent Days (Optional) */}
@@ -1585,7 +1152,9 @@ const ExamAttendanceUploadModal = ({
                         </option>
                       ))}
                     </select>
-                    <span className="text-[10px] text-dark-muted block">Days absent from school</span>
+                    <span className="text-[10px] text-dark-muted block">
+                      Days absent from school
+                    </span>
                   </div>
 
                   {/* 4. On Leave Days (Optional) */}
@@ -1609,7 +1178,9 @@ const ExamAttendanceUploadModal = ({
                         </option>
                       ))}
                     </select>
-                    <span className="text-[10px] text-dark-muted block">Approved / medical leaves</span>
+                    <span className="text-[10px] text-dark-muted block">
+                      Approved / medical leaves
+                    </span>
                   </div>
 
                   {/* 5. Total Working Days (Optional) */}
@@ -1633,7 +1204,9 @@ const ExamAttendanceUploadModal = ({
                         </option>
                       ))}
                     </select>
-                    <span className="text-[10px] text-dark-muted block">Total working days in term</span>
+                    <span className="text-[10px] text-dark-muted block">
+                      Total working days in term
+                    </span>
                   </div>
                 </div>
 
@@ -1645,7 +1218,8 @@ const ExamAttendanceUploadModal = ({
                       <span>File Data Preview (First 5 Rows)</span>
                     </span>
                     <span className="text-[10px] text-dark-muted font-semibold">
-                      Showing first {Math.min(5, rawRowsData.length)} of {rawRowsData.length} records in file
+                      Showing first {Math.min(5, rawRowsData.length)} of {rawRowsData.length}{' '}
+                      records in file
                     </span>
                   </div>
                   <div className="max-h-36 overflow-x-auto overflow-y-auto border border-light-border rounded-xl bg-white shadow-2xs">
@@ -1730,7 +1304,8 @@ const ExamAttendanceUploadModal = ({
                       {columnMapping.admission_no && columnMapping.present ? (
                         <span className="text-emerald-700 font-bold flex items-center gap-1">
                           <i className="fas fa-check-circle text-xs" />
-                          Mandatory columns mapped: [Admission No: "{columnMapping.admission_no}", Present: "{columnMapping.present}"]
+                          Mandatory columns mapped: [Admission No: "{columnMapping.admission_no}",
+                          Present: "{columnMapping.present}"]
                         </span>
                       ) : (
                         <span className="text-amber-800 font-bold flex items-center gap-1">
@@ -1873,56 +1448,8 @@ const ExamAttendanceUploadModal = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-4 bg-slate-50 border-t border-light-border flex items-center justify-between shrink-0">
-          {mainView === 'students' ? (
+          {
             <>
-              <button
-                type="button"
-                onClick={() => setMainView('upload')}
-                className="px-4 py-2 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              >
-                <i className="fas fa-cloud-arrow-up text-xs" />
-                <span>Upload Spreadsheet File Instead</span>
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-xs font-bold text-dark-muted hover:text-dark-primary transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                {Object.keys(unsavedEdits).length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleSaveStudentEdits}
-                    disabled={saving}
-                    className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    {saving ? (
-                      <>
-                        <i className="fas fa-spinner fa-spin text-xs" />
-                        <span>Saving Changes...</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="fas fa-check text-xs" />
-                        <span>Save Changes ({Object.keys(unsavedEdits).length})</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setMainView('students')}
-                className="px-4 py-2 text-xs font-bold text-dark-slate hover:text-dark-primary bg-white hover:bg-slate-100 border border-light-border rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              >
-                <i className="fas fa-users-viewfinder text-xs text-emerald-600" />
-                <span>View Students &amp; Attendance ({kpis.recorded}/{kpis.total})</span>
-              </button>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1951,7 +1478,7 @@ const ExamAttendanceUploadModal = ({
                 </button>
               </div>
             </>
-          )}
+          }
         </div>
       </div>
     </div>

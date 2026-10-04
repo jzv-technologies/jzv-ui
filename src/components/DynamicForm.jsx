@@ -3,6 +3,7 @@ import { ChevronDown, Square, SquareCheckBig, Check, Circle, CircleCheckBig } fr
 import { CARD_THEMES } from '../utils/cardTheme';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { fetchUserDynamicFormConfigByUuid } from '../utils/dynamicFormConfigs';
 
 const SUPABASE_FORM_CONFIG_TABLE = 'dynamic_form_configs';
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -99,7 +100,7 @@ const evaluateCriteria = (criteria, formData) => {
 // MODERN FLOATING FIELD
 // =========================
 
-const FloatingLabelField = ({
+const FloatingLabelField = React.memo(function FloatingLabelField({
   label,
   type,
   value,
@@ -109,7 +110,7 @@ const FloatingLabelField = ({
   error = '',
   textColor = 'text-gray-800',
   disabled = false,
-}) => {
+}) {
   const [isFocused, setIsFocused] = useState(false);
 
   const hasValue = value !== undefined && value !== null && value !== '';
@@ -242,13 +243,15 @@ const FloatingLabelField = ({
       {error && <p className="text-red-500 text-xs mt-2 ml-2">{error}</p>}
     </div>
   );
-};
+});
+
+FloatingLabelField.displayName = 'FloatingLabelField';
 
 // =========================
 // SUCCESS MODAL
 // =========================
 
-const SuccessModal = ({ message, onClose }) => {
+const SuccessModal = React.memo(function SuccessModal({ message, onClose }) {
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === 'Escape') onClose();
@@ -287,13 +290,15 @@ const SuccessModal = ({ message, onClose }) => {
       </div>
     </div>
   );
-};
+});
+
+SuccessModal.displayName = 'SuccessModal';
 
 // =========================
 // EMBEDDED CONVERSATION CHAT
 // =========================
 
-const EmbeddedConversationChat = ({
+const EmbeddedConversationChat = React.memo(function EmbeddedConversationChat({
   label,
   value,
   onChange,
@@ -301,7 +306,7 @@ const EmbeddedConversationChat = ({
   error = '',
   textColor = 'text-gray-800',
   currentUserName = 'Reporter',
-}) => {
+}) {
   const [newMsg, setNewMsg] = useState('');
 
   let parsed = [];
@@ -389,7 +394,9 @@ const EmbeddedConversationChat = ({
       {error && <p className="text-red-500 text-xs mt-1 ml-2">{error}</p>}
     </div>
   );
-};
+});
+
+EmbeddedConversationChat.displayName = 'EmbeddedConversationChat';
 
 // =========================
 // MAIN FORM
@@ -504,24 +511,12 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
       }
 
       try {
-        const queryPromise = supabase
-          .from(SUPABASE_FORM_CONFIG_TABLE)
-          .select('*')
-          .eq('form_name', uuid);
+        // Fetch form configuration with session-cache and role filtering
+        const configRecord = await fetchUserDynamicFormConfigByUuid(uuid, effectiveRoles);
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Supabase query timeout')), 5000)
-        );
-
-        const { data, error: supabaseError } = await Promise.race([queryPromise, timeoutPromise]);
-
-        if (supabaseError) throw supabaseError;
-
-        if (!data || data.length === 0) {
-          throw new Error(`No form configuration record found for "${uuid}"`);
+        if (!configRecord) {
+          throw new Error(`No form configuration record found for "${uuid}" or access denied`);
         }
-
-        const configRecord = data[0];
         const configField = configRecord.fields;
         let fieldsFromSupabase = [];
         if (configField) {

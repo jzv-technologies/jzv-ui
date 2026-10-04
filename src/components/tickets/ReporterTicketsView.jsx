@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { supabase } from "../../utils/supabase";
-import { showToast } from "../../utils/toast";
-import DataGrid from "../DataGrid";
-import DetailModal from "../DetailModal";
+import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from '../../utils/supabase';
+import { showToast } from '../../utils/toast';
+import { fetchUserDynamicFormConfigs } from '../../utils/dynamicFormConfigs';
+import DataGrid from '../DataGrid';
+import DetailModal from '../DetailModal';
 
 const getLocalMappingFallback = (uuid) => {
   const mappings = {
     complaint: {
-      google_sheet_id: "1E97QNg6HM6ZJlTGdYUlK5FiD-WwhNYl3vTDRixRgA9A",
-      data_sheet_name: "complaint_data",
+      google_sheet_id: '1E97QNg6HM6ZJlTGdYUlK5FiD-WwhNYl3vTDRixRgA9A',
+      data_sheet_name: 'complaint_data',
     },
     career: {
-      google_sheet_id: "1rtxVBXFij9ZxwQhjRhzB8X6Phb0oxOKgxWgBYpSQ6xI",
-      data_sheet_name: "career_data",
-    }
+      google_sheet_id: '1rtxVBXFij9ZxwQhjRhzB8X6Phb0oxOKgxWgBYpSQ6xI',
+      data_sheet_name: 'career_data',
+    },
   };
   return mappings[uuid] || null;
 };
@@ -26,17 +27,21 @@ let reporterTicketsCache = {
   selectedConfig: null,
 };
 
-const ReporterTicketsView = ({ user, fullName }) => {
+const ReporterTicketsView = ({ user, fullName, userRoles = [] }) => {
   const isCacheValid = user?.id && reporterTicketsCache.userId === user.id;
 
   const [loading, setLoading] = useState(() => !isCacheValid);
   const [configs, setConfigs] = useState(() => (isCacheValid ? reporterTicketsCache.configs : []));
-  const [mappings, setMappings] = useState(() => (isCacheValid ? reporterTicketsCache.mappings : []));
+  const [mappings, setMappings] = useState(() =>
+    isCacheValid ? reporterTicketsCache.mappings : []
+  );
   const [tickets, setTickets] = useState(() => (isCacheValid ? reporterTicketsCache.tickets : []));
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [selectedConfig, setSelectedConfig] = useState(() => (isCacheValid ? reporterTicketsCache.selectedConfig : null));
+  const [selectedConfig, setSelectedConfig] = useState(() =>
+    isCacheValid ? reporterTicketsCache.selectedConfig : null
+  );
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   const fetchUserTickets = async (config, allMappings) => {
     if (!config.data_id) {
@@ -46,14 +51,16 @@ const ReporterTicketsView = ({ user, fullName }) => {
       }
       return;
     }
-    const mapping = (allMappings && allMappings.find((m) => m.data_id === config.data_id)) || getLocalMappingFallback(config.form_name || config.data_id);
+    const mapping =
+      (allMappings && allMappings.find((m) => m.data_id === config.data_id)) ||
+      getLocalMappingFallback(config.form_name || config.data_id);
 
     try {
       const searchParams = {
-        action: "search",
+        action: 'search',
         uuid: config.form_name || config.data_id,
         criteria: {
-          email: user?.email || "",
+          email: user?.email || '',
         },
       };
 
@@ -62,14 +69,11 @@ const ReporterTicketsView = ({ user, fullName }) => {
         searchParams.data_sheet_name = mapping.data_sheet_name;
       }
 
-      const res = await fetch(
-        `${import.meta.env.VITE_APPS_SCRIPT_URL}?action=search`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "text/plain" },
-          body: JSON.stringify(searchParams),
-        }
-      );
+      const res = await fetch(`${import.meta.env.VITE_APPS_SCRIPT_URL}?action=search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(searchParams),
+      });
       const data = await res.json();
       if (data.success) {
         setTickets(data.data || []);
@@ -77,27 +81,25 @@ const ReporterTicketsView = ({ user, fullName }) => {
           reporterTicketsCache.tickets = data.data || [];
         }
       } else {
-        throw new Error(data.error || "Failed to search tickets");
+        throw new Error(data.error || 'Failed to search tickets');
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to fetch tickets: " + err.message);
+      setError('Failed to fetch tickets: ' + err.message);
     }
   };
 
   const loadData = async () => {
     setLoading(true);
-    setError("");
+    setError('');
     try {
-      const [configsRes, mappingsRes] = await Promise.all([
-        supabase.from("dynamic_form_configs").select("*"),
-        supabase.from("google_sheet_mappings").select("*"),
+      const [activeConfigs, mappingsRes] = await Promise.all([
+        fetchUserDynamicFormConfigs(userRoles || []),
+        supabase.from('google_sheet_mappings').select('*'),
       ]);
 
-      if (configsRes.error) throw configsRes.error;
       if (mappingsRes.error) throw mappingsRes.error;
 
-      const activeConfigs = configsRes.data || [];
       const activeMappings = mappingsRes.data || [];
 
       setConfigs(activeConfigs);
@@ -108,7 +110,7 @@ const ReporterTicketsView = ({ user, fullName }) => {
       }
 
       const defaultForm =
-        activeConfigs.find((c) => c.form_name === "complaint") ||
+        activeConfigs.find((c) => c.form_name === 'complaint') ||
         activeConfigs.find((c) => c.data_id) ||
         activeConfigs[0];
 
@@ -141,30 +143,30 @@ const ReporterTicketsView = ({ user, fullName }) => {
 
     let existing = [];
     try {
-      existing = JSON.parse(selectedTicket[fieldName] || "[]");
+      existing = JSON.parse(selectedTicket[fieldName] || '[]');
       if (!Array.isArray(existing)) existing = [];
     } catch {
       existing = [];
     }
 
-    const senderName = user?.full_name || fullName || "Reporter";
+    const senderName = user?.full_name || fullName || 'Reporter';
     const newMsgObj = {
       sender: senderName,
-      "time-stamp": new Date().toLocaleString(),
+      'time-stamp': new Date().toLocaleString(),
       message: messageText,
     };
     const nextVal = JSON.stringify([...existing, newMsgObj]);
 
     setSendingMessage(true);
     try {
-      const selectedMapping = (mappings && mappings.find(
-        (m) => m.data_id === selectedConfig.data_id
-      )) || getLocalMappingFallback(selectedConfig.form_name || selectedConfig.data_id);
+      const selectedMapping =
+        (mappings && mappings.find((m) => m.data_id === selectedConfig.data_id)) ||
+        getLocalMappingFallback(selectedConfig.form_name || selectedConfig.data_id);
 
       const updatePayload = {
-        action: "update",
+        action: 'update',
         uuid: selectedConfig.form_name || selectedConfig.data_id,
-        matchColumn: "id",
+        matchColumn: 'id',
         records: [
           {
             matchValue: selectedTicket.id,
@@ -181,8 +183,8 @@ const ReporterTicketsView = ({ user, fullName }) => {
       }
 
       const res = await fetch(import.meta.env.VITE_APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(updatePayload),
       });
 
@@ -190,16 +192,14 @@ const ReporterTicketsView = ({ user, fullName }) => {
       if (result.success) {
         const updatedTicket = { ...selectedTicket, [fieldName]: nextVal };
         setSelectedTicket(updatedTicket);
-        setTickets((prev) =>
-          prev.map((t) => (t.id === selectedTicket.id ? updatedTicket : t))
-        );
-        showToast("Message sent successfully!", "success");
+        setTickets((prev) => prev.map((t) => (t.id === selectedTicket.id ? updatedTicket : t)));
+        showToast('Message sent successfully!', 'success');
       } else {
-        throw new Error(result.error || "Failed to update conversation");
+        throw new Error(result.error || 'Failed to update conversation');
       }
     } catch (err) {
       console.error(err);
-      showToast("Failed to send message: " + err.message, "error");
+      showToast('Failed to send message: ' + err.message, 'error');
     } finally {
       setSendingMessage(false);
     }
@@ -210,13 +210,13 @@ const ReporterTicketsView = ({ user, fullName }) => {
     const config = {};
     const fieldsList = Array.isArray(selectedConfig.fields) ? selectedConfig.fields : [];
     fieldsList.forEach((field) => {
-      const name = field["Field Name"]?.trim();
+      const name = field['Field Name']?.trim();
       if (name) {
         config[name] = {
-          label: field.Label || name
+          label: field.Label || name,
         };
         config[name.toLowerCase()] = {
-          label: field.Label || name
+          label: field.Label || name,
         };
       }
     });
@@ -228,7 +228,7 @@ const ReporterTicketsView = ({ user, fullName }) => {
     if (selectedConfig && selectedConfig.fields) {
       const fieldsList = Array.isArray(selectedConfig.fields) ? selectedConfig.fields : [];
       fieldsList.forEach((field) => {
-        const name = field["Field Name"]?.trim();
+        const name = field['Field Name']?.trim();
         if (name) {
           map[name.toLowerCase()] = field.Label || name;
         }
@@ -238,13 +238,13 @@ const ReporterTicketsView = ({ user, fullName }) => {
   }, [selectedConfig]);
 
   const detailExcludeFields = useMemo(() => {
-    const base = ["uuid", "email"];
+    const base = ['uuid', 'email'];
     if (selectedConfig && selectedConfig.fields) {
       const fieldsList = Array.isArray(selectedConfig.fields) ? selectedConfig.fields : [];
       fieldsList.forEach((field) => {
-        const name = field["Field Name"]?.trim();
-        const type = field["Field Type"]?.trim().toLowerCase();
-        if (name && (type === "conversation" || name.toLowerCase() === "conversation")) {
+        const name = field['Field Name']?.trim();
+        const type = field['Field Type']?.trim().toLowerCase();
+        if (name && (type === 'conversation' || name.toLowerCase() === 'conversation')) {
           base.push(name);
         }
       });
@@ -254,17 +254,15 @@ const ReporterTicketsView = ({ user, fullName }) => {
 
   const conversationFieldsData = [];
   if (selectedTicket && selectedConfig) {
-    const fieldsList = Array.isArray(selectedConfig.fields)
-      ? selectedConfig.fields
-      : [];
+    const fieldsList = Array.isArray(selectedConfig.fields) ? selectedConfig.fields : [];
     fieldsList.forEach((field) => {
-      const key = field["Field Name"]?.trim();
-      const type = field["Field Type"]?.trim().toLowerCase();
-      if (key && (type === "conversation" || key.toLowerCase() === "conversation")) {
+      const key = field['Field Name']?.trim();
+      const type = field['Field Type']?.trim().toLowerCase();
+      if (key && (type === 'conversation' || key.toLowerCase() === 'conversation')) {
         conversationFieldsData.push({
           key: key,
           label: field.Label || key,
-          value: selectedTicket[key] || "[]",
+          value: selectedTicket[key] || '[]',
           onSendMessage: handleSendConversationMessage,
           isSending: sendingMessage,
         });
@@ -286,9 +284,7 @@ const ReporterTicketsView = ({ user, fullName }) => {
     <div className="bg-white border border-light-border shadow-xl overflow-hidden rounded-2xl p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div>
-          <h3 className="text-2xl font-bold text-dark-deepblue">
-            My Submitted Tickets
-          </h3>
+          <h3 className="text-2xl font-bold text-dark-deepblue">My Submitted Tickets</h3>
           <p className="text-sm text-dark-muted">
             Track the status of your requests and participate in conversation threads.
           </p>
@@ -299,11 +295,9 @@ const ReporterTicketsView = ({ user, fullName }) => {
               Form Category:
             </label>
             <select
-              value={selectedConfig?.form_name || ""}
+              value={selectedConfig?.form_name || ''}
               onChange={(e) => {
-                const config = configs.find(
-                  (c) => c.form_name === e.target.value
-                );
+                const config = configs.find((c) => c.form_name === e.target.value);
                 if (config) {
                   setSelectedConfig(config);
                   setTickets([]);
@@ -341,7 +335,7 @@ const ReporterTicketsView = ({ user, fullName }) => {
         <DataGrid
           data={tickets}
           onRowClick={(ticket) => setSelectedTicket(ticket)}
-          excludeColumns={["uuid", "email"]}
+          excludeColumns={['uuid', 'email']}
           columnConfig={columnConfig}
         />
       )}
@@ -350,7 +344,7 @@ const ReporterTicketsView = ({ user, fullName }) => {
         <DetailModal
           record={selectedTicket}
           onClose={() => setSelectedTicket(null)}
-          title={`${selectedConfig?.display_name || "Ticket"} Details`}
+          title={`${selectedConfig?.display_name || 'Ticket'} Details`}
           conversationFields={conversationFieldsData}
           excludeFields={detailExcludeFields}
           onPrevRecord={handlePrevRecord}

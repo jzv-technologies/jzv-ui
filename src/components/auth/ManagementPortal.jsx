@@ -49,7 +49,8 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
   useEffect(() => {
     const fetchConfigs = async () => {
       try {
-        const { data, error } = await supabase.from('dynamic_form_configs').select('*');
+        // Use RPC function for admin access to all dynamic form configs
+        const { data, error } = await supabase.rpc('get_all_dynamic_form_configs');
         if (!error && data) {
           setDynamicConfigs(data);
         }
@@ -244,7 +245,10 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
       let teacherRows = Array.isArray(secureTeachersData) ? secureTeachersData : [];
       if (secureTeachersErr || teacherRows.length === 0) {
-        const { data: fallbackTeachers } = await supabase.from('teachers').select('*').order('name', { ascending: true });
+        const { data: fallbackTeachers } = await supabase
+          .from('teachers')
+          .select('*')
+          .order('name', { ascending: true });
         teacherRows = Array.isArray(fallbackTeachers) ? fallbackTeachers : [];
       }
 

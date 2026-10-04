@@ -214,10 +214,19 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                       }
                       if (colId === 'marksObtained') {
                         const pct =
-                          s.maxMarks > 0 && typeof s.marksObtained === 'number'
+                          s.maxMarks > 0 &&
+                          typeof s.marksObtained === 'number' &&
+                          s.maxMarks > (s.passMarks || 0)
                             ? Math.min(
                                 100,
-                                Math.max(0, Math.round((s.marksObtained / s.maxMarks) * 100))
+                                Math.max(
+                                  0,
+                                  Math.round(
+                                    ((s.marksObtained - (s.passMarks || 0)) /
+                                      (s.maxMarks - (s.passMarks || 0))) *
+                                      100
+                                  )
+                                )
                               )
                             : 0;
                         const showBar = Boolean(tbl.showMarksBarFill) && pct > 0;
@@ -357,10 +366,19 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                     }
                     if (colId === 'marksObtained') {
                       const pct =
-                        s.maxMarks > 0 && typeof s.marksObtained === 'number'
+                        s.maxMarks > 0 &&
+                        typeof s.marksObtained === 'number' &&
+                        s.maxMarks > (s.passMarks || 0)
                           ? Math.min(
                               100,
-                              Math.max(0, Math.round((s.marksObtained / s.maxMarks) * 100))
+                              Math.max(
+                                0,
+                                Math.round(
+                                  ((s.marksObtained - (s.passMarks || 0)) /
+                                    (s.maxMarks - (s.passMarks || 0))) *
+                                    100
+                                )
+                              )
                             )
                           : 0;
                       const showBar = Boolean(tbl.showMarksBarFill) && pct > 0;

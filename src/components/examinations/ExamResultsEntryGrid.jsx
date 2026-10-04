@@ -92,10 +92,14 @@ const ExamResultsEntryGrid = ({
 
       (data || []).forEach((entry) => {
         const rId = String(entry.result_id);
-        // Use admission_no as the join key if present, fall back to student_id for legacy rows
-        const sKey = entry.admission_no ? String(entry.admission_no) : String(entry.student_id);
         if (entriesMap[rId]) {
-          entriesMap[rId][sKey] = entry;
+          // Store by both student_id and admission_no so all lookups succeed regardless of key used
+          if (entry.student_id) {
+            entriesMap[rId][String(entry.student_id)] = entry;
+          }
+          if (entry.admission_no) {
+            entriesMap[rId][String(entry.admission_no)] = entry;
+          }
         }
       });
 
@@ -118,10 +122,14 @@ const ExamResultsEntryGrid = ({
       const { changesToSave } = event.detail;
       // Process the save all logic here
       const promises = [];
-      Object.entries(changesToSave).forEach(([resultId, students]) => {
-        Object.entries(students).forEach(([studentId, patch]) => {
+      Object.entries(changesToSave).forEach(([resultId, studentChanges]) => {
+        Object.entries(studentChanges).forEach(([studentId, patch]) => {
+          const studentObj = students.find((s) => String(s.id) === String(studentId));
+          const admissionNo = studentObj?.admission_no || null;
+          const stuKey = admissionNo ? String(admissionNo) : String(studentId);
+
           const currentResultEntries = latestEntriesRef.current[String(resultId)] || {};
-          const existing = currentResultEntries[String(studentId)];
+          const existing = currentResultEntries[String(studentId)] || currentResultEntries[stuKey];
 
           const marksVal =
             patch.marks_obtained !== undefined ? patch.marks_obtained : existing?.marks_obtained;
@@ -133,7 +141,7 @@ const ExamResultsEntryGrid = ({
           const payload = {
             result_id: Number(resultId),
             student_id: Number(studentId),
-            admission_no: students.find((s) => String(s.id) === String(studentId))?.admission_no || null,
+            admission_no: admissionNo,
             marks_obtained:
               isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
                 ? null
@@ -147,7 +155,11 @@ const ExamResultsEntryGrid = ({
               supabase.from('exam_result_entries').update(payload).eq('id', existing.id)
             );
           } else {
-            promises.push(supabase.from('exam_result_entries').insert(payload));
+            promises.push(
+              supabase
+                .from('exam_result_entries')
+                .upsert(payload, { onConflict: 'result_id,student_id' })
+            );
           }
         });
       });
@@ -166,8 +178,8 @@ const ExamResultsEntryGrid = ({
         .finally(() => {
           setSavingCells((prev) => {
             const next = new Set(prev);
-            Object.entries(changesToSave).forEach(([resultId, students]) => {
-              Object.keys(students).forEach((studentId) => {
+            Object.entries(changesToSave).forEach(([resultId, studentChanges]) => {
+              Object.keys(studentChanges).forEach((studentId) => {
                 next.delete(`${resultId}_${studentId}`);
               });
             });
@@ -178,7 +190,7 @@ const ExamResultsEntryGrid = ({
 
     window.addEventListener('exam-results-save-all', handleSaveAll);
     return () => window.removeEventListener('exam-results-save-all', handleSaveAll);
-  }, [loadAllEntries, setPendingChanges, setHasUnsavedChanges]);
+  }, [loadAllEntries, setPendingChanges, setHasUnsavedChanges, students]);
 
   // Listen for quick-fill event from parent
   useEffect(() => {
@@ -192,7 +204,8 @@ const ExamResultsEntryGrid = ({
 
       const currentResEntries = allEntries[String(targetResult.id)] || {};
       const unfilledStudents = students.filter((stu) => {
-        const e = currentResEntries[String(stu.admission_no || stu.id)];
+        const stuKey = String(stu.admission_no || stu.id);
+        const e = currentResEntries[String(stu.id)] || currentResEntries[stuKey];
         return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
       });
 
@@ -204,7 +217,8 @@ const ExamResultsEntryGrid = ({
 
       try {
         const promises = unfilledStudents.map((stu) => {
-          const existing = currentResEntries[String(stu.admission_no || stu.id)];
+          const stuKey = String(stu.admission_no || stu.id);
+          const existing = currentResEntries[String(stu.id)] || currentResEntries[stuKey];
           const payload = {
             result_id: targetResult.id,
             student_id: stu.id,
@@ -215,7 +229,9 @@ const ExamResultsEntryGrid = ({
           if (existing?.id) {
             return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
           } else {
-            return supabase.from('exam_result_entries').insert(payload);
+            return supabase
+              .from('exam_result_entries')
+              .upsert(payload, { onConflict: 'result_id,student_id' });
           }
         });
 
@@ -240,8 +256,12 @@ const ExamResultsEntryGrid = ({
       setSavingCells((prev) => new Set(prev).add(cellKey));
 
       try {
+        const studentObj = students.find((s) => String(s.id) === String(studentId));
+        const admissionNo = studentObj?.admission_no || null;
+        const stuKey = admissionNo ? String(admissionNo) : String(studentId);
+
         const currentResultEntries = latestEntriesRef.current[String(resultId)] || {};
-        const existing = currentResultEntries[String(studentId)];
+        const existing = currentResultEntries[String(studentId)] || currentResultEntries[stuKey];
 
         const marksVal =
           patch.marks_obtained !== undefined ? patch.marks_obtained : existing?.marks_obtained;
@@ -252,7 +272,7 @@ const ExamResultsEntryGrid = ({
         const payload = {
           result_id: Number(resultId),
           student_id: Number(studentId),
-          admission_no: students.find((s) => String(s.id) === String(studentId))?.admission_no || null,
+          admission_no: admissionNo,
           marks_obtained:
             isAbsentVal || marksVal === '' || marksVal === null || marksVal === undefined
               ? null
@@ -260,6 +280,8 @@ const ExamResultsEntryGrid = ({
           is_absent: Boolean(isAbsentVal),
           remarks: remarksVal,
         };
+
+        let savedId = existing?.id;
 
         if (existing?.id) {
           const { error } = await supabase
@@ -270,40 +292,46 @@ const ExamResultsEntryGrid = ({
         } else {
           const { data, error } = await supabase
             .from('exam_result_entries')
-            .insert(payload)
+            .upsert(payload, { onConflict: 'result_id,student_id' })
             .select()
             .single();
           if (error) throw error;
-
-          // Update local ID
-          setAllEntries((prev) => {
-            const next = { ...prev };
-            if (!next[String(resultId)]) next[String(resultId)] = {};
-            next[String(resultId)] = {
-              ...next[String(resultId)],
-              [String(studentId)]: { ...payload, id: data.id },
-            };
-            return next;
-          });
+          if (data?.id) savedId = data.id;
         }
 
-        // Check if all students for this result are filled (keyed by admission_no)
-        const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
+        // Update local state by both studentId and admissionNo
+        setAllEntries((prev) => {
+          const next = { ...prev };
+          const resMap = next[String(resultId)] ? { ...next[String(resultId)] } : {};
+          const fullEntry = { ...(existing || {}), ...payload, id: savedId };
+          resMap[String(studentId)] = fullEntry;
+          if (admissionNo) {
+            resMap[String(admissionNo)] = fullEntry;
+          }
+          next[String(resultId)] = resMap;
+          return next;
+        });
+
+        // Check if all students for this result are filled
         const updatedEntries = {
           ...currentResultEntries,
-          [stuKey]: { ...(existing || {}), ...payload },
+          [String(studentId)]: { ...(existing || {}), ...payload, id: savedId },
+          ...(admissionNo ? { [String(admissionNo)]: { ...(existing || {}), ...payload, id: savedId } } : {}),
         };
-        const allStudentKeys = students.map((s) => String(s.admission_no || s.id));
-        const allFilled = allStudentKeys.every((sKey) => {
-          const e = updatedEntries[sKey];
+        const allFilled = students.every((s) => {
+          const key1 = String(s.id);
+          const key2 = s.admission_no ? String(s.admission_no) : key1;
+          const e = updatedEntries[key1] || updatedEntries[key2];
           return e && (e.is_absent || (e.marks_obtained !== null && e.marks_obtained !== ''));
         });
 
         if (allFilled && onStatusUpdate) {
           onStatusUpdate(Number(resultId), 'completed');
         } else if (
-          allStudentKeys.some((sKey) => {
-            const e = updatedEntries[sKey];
+          students.some((s) => {
+            const key1 = String(s.id);
+            const key2 = s.admission_no ? String(s.admission_no) : key1;
+            const e = updatedEntries[key1] || updatedEntries[key2];
             return e && (e.is_absent || e.marks_obtained !== null);
           }) &&
           onStatusUpdate
@@ -326,16 +354,23 @@ const ExamResultsEntryGrid = ({
 
   // Handle local marks edit with debouncing
   const handleMarksChange = (resultId, studentId, value) => {
+    const studentObj = students.find((s) => String(s.id) === String(studentId));
+    const admissionNo = studentObj?.admission_no || null;
+    const stuKey = admissionNo ? String(admissionNo) : String(studentId);
+
     // Update local state immediately for responsive typing
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
-      const existing = currentRes[stuKey] || {
+      const existing = currentRes[String(studentId)] || currentRes[stuKey] || {
         student_id: studentId,
         result_id: resultId,
       };
-      currentRes[stuKey] = { ...existing, marks_obtained: value, is_absent: false };
+      const updatedEntry = { ...existing, marks_obtained: value, is_absent: false };
+      currentRes[String(studentId)] = updatedEntry;
+      if (admissionNo) {
+        currentRes[String(admissionNo)] = updatedEntry;
+      }
       next[String(resultId)] = currentRes;
       return next;
     });
@@ -364,23 +399,31 @@ const ExamResultsEntryGrid = ({
 
   // Toggle absent state
   const handleAbsentToggle = (resultId, studentId) => {
-    const current = allEntries[String(resultId)]?.[String(studentId)];
+    const studentObj = students.find((s) => String(s.id) === String(studentId));
+    const admissionNo = studentObj?.admission_no || null;
+    const stuKey = admissionNo ? String(admissionNo) : String(studentId);
+
+    const currentRes = allEntries[String(resultId)] || {};
+    const current = currentRes[String(studentId)] || currentRes[stuKey];
     const newAbsent = !current?.is_absent;
 
     setAllEntries((prev) => {
       const next = { ...prev };
-      const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const stuKey = students.find((s) => String(s.id) === String(studentId))?.admission_no || String(studentId);
-      const existing = currentRes[stuKey] || {
+      const resMap = next[String(resultId)] ? { ...next[String(resultId)] } : {};
+      const existing = resMap[String(studentId)] || resMap[stuKey] || {
         student_id: studentId,
         result_id: resultId,
       };
-      currentRes[stuKey] = {
+      const updatedEntry = {
         ...existing,
         is_absent: newAbsent,
         marks_obtained: newAbsent ? '' : existing.marks_obtained,
       };
-      next[String(resultId)] = currentRes;
+      resMap[String(studentId)] = updatedEntry;
+      if (admissionNo) {
+        resMap[String(admissionNo)] = updatedEntry;
+      }
+      next[String(resultId)] = resMap;
       return next;
     });
 
@@ -444,7 +487,8 @@ const ExamResultsEntryGrid = ({
 
     const currentResEntries = allEntries[String(targetResult.id)] || {};
     const unfilled = students.filter((stu) => {
-      const e = currentResEntries[String(stu.id)];
+      const stuKey = String(stu.admission_no || stu.id);
+      const e = currentResEntries[String(stu.id)] || currentResEntries[stuKey];
       return !e || (!e.is_absent && (e.marks_obtained === '' || e.marks_obtained === null));
     });
 
@@ -455,7 +499,8 @@ const ExamResultsEntryGrid = ({
 
     try {
       const promises = unfilled.map((stu) => {
-        const existing = currentResEntries[String(stu.admission_no || stu.id)];
+        const stuKey = String(stu.admission_no || stu.id);
+        const existing = currentResEntries[String(stu.id)] || currentResEntries[stuKey];
         const payload = {
           result_id: targetResult.id,
           student_id: stu.id,
@@ -467,7 +512,9 @@ const ExamResultsEntryGrid = ({
         if (existing?.id) {
           return supabase.from('exam_result_entries').update(payload).eq('id', existing.id);
         } else {
-          return supabase.from('exam_result_entries').insert(payload);
+          return supabase
+            .from('exam_result_entries')
+            .upsert(payload, { onConflict: 'result_id,student_id' });
         }
       });
       await Promise.all(promises);

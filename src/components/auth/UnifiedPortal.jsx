@@ -1,5 +1,5 @@
 // src/components/auth/UnifiedPortal.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import useViewConfig from '../../hooks/useViewConfig';
 import PortalLayout from '../layout/PortalLayout';
 import Translate from '../Translate';
@@ -33,6 +33,11 @@ import CandidateTestAccessManager from '../portal-shared/CandidateTestAccessMana
 import SubmissionsTableView from '../portal-shared/SubmissionsTableView';
 import { getEffectiveRole } from '../../utils/roleUtils';
 
+// Memoized tile components
+import TileButton from '../portal-shared/TileButton';
+import GroupCard from '../portal-shared/GroupCard';
+import DirectTile from '../portal-shared/DirectTile';
+
 export const UnifiedPortal = ({
   user,
   userRoles = [],
@@ -44,7 +49,7 @@ export const UnifiedPortal = ({
   const [subView, setSubView] = useState(initialSubView);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
 
-  const { viewConfigs, loading, error, refreshConfigs, getVisibleTiles } = useViewConfig();
+  const { viewConfigs, loading, error, refreshConfigs, getVisibleTiles } = useViewConfig(userRoles);
 
   // Determine effective primary role using centralized priority hierarchy:
   // admin -> management -> teacher -> staff -> custom -> parent -> candidate -> guest
@@ -161,73 +166,35 @@ export const UnifiedPortal = ({
     (subView ? subView.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : '');
 
   // Tile click handler
-  const handleTileClick = (tile) => {
-    if (tile.action === 'open_window') {
-      window.open(tile.actionTarget || '/portal/display', '_blank');
-      return;
-    }
-
-    if (tile.action === 'open_modal') {
-      if (tile.actionTarget === 'requests-exceptions') {
-        setIsExceptionsModalOpen(true);
-      } else {
-        openModal(tile.actionTarget || tile.id);
+  const handleTileClick = useCallback(
+    (tile) => {
+      if (tile.action === 'open_window') {
+        window.open(tile.actionTarget || '/portal/display', '_blank');
+        return;
       }
-      return;
-    }
 
-    // Default: switch subview
-    const groupInfo = resolveGroupInfo(tile.parent_name);
-    if (isCategoryView && groupInfo && multiTileGroups.some((g) => g.info.key === groupInfo.key)) {
-      setActiveGroup(groupInfo.key);
-    }
-    setSubView(tile.id);
-  };
+      if (tile.action === 'open_modal') {
+        if (tile.actionTarget === 'requests-exceptions') {
+          setIsExceptionsModalOpen(true);
+        } else {
+          openModal(tile.actionTarget || tile.id);
+        }
+        return;
+      }
 
-  // Helper to render an individual feature tile button
-  const renderTileButton = (tile) => {
-    const topBarClass =
-      (tile.buttonColor && tile.buttonColor.split(' ').find((c) => c.startsWith('bg-'))) ||
-      'bg-orange-primary';
-
-    const hoverBorderClass = topBarClass
-      ? topBarClass.replace('bg-', 'hover:border-')
-      : 'hover:border-orange-primary';
-
-    return (
-      <button
-        key={tile.id}
-        onClick={() => handleTileClick(tile)}
-        className={`group pt-5 pb-3.5 px-3.5 sm:pt-7 sm:pb-5 sm:px-5 lg:pt-8 lg:pb-6 lg:px-6 bg-white border border-light-border rounded-2xl sm:rounded-[1.75rem] ${hoverBorderClass} hover:shadow-2xl hover:scale-[1.02] active:scale-95 transition-all duration-300 cursor-pointer flex flex-col sm:flex-row items-center sm:items-center gap-2.5 sm:gap-3.5 text-center sm:text-left w-full shadow-sm relative overflow-hidden`}
-      >
-        <div className={`absolute top-0 left-0 right-0 h-1.5 sm:h-2 ${topBarClass}`} />
-        <div
-          className={`w-10 h-10 sm:w-14 lg:w-16 sm:h-14 lg:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-xl lg:text-2xl shadow-md sm:shadow-lg ${tile.shadow || ''} transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0 ${tile.buttonColor || 'bg-orange-primary text-white'}`}
-        >
-          <i className={`fas ${tile.icon}`}></i>
-        </div>
-        <div className="w-full">
-          <div className="flex items-center justify-center sm:justify-start gap-1.5">
-            <h5 className="font-bold text-xs sm:text-base lg:text-xl text-dark-deepblue sm:mb-1 group-hover:text-orange-primary transition-colors leading-tight">
-              {tile.titleKey ? <Translate id={tile.titleKey}>{tile.title}</Translate> : tile.title}
-            </h5>
-            {tile.isDynamic && (
-              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[9px] font-extrabold uppercase">
-                Form
-              </span>
-            )}
-          </div>
-          <p className="hidden sm:block text-dark-muted text-xs lg:text-sm leading-relaxed">
-            {tile.descriptionKey ? (
-              <Translate id={tile.descriptionKey}>{tile.description}</Translate>
-            ) : (
-              tile.description
-            )}
-          </p>
-        </div>
-      </button>
-    );
-  };
+      // Default: switch subview
+      const groupInfo = resolveGroupInfo(tile.parent_name);
+      if (
+        isCategoryView &&
+        groupInfo &&
+        multiTileGroups.some((g) => g.info.key === groupInfo.key)
+      ) {
+        setActiveGroup(groupInfo.key);
+      }
+      setSubView(tile.id);
+    },
+    [isCategoryView, multiTileGroups, openModal]
+  );
 
   // Subview component registry
   const renderSubViewContent = () => {
@@ -418,7 +385,7 @@ export const UnifiedPortal = ({
       case 'track-tickets':
         return (
           <div data-feature="my-tickets">
-            <ReporterTicketsView user={user} fullName={fullName} />
+            <ReporterTicketsView user={user} fullName={fullName} userRoles={userRoles} />
           </div>
         );
 
@@ -646,13 +613,27 @@ export const UnifiedPortal = ({
                 {/* ── Level 2: Group Drill-down View (when activeGroup is selected) ── */}
                 {!isCategoryView ? (
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 animate-in fade-in duration-300">
-                    {displayedTiles.map((tile) => renderTileButton(tile))}
+                    {displayedTiles.map((tile) => (
+                      <TileButton
+                        key={tile.id}
+                        tile={tile}
+                        onClick={handleTileClick}
+                        isCategoryView={false}
+                      />
+                    ))}
                   </div>
                 ) : activeGroup && currentGroupEntry ? (
                   <div className="space-y-6 animate-in fade-in duration-300">
                     {/* Tiles Grid for this group */}
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
-                      {currentGroupEntry.tiles.map((tile) => renderTileButton(tile))}
+                      {currentGroupEntry.tiles.map((tile) => (
+                        <TileButton
+                          key={tile.id}
+                          tile={tile}
+                          onClick={handleTileClick}
+                          isCategoryView={false}
+                        />
+                      ))}
                     </div>
                   </div>
                 ) : (
@@ -661,62 +642,9 @@ export const UnifiedPortal = ({
                     {/* 1. Group Cards Grid (Nesting Level 1) */}
                     {multiTileGroups.length > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                        {multiTileGroups.map((group) => {
-                          const accentBarClass = group.info.color
-                            ? group.info.color.replace('text-', 'bg-')
-                            : 'bg-orange-primary';
-
-                          return (
-                            <div
-                              key={group.info.key}
-                              onClick={() => setActiveGroup(group.info.key)}
-                              className="group relative bg-white border border-light-border hover:border-orange-primary/60 rounded-2xl sm:rounded-3xl p-5 sm:p-6 text-left shadow-xs hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer flex flex-col justify-between overflow-hidden"
-                            >
-                              {/* Top accent bar */}
-                              <div
-                                className={`absolute top-0 left-0 right-0 h-1.5 sm:h-2 ${accentBarClass}`}
-                              />
-
-                              <div>
-                                {/* Icon + Feature Count */}
-                                <div className="flex items-center justify-between mb-4">
-                                  <div
-                                    className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-xl sm:text-2xl shadow-xs ${group.info.badgeBg} group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300`}
-                                  >
-                                    <i className={`fas ${group.info.icon} ${group.info.color}`}></i>
-                                  </div>
-                                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                                    {group.tiles.length}{' '}
-                                    {group.tiles.length === 1 ? 'feature' : 'features'}
-                                  </span>
-                                </div>
-
-                                {/* Title */}
-                                <h3 className="text-base sm:text-lg lg:text-xl font-extrabold text-dark-deepblue group-hover:text-orange-primary transition-colors tracking-tight mb-2">
-                                  {group.info.label}
-                                </h3>
-
-                                {/* Feature Previews */}
-                                <div className="flex flex-wrap gap-1.5 mb-2">
-                                  {group.tiles.slice(0, 4).map((tile) => (
-                                    <span
-                                      key={tile.id}
-                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-dark-slate bg-gray-50 group-hover:bg-orange-50/50 px-2 py-0.5 rounded-md border border-gray-200/70 transition-colors"
-                                    >
-                                      <i className={`fas ${tile.icon} text-[9px] opacity-70`}></i>
-                                      <span className="truncate max-w-[130px]">{tile.title}</span>
-                                    </span>
-                                  ))}
-                                  {group.tiles.length > 4 && (
-                                    <span className="inline-flex items-center text-[10px] font-bold text-dark-muted px-1.5 py-0.5">
-                                      +{group.tiles.length - 4} more
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {multiTileGroups.map((group) => (
+                          <GroupCard key={group.info.key} group={group} onClick={setActiveGroup} />
+                        ))}
                       </div>
                     )}
 
@@ -724,7 +652,9 @@ export const UnifiedPortal = ({
                     {directTiles.length > 0 && (
                       <div className="pt-2 sm:pt-4">
                         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
-                          {directTiles.map((tile) => renderTileButton(tile))}
+                          {directTiles.map((tile) => (
+                            <DirectTile key={tile.id} tile={tile} onClick={handleTileClick} />
+                          ))}
                         </div>
                       </div>
                     )}

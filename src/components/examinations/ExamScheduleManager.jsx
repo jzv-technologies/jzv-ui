@@ -68,6 +68,8 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     if (canAccess('exam-sched-tab-setup')) return 'setup';
     if (canAccess('exam-sched-tab-scheduler')) return 'scheduler';
     if (canAccess('exam-sched-tab-teacher')) return 'teacher';
+    if (canAccess('exam-sched-tab-coverage')) return 'coverage';
+    if (canAccess('exam-sched-tab-notice-print')) return 'notice_print';
     if (canAccess('exam-sched-tab-parent')) return 'parent_ward';
     return availableTabs[0]?.id || 'scheduler';
   });
@@ -254,7 +256,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     );
   }
 
-  if (loading) {
+  if (loading || canAccess.loading) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />

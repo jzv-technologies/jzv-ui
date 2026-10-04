@@ -6,6 +6,7 @@ import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
+import ExamRemarksModal from './ExamRemarksModal';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
 import { ExtraComponentLayers } from './report-card-designer/components/ExtraComponent';
 import {
@@ -540,14 +541,19 @@ const ReportCardGenerator = ({
 
       if (!remErr && Array.isArray(remData) && remData.length > 0) {
         remData.forEach((item) => {
-          const adm = String(item.admission_no || '').trim().toLowerCase();
+          const adm = String(item.admission_no || '')
+            .trim()
+            .toLowerCase();
           const entry = {
             remarks: item.remarks || '',
             recommendations: item.recommendations || '',
           };
           if (adm) map[adm] = entry;
           const matched = currentStudents.find(
-            (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+            (s) =>
+              String(s.admission_no || s.admission_number || '')
+                .trim()
+                .toLowerCase() === adm
           );
           if (matched) {
             map[String(matched.id)] = entry;
@@ -560,7 +566,10 @@ const ReportCardGenerator = ({
         const adm = String(admKey).trim().toLowerCase();
         if (!map[adm]) map[adm] = entry;
         const matched = currentStudents.find(
-          (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+          (s) =>
+            String(s.admission_no || s.admission_number || '')
+              .trim()
+              .toLowerCase() === adm
         );
         if (matched && !map[String(matched.id)]) {
           map[String(matched.id)] = entry;
@@ -581,7 +590,10 @@ const ReportCardGenerator = ({
             const adm = String(admKey).trim().toLowerCase();
             map[adm] = entry;
             const matched = currentStudents.find(
-              (s) => String(s.admission_no || s.admission_number || '').trim().toLowerCase() === adm
+              (s) =>
+                String(s.admission_no || s.admission_number || '')
+                  .trim()
+                  .toLowerCase() === adm
             );
             if (matched) map[String(matched.id)] = entry;
           });
@@ -1606,13 +1618,17 @@ const ReportCardGenerator = ({
                                               if (colId === 'marksObtained') {
                                                 const pct =
                                                   s.maxMarks > 0 &&
-                                                  typeof s.marksObtained === 'number'
+                                                  typeof s.marksObtained === 'number' &&
+                                                  s.maxMarks > (s.passMarks || 0)
                                                     ? Math.min(
                                                         100,
                                                         Math.max(
                                                           0,
                                                           Math.round(
-                                                            (s.marksObtained / s.maxMarks) * 100
+                                                            ((s.marksObtained -
+                                                              (s.passMarks || 0)) /
+                                                              (s.maxMarks - (s.passMarks || 0))) *
+                                                              100
                                                           )
                                                         )
                                                       )
@@ -1773,13 +1789,16 @@ const ReportCardGenerator = ({
                                             if (colId === 'marksObtained') {
                                               const pct =
                                                 s.maxMarks > 0 &&
-                                                typeof s.marksObtained === 'number'
+                                                typeof s.marksObtained === 'number' &&
+                                                s.maxMarks > (s.passMarks || 0)
                                                   ? Math.min(
                                                       100,
                                                       Math.max(
                                                         0,
                                                         Math.round(
-                                                          (s.marksObtained / s.maxMarks) * 100
+                                                          ((s.marksObtained - (s.passMarks || 0)) /
+                                                            (s.maxMarks - (s.passMarks || 0))) *
+                                                            100
                                                         )
                                                       )
                                                     )
@@ -3022,13 +3041,11 @@ const ReportCardGenerator = ({
                           const effectiveRemarks =
                             studentRemarks.remarks !== undefined
                               ? studentRemarks.remarks
-                              : activeTemplate.remarksText ||
-                                'Consistently demonstrates strong academic performance, active class participation, and excellent problem-solving skills.';
+                              : activeTemplate.remarksText || '';
                           const effectiveRecommendations =
                             studentRemarks.recommendations !== undefined
                               ? studentRemarks.recommendations
-                              : rmk.recommendationsText ||
-                                'Encouraged to read broader scientific journals and continue regular practice in advanced mathematics.';
+                              : rmk.recommendationsText || '';
 
                           return (
                             <div
