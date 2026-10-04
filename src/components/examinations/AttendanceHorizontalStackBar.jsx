@@ -29,39 +29,54 @@ export const AttendanceHorizontalStackBar = ({
 
   const effectiveCompact = isCompact || size === 'compact';
 
-  // Extract attendance metrics from student or fallback mock
-  const totalDays =
-    Number(student.total_working_days || student.totalDays) || Number(totalWorkingDays) || 200;
+  // Check if attendance was explicitly recorded for this student
+  const hasRecordedAttendance =
+    student.hasAttendanceRecorded === true ||
+    student.present_days !== undefined ||
+    student.presentDays !== undefined ||
+    (typeof student.attendance === 'string' &&
+      student.attendance.trim() !== '' &&
+      student.attendance !== '—' &&
+      student.attendance !== '0%');
 
+  // Extract attendance metrics from student
+  let totalDays = 0;
   let presentDays = 0;
   let absentDays = 0;
-  let leaveDays = Number(student.leave_days || student.leaveDays) || 0;
+  let leaveDays = 0;
+  let presentPct = 0;
+  let absentPct = 0;
+  let leavePct = 0;
 
-  if (student.present_days !== undefined || student.presentDays !== undefined) {
-    presentDays = Number(student.present_days || student.presentDays) || 0;
-    absentDays =
-      student.absent_days !== undefined || student.absentDays !== undefined
-        ? Number(student.absent_days || student.absentDays) || 0
-        : Math.max(0, totalDays - presentDays - leaveDays);
-  } else {
-    // Derived from attendance string like '96%' or number 96
-    const rawPct =
-      typeof student.attendance === 'string'
-        ? parseFloat(student.attendance.replace('%', ''))
-        : typeof student.attendance === 'number'
-          ? student.attendance
-          : 96;
-    const pct = isNaN(rawPct) ? 96 : Math.max(0, Math.min(100, rawPct));
-    presentDays = Math.round((pct / 100) * totalDays);
-    absentDays = Math.max(0, totalDays - presentDays - leaveDays);
+  if (hasRecordedAttendance) {
+    totalDays =
+      Number(student.total_working_days || student.totalDays) ||
+      Number(totalWorkingDays) ||
+      0;
+    leaveDays = Number(student.leave_days || student.leaveDays) || 0;
+
+    if (student.present_days !== undefined || student.presentDays !== undefined) {
+      presentDays = Number(student.present_days || student.presentDays) || 0;
+      absentDays =
+        student.absent_days !== undefined || student.absentDays !== undefined
+          ? Number(student.absent_days || student.absentDays) || 0
+          : Math.max(0, totalDays - presentDays - leaveDays);
+    } else if (typeof student.attendance === 'string' && student.attendance.includes('%')) {
+      const parsedPct = parseFloat(student.attendance.replace('%', ''));
+      const safePct = isNaN(parsedPct) ? 0 : Math.max(0, Math.min(100, parsedPct));
+      const refDays = totalDays > 0 ? totalDays : 100;
+      presentDays = Math.round((safePct / 100) * refDays);
+      absentDays = Math.max(0, refDays - presentDays - leaveDays);
+      if (totalDays === 0) totalDays = refDays;
+    }
+
+    const calculatedTotal = presentDays + absentDays + leaveDays;
+    const divisor = calculatedTotal > 0 ? calculatedTotal : totalDays > 0 ? totalDays : 1;
+
+    presentPct = Math.min(100, Math.max(0, (presentDays / divisor) * 100));
+    absentPct = Math.min(100, Math.max(0, (absentDays / divisor) * 100));
+    leavePct = Math.min(100, Math.max(0, (leaveDays / divisor) * 100));
   }
-
-  const calculatedTotal = presentDays + absentDays + leaveDays;
-  const divisor = calculatedTotal > 0 ? calculatedTotal : totalDays > 0 ? totalDays : 1;
-
-  const presentPct = Math.min(100, Math.max(0, (presentDays / divisor) * 100));
-  const absentPct = Math.min(100, Math.max(0, (absentDays / divisor) * 100));
-  const leavePct = Math.min(100, Math.max(0, (leaveDays / divisor) * 100));
 
   // Determine health color badge
   const badgeBg =
@@ -108,14 +123,22 @@ export const AttendanceHorizontalStackBar = ({
 
           {showPercentage && (
             <div className="flex items-center gap-2 ml-auto">
-              <span className="text-[9px] font-bold text-dark-muted hidden sm:inline">
-                {presentDays} / {totalDays} Days
-              </span>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[9.5px] font-black border uppercase tracking-wider ${badgeBg}`}
-              >
-                {presentPct.toFixed(1)}% Attended
-              </span>
+              {hasRecordedAttendance ? (
+                <>
+                  <span className="text-[9px] font-bold text-dark-muted hidden sm:inline">
+                    {presentDays} / {totalDays} Days
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[9.5px] font-black border uppercase tracking-wider ${badgeBg}`}
+                  >
+                    {presentPct.toFixed(1)}% Attended
+                  </span>
+                </>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold border uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200">
+                  Not Recorded
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -126,55 +149,63 @@ export const AttendanceHorizontalStackBar = ({
         className="w-full bg-slate-200 rounded-lg overflow-hidden flex border border-slate-300/80 shadow-2xs relative"
         style={{ height: `${barHeight || 18}px` }}
       >
-        {/* Segment 1: Present */}
-        {presentPct > 0 && (
-          <div
-            style={{
-              width: `${presentPct}%`,
-              backgroundColor: presentColor,
-            }}
-            className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
-            title={`Present: ${presentDays} days (${presentPct.toFixed(1)}%)`}
-          >
-            {presentPct >= 12 && (
-              <span className="drop-shadow-xs truncate select-none">
-                {presentDays}d ({presentPct.toFixed(0)}%)
-              </span>
+        {hasRecordedAttendance ? (
+          <>
+            {/* Segment 1: Present */}
+            {presentPct > 0 && (
+              <div
+                style={{
+                  width: `${presentPct}%`,
+                  backgroundColor: presentColor,
+                }}
+                className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
+                title={`Present: ${presentDays} days (${presentPct.toFixed(1)}%)`}
+              >
+                {presentPct >= 12 && (
+                  <span className="drop-shadow-xs truncate select-none">
+                    {presentDays}d ({presentPct.toFixed(0)}%)
+                  </span>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Segment 2: Leave / Excused */}
-        {leavePct > 0 && (
-          <div
-            style={{
-              width: `${leavePct}%`,
-              backgroundColor: leaveColor,
-            }}
-            className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
-            title={`Leave: ${leaveDays} days (${leavePct.toFixed(1)}%)`}
-          >
-            {leavePct >= 10 && (
-              <span className="drop-shadow-xs truncate select-none">{leaveDays}d</span>
+            {/* Segment 2: Leave / Excused */}
+            {leavePct > 0 && (
+              <div
+                style={{
+                  width: `${leavePct}%`,
+                  backgroundColor: leaveColor,
+                }}
+                className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
+                title={`Leave: ${leaveDays} days (${leavePct.toFixed(1)}%)`}
+              >
+                {leavePct >= 10 && (
+                  <span className="drop-shadow-xs truncate select-none">{leaveDays}d</span>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Segment 3: Absent */}
-        {absentPct > 0 && (
-          <div
-            style={{
-              width: `${absentPct}%`,
-              backgroundColor: absentColor,
-            }}
-            className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
-            title={`Absent: ${absentDays} days (${absentPct.toFixed(1)}%)`}
-          >
-            {absentPct >= 10 && (
-              <span className="drop-shadow-xs truncate select-none">
-                {absentDays}d ({absentPct.toFixed(0)}%)
-              </span>
+            {/* Segment 3: Absent */}
+            {absentPct > 0 && (
+              <div
+                style={{
+                  width: `${absentPct}%`,
+                  backgroundColor: absentColor,
+                }}
+                className="h-full flex items-center justify-center text-white text-[9px] font-black truncate px-1 transition-all duration-300 relative group"
+                title={`Absent: ${absentDays} days (${absentPct.toFixed(1)}%)`}
+              >
+                {absentPct >= 10 && (
+                  <span className="drop-shadow-xs truncate select-none">
+                    {absentDays}d ({absentPct.toFixed(0)}%)
+                  </span>
+                )}
+              </div>
             )}
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-400 text-[9.5px] font-bold italic tracking-wide">
+            Attendance details pending upload
           </div>
         )}
       </div>
@@ -184,7 +215,9 @@ export const AttendanceHorizontalStackBar = ({
         <div className="flex flex-wrap items-center justify-between gap-1.5 mt-2 pt-1.5 border-t border-slate-200/70 text-[9.5px]">
           <div className="flex items-center gap-1 font-bold text-dark-muted">
             <span className="text-[9px] uppercase tracking-wider">Working Days:</span>
-            <span className="font-black text-dark-primary font-mono">{totalDays}</span>
+            <span className="font-black text-dark-primary font-mono">
+              {hasRecordedAttendance && totalDays > 0 ? totalDays : '—'}
+            </span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -198,7 +231,7 @@ export const AttendanceHorizontalStackBar = ({
                 className="font-black font-mono"
                 style={{ color: style?.contentColor || '#0f172a' }}
               >
-                {presentDays} ({presentPct.toFixed(1)}%)
+                {hasRecordedAttendance ? `${presentDays} (${presentPct.toFixed(1)}%)` : '—'}
               </span>
             </div>
 
@@ -213,7 +246,7 @@ export const AttendanceHorizontalStackBar = ({
                   className="font-black font-mono"
                   style={{ color: style?.contentColor || '#0f172a' }}
                 >
-                  {leaveDays} ({leavePct.toFixed(1)}%)
+                  {hasRecordedAttendance ? `${leaveDays} (${leavePct.toFixed(1)}%)` : '—'}
                 </span>
               </div>
             )}
@@ -228,7 +261,7 @@ export const AttendanceHorizontalStackBar = ({
                 className="font-black font-mono"
                 style={{ color: style?.contentColor || '#0f172a' }}
               >
-                {absentDays} ({absentPct.toFixed(1)}%)
+                {hasRecordedAttendance ? `${absentDays} (${absentPct.toFixed(1)}%)` : '—'}
               </span>
             </div>
           </div>

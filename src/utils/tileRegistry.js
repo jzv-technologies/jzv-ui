@@ -351,6 +351,19 @@ export const TILE_METADATA_REGISTRY = {
     valid_access_roles: ['parent', 'admin', 'management'],
     display_order: 55,
   },
+  'ward-progress-report': {
+    title: 'Student Progress Report',
+    titleKey: 'role_portal.ward_progress_report.title',
+    description: 'View published examination progress reports and report cards for your child.',
+    descriptionKey: 'role_portal.ward_progress_report.description',
+    icon: 'fa-file-invoice',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Calendar and Schedules',
+    action: 'subview',
+    valid_access_roles: ['parent'],
+    display_order: 56,
+  },
 
   // ── Candidate components ───────────────────────────────────────────
   'take-test': {

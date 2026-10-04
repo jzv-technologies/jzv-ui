@@ -7,7 +7,12 @@ import { formatDateDisplay, normalizeDateStr } from '../../utils/dateUtils';
  * Parent view for upcoming published Exam Schedule.
  * Restricted strictly to published schedules applicable to the parent's selected ward.
  */
-const ParentExamTimetableView = ({ user, classes: propClasses = [], subjects: propSubjects = [] }) => {
+const ParentExamTimetableView = ({
+  user,
+  classes: propClasses = [],
+  subjects: propSubjects = [],
+  onNavigate = null,
+}) => {
   const [internalClasses, setInternalClasses] = useState([]);
   const [internalSubjects, setInternalSubjects] = useState([]);
 
@@ -275,13 +280,26 @@ const ParentExamTimetableView = ({ user, classes: propClasses = [], subjects: pr
           </div>
 
           {selectedSchedule && (
-            <div className="text-right">
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                <i className="fas fa-circle-check text-[10px]" /> Published
-              </span>
-              <p className="text-[11px] font-semibold text-dark-muted mt-1">
-                {selectedSchedule.start_date} to {selectedSchedule.end_date}
-              </p>
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+              {Boolean(selectedSchedule.is_report_published) && typeof onNavigate === 'function' && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('ward-progress-report')}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                  title="View Progress Report Card for this examination"
+                >
+                  <i className="fas fa-file-invoice text-xs" />
+                  <span>View Progress Report</span>
+                </button>
+              )}
+              <div className="text-right">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <i className="fas fa-circle-check text-[10px]" /> Published
+                </span>
+                <p className="text-[11px] font-semibold text-dark-muted mt-1">
+                  {selectedSchedule.start_date} to {selectedSchedule.end_date}
+                </p>
+              </div>
             </div>
           )}
         </div>

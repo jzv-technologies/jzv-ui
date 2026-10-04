@@ -1,5 +1,5 @@
 // src/components/examinations/ReportCardGenerator.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
@@ -7,6 +7,7 @@ import MultiSelectDropdown from '../MultiSelectDropdown';
 import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
+import ConfirmModal from '../ConfirmModal';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
 import { ExtraComponentLayers } from './report-card-designer/components/ExtraComponent';
 import {
@@ -71,6 +72,9 @@ const ReportCardGenerator = ({
   initialScheduleId = null,
   initialClassId = null,
   userRoles = [],
+  studentRanksMap = null,
+  propAttendanceMap = null,
+  onReportDataLoaded = null,
   studentSelectionMode: controlledStudentSelectionMode,
   onStudentSelectionModeChange,
   selectedStudentIds: controlledSelectedStudentIds,
@@ -91,6 +95,12 @@ const ReportCardGenerator = ({
   // Access control — driven by app_view_controller, no hardcoded role checks
   const canAccess = useCanAccess(userRoles);
   const canUploadAttendance = canAccess('exam-attendance-upload');
+  const canPublishReport =
+    canAccess('exam-progress-report-publish') ||
+    canAccess('exam-sched-publish') ||
+    userRoles.some((r) =>
+      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+    );
 
   const [internalPaperSize, setInternalPaperSize] = useState('a4');
   const [internalOrientation, setInternalOrientation] = useState('portrait');
@@ -110,6 +120,8 @@ const ReportCardGenerator = ({
   const [selectedClassId, setSelectedClassId] = useState(
     initialClassId ? String(initialClassId) : classes[0]?.id ? String(classes[0].id) : ''
   );
+  const [confirmModalData, setConfirmModalData] = useState(null);
+  const [publishingReport, setPublishingReport] = useState(false);
 
   useEffect(() => {
     if (initialScheduleId !== undefined && initialScheduleId !== null) {
@@ -146,44 +158,29 @@ const ReportCardGenerator = ({
     if (subjects.length > 0) setInternalSubjects(subjects);
   }, [subjects]);
 
-  // If master data props are empty (e.g. Standalone View), fetch from Supabase
+  // If the schedule list wasn't supplied, fetch only the lightweight schedule list.
+  // Classes / subjects / classifications now arrive with the single report-data RPC below.
   useEffect(() => {
-    const fetchMasterData = async () => {
+    if (schedules.length > 0) return;
+    let cancelled = false;
+    (async () => {
       try {
-        if (schedules.length === 0) {
-          const { data: sData } = await supabase
-            .from('exam_schedules')
-            .select('*')
-            .order('start_date', { ascending: false });
-          if (sData && sData.length > 0) {
-            setInternalSchedules(sData);
-            setSelectedScheduleId((prev) => prev || String(sData[0].id));
-          }
+        const { data: sData } = await supabase
+          .from('exam_schedules')
+          .select('id, name, start_date, end_date, status, is_report_published')
+          .order('start_date', { ascending: false });
+        if (!cancelled && sData && sData.length > 0) {
+          setInternalSchedules(sData);
+          setSelectedScheduleId((prev) => prev || String(sData[0].id));
         }
-        if (classes.length === 0) {
-          const { data: cData } = await supabase.from('classes').select('*').order('name');
-          if (cData && cData.length > 0) {
-            setInternalClasses(cData);
-            setSelectedClassId((prev) => prev || String(cData[0].id));
-          }
-        }
-        if (subjects.length === 0) {
-          const { data: subData } = await supabase.from('syl_subjects').select('*').order('name');
-          if (subData) setInternalSubjects(subData);
-        }
-        const { data: clsData } = await supabase
-          .from('syl_classifications')
-          .select('*')
-          .order('name');
-        if (clsData && clsData.length > 0) setInternalClassifications(clsData);
       } catch (err) {
-        console.error('Failed to load master data in ReportCardGenerator:', err);
+        console.error('Failed to load schedules in ReportCardGenerator:', err);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-    if (schedules.length === 0 || classes.length === 0 || subjects.length === 0) {
-      fetchMasterData();
-    }
-  }, [schedules.length, classes.length, subjects.length]);
+  }, [schedules.length]);
 
   // Student selection: 'all' vs specific students
   const [internalStudentSelectionMode, setInternalStudentSelectionMode] = useState('all');
@@ -214,6 +211,7 @@ const ReportCardGenerator = ({
   const [results, setResults] = useState([]);
   const [entries, setEntries] = useState([]);
   const [attendanceMap, setAttendanceMap] = useState({});
+  const [serverRanksMap, setServerRanksMap] = useState({});
   const [internalAttendanceModalOpen, setInternalAttendanceModalOpen] = useState(false);
   const isAttendanceModalOpen =
     propIsAttendanceModalOpen !== undefined
@@ -229,56 +227,145 @@ const ReportCardGenerator = ({
     onAttendanceCountChange?.(Object.keys(attendanceMap).length);
   }, [attendanceMap, onAttendanceCountChange]);
 
-  // Load attendance records for current selected schedule
-  const fetchAttendance = async () => {
-    if (!selectedScheduleId) {
-      setAttendanceMap({});
-      return;
-    }
-    try {
-      const { data: attData, error: attErr } = await supabase
-        .from('exam_attendance_entries')
-        .select('*')
-        .eq('schedule_id', selectedScheduleId);
+  // ── Single-call report data ─────────────────────────────────────────────────
+  // One RPC (get_progress_report_data) returns students, results, entries, attendance,
+  // remarks, class ranks and the subject/classification/class masters for this report.
+  // Replaces ~12 separate REST calls and the sequential results -> entries waterfall.
+  const [reportPayload, setReportPayload] = useState(null);
+  const [serverRemarks, setServerRemarks] = useState([]);
+  const reportFetchSeq = useRef(0);
+  const propStudentsRef = useRef(propStudents);
+  propStudentsRef.current = propStudents;
+  const isParentView = userRoles.includes('parent');
+  const parentStudentIdsKey =
+    isParentView && Array.isArray(selectedStudentIds) ? selectedStudentIds.map(String).join(',') : '';
 
-      let list = [];
-      if (!attErr && Array.isArray(attData) && attData.length > 0) {
-        list = attData;
-      } else {
+  const applyAttendance = (list) => {
+    let rows = Array.isArray(list) ? list : [];
+    if (rows.length === 0) {
+      // Browser cache fallback (only populated on the machine that uploaded attendance)
+      try {
         const local = localStorage.getItem(`jzv_exam_attendance_${selectedScheduleId}`);
-        if (local) {
-          try {
-            list = JSON.parse(local);
-          } catch (_) {}
-        }
-      }
-      const map = {};
-      list.forEach((item) => {
-        if (item.admission_no) {
-          map[String(item.admission_no).trim().toLowerCase()] = item;
-        }
-      });
-      setAttendanceMap(map);
-    } catch (e) {
-      const local = localStorage.getItem(`jzv_exam_attendance_${selectedScheduleId}`);
-      if (local) {
-        try {
-          const list = JSON.parse(local);
-          const map = {};
-          list.forEach((item) => {
-            if (item.admission_no) {
-              map[String(item.admission_no).trim().toLowerCase()] = item;
-            }
-          });
-          setAttendanceMap(map);
-        } catch (_) {}
-      }
+        if (local) rows = JSON.parse(local);
+      } catch (_) {}
     }
+    const map = {};
+    rows.forEach((item) => {
+      if (item.admission_no) {
+        const k1 = String(item.admission_no).trim().toLowerCase();
+        const k2 = k1.replace(/^0+/, '');
+        map[k1] = item;
+        if (k2) map[k2] = item;
+      }
+      if (item.student_id) map[String(item.student_id)] = item;
+    });
+    if (propAttendanceMap && typeof propAttendanceMap === 'object') {
+      Object.assign(map, propAttendanceMap);
+    }
+    setAttendanceMap(map);
   };
 
+  const mergeById = (prev, incoming) => {
+    const byId = new Map((prev || []).map((x) => [String(x.id), x]));
+    incoming.forEach((x) => byId.set(String(x.id), { ...(byId.get(String(x.id)) || {}), ...x }));
+    return Array.from(byId.values());
+  };
+
+  // Fallback used only if the RPC is unavailable (e.g. migration not yet applied).
+  // Still avoids the waterfall by running independent queries in parallel.
+  const legacyLoad = async (seq) => {
+    const hasProps = Array.isArray(propStudentsRef.current) && propStudentsRef.current.length > 0;
+    const [stuRes, resRes, attRes, remRes, subRes] = await Promise.all([
+      hasProps
+        ? Promise.resolve(null)
+        : supabase
+            .from('students')
+            .select('*')
+            .eq('class_id', selectedClassId)
+            .order('student_name'),
+      supabase
+        .from('exam_results')
+        .select('*')
+        .eq('schedule_id', selectedScheduleId)
+        .eq('class_id', selectedClassId),
+      supabase.from('exam_attendance_entries').select('*').eq('schedule_id', selectedScheduleId),
+      supabase.from('exam_student_remarks').select('*').eq('schedule_id', selectedScheduleId),
+      subjects.length === 0 ? supabase.from('syl_subjects').select('*') : Promise.resolve(null),
+    ]);
+    const resData = resRes?.data || [];
+    let entryData = [];
+    if (resData.length > 0) {
+      const { data } = await supabase
+        .from('exam_result_entries')
+        .select('*')
+        .in(
+          'result_id',
+          resData.map((r) => r.id)
+        );
+      entryData = data || [];
+    }
+    if (seq !== reportFetchSeq.current) return;
+    if (stuRes) setStudents(stuRes.data || []);
+    if (subRes?.data) setInternalSubjects(subRes.data);
+    setResults(resData);
+    setEntries(entryData);
+    setServerRemarks(remRes?.data || []);
+    applyAttendance(attRes?.data);
+  };
+
+  const loadReportData = useCallback(async () => {
+    if (!selectedClassId || !selectedScheduleId) {
+      setStudents([]);
+      setResults([]);
+      setEntries([]);
+      setReportPayload(null);
+      return;
+    }
+    const seq = ++reportFetchSeq.current;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('get_progress_report_data', {
+        p_schedule_id: Number(selectedScheduleId),
+        p_class_id: Number(selectedClassId),
+        p_student_ids: isParentView
+          ? parentStudentIdsKey.split(',').filter(Boolean).map(Number)
+          : null,
+      });
+      if (error) throw error;
+      if (seq !== reportFetchSeq.current) return;
+
+      const hasProps =
+        Array.isArray(propStudentsRef.current) && propStudentsRef.current.length > 0;
+      setReportPayload(data);
+      setResults(data?.results || []);
+      setEntries(data?.entries || []);
+      setServerRanksMap(data?.ranks || {});
+      setServerRemarks(data?.remarks || []);
+      if (!hasProps) setStudents(data?.students || []);
+      if (data?.subjects?.length) setInternalSubjects((prev) => mergeById(prev, data.subjects));
+      if (data?.classifications?.length) setInternalClassifications(data.classifications);
+      if (data?.class) setInternalClasses((prev) => mergeById(prev, [data.class]));
+      applyAttendance(data?.attendance);
+      onReportDataLoaded?.(data);
+    } catch (err) {
+      console.warn(
+        '[ReportCardGenerator] get_progress_report_data unavailable, using direct queries:',
+        err?.message
+      );
+      try {
+        await legacyLoad(seq);
+      } catch (e) {
+        console.error('Error loading report card data:', e);
+        showToast('Error loading report card data', 'error');
+      }
+    } finally {
+      if (seq === reportFetchSeq.current) setLoading(false);
+    }
+  }, [selectedScheduleId, selectedClassId, isParentView, parentStudentIdsKey]);
+
   useEffect(() => {
-    fetchAttendance();
-  }, [selectedScheduleId]);
+    loadReportData();
+  }, [loadReportData]);
 
   // Load saved templates strictly via RPC call with localStorage cache fallback
   useEffect(() => {
@@ -311,69 +398,61 @@ const ReportCardGenerator = ({
     }
   }, [propStudents, selectedClassId]);
 
-  // Load class students and exam data
-  useEffect(() => {
-    if (!selectedClassId || !selectedScheduleId) {
-      setStudents([]);
-      setResults([]);
-      setEntries([]);
-      return;
-    }
-
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // 1. Fetch Students
-        if (propStudents && Array.isArray(propStudents) && propStudents.length > 0) {
-          const matched = propStudents.filter(
-            (s) => String(s.class_id) === String(selectedClassId)
-          );
-          setStudents(matched);
-        } else {
-          const { data: stuData } = await supabase
-            .from('students')
-            .select('*')
-            .eq('class_id', selectedClassId)
-            .order('student_name');
-          setStudents(stuData || []);
-        }
-
-        // 2. Fetch Results for this Schedule + Class
-        const { data: resData } = await supabase
-          .from('exam_results')
-          .select('*')
-          .eq('schedule_id', selectedScheduleId)
-          .eq('class_id', selectedClassId);
-
-        setResults(resData || []);
-
-        // 3. Fetch Entries for these results
-        if (resData && resData.length > 0) {
-          const resIds = resData.map((r) => r.id);
-          const { data: entryData } = await supabase
-            .from('exam_result_entries')
-            .select('*')
-            .in('result_id', resIds);
-
-          setEntries(entryData || []);
-        } else {
-          setEntries([]);
-        }
-      } catch (err) {
-        console.error('Error loading report card data:', err);
-        showToast('Error loading report card data', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [selectedScheduleId, selectedClassId, propStudents]);
 
   // Selected schedule object
   const selectedSchedule = useMemo(() => {
     return internalSchedules.find((s) => String(s.id) === String(selectedScheduleId)) || null;
   }, [internalSchedules, selectedScheduleId]);
+
+  const handleTogglePublishReport = useCallback(async () => {
+    if (!selectedScheduleId || !selectedSchedule) {
+      showToast('Please select an exam schedule first', 'warning');
+      return;
+    }
+
+    const willPublish = !selectedSchedule.is_report_published;
+
+    setConfirmModalData({
+      title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
+      message: willPublish
+        ? `Publish progress report cards for "${selectedSchedule.name}"? Parents will immediately be able to view their ward's results in the parent portal.`
+        : `Unpublish progress report cards for "${selectedSchedule.name}"? Parents will no longer be able to view report cards for this examination.`,
+      confirmText: willPublish ? 'Publish to Parents' : 'Unpublish',
+      type: willPublish ? 'success' : 'warning',
+      onConfirm: async () => {
+        setConfirmModalData(null);
+        setPublishingReport(true);
+        try {
+          const { error } = await supabase
+            .from('exam_schedules')
+            .update({ is_report_published: willPublish })
+            .eq('id', selectedSchedule.id);
+
+          if (error) throw error;
+
+          setInternalSchedules((prev) =>
+            prev.map((s) =>
+              String(s.id) === String(selectedSchedule.id)
+                ? { ...s, is_report_published: willPublish }
+                : s
+            )
+          );
+
+          showToast(
+            willPublish
+              ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
+              : `Progress report for "${selectedSchedule.name}" unpublished.`,
+            'success'
+          );
+        } catch (err) {
+          console.error('Failed to update progress report publication status:', err);
+          showToast(err.message || 'Failed to update publication status', 'error');
+        } finally {
+          setPublishingReport(false);
+        }
+      },
+    });
+  }, [selectedScheduleId, selectedSchedule]);
 
   // Selected class object
   const selectedClass = useMemo(() => {
@@ -483,14 +562,32 @@ const ReportCardGenerator = ({
     );
     const metricsMap = {};
     sortedByTotal.forEach((item, idx) => {
+      const stuObj = students.find((s) => String(s.id) === String(item.studentId));
+      const admKey = stuObj?.admission_no ? String(stuObj.admission_no).trim().toLowerCase() : '';
+      const serverRank =
+        studentRanksMap?.[String(item.studentId)] ||
+        (admKey && studentRanksMap?.[admKey]) ||
+        serverRanksMap[String(item.studentId)] ||
+        (admKey && serverRanksMap[admKey]);
+
+      const computedRank = sortedByTotal.length > 1 ? idx + 1 : null;
+      const classRank =
+        serverRank?.classRank ||
+        computedRank ||
+        (userRoles.includes('parent') ? null : idx + 1);
+      const totalStudents =
+        serverRank?.totalStudents ||
+        (sortedByTotal.length > 1 ? sortedByTotal.length : null);
+
       metricsMap[String(item.studentId)] = {
         ...item,
-        classRank: idx + 1,
+        classRank,
+        totalStudents,
       };
     });
 
     return metricsMap;
-  }, [students, results, entries, internalSubjects, activeTemplate?.gradingScale]);
+  }, [students, results, entries, internalSubjects, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, userRoles]);
 
   const handlePrint = () => {
     window.print();
@@ -520,92 +617,47 @@ const ReportCardGenerator = ({
     onRemarksModalOpenChange?.(val);
   };
 
-  // Load remarks records for current selected schedule
-  const fetchRemarks = async () => {
+  // Build the per-student remarks map from the rows delivered by the report-data RPC
+  // (no extra network call), merged with the browser-local cache.
+  useEffect(() => {
     if (!selectedScheduleId) {
       setStudentRemarksMap({});
       return;
     }
-    try {
-      const { data: remData, error: remErr } = await supabase
-        .from('exam_student_remarks')
-        .select('*')
-        .eq('schedule_id', selectedScheduleId);
-
-      const map = {};
-      const storageKey = `jzv_exam_remarks_${selectedScheduleId}`;
-      const local = localStorage.getItem(storageKey);
-      const localMap = local ? JSON.parse(local) : {};
-
-      const currentStudents = students.length > 0 ? students : propStudents || [];
-
-      if (!remErr && Array.isArray(remData) && remData.length > 0) {
-        remData.forEach((item) => {
-          const adm = String(item.admission_no || '')
+    const currentStudents = students.length > 0 ? students : propStudents || [];
+    const findStudent = (adm) =>
+      currentStudents.find(
+        (s) =>
+          String(s.admission_no || s.admission_number || '')
             .trim()
-            .toLowerCase();
-          const entry = {
-            remarks: item.remarks || '',
-            recommendations: item.recommendations || '',
-          };
-          if (adm) map[adm] = entry;
-          const matched = currentStudents.find(
-            (s) =>
-              String(s.admission_no || s.admission_number || '')
-                .trim()
-                .toLowerCase() === adm
-          );
-          if (matched) {
-            map[String(matched.id)] = entry;
-          }
-        });
-      }
+            .toLowerCase() === adm
+      );
+    const map = {};
 
-      // Merge local cache
-      Object.entries(localMap).forEach(([admKey, entry]) => {
-        const adm = String(admKey).trim().toLowerCase();
-        if (!map[adm]) map[adm] = entry;
-        const matched = currentStudents.find(
-          (s) =>
-            String(s.admission_no || s.admission_number || '')
-              .trim()
-              .toLowerCase() === adm
-        );
-        if (matched && !map[String(matched.id)]) {
-          map[String(matched.id)] = entry;
-        }
-      });
+    (serverRemarks || []).forEach((item) => {
+      const adm = String(item.admission_no || '')
+        .trim()
+        .toLowerCase();
+      const entry = { remarks: item.remarks || '', recommendations: item.recommendations || '' };
+      if (adm) map[adm] = entry;
+      const matched = adm ? findStudent(adm) : null;
+      if (matched) map[String(matched.id)] = entry;
+    });
 
-      setStudentRemarksMap(map);
-    } catch (e) {
-      console.warn('[ReportCardGenerator] fetchRemarks exception:', e);
-      const storageKey = `jzv_exam_remarks_${selectedScheduleId}`;
-      const local = localStorage.getItem(storageKey);
-      if (local) {
-        try {
-          const localMap = JSON.parse(local);
-          const map = {};
-          const currentStudents = students.length > 0 ? students : propStudents || [];
-          Object.entries(localMap).forEach(([admKey, entry]) => {
-            const adm = String(admKey).trim().toLowerCase();
-            map[adm] = entry;
-            const matched = currentStudents.find(
-              (s) =>
-                String(s.admission_no || s.admission_number || '')
-                  .trim()
-                  .toLowerCase() === adm
-            );
-            if (matched) map[String(matched.id)] = entry;
-          });
-          setStudentRemarksMap(map);
-        } catch (_) {}
-      }
-    }
-  };
+    let localMap = {};
+    try {
+      const local = localStorage.getItem(`jzv_exam_remarks_${selectedScheduleId}`);
+      if (local) localMap = JSON.parse(local) || {};
+    } catch (_) {}
+    Object.entries(localMap).forEach(([admKey, entry]) => {
+      const adm = String(admKey).trim().toLowerCase();
+      if (!map[adm]) map[adm] = entry;
+      const matched = findStudent(adm);
+      if (matched && !map[String(matched.id)]) map[String(matched.id)] = entry;
+    });
 
-  useEffect(() => {
-    fetchRemarks();
-  }, [selectedScheduleId, students]);
+    setStudentRemarksMap(map);
+  }, [serverRemarks, students, selectedScheduleId]);
 
   useEffect(() => {
     onRemarksCountChange?.(Object.keys(studentRemarksMap).length);
@@ -623,9 +675,34 @@ const ReportCardGenerator = ({
                 <i className="fas fa-file-invoice" />
               </div>
               <div>
-                <h2 className="text-base font-black text-dark-primary tracking-tight">
-                  Progress Report Generator
-                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-black text-dark-primary tracking-tight">
+                    Progress Report Generator
+                  </h2>
+                  {selectedSchedule && (
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                        selectedSchedule.is_report_published
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                      title={
+                        selectedSchedule.is_report_published
+                          ? 'Progress Report cards are published to parent portal'
+                          : 'Progress Report cards are draft/unpublished to parents'
+                      }
+                    >
+                      <i
+                        className={`fas ${
+                          selectedSchedule.is_report_published ? 'fa-globe' : 'fa-lock'
+                        } text-[8px]`}
+                      />
+                      {selectedSchedule.is_report_published
+                        ? 'Report Published'
+                        : 'Report Unpublished'}
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs font-bold text-dark-muted">
                   Generate student performance cards with custom grouping, charts, and calculations
                 </p>
@@ -914,23 +991,45 @@ const ReportCardGenerator = ({
             const admKey = String(rawStudent.admission_no || rawStudent.admission_number || '')
               .trim()
               .toLowerCase();
-            const att = attendanceMap[admKey];
-            const student = att
-              ? {
-                  ...rawStudent,
-                  total_working_days:
-                    att.total_days ||
-                    Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0),
-                  present_days: Number(att.present || 0),
-                  absent_days: Number(att.absent || 0),
-                  leave_days: Number(att.on_leave || 0),
-                  attendance:
-                    Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0) >
-                    0
-                      ? `${Math.round((Number(att.present || 0) / (Number(att.present || 0) + Number(att.absent || 0) + Number(att.on_leave || 0))) * 100)}%`
-                      : rawStudent.attendance || '—',
-                }
-              : rawStudent;
+            const admKeyNoLeadingZero = admKey.replace(/^0+/, '');
+            const stuIdKey = String(rawStudent.id || '');
+            const att =
+              attendanceMap[admKey] ||
+              (admKeyNoLeadingZero && attendanceMap[admKeyNoLeadingZero]) ||
+              (stuIdKey && attendanceMap[stuIdKey]);
+
+            let student;
+            if (att) {
+              const pres = Number(att.present || 0);
+              const abs = Number(att.absent || 0);
+              const leave = Number(att.on_leave || 0);
+              const totalWorking =
+                att.total_days !== undefined && att.total_days !== null
+                  ? Number(att.total_days)
+                  : pres + abs + leave;
+              const calcDays = pres + abs + leave;
+              const divisor = totalWorking > 0 ? totalWorking : calcDays > 0 ? calcDays : 1;
+              const pct = Math.round((pres / divisor) * 100);
+
+              student = {
+                ...rawStudent,
+                total_working_days: totalWorking,
+                present_days: pres,
+                absent_days: abs,
+                leave_days: leave,
+                attendance: totalWorking > 0 || calcDays > 0 ? `${pct}%` : '—',
+                hasAttendanceRecorded: true,
+              };
+            } else {
+              student = {
+                ...rawStudent,
+                hasAttendanceRecorded: Boolean(
+                  rawStudent.attendance &&
+                    rawStudent.attendance !== '—' &&
+                    rawStudent.attendance !== '0%'
+                ),
+              };
+            }
             const metrics = studentMetricsMap[String(student.id)] || {};
             const subjectScores = metrics.subjectScores || [];
 
@@ -1927,7 +2026,9 @@ const ReportCardGenerator = ({
                             },
                             showClassRank: {
                               label: 'Class Rank',
-                              value: metrics.classRank ? `#${metrics.classRank}` : '—',
+                              value: metrics.classRank
+                                ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
+                                : '—',
                               color: '',
                             },
                             showPassFail: {
@@ -3269,7 +3370,7 @@ const ReportCardGenerator = ({
         studentRemarksMap={studentRemarksMap}
         onSaveSuccess={(updatedMap) => {
           setStudentRemarksMap(updatedMap);
-          fetchRemarks();
+          loadReportData();
         }}
         activeTemplate={activeTemplate}
       />
@@ -3283,9 +3384,23 @@ const ReportCardGenerator = ({
         displayedStudents={displayedStudents}
         attendanceMap={attendanceMap}
         onUploadSuccess={() => {
-          fetchAttendance();
+          loadReportData();
         }}
       />
+
+      {/* Confirmation Modal */}
+      {confirmModalData && (
+        <ConfirmModal
+          isOpen={Boolean(confirmModalData)}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          confirmText={confirmModalData.confirmText}
+          cancelText={confirmModalData.cancelText || 'Cancel'}
+          type={confirmModalData.type || 'warning'}
+          onConfirm={confirmModalData.onConfirm}
+          onCancel={() => setConfirmModalData(null)}
+        />
+      )}
     </div>
   );
 };

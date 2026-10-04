@@ -15,6 +15,7 @@ import ExamAttendanceTabView from './ExamAttendanceTabView';
 import ExamRemarksTabView from './ExamRemarksTabView';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
+import ConfirmModal from '../ConfirmModal';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -45,6 +46,12 @@ const ExamResultsManager = ({
 
   // Capability driven strictly by app_view_controller component
   const canManageAllMarks = canAccess('exam-results-status-override');
+  const canPublishReport =
+    canAccess('exam-progress-report-publish') ||
+    canAccess('exam-sched-publish') ||
+    userRoles.some((r) =>
+      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+    );
 
   const isReportOnly =
     initialTab === 'report' ||
@@ -227,6 +234,8 @@ const ExamResultsManager = ({
   const [isRemarksModalOpen, setIsRemarksModalOpen] = useState(false);
   const [attendanceCount, setAttendanceCount] = useState(0);
   const [remarksCount, setRemarksCount] = useState(0);
+  const [confirmModalData, setConfirmModalData] = useState(null);
+  const [publishingReport, setPublishingReport] = useState(false);
 
   // Save Mode & Quick Fill State (moved from ExamResultsEntryGrid)
   const [saveMode, setSaveMode] = useState('auto');
@@ -298,11 +307,13 @@ const ExamResultsManager = ({
     setClassAssignments(dbClassAssignments);
     setResults(dbResults);
 
-    if (!selectedScheduleId && dbSchedules.length > 0) {
-      setSelectedScheduleId(String(dbSchedules[0].id));
+    // Functional update: keeps loadAll stable (no selectedScheduleId dependency) so the
+    // whole 9-table load below runs once instead of re-running when the schedule is auto-selected.
+    if (dbSchedules.length > 0) {
+      setSelectedScheduleId((prev) => prev || String(dbSchedules[0].id));
     }
     setLoading(false);
-  }, [selectedScheduleId]);
+  }, []);
 
   useEffect(() => {
     loadAll();
@@ -340,6 +351,56 @@ const ExamResultsManager = ({
     () => schedules.find((s) => String(s.id) === String(selectedScheduleId)) || null,
     [schedules, selectedScheduleId]
   );
+
+  const handleTogglePublishReport = useCallback(async () => {
+    if (!selectedScheduleId || !selectedSchedule) {
+      showToast('Please select an exam schedule first', 'warning');
+      return;
+    }
+
+    const willPublish = !selectedSchedule.is_report_published;
+
+    setConfirmModalData({
+      title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
+      message: willPublish
+        ? `Publish progress report cards for "${selectedSchedule.name}"? Parents will immediately be able to view their ward's results in the parent portal.`
+        : `Unpublish progress report cards for "${selectedSchedule.name}"? Parents will no longer be able to view report cards for this examination.`,
+      confirmText: willPublish ? 'Publish to Parents' : 'Unpublish',
+      type: willPublish ? 'success' : 'warning',
+      onConfirm: async () => {
+        setConfirmModalData(null);
+        setPublishingReport(true);
+        try {
+          const { error } = await supabase
+            .from('exam_schedules')
+            .update({ is_report_published: willPublish })
+            .eq('id', selectedSchedule.id);
+
+          if (error) throw error;
+
+          setSchedules((prev) =>
+            prev.map((s) =>
+              String(s.id) === String(selectedSchedule.id)
+                ? { ...s, is_report_published: willPublish }
+                : s
+            )
+          );
+
+          showToast(
+            willPublish
+              ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
+              : `Progress report for "${selectedSchedule.name}" unpublished.`,
+            'success'
+          );
+        } catch (err) {
+          console.error('Failed to update progress report publication status:', err);
+          showToast(err.message || 'Failed to update publication status', 'error');
+        } finally {
+          setPublishingReport(false);
+        }
+      },
+    });
+  }, [selectedScheduleId, selectedSchedule]);
 
   const teacherMap = useMemo(() => {
     const map = {};
@@ -1028,6 +1089,30 @@ const ExamResultsManager = ({
                     {selectedSchedule.status}
                   </span>
                 )}
+
+                {selectedSchedule && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      selectedSchedule.is_report_published
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                    title={
+                      selectedSchedule.is_report_published
+                        ? 'Progress Report cards are published to parent portal'
+                        : 'Progress Report cards are draft/unpublished to parents'
+                    }
+                  >
+                    <i
+                      className={`fas ${
+                        selectedSchedule.is_report_published ? 'fa-globe' : 'fa-lock'
+                      } text-[8px]`}
+                    />
+                    {selectedSchedule.is_report_published
+                      ? 'Report Published'
+                      : 'Report Unpublished'}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
                 {isReportOnly
@@ -1041,7 +1126,7 @@ const ExamResultsManager = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          <div className="flex items-center gap-2.5 self-end sm:self-auto ">
             {schedules.length > 0 && (
               <MultiSelectDropdown
                 label="Exam"
@@ -1071,6 +1156,42 @@ const ExamResultsManager = ({
             >
               <i className="fas fa-sync-alt text-xs" />
             </button>
+
+            {canPublishReport && selectedSchedule && (
+              <button
+                type="button"
+                onClick={handleTogglePublishReport}
+                disabled={publishingReport}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-60 shrink-0 ${
+                  selectedSchedule.is_report_published
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
+                title={
+                  selectedSchedule.is_report_published
+                    ? 'Click to unpublish progress reports from the parent portal'
+                    : 'Click to publish progress reports to the parent portal'
+                }
+                data-feature="exam-progress-report-publish"
+              >
+                {publishingReport ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin text-xs" />
+                    <span>Updating...</span>
+                  </>
+                ) : selectedSchedule.is_report_published ? (
+                  <>
+                    <i className="fas fa-eye-slash text-xs" />
+                    <span>Unpublish Report</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-bullhorn text-xs" />
+                    <span>Publish Progress Report</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -2139,6 +2260,20 @@ const ExamResultsManager = ({
             await refreshResults();
             showToast('Remarks updated successfully', 'success');
           }}
+        />
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModalData && (
+        <ConfirmModal
+          isOpen={Boolean(confirmModalData)}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          confirmText={confirmModalData.confirmText}
+          cancelText={confirmModalData.cancelText || 'Cancel'}
+          type={confirmModalData.type || 'warning'}
+          onConfirm={confirmModalData.onConfirm}
+          onCancel={() => setConfirmModalData(null)}
         />
       )}
     </div>

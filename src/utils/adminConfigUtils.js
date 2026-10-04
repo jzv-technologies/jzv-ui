@@ -9,9 +9,36 @@ import { supabase } from './supabase';
  * @param {*} defaultValue - Fallback value if configuration is not found
  * @returns {Promise<*>}
  */
+// De-duplicates concurrent/repeat reads of the same key (e.g. the report templates are
+// requested by the manager, generator and designer) into a single RPC.
+const CONFIG_CACHE_TTL_MS = 60 * 1000;
+const configCache = new Map(); // key -> { ts, value } | { promise }
+
 export const getAdminConfig = async (key, defaultValue = null) => {
   if (!key) return defaultValue;
 
+  const hit = configCache.get(key);
+  if (hit) {
+    if (hit.promise) {
+      const v = await hit.promise;
+      return v !== undefined ? v : defaultValue;
+    }
+    if (Date.now() - hit.ts < CONFIG_CACHE_TTL_MS) return hit.value;
+  }
+
+  const promise = fetchAdminConfig(key);
+  configCache.set(key, { promise });
+  const value = await promise;
+  if (value !== undefined) {
+    configCache.set(key, { ts: Date.now(), value });
+    return value;
+  }
+  configCache.delete(key);
+  return defaultValue;
+};
+
+// Returns the config value, or undefined when nothing could be resolved.
+const fetchAdminConfig = async (key) => {
   // 1. Try RPC call
   try {
     const { data, error } = await supabase.rpc('get_admin_config', { p_key: key });
@@ -33,7 +60,7 @@ export const getAdminConfig = async (key, defaultValue = null) => {
     }
   } catch (_) {}
 
-  return defaultValue;
+  return undefined;
 };
 
 /**
@@ -46,6 +73,9 @@ export const getAdminConfig = async (key, defaultValue = null) => {
  */
 export const saveAdminConfig = async (key, val) => {
   if (!key) return false;
+
+  // Invalidate the read cache so the next getAdminConfig sees the new value
+  configCache.delete(key);
 
   // 1. Always cache to localStorage first
   try {

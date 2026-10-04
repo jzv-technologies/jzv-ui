@@ -12,6 +12,7 @@ import TimetableManager from '../timetable/TimetableManager';
 import TeacherTimetableViewer from '../timetable/TeacherTimetableViewer';
 import ParentTimetableViewer from '../timetable/ParentTimetableViewer';
 import ParentExamTimetableView from '../examinations/ParentExamTimetableView';
+import ParentProgressReportView from '../examinations/ParentProgressReportView';
 import SyllabusManager from '../syllabus/SyllabusManager';
 import SyllabusTrackerPortal from '../syllabus/SyllabusTrackerPortal';
 import AcademicCalendarView from '../academic-calendar/AcademicCalendarView';
@@ -294,7 +295,24 @@ export const UnifiedPortal = ({
       case 'ward-exam-timetable':
         return (
           <div data-feature="ward-exam-timetable">
-            <ParentExamTimetableView user={user} classes={[]} subjects={[]} />
+            <ParentExamTimetableView
+              user={user}
+              classes={[]}
+              subjects={[]}
+              onNavigate={(view) => setSubView(view)}
+            />
+          </div>
+        );
+
+      case 'ward-progress-report':
+      case 'parent-progress-report':
+        return (
+          <div data-feature="ward-progress-report">
+            <ParentProgressReportView
+              user={user}
+              userRoles={userRoles}
+              onNavigate={(view) => setSubView(view)}
+            />
           </div>
         );
 
@@ -491,6 +509,17 @@ export const UnifiedPortal = ({
       case 'progress-report':
       case 'progress-reports':
       case 'exam-report':
+        if (isParent && !isAdmin && !isManagement && !isTeacher) {
+          return (
+            <div data-feature="ward-progress-report">
+              <ParentProgressReportView
+                user={user}
+                userRoles={userRoles}
+                onNavigate={(view) => setSubView(view)}
+              />
+            </div>
+          );
+        }
         return (
           <div data-feature="exam-progress-report">
             <ExamResultsManager

@@ -430,7 +430,8 @@ export const useViewConfig = (userRoles = []) => {
       if (
         componentName === 'exam-sched-tab-setup' ||
         componentName === 'exam-sched-slot-edit' ||
-        componentName === 'exam-sched-publish'
+        componentName === 'exam-sched-publish' ||
+        componentName === 'exam-progress-report-publish'
       ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
@@ -438,8 +439,12 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for parent exam timetable
-      if (componentName === 'ward-exam-timetable' || componentName === 'exam-sched-tab-parent') {
+      // Builtin fallback for parent exam timetable and progress report
+      if (
+        componentName === 'ward-exam-timetable' ||
+        componentName === 'ward-progress-report' ||
+        componentName === 'exam-sched-tab-parent'
+      ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
           ['parent', 'admin', 'management'].includes(String(r).toLowerCase().trim())
