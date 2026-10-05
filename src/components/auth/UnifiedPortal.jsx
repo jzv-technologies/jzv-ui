@@ -25,6 +25,7 @@ import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesVi
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamResultsManager from '../examinations/ExamResultsManager';
 import ReportCardDesigner from '../examinations/ReportCardDesigner';
+import ExamAnalysisManager from '../examinations/ExamAnalysisManager';
 import ConditionalBlock from '../portal-shared/ConditionalBlock';
 
 // Shared subview containers
@@ -528,6 +529,18 @@ export const UnifiedPortal = ({
               teacherRecord={teacherRecord}
               allowedTabs={['report']}
               initialTab="report"
+            />
+          </div>
+        );
+
+      case 'exam-analysis':
+      case 'exam-report-analysis':
+        return (
+          <div data-feature="exam-analysis" className="w-full">
+            <ExamAnalysisManager
+              user={user}
+              userRoles={userRoles}
+              onBack={() => setSubView(null)}
             />
           </div>
         );

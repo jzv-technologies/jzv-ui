@@ -9,12 +9,12 @@ import {
   invalidateDynamicFormConfigsCache,
 } from '../utils/dynamicFormConfigs';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v16';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v18';
 
 const readSessionCache = (userRoles) => {
   try {
     // Clear legacy caches
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 17; i++) {
       sessionStorage.removeItem(`jzv_view_config_cache_v${i}`);
     }
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
@@ -442,9 +442,15 @@ export const useViewConfig = (userRoles = []) => {
       // Builtin fallback for parent exam timetable and progress report
       if (
         componentName === 'ward-exam-timetable' ||
-        componentName === 'ward-progress-report' ||
-        componentName === 'exam-sched-tab-parent'
+        componentName === 'ward-progress-report'
       ) {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['parent'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
+      if (componentName === 'exam-sched-tab-parent') {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
           ['parent', 'admin', 'management'].includes(String(r).toLowerCase().trim())

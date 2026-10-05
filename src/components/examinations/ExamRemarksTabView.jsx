@@ -41,7 +41,18 @@ const ExamRemarksTabView = forwardRef(({
   onOpenUploadModal,
 }, ref) => {
   const canAccess = useCanAccess(userRoles);
-  const canEdit = canAccess('exam-remarks-edit') || canAccess('exam-attendance-upload') || canAccess('exam-mark-entry-tab');
+  const canManageAll =
+    canAccess('exam-results-status-override') ||
+    userRoles.some((r) =>
+      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+    );
+  const isReportPublished = Boolean(schedule?.is_report_published);
+  const isTeacherLocked = isReportPublished && !canManageAll;
+  const canEdit =
+    !isTeacherLocked &&
+    (canAccess('exam-remarks-edit') ||
+      canAccess('exam-attendance-upload') ||
+      canAccess('exam-mark-entry-tab'));
 
   // Remarks data map: { [normalizedAdmissionNo]: { remarks, recommendations, id, admission_no } }
   const [remarksMap, setRemarksMap] = useState({});
@@ -235,7 +246,7 @@ const ExamRemarksTabView = forwardRef(({
 
   // Save student remarks
   const handleSaveStudentRemarks = async (autoNavigateNext = false) => {
-    if (!editingStudent || !schedule?.id) return;
+    if (!editingStudent || !schedule?.id || isTeacherLocked) return;
     const adm = editingStudent.admission_no;
     if (!adm) {
       showToast('Student does not have an admission number', 'error');
@@ -352,6 +363,16 @@ const ExamRemarksTabView = forwardRef(({
 
   return (
     <div className="w-full space-y-4" data-feature="exam-remarks-tab-content">
+      {/* Published Exam Lock Banner */}
+      {isTeacherLocked && (
+        <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold shadow-2xs">
+          <i className="fas fa-lock text-amber-600 text-sm shrink-0" />
+          <span>
+            Progress Report is published for this examination. Remarks and feedback editing is locked for teachers.
+          </span>
+        </div>
+      )}
+
       {/* ── Top Bar: Interactive KPI Cards (Click to filter table) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Total Students -> Filter: All */}

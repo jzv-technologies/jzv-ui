@@ -103,19 +103,24 @@ const ExamClassSummaryView = ({
         clsResultsBySubjectId.set(String(r.subject_id), r);
       });
 
-      const adHocResults = clsResults.filter((r) => !r.is_from_schedule);
-      const adHocSubs = adHocResults
-        .map((r) => subjects.find((s) => String(s.id) === String(r.subject_id)))
-        .filter(Boolean);
-
       // 4. Combined unique subjects list
       const combinedSubjectsMap = new Map();
+      // Scheduled subjects (from timetable slots)
       scheduledSubs.forEach((s) => {
         combinedSubjectsMap.set(String(s.id), { ...s, isAdHoc: false });
       });
-      adHocSubs.forEach((s) => {
-        if (!combinedSubjectsMap.has(String(s.id))) {
-          combinedSubjectsMap.set(String(s.id), { ...s, isAdHoc: true });
+      // Include all subjects that have an exam_results record for this class & schedule
+      // (whether ad-hoc or previously scheduled before being removed from the timetable)
+      clsResults.forEach((r) => {
+        const sId = String(r.subject_id);
+        if (!combinedSubjectsMap.has(sId)) {
+          const sub = subjects.find((s) => String(s.id) === sId);
+          if (sub) {
+            combinedSubjectsMap.set(sId, {
+              ...sub,
+              isAdHoc: !r.is_from_schedule || !scheduledSubjectIdSet.has(sId),
+            });
+          }
         }
       });
 

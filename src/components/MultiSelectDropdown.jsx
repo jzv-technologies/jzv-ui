@@ -66,6 +66,7 @@ const MultiSelectDropdown = ({
   singleSelect = false,
   icon = null,
   disabled = false,
+  onRemoveOption = null,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -336,36 +337,68 @@ const MultiSelectDropdown = ({
                     }
                   }}
                   title={getOptLabel(opt)}
-                  className={`w-full flex items-start gap-2.5 px-3 py-2 cursor-pointer transition-all text-xs font-bold select-none hover:bg-brand-primary/5 ${
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 cursor-pointer transition-all text-xs font-bold select-none hover:bg-brand-primary/5 ${
                     isChecked ? 'bg-brand-primary/10 text-brand-primary' : 'text-gray-750'
                   }`}
                 >
-                  {singleSelect ? (
-                    <div
-                      className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center mt-0.5 shrink-0 transition-colors pointer-events-none ${
-                        isChecked ? 'border-brand-primary bg-brand-primary' : 'border-gray-300 bg-white'
-                      }`}
-                    >
-                      {isChecked && <i className="fas fa-check text-[7px] text-white" />}
-                    </div>
-                  ) : (
-                    <div
-                      className={`w-3.5 h-3.5 rounded border flex items-center justify-center mt-0.5 shrink-0 transition-colors pointer-events-none ${
-                        isChecked ? 'border-brand-primary bg-brand-primary text-white' : 'border-gray-300 bg-white'
-                      }`}
-                    >
-                      {isChecked && <i className="fas fa-check text-[8px]" />}
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {singleSelect ? (
+                      <div
+                        className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors pointer-events-none ${
+                          isChecked ? 'border-brand-primary bg-brand-primary' : 'border-gray-300 bg-white'
+                        }`}
+                      >
+                        {isChecked && <i className="fas fa-check text-[7px] text-white" />}
+                      </div>
+                    ) : (
+                      <div
+                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors pointer-events-none ${
+                          isChecked ? 'border-brand-primary bg-brand-primary text-white' : 'border-gray-300 bg-white'
+                        }`}
+                      >
+                        {isChecked && <i className="fas fa-check text-[8px]" />}
+                      </div>
+                    )}
+                    {prefixIcon && (
+                      <i
+                        className={`fas ${prefixIcon} text-[9px] shrink-0 pointer-events-none`}
+                        style={{ color: prefixColor }}
+                      />
+                    )}
+                    <span className="truncate leading-tight text-left pointer-events-none">
+                      {getOptLabel(opt)}
+                    </span>
+                  </div>
+
+                  {(opt.badge || onRemoveOption) && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {opt.badge && (
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                            String(opt.badge).toLowerCase() === 'ad-hoc'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}
+                        >
+                          {opt.badge}
+                        </span>
+                      )}
+                      {onRemoveOption && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onRemoveOption(val, opt);
+                          }}
+                          className="w-5 h-5 rounded text-gray-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-all cursor-pointer"
+                          title={opt.removeTitle || `Remove ${getOptLabel(opt)}`}
+                        >
+                          <i className="fas fa-trash-alt text-[10px]" />
+                        </button>
+                      )}
                     </div>
                   )}
-                  {prefixIcon && (
-                    <i
-                      className={`fas ${prefixIcon} text-[9px] mt-1 shrink-0 pointer-events-none`}
-                      style={{ color: prefixColor }}
-                    />
-                  )}
-                  <span className="break-words leading-tight flex-1 text-left pointer-events-none">
-                    {getOptLabel(opt)}
-                  </span>
                 </div>
               );
             })

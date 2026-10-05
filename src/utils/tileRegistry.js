@@ -294,6 +294,17 @@ export const TILE_METADATA_REGISTRY = {
     valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
     display_order: 86,
   },
+  'exam-analysis': {
+    title: 'Exam Analysis',
+    description: 'In-depth marks percentage distribution and standard deviation heatmap analytics across classes.',
+    icon: 'fa-chart-pie',
+    buttonColor: 'bg-violet-600 text-white',
+    shadow: 'shadow-violet-200',
+    group: 'Examinations',
+    action: 'subview',
+    valid_access_roles: ['admin', 'management'],
+    display_order: 87,
+  },
   dashboard: {
     title: 'Dashboard',
     description: 'View syllabus progress, activity, and attention-required insights.',
@@ -348,7 +359,7 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-rose-200',
     group: 'Calendar and Schedules',
     action: 'subview',
-    valid_access_roles: ['parent', 'admin', 'management'],
+    valid_access_roles: ['parent'],
     display_order: 55,
   },
   'ward-progress-report': {

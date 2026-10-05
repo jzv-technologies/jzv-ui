@@ -45,7 +45,11 @@ const ExamResultsManager = ({
   const canAccess = useCanAccess(userRoles);
 
   // Capability driven strictly by app_view_controller component
-  const canManageAllMarks = canAccess('exam-results-status-override');
+  const canManageAllMarks =
+    canAccess('exam-results-status-override') ||
+    userRoles.some((r) =>
+      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+    );
   const canPublishReport =
     canAccess('exam-progress-report-publish') ||
     canAccess('exam-sched-publish') ||
@@ -186,6 +190,7 @@ const ExamResultsManager = ({
   const [teachers, setTeachers] = useState([]);
   const [slots, setSlots] = useState([]);
   const [classAssignments, setClassAssignments] = useState([]);
+  const [classSubjects, setClassSubjects] = useState([]);
 
   // Exam results
   const [results, setResults] = useState([]);
@@ -274,7 +279,7 @@ const ExamResultsManager = ({
       }
     };
 
-    const [dbSchedules, dbClasses, dbSubjects, dbStudents] = await Promise.all([
+    const [dbSchedules, dbClasses, dbSubjects, dbStudents, dbClassSubjects] = await Promise.all([
       safe(supabase.from('exam_schedules').select('*').order('start_date', { ascending: false })),
       safe(supabase.from('classes').select('*').order('name')),
       safe(supabase.from('syl_subjects').select('*').order('name')),
@@ -285,12 +290,14 @@ const ExamResultsManager = ({
           .order('class_id', { ascending: true })
           .order('student_name', { ascending: true })
       ),
+      safe(supabase.from('class_subjects').select('*')),
     ]);
 
     setSchedules(dbSchedules);
     setClasses(dbClasses);
     setSubjects(dbSubjects);
     setStudents(dbStudents);
+    setClassSubjects(dbClassSubjects);
 
     // Functional update: keeps loadAll stable (no selectedScheduleId dependency) so the
     // master data load runs once instead of re-running when the schedule is auto-selected.
@@ -418,6 +425,9 @@ const ExamResultsManager = ({
     () => schedules.find((s) => String(s.id) === String(selectedScheduleId)) || null,
     [schedules, selectedScheduleId]
   );
+
+  const isReportPublished = Boolean(selectedSchedule?.is_report_published);
+  const isTeacherLocked = isReportPublished && !canManageAllMarks;
 
   const handleTogglePublishReport = useCallback(async () => {
     if (!selectedScheduleId || !selectedSchedule) {
@@ -691,22 +701,39 @@ const ExamResultsManager = ({
     if (!adHocSubjectId) return;
     setSavingAdHoc(true);
     try {
-      const { error } = await supabase.from('exam_results').insert({
-        schedule_id: Number(selectedScheduleId),
-        class_id: Number(selectedClassId),
-        subject_id: Number(adHocSubjectId),
-        max_marks: Number(adHocMaxMarks) || 100,
-        pass_marks: adHocPassMarks ? Number(adHocPassMarks) : null,
-        is_from_schedule: false,
-        entry_status: 'pending',
-      });
+      const existingRes = classResultsIndex[String(adHocSubjectId)];
+      let error = null;
+      if (existingRes) {
+        const res = await supabase
+          .from('exam_results')
+          .update({
+            max_marks: Number(adHocMaxMarks) || 100,
+            pass_marks: adHocPassMarks ? Number(adHocPassMarks) : null,
+            is_from_schedule: false,
+          })
+          .eq('id', existingRes.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('exam_results').insert({
+          schedule_id: Number(selectedScheduleId),
+          class_id: Number(selectedClassId),
+          subject_id: Number(adHocSubjectId),
+          max_marks: Number(adHocMaxMarks) || 100,
+          pass_marks: adHocPassMarks ? Number(adHocPassMarks) : null,
+          is_from_schedule: false,
+          entry_status: 'pending',
+        });
+        error = res.error;
+      }
       if (error) throw error;
+      const addedSubId = String(adHocSubjectId);
       showToast('Ad-hoc subject added', 'success');
       setShowAdHocForm(false);
       setAdHocSubjectId('');
       setAdHocMaxMarks('100');
       setAdHocPassMarks('');
       await refreshResults();
+      setSelectedSubjectIds((prev) => (prev.includes(addedSubId) ? prev : [...prev, addedSubId]));
     } catch (err) {
       showToast(err.message || 'Failed to add ad-hoc subject', 'error');
     } finally {
@@ -811,6 +838,7 @@ const ExamResultsManager = ({
   }, [teacherRecord, selectedClassId, activeResults, classAssignments]);
 
   // Enforce access control for mark editing - per subject
+  // When progress report is published, teachers are locked from editing marks
   const canEditMarksForSubject = useMemo(() => {
     const editMap = {};
     activeResults.forEach((result) => {
@@ -818,9 +846,11 @@ const ExamResultsManager = ({
         activeSlots[String(result.id)]?.teacher_id &&
         String(teacherRecord?.id) === String(activeSlots[String(result.id)]?.teacher_id);
       const isSubjectTeacherForThis = isAllocatedSubjectTeacher[String(result.id)];
+      const isTeacher = isInvigilator || isSubjectTeacherForThis;
+      const teacherAllowed = isTeacher && !isReportPublished;
       editMap[String(result.id)] =
         canAccess('exam-results-edit-marks') &&
-        (canManageAllMarks || isInvigilator || isSubjectTeacherForThis);
+        (canManageAllMarks || teacherAllowed);
     });
     return editMap;
   }, [
@@ -830,6 +860,7 @@ const ExamResultsManager = ({
     canManageAllMarks,
     canAccess,
     isAllocatedSubjectTeacher,
+    isReportPublished,
   ]);
 
   // Quick fill handler - uses activeResults and canEditMarksForSubject which are now defined
@@ -856,35 +887,141 @@ const ExamResultsManager = ({
     setQuickFillValue('');
   }, [quickFillSubjectId, quickFillValue, activeResults, canEditMarksForSubject]);
 
-  // All subjects to show in the left panel = scheduledSubjects + ad-hoc
-  const adHocResults = useMemo(
-    () => classResults.filter((r) => !r.is_from_schedule),
-    [classResults]
-  );
-
-  const adHocSubjects = useMemo(
-    () =>
-      adHocResults
-        .map((r) => subjects.find((s) => String(s.id) === String(r.subject_id)))
-        .filter(Boolean),
-    [adHocResults, subjects]
-  );
-
+  // All subjects to show in Mark Entry = Scheduled subjects from timetable slots + ad-hoc subjects + subjects with existing entered marks
   const allSubjectsToShow = useMemo(() => {
     const ids = new Set();
     const list = [];
+
+    // 1. Scheduled subjects in exam timetable slots
     scheduledSubjects.forEach((s) => {
       ids.add(String(s.id));
       list.push({ ...s, isAdHoc: false });
     });
-    adHocSubjects.forEach((s) => {
-      if (!ids.has(String(s.id))) {
-        ids.add(String(s.id));
-        list.push({ ...s, isAdHoc: true });
+
+    // 2. Ad-hoc subjects (!r.is_from_schedule) or subjects with existing marks (entry_status !== 'pending')
+    classResults.forEach((r) => {
+      const sId = String(r.subject_id);
+      if (!ids.has(sId)) {
+        const isExplicitAdHoc = r.is_from_schedule === false;
+        const hasEnteredMarks = r.entry_status === 'completed' || r.entry_status === 'in_progress';
+        if (isExplicitAdHoc || hasEnteredMarks) {
+          const sub = subjects.find((s) => String(s.id) === sId);
+          if (sub) {
+            ids.add(sId);
+            list.push({ ...sub, isAdHoc: isExplicitAdHoc });
+          }
+        }
       }
     });
+
     return list;
-  }, [scheduledSubjects, adHocSubjects]);
+  }, [scheduledSubjects, classResults, subjects]);
+
+  // Ad-hoc candidate subjects: available in class_subjects for selectedClassId and not already in allSubjectsToShow
+  const availableAdHocSubjects = useMemo(() => {
+    if (!selectedClassId) return [];
+    const activeClassSubjectIds = new Set(
+      classSubjects
+        .filter(
+          (cs) =>
+            String(cs.class_id) === String(selectedClassId) &&
+            (!cs.status || cs.status === 'active')
+        )
+        .map((cs) => String(cs.subject_id))
+    );
+
+    const existingSubjectIds = new Set(allSubjectsToShow.map((s) => String(s.id)));
+
+    return subjects
+      .filter(
+        (s) =>
+          activeClassSubjectIds.has(String(s.id)) &&
+          !existingSubjectIds.has(String(s.id))
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [selectedClassId, classSubjects, allSubjectsToShow, subjects]);
+
+  // Remove a subject from Mark Entry (deletes exam_results, exam_result_entries, and exam_schedule_slots)
+  const handleRemoveSubject = useCallback(
+    (subjectId) => {
+      const sIdStr = String(subjectId);
+      const sub = subjects.find((s) => String(s.id) === sIdStr);
+      const subName = sub?.name || `Subject #${subjectId}`;
+      const cls = classes.find((c) => String(c.id) === String(selectedClassId));
+      const className = cls?.name || 'Class';
+
+      const existingResult = classResultsIndex[sIdStr];
+      const hasMarks =
+        existingResult &&
+        (existingResult.entry_status === 'completed' || existingResult.entry_status === 'in_progress');
+
+      const isAdHoc = sub?.isAdHoc ?? (existingResult ? !existingResult.is_from_schedule : false);
+      const typeLabel = isAdHoc ? 'Ad-Hoc Subject' : 'Scheduled Subject';
+
+      setConfirmModalData({
+        title: `Remove ${typeLabel} "${subName}"?`,
+        message: hasMarks
+          ? `Marks have already been entered for "${subName}" in ${className}. Removing this subject will permanently delete all entered student marks and records for this examination. Are you sure you want to proceed?`
+          : `Remove "${subName}" from Mark Entry for ${className}? This will remove it from the examination schedule and mark entry.`,
+        confirmText: 'Remove Subject',
+        cancelText: 'Cancel',
+        type: 'danger',
+        onConfirm: async () => {
+          setConfirmModalData(null);
+          try {
+            // 1. Delete all matching result entries and exam_results records for this subject in this class & schedule
+            const { data: matchingResults } = await supabase
+              .from('exam_results')
+              .select('id')
+              .eq('schedule_id', Number(selectedScheduleId))
+              .eq('class_id', Number(selectedClassId))
+              .eq('subject_id', Number(subjectId));
+
+            if (matchingResults && matchingResults.length > 0) {
+              const resIds = matchingResults.map((r) => r.id);
+              await supabase
+                .from('exam_result_entries')
+                .delete()
+                .in('result_id', resIds);
+
+              const { error: resErr } = await supabase
+                .from('exam_results')
+                .delete()
+                .in('id', resIds);
+
+              if (resErr) throw resErr;
+            }
+
+            // 2. Also remove slot from exam_schedule_slots if it was present
+            await supabase
+              .from('exam_schedule_slots')
+              .delete()
+              .eq('schedule_id', Number(selectedScheduleId))
+              .eq('class_id', Number(selectedClassId))
+              .eq('subject_id', Number(subjectId));
+
+            // 3. Remove from selectedSubjectIds if selected
+            setSelectedSubjectIds((prev) => prev.filter((id) => id !== sIdStr));
+
+            // 4. Clean up schemeEdits
+            setSchemeEdits((prev) => {
+              const updated = { ...prev };
+              delete updated[sIdStr];
+              return updated;
+            });
+
+            // 5. Refresh results & slots
+            await refreshResults();
+            showToast(`Subject "${subName}" removed from Mark Entry`, 'success');
+          } catch (err) {
+            console.error('Failed to remove subject:', err);
+            showToast('Failed to remove subject: ' + (err.message || err), 'error');
+          }
+        },
+      });
+    },
+    [subjects, classes, selectedClassId, selectedScheduleId, classResultsIndex, refreshResults]
+  );
 
   const completionStats = useMemo(() => {
     let completed = 0;
@@ -1375,9 +1512,13 @@ const ExamResultsManager = ({
                   <button
                     type="button"
                     onClick={() => setIsAttendanceModalOpen(true)}
-                    disabled={!selectedScheduleId}
+                    disabled={!selectedScheduleId || isTeacherLocked}
                     className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
-                    title="Upload Attendance from Excel or CSV"
+                    title={
+                      isTeacherLocked
+                        ? 'Progress report is published for this examination. Attendance editing is locked for teachers.'
+                        : 'Upload Attendance from Excel or CSV'
+                    }
                   >
                     <i className="fas fa-file-arrow-up text-indigo-600 text-xs" />
                     <span>Upload Attendance</span>
@@ -1439,9 +1580,13 @@ const ExamResultsManager = ({
                       setRemarksModalMode('upload');
                       setIsRemarksModalOpen(true);
                     }}
-                    disabled={!selectedScheduleId}
+                    disabled={!selectedScheduleId || isTeacherLocked}
                     className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 h-9 sm:h-8 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-250 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
-                    title="Upload Remarks & Feedback from Excel or CSV"
+                    title={
+                      isTeacherLocked
+                        ? 'Progress report is published for this examination. Remarks editing is locked for teachers.'
+                        : 'Upload Remarks & Feedback from Excel or CSV'
+                    }
                   >
                     <i className="fas fa-file-arrow-up text-amber-600 text-xs" />
                     <span>Upload Remarks</span>
@@ -1496,16 +1641,19 @@ const ExamResultsManager = ({
 
             {/* Subject Selector MultiSelectDropdown in top filter bar */}
             {activeTab === 'entry' && selectedClassId && (
-              <div className="min-w-[180px] max-w-[300px]">
+              <div className="min-w-[190px] max-w-[320px]">
                 <MultiSelectDropdown
                   label="Subjects"
                   icon="fa-book-open"
                   options={allSubjectsToShow.map((sub) => ({
                     id: String(sub.id),
                     label: sub.name,
+                    badge: sub.isAdHoc ? 'Ad-Hoc' : 'Scheduled',
+                    removeTitle: `Remove ${sub.name} from Mark Entry (${sub.isAdHoc ? 'Ad-Hoc' : 'Scheduled'})`,
                   }))}
                   selected={selectedSubjectIds}
                   onChange={setSelectedSubjectIds}
+                  onRemoveOption={canManageAllMarks && !isTeacherLocked ? (val) => handleRemoveSubject(val) : null}
                   placeholder={scheduleReady ? "Select subjects..." : "Loading subjects..."}
                   fullWidth={false}
                   disabled={!scheduleReady}
@@ -1519,8 +1667,13 @@ const ExamResultsManager = ({
                 <button
                   type="button"
                   onClick={() => setShowAdHocForm(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                  title="Add ad-hoc subject not in exam schedule"
+                  disabled={isTeacherLocked}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title={
+                    isTeacherLocked
+                      ? 'Progress report is published. Adding subjects is locked for teachers.'
+                      : 'Add ad-hoc subject not in exam schedule'
+                  }
                 >
                   <i className="fas fa-plus text-[10px]" />
                   <span>Ad-Hoc Subject</span>
@@ -1557,8 +1710,13 @@ const ExamResultsManager = ({
                 <button
                   type="button"
                   onClick={handleOpenSchemeModal}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                  title="Configure Marks"
+                  disabled={isTeacherLocked}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-dark-slate text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title={
+                    isTeacherLocked
+                      ? 'Progress report is published. Marking scheme is locked for teachers.'
+                      : 'Configure Marks'
+                  }
                 >
                   <i className="fas fa-gears text-emerald-600 text-xl" />
                 </button>
@@ -1595,8 +1753,13 @@ const ExamResultsManager = ({
                 <button
                   type="button"
                   onClick={() => setShowImportModal(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800  text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs"
-                  title="Import marks from CSV with override/ignore options"
+                  disabled={isTeacherLocked}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 h-9 sm:h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-800  text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                  title={
+                    isTeacherLocked
+                      ? 'Progress report is published. Importing marks is locked for teachers.'
+                      : 'Import marks from CSV with override/ignore options'
+                  }
                 >
                   <i className="fas fa-upload text-emerald-700 text-xl" />
                 </button>
@@ -1799,6 +1962,9 @@ const ExamResultsManager = ({
                     setQuickFillValue={setQuickFillValue}
                     saveAllPendingChanges={saveAllPendingChanges}
                     handleQuickFill={handleQuickFill}
+                    onRemoveSubject={handleRemoveSubject}
+                    canRemoveSubject={canManageAllMarks && !isTeacherLocked}
+                    isLocked={isTeacherLocked}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
@@ -2062,6 +2228,7 @@ const ExamResultsManager = ({
                         <th className="py-2.5 px-3">Teacher / Invigilator</th>
                         <th className="py-2.5 px-3 w-28">Max Marks</th>
                         <th className="py-2.5 px-3 w-28">Pass Marks</th>
+                        <th className="py-2.5 px-3 w-16 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2157,6 +2324,16 @@ const ExamResultsManager = ({
                                 placeholder="35"
                               />
                             </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSubject(sub.id)}
+                                className="w-7 h-7 rounded-lg text-rose-500 hover:text-white hover:bg-rose-600 transition-all flex items-center justify-center cursor-pointer shadow-2xs mx-auto"
+                                title={`Remove ${sub.name} from Mark Entry`}
+                              >
+                                <i className="fas fa-trash-alt text-xs" />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -2211,7 +2388,7 @@ const ExamResultsManager = ({
             <div className="px-6 py-4 border-b border-light-border bg-emerald-50/50">
               <h3 className="text-base font-bold text-dark-primary">Add Ad-Hoc Subject</h3>
               <p className="text-[11px] text-dark-muted mt-0.5">
-                Add a subject outside the formal exam schedule.
+                Add a curriculum subject outside the formal exam timetable for this class.
               </p>
             </div>
             <form onSubmit={handleAddAdHoc} className="p-6 space-y-4">
@@ -2224,14 +2401,18 @@ const ExamResultsManager = ({
                   required
                 >
                   <option value="">— Select subject —</option>
-                  {subjects
-                    .filter((s) => !classResultsIndex[String(s.id)])
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
+                  {availableAdHocSubjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.code ? `(${s.code})` : ''}
+                    </option>
+                  ))}
                 </select>
+                {availableAdHocSubjects.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                    <i className="fas fa-info-circle mr-1" />
+                    All curriculum subjects for this class are already added to the exam.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2261,7 +2442,7 @@ const ExamResultsManager = ({
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={savingAdHoc}
+                  disabled={savingAdHoc || availableAdHocSubjects.length === 0 || !adHocSubjectId}
                   className="flex-1 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition-all disabled:opacity-60 cursor-pointer"
                 >
                   {savingAdHoc ? 'Adding...' : 'Add Subject'}

@@ -43,6 +43,9 @@ const ExamResultsEntryGrid = ({
   setQuickFillValue = () => {},
   saveAllPendingChanges = () => {},
   handleQuickFill = () => {},
+  onRemoveSubject = null,
+  canRemoveSubject = false,
+  isLocked = false,
 }) => {
   // allEntries structure: { [resultId]: { [studentId]: entryObject } }
   const [allEntries, setAllEntries] = useState({});
@@ -597,6 +600,16 @@ const ExamResultsEntryGrid = ({
 
   return (
     <div className="space-y-4">
+      {/* Published Exam Lock Banner */}
+      {isLocked && (
+        <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold shadow-2xs">
+          <i className="fas fa-lock text-amber-600 text-sm shrink-0" />
+          <span>
+            Progress Report is published for this examination. Marks editing is locked for teachers.
+          </span>
+        </div>
+      )}
+
       {/* Controls & Progress Bar */}
 
       {/* Multi-Subject Table */}
@@ -646,14 +659,35 @@ const ExamResultsEntryGrid = ({
                           width: `${stats.pct}%`,
                         }}
                       />
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
                         <span className="font-black text-dark-primary text-xs">
                           {subject?.name || `Sub #${result.subject_id}`}
                         </span>
+                        {!result.is_from_schedule && (
+                          <span
+                            className="text-[8px] font-extrabold uppercase px-1 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200"
+                            title="Ad-Hoc Subject"
+                          >
+                            Ad-Hoc
+                          </span>
+                        )}
                         {!canEdit && (
                           <span title="Read-only: You do not have permission to edit marks for this subject">
                             <i className="fas fa-lock text-slate-400 text-[10px]" />
                           </span>
+                        )}
+                        {onRemoveSubject && canRemoveSubject && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveSubject(result.subject_id);
+                            }}
+                            className="w-4 h-4 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-100/70 flex items-center justify-center transition-all cursor-pointer ml-0.5"
+                            title={`Remove ${subject?.name || 'subject'} from Mark Entry (${!result.is_from_schedule ? 'Ad-Hoc' : 'Scheduled'})`}
+                          >
+                            <i className="fas fa-trash-alt text-[9px]" />
+                          </button>
                         )}
                       </div>
                       <div className="flex items-center justify-center gap-1 text-[10px] text-dark-muted font-normal mt-0.5">
