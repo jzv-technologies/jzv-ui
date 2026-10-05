@@ -657,6 +657,102 @@ const ReportCardGenerator = ({
     return isLandscape ? spec.landscape : spec.portrait;
   }, [paperSize, orientation]);
 
+  // Dynamic font sizes for mark table in print / export PDF
+  const tablePrintLabelFontSize = useMemo(() => {
+    const tbl = activeTemplate?.subjectTableConfig || {};
+    const tblSt = { ...DEFAULT_BLOCK_STYLE, ...(tbl.style || {}) };
+    const isCompact = tbl.size === 'compact';
+    return tblSt.labelFontSize || (isCompact ? 9 : 10);
+  }, [activeTemplate]);
+
+  const tablePrintContentFontSize = useMemo(() => {
+    const tbl = activeTemplate?.subjectTableConfig || {};
+    const tblSt = { ...DEFAULT_BLOCK_STYLE, ...(tbl.style || {}) };
+    const isCompact = tbl.size === 'compact';
+    return tblSt.contentFontSize || (isCompact ? 10 : 11);
+  }, [activeTemplate]);
+
+  // Dynamic font sizes for other blocks in print / export PDF
+  const schoolHeaderPrint = useMemo(() => {
+    const hdr = activeTemplate?.schoolHeader || {};
+    const isCompact = hdr.size === 'compact';
+    const isLarge = hdr.size === 'large';
+    const hdrSt = { ...DEFAULT_BLOCK_STYLE, ...(hdr.style || {}) };
+    return {
+      titleFontSize: hdrSt.contentFontSize || (isCompact ? 16 : isLarge ? 24 : 20),
+      subtitleFontSize: hdrSt.labelFontSize || (isCompact ? 10 : 11),
+      addressFontSize: hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 10,
+      examTitleFontSize: hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 9.5,
+    };
+  }, [activeTemplate]);
+
+  const studentInfoPrint = useMemo(() => {
+    const cfg = activeTemplate?.studentInfoConfig || {};
+    const isCompact = cfg.size === 'compact';
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      labelFontSize: st.labelFontSize || (isCompact ? 8.5 : 9.5),
+      contentFontSize: st.contentFontSize || (isCompact ? 10.5 : 12),
+    };
+  }, [activeTemplate]);
+
+  const summaryPrint = useMemo(() => {
+    const cfg = activeTemplate?.summaryConfig || {};
+    const isCompact = cfg.size === 'compact';
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      labelFontSize: st.labelFontSize || (isCompact ? 8 : 9),
+      contentFontSize: st.contentFontSize || (isCompact ? 12 : 14),
+    };
+  }, [activeTemplate]);
+
+  const remarksPrint = useMemo(() => {
+    const cfg = activeTemplate?.remarksConfig || {};
+    const isCompact = cfg.size === 'compact';
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      labelFontSize: st.labelFontSize || (isCompact ? 9 : 10),
+      contentFontSize: st.contentFontSize || (isCompact ? 10 : 11),
+    };
+  }, [activeTemplate]);
+
+  const signaturesPrint = useMemo(() => {
+    const cfg = activeTemplate?.signaturesConfig || {};
+    const isCompact = cfg.size === 'compact';
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      labelFontSize: st.labelFontSize || (isCompact ? 9 : 10),
+      contentFontSize: st.contentFontSize || (isCompact ? 8.5 : 9.5),
+    };
+  }, [activeTemplate]);
+
+  const attendanceBarPrint = useMemo(() => {
+    const cfg = activeTemplate?.attendanceBarConfig || {};
+    const isCompact = cfg.size === 'compact';
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      labelFontSize: st.labelFontSize || (isCompact ? 9 : 10),
+      contentFontSize: st.contentFontSize || (isCompact ? 10 : 11),
+    };
+  }, [activeTemplate]);
+
+  const gradingScalePrint = useMemo(() => {
+    const cfg = activeTemplate?.gradingScaleConfig || {};
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      fontSize: st.contentFontSize || st.labelFontSize || 8,
+    };
+  }, [activeTemplate]);
+
+  const chartPrint = useMemo(() => {
+    const cfg = activeTemplate?.chartConfig || {};
+    const isTight = !!cfg.tightMargins;
+    const st = { ...DEFAULT_BLOCK_STYLE, ...(cfg.style || {}) };
+    return {
+      titleFontSize: st.labelFontSize || (isTight ? 9 : 10),
+    };
+  }, [activeTemplate]);
+
   // Per-student Teacher Remarks & Recommendations Map
   const [studentRemarksMap, setStudentRemarksMap] = useState({});
   const [internalRemarksModalOpen, setInternalRemarksModalOpen] = useState(false);
@@ -1028,12 +1124,86 @@ const ReportCardGenerator = ({
                 margin-top: auto !important;
                 padding-top: 2mm !important;
               }
+              /* Mark Table */
               .progress-report-card-page table {
-                font-size: 9.5px !important;
+                font-size: ${tablePrintContentFontSize}px !important;
+              }
+              .progress-report-card-page thead tr,
+              .progress-report-card-page thead th {
+                font-size: ${tablePrintLabelFontSize}px !important;
+              }
+              .progress-report-card-page tbody tr,
+              .progress-report-card-page tbody td {
+                font-size: ${tablePrintContentFontSize}px !important;
               }
               .progress-report-card-page th,
               .progress-report-card-page td {
-                padding: 3px 5px !important;
+                padding: ${activeTemplate?.subjectTableConfig?.size === 'compact' ? '2px 4px' : activeTemplate?.subjectTableConfig?.size === 'spacious' ? '5px 8px' : '3px 6px'} !important;
+              }
+
+              /* School Header */
+              .progress-report-card-page .school-header-title {
+                font-size: ${schoolHeaderPrint.titleFontSize}px !important;
+              }
+              .progress-report-card-page .school-header-subtitle {
+                font-size: ${schoolHeaderPrint.subtitleFontSize}px !important;
+              }
+              .progress-report-card-page .school-header-address {
+                font-size: ${schoolHeaderPrint.addressFontSize}px !important;
+              }
+              .progress-report-card-page .school-header-exam-badge {
+                font-size: ${schoolHeaderPrint.examTitleFontSize}px !important;
+              }
+
+              /* Student Info */
+              .progress-report-card-page .student-info-label {
+                font-size: ${studentInfoPrint.labelFontSize}px !important;
+              }
+              .progress-report-card-page .student-info-value {
+                font-size: ${studentInfoPrint.contentFontSize}px !important;
+              }
+
+              /* Summary Calculations */
+              .progress-report-card-page .summary-calc-label {
+                font-size: ${summaryPrint.labelFontSize}px !important;
+              }
+              .progress-report-card-page .summary-calc-value {
+                font-size: ${summaryPrint.contentFontSize}px !important;
+              }
+
+              /* Teacher Remarks */
+              .progress-report-card-page .remarks-label {
+                font-size: ${remarksPrint.labelFontSize}px !important;
+              }
+              .progress-report-card-page .remarks-content {
+                font-size: ${remarksPrint.contentFontSize}px !important;
+              }
+
+              /* Signatures */
+              .progress-report-card-page .signature-title {
+                font-size: ${signaturesPrint.labelFontSize}px !important;
+              }
+              .progress-report-card-page .signature-subtitle {
+                font-size: ${signaturesPrint.contentFontSize}px !important;
+              }
+
+              /* Attendance Bar */
+              .progress-report-card-page .attendance-bar-label {
+                font-size: ${attendanceBarPrint.labelFontSize}px !important;
+              }
+              .progress-report-card-page .attendance-bar-content {
+                font-size: ${attendanceBarPrint.contentFontSize}px !important;
+              }
+
+              /* Charts */
+              .progress-report-card-page .chart-column-title {
+                font-size: ${chartPrint.titleFontSize}px !important;
+              }
+
+              /* Grading Scale Legend */
+              .progress-report-card-page .grading-scale-legend,
+              .progress-report-card-page .grading-scale-legend * {
+                font-size: ${gradingScalePrint.fontSize}px !important;
               }
             }
           `}</style>
@@ -1249,19 +1419,17 @@ const ReportCardGenerator = ({
                             >
                               {hdr.showTitle !== false && hdr.title && (
                                 <h1
-                                  className={`font-black tracking-tight uppercase ${
+                                  className={`font-black tracking-tight uppercase school-header-title ${
                                     isCompact
-                                      ? 'text-lg print:text-xs'
+                                      ? 'text-lg'
                                       : isLarge
-                                        ? 'text-2xl print:text-lg'
-                                        : 'text-xl sm:text-2xl print:text-base'
+                                        ? 'text-2xl'
+                                        : 'text-xl sm:text-2xl'
                                   }`}
                                   style={{
                                     color:
                                       hdrSt.contentColor || activeTemplate.accentColor || '#0f172a',
-                                    fontSize: hdrSt.contentFontSize
-                                      ? `${hdrSt.contentFontSize}px`
-                                      : undefined,
+                                    fontSize: `${schoolHeaderPrint.titleFontSize}px`,
                                   }}
                                 >
                                   {hdr.title}
@@ -1269,9 +1437,9 @@ const ReportCardGenerator = ({
                               )}
                               {hdr.showSubtitle !== false && hdr.subtitle && (
                                 <p
-                                  className="text-xs print:text-[8.5px] font-bold uppercase tracking-wider"
+                                  className="text-xs font-bold uppercase tracking-wider school-header-subtitle"
                                   style={{
-                                    fontSize: `${hdrSt.labelFontSize || 11}px`,
+                                    fontSize: `${schoolHeaderPrint.subtitleFontSize}px`,
                                     color: hdrSt.labelColor || '#64748b',
                                   }}
                                 >
@@ -1280,9 +1448,9 @@ const ReportCardGenerator = ({
                               )}
                               {hdr.showAddress !== false && hdr.address && (
                                 <p
-                                  className="text-[10px] print:text-[7.5px] font-semibold"
+                                  className="text-[10px] font-semibold school-header-address"
                                   style={{
-                                    fontSize: `${hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 10}px`,
+                                    fontSize: `${schoolHeaderPrint.addressFontSize}px`,
                                     color: hdrSt.labelColor || '#94a3b8',
                                   }}
                                 >
@@ -1292,9 +1460,10 @@ const ReportCardGenerator = ({
                               {hdr.showExamTitle !== false && (
                                 <div className="pt-1 print:pt-0.5">
                                   <span
-                                    className="inline-block px-3 py-0.5 print:py-0.2 print:px-2 rounded-full text-white text-[10px] print:text-[8px] font-black uppercase tracking-widest"
+                                    className="inline-block px-3 py-0.5 print:py-0.2 print:px-2 rounded-full text-white font-black uppercase tracking-widest school-header-exam-badge"
                                     style={{
                                       backgroundColor: activeTemplate.accentColor || '#0f172a',
+                                      fontSize: `${schoolHeaderPrint.examTitleFontSize}px`,
                                     }}
                                   >
                                     {selectedSchedule?.name ||
@@ -1380,40 +1549,40 @@ const ReportCardGenerator = ({
                               key="studentInfo"
                               className={`border border-slate-200 rounded-2xl print:rounded-lg grid grid-cols-2 ${colClass} ${
                                 isCompact
-                                  ? 'p-2.5 print:p-1.5 gap-2 print:gap-1 text-[11px] print:text-[8.5px]'
+                                  ? 'p-2.5 print:p-1.5 gap-2 print:gap-1'
                                   : isLarge
-                                    ? 'p-4 print:p-2.5 gap-3 print:gap-2 text-xs print:text-[10.5px]'
-                                    : 'p-3.5 print:p-2 gap-2.5 print:gap-1.5 text-xs print:text-[10px]'
+                                    ? 'p-4 print:p-2.5 gap-3 print:gap-2'
+                                    : 'p-3.5 print:p-2 gap-2.5 print:gap-1.5'
                               }`}
                               style={bleed.innerBgStyle('#f8fafc')}
                             >
                               {flds.name !== false && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Student Name
                                   </span>
-                                  <span className="font-black" style={siValueStyle}>
+                                  <span className="font-black student-info-value" style={siValueStyle}>
                                     {student.student_name}
                                   </span>
                                 </div>
                               )}
                               {flds.admissionNo !== false && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Admission No
                                   </span>
-                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                  <span className="font-mono font-bold student-info-value" style={siValueStyle}>
                                     {student.admission_no}
                                   </span>
                                 </div>
                               )}
                               {flds.className !== false && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Class & Section
                                   </span>
                                   <span
-                                    className="font-bold"
+                                    className="font-bold student-info-value"
                                     style={{
                                       ...siValueStyle,
                                       color: siSt.contentColor || '#be123c',
@@ -1425,61 +1594,61 @@ const ReportCardGenerator = ({
                               )}
                               {flds.rollNo !== false && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Roll No
                                   </span>
-                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                  <span className="font-mono font-bold student-info-value" style={siValueStyle}>
                                     #{student.roll_no || studentIdx + 1}
                                   </span>
                                 </div>
                               )}
                               {flds.fatherName && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Father / Guardian
                                   </span>
-                                  <span className="font-bold" style={siValueStyle}>
+                                  <span className="font-bold student-info-value" style={siValueStyle}>
                                     {student.father_name || '—'}
                                   </span>
                                 </div>
                               )}
                               {flds.dob && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Date of Birth
                                   </span>
-                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                  <span className="font-mono font-bold student-info-value" style={siValueStyle}>
                                     {student.dob || '—'}
                                   </span>
                                 </div>
                               )}
                               {flds.gender && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Gender
                                   </span>
-                                  <span className="font-bold" style={siValueStyle}>
+                                  <span className="font-bold student-info-value" style={siValueStyle}>
                                     {student.gender || '—'}
                                   </span>
                                 </div>
                               )}
                               {flds.bloodGroup && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Blood Group
                                   </span>
-                                  <span className="font-mono font-bold" style={siValueStyle}>
+                                  <span className="font-mono font-bold student-info-value" style={siValueStyle}>
                                     {student.blood_group || '—'}
                                   </span>
                                 </div>
                               )}
                               {flds.attendance && (
                                 <div>
-                                  <span className="font-bold uppercase block" style={siLabelStyle}>
+                                  <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
                                     Attendance
                                   </span>
                                   <span
-                                    className="font-mono font-bold"
+                                    className="font-mono font-bold student-info-value"
                                     style={{
                                       ...siValueStyle,
                                       color: siSt.contentColor || '#047857',
@@ -1513,15 +1682,15 @@ const ReportCardGenerator = ({
                           const isCompact = tbl.size === 'compact';
                           const isSpacious = tbl.size === 'spacious';
                           const cellPad = isCompact
-                            ? 'py-1 print:py-0.5 px-2 print:px-1'
+                            ? 'py-1 px-2'
                             : isSpacious
-                              ? 'py-2 print:py-1 px-3 print:px-2'
-                              : 'py-1.5 print:py-0.5 px-2.5 print:px-1.5';
+                              ? 'py-2 px-3'
+                              : 'py-1.5 px-2.5';
                           const fontClass = isCompact
-                            ? 'text-[10px] print:text-[8.5px]'
+                            ? 'text-[10px]'
                             : isSpacious
-                              ? 'text-xs print:text-[10.5px]'
-                              : 'text-xs print:text-[9.5px]';
+                              ? 'text-xs'
+                              : 'text-xs';
                           const activeCols = getActiveTableColumns(tbl);
 
                           const showOutline = tbl.showOutlineBorder !== false;
@@ -1563,10 +1732,10 @@ const ReportCardGenerator = ({
                                 className="overflow-x-auto rounded-xl print:rounded-lg"
                                 style={{ border: outlineStyle }}
                               >
-                                <table className={`w-full ${fontClass} border-collapse`}>
+                                <table className={`w-full ${fontClass} border-collapse`} style={{ ...tblValueStyle }}>
                                   <thead>
                                     <tr
-                                      className="font-black text-[10px] print:text-[8.5px] uppercase tracking-wider"
+                                      className="font-black uppercase tracking-wider"
                                       style={{
                                         backgroundColor:
                                           activeTemplate.subjectTableConfig?.headerBgColor ||
@@ -1596,7 +1765,7 @@ const ReportCardGenerator = ({
                                             <th
                                               key={colId}
                                               className={`${cellPad} text-left`}
-                                              style={thBorder}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1608,7 +1777,7 @@ const ReportCardGenerator = ({
                                               key={colId}
                                               className={`${cellPad} text-center font-arabic`}
                                               dir="rtl"
-                                              style={thBorder}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1618,8 +1787,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-20 print:w-14`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-20`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1629,8 +1798,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-20 print:w-14`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-20`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1640,8 +1809,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-24 print:w-16`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-24`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1651,8 +1820,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-16 print:w-12`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-16`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1662,8 +1831,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-16 print:w-12`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-16`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1673,8 +1842,8 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center w-20 print:w-14`}
-                                              style={thBorder}
+                                              className={`${cellPad} text-center w-20`}
+                                              style={{ ...tblLabelStyle, ...thBorder }}
                                             >
                                               {headerText}
                                             </th>
@@ -1689,19 +1858,21 @@ const ReportCardGenerator = ({
                                     {groupedSections.map((grp) => (
                                       <React.Fragment key={grp.groupName}>
                                         <tr
-                                          className="font-black text-[11px] print:text-[9px] text-dark-primary"
+                                          className="font-black text-dark-primary"
                                           style={{
                                             backgroundColor: hexToRgba('#ffe4e6', 0.6),
                                             borderBottom: inlineBorderBottom,
+                                            ...tblLabelStyle,
                                           }}
                                         >
                                           <td
                                             colSpan={activeCols.length}
-                                            className="py-1 print:py-0.5 px-2.5 print:px-1.5 uppercase tracking-wider text-rose-900"
+                                            className="py-1 px-2.5 uppercase tracking-wider text-rose-900"
+                                            style={{ ...tblLabelStyle }}
                                           >
                                             <i className="fas fa-layer-group text-[10px] mr-1.5 text-rose-600" />
                                             <span>Group: {grp.groupName}</span>
-                                            <span className="ml-3 font-normal text-[10px] print:text-[8px] text-dark-muted">
+                                            <span className="ml-3 font-normal opacity-80">
                                               (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} ·{' '}
                                               {grp.groupPct}%)
                                             </span>
@@ -1736,7 +1907,7 @@ const ReportCardGenerator = ({
                                                     key={colId}
                                                     className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
                                                     dir="rtl"
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {s.arabicName || '—'}
                                                   </td>
@@ -1747,7 +1918,7 @@ const ReportCardGenerator = ({
                                                   <td
                                                     key={colId}
                                                     className={`${cellPad} text-center font-mono`}
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {s.maxMarks}
                                                   </td>
@@ -1758,7 +1929,7 @@ const ReportCardGenerator = ({
                                                   <td
                                                     key={colId}
                                                     className={`${cellPad} text-center font-mono`}
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {s.passMarks || '—'}
                                                   </td>
@@ -1795,7 +1966,7 @@ const ReportCardGenerator = ({
                                                           ? 'text-amber-600'
                                                           : 'text-dark-primary'
                                                     }`}
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {showBar && (
                                                       <div
@@ -1826,7 +1997,7 @@ const ReportCardGenerator = ({
                                                   <td
                                                     key={colId}
                                                     className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {typeof s.marksObtained === 'number' &&
                                                     s.maxMarks > 0
@@ -1840,7 +2011,7 @@ const ReportCardGenerator = ({
                                                   <td
                                                     key={colId}
                                                     className={`${cellPad} text-center font-bold text-emerald-700`}
-                                                    style={tdBorder}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     {s.grade}
                                                   </td>
@@ -1850,8 +2021,8 @@ const ReportCardGenerator = ({
                                                 return (
                                                   <td
                                                     key={colId}
-                                                    className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}
-                                                    style={tdBorder}
+                                                    className={`${cellPad} text-center font-bold`}
+                                                    style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
                                                     <span
                                                       className={
@@ -1907,7 +2078,7 @@ const ReportCardGenerator = ({
                                                   key={colId}
                                                   className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
                                                   dir="rtl"
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {s.arabicName || '—'}
                                                 </td>
@@ -1918,7 +2089,7 @@ const ReportCardGenerator = ({
                                                 <td
                                                   key={colId}
                                                   className={`${cellPad} text-center font-mono`}
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {s.maxMarks}
                                                 </td>
@@ -1929,7 +2100,7 @@ const ReportCardGenerator = ({
                                                 <td
                                                   key={colId}
                                                   className={`${cellPad} text-center font-mono`}
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {s.passMarks || '—'}
                                                 </td>
@@ -1965,7 +2136,7 @@ const ReportCardGenerator = ({
                                                         ? 'text-amber-600'
                                                         : 'text-dark-primary'
                                                   }`}
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {showBar && (
                                                     <div
@@ -1996,7 +2167,7 @@ const ReportCardGenerator = ({
                                                 <td
                                                   key={colId}
                                                   className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {typeof s.marksObtained === 'number' &&
                                                   s.maxMarks > 0
@@ -2010,7 +2181,7 @@ const ReportCardGenerator = ({
                                                 <td
                                                   key={colId}
                                                   className={`${cellPad} text-center font-bold text-emerald-700`}
-                                                  style={tdBorder}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   {s.grade}
                                                 </td>
@@ -2020,8 +2191,8 @@ const ReportCardGenerator = ({
                                               return (
                                                 <td
                                                   key={colId}
-                                                  className={`${cellPad} text-center font-bold text-[10px] print:text-[8.5px]`}
-                                                  style={tdBorder}
+                                                  className={`${cellPad} text-center font-bold`}
+                                                  style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
                                                   <span
                                                     className={
@@ -2126,19 +2297,19 @@ const ReportCardGenerator = ({
                                 return (
                                   <div key={key}>
                                     <span
-                                      className="font-bold uppercase block"
+                                      className="font-bold uppercase block summary-calc-label"
                                       style={{
-                                        fontSize: `${sumStyle.labelFontSize || (isCompact ? 8 : 9)}px`,
+                                        fontSize: `${summaryPrint.labelFontSize}px`,
                                         color: sumStyle.labelColor || '#94a3b8',
                                       }}
                                     >
                                       {item.label}
                                     </span>
                                     <span
-                                      className="font-black font-mono"
+                                      className="font-black font-mono summary-calc-value"
                                       style={{
                                         color: item.color || sumStyle.contentColor || '#ffffff',
-                                        fontSize: `${sumStyle.contentFontSize || (isCompact ? 12 : 14)}px`,
+                                        fontSize: `${summaryPrint.contentFontSize}px`,
                                       }}
                                     >
                                       {item.value}
@@ -3164,7 +3335,11 @@ const ReportCardGenerator = ({
                                       >
                                         {colCfg.title && (
                                           <h5
-                                            className={`${isTight ? 'text-[9.5px] print:text-[7.5px] mb-0.5' : 'text-[10px] print:text-[8px] mb-1'} font-black text-dark-primary uppercase tracking-wider text-center`}
+                                            className="font-black text-dark-primary uppercase tracking-wider text-center chart-column-title mb-1"
+                                            style={{
+                                              fontSize: `${chartPrint.titleFontSize}px`,
+                                              color: chSt.labelColor || undefined,
+                                            }}
                                           >
                                             {colCfg.title}
                                           </h5>
@@ -3208,10 +3383,10 @@ const ReportCardGenerator = ({
                             >
                               <div className="flex items-center justify-between">
                                 <span
-                                  className="text-[10px] print:text-[7.5px] font-black uppercase tracking-wider block"
+                                  className="font-black uppercase tracking-wider block remarks-label"
                                   style={{
                                     color: rmkSt.labelColor || '#78350f',
-                                    fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                    fontSize: `${remarksPrint.labelFontSize}px`,
                                   }}
                                 >
                                   {rmk.title || "Teacher's Remarks"}:
@@ -3234,10 +3409,10 @@ const ReportCardGenerator = ({
                                 </button>
                               </div>
                               <p
-                                className="text-xs print:text-[9.5px] italic font-medium"
+                                className="italic font-medium remarks-content"
                                 style={{
                                   color: rmkSt.contentColor || '#0f172a',
-                                  fontSize: `${rmkSt.contentFontSize || (isCompact ? 10 : 11)}px`,
+                                  fontSize: `${remarksPrint.contentFontSize}px`,
                                 }}
                               >
                                 &quot;{effectiveRemarks}&quot;
@@ -3246,19 +3421,19 @@ const ReportCardGenerator = ({
                               {rmk.showRecommendations !== false && effectiveRecommendations && (
                                 <div className="pt-1.5 border-t border-amber-200/60 print:pt-0.5">
                                   <span
-                                    className="text-[10px] print:text-[7.5px] font-black uppercase tracking-wider block"
+                                    className="font-black uppercase tracking-wider block remarks-label"
                                     style={{
                                       color: rmkSt.labelColor || '#78350f',
-                                      fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                      fontSize: `${remarksPrint.labelFontSize}px`,
                                     }}
                                   >
                                     {rmk.recommendationsTitle || 'Recommendations'}:
                                   </span>
                                   <p
-                                    className="text-xs print:text-[9.5px] italic font-medium"
+                                    className="italic font-medium remarks-content"
                                     style={{
                                       color: rmkSt.contentColor || '#0f172a',
-                                      fontSize: `${rmkSt.contentFontSize || (isCompact ? 10 : 11)}px`,
+                                      fontSize: `${remarksPrint.contentFontSize}px`,
                                     }}
                                   >
                                     &quot;{effectiveRecommendations}&quot;
@@ -3268,9 +3443,9 @@ const ReportCardGenerator = ({
 
                               {rmk.showPromotion && (
                                 <p
-                                  className="mt-1 font-bold uppercase tracking-wider"
+                                  className="mt-1 font-bold uppercase tracking-wider remarks-content"
                                   style={{
-                                    fontSize: `${rmkSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                    fontSize: `${remarksPrint.labelFontSize}px`,
                                     color: rmkSt.contentColor || '#065f46',
                                   }}
                                 >
@@ -3330,7 +3505,7 @@ const ReportCardGenerator = ({
                           return (
                             <div
                               key="signatures"
-                              className={`report-card-signatures ${ptClass} grid gap-4 print:gap-2 text-center text-xs print:text-[8.5px] ${
+                              className={`report-card-signatures ${ptClass} grid gap-4 print:gap-2 text-center ${
                                 activeSigs.length === 1 ? 'max-w-xs mx-auto' : ''
                               }`}
                               style={{
@@ -3344,15 +3519,20 @@ const ReportCardGenerator = ({
                                   className="border-t border-slate-900 pt-1.5 print:pt-0.5 space-y-0.5"
                                 >
                                   <span
-                                    className="font-bold text-dark-slate block truncate"
+                                    className="font-bold text-dark-slate block truncate signature-title"
                                     style={{
-                                      fontSize: `${sigSt.labelFontSize || (isCompact ? 9 : 10)}px`,
+                                      fontSize: `${signaturesPrint.labelFontSize}px`,
                                       color: sigSt.labelColor || undefined,
                                     }}
                                   >
                                     {sig.title}
                                   </span>
-                                  <span className="text-[10px] print:text-[7.5px] text-dark-muted">
+                                  <span
+                                    className="text-dark-muted block truncate signature-subtitle"
+                                    style={{
+                                      fontSize: `${signaturesPrint.contentFontSize}px`,
+                                    }}
+                                  >
                                     {sig.subtitle}
                                   </span>
                                 </div>
@@ -3383,15 +3563,22 @@ const ReportCardGenerator = ({
 
                   {/* Optional Grading Scale Legend on Printed Card */}
                   {activeTemplate.showGradingScale && activeTemplate.gradingScale?.length > 0 && (
-                    <div className="pt-2 print:pt-1 border-t border-slate-200 print:border-slate-300">
-                      <span className="text-[9px] print:text-[7px] font-black uppercase text-dark-muted block mb-0.5">
+                    <div className="pt-2 print:pt-1 border-t border-slate-200 print:border-slate-300 grading-scale-legend">
+                      <span
+                        className="font-black uppercase text-dark-muted block mb-0.5"
+                        style={{ fontSize: `${gradingScalePrint.fontSize}px` }}
+                      >
                         Grading Criteria Legend:
                       </span>
-                      <div className="flex flex-wrap gap-1.5 text-[9px] print:text-[7px] text-dark-slate">
+                      <div
+                        className="flex flex-wrap gap-1.5 text-dark-slate"
+                        style={{ fontSize: `${gradingScalePrint.fontSize}px` }}
+                      >
                         {activeTemplate.gradingScale.map((g) => (
                           <span
                             key={g.grade}
                             className="bg-slate-100 print:bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200 font-bold"
+                            style={{ fontSize: `${gradingScalePrint.fontSize}px` }}
                           >
                             <strong>{g.grade}</strong> ({g.minPercentage}% - {g.maxPercentage}%
                             {g.description ? ` · ${g.description}` : ''})

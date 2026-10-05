@@ -23,6 +23,7 @@ import LessonManager from '../syllabus/lesson-manager/LessonManager';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
+import ExamScheduleViewer from '../examinations/ExamScheduleViewer';
 import ExamResultsManager from '../examinations/ExamResultsManager';
 import ReportCardDesigner from '../examinations/ReportCardDesigner';
 import ExamAnalysisManager from '../examinations/ExamAnalysisManager';
@@ -279,10 +280,23 @@ export const UnifiedPortal = ({
         );
 
       case 'timetable-planner':
-      case 'timetable-viewer':
+        if (!isAdmin && !isManagement && !userRoles.includes('coordinator')) {
+          return (
+            <div data-feature="timetable-viewer">
+              <TeacherTimetableViewer user={user} />
+            </div>
+          );
+        }
         return (
           <div data-feature="timetable-planner">
-            <TimetableManager userRoles={userRoles} user={user} />
+            <TimetableManager userRoles={userRoles} user={user} initialTab="scheduler" />
+          </div>
+        );
+
+      case 'timetable-viewer':
+        return (
+          <div data-feature="timetable-viewer">
+            <TeacherTimetableViewer user={user} />
           </div>
         );
 
@@ -491,6 +505,13 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="exam-schedule">
             <ExamScheduleManager user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
+          </div>
+        );
+
+      case 'exam-schedule-viewer':
+        return (
+          <div data-feature="exam-schedule-viewer">
+            <ExamScheduleViewer user={user} userRoles={userRoles} teacherRecord={teacherRecord} />
           </div>
         );
 

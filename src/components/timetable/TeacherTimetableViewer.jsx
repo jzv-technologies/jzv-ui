@@ -28,31 +28,66 @@ const TeacherTimetableViewer = ({ user }) => {
   const loadMockFallback = () => {
     console.log('Loading mock timetable data in Teacher portal...');
     const raw = localStorage.getItem(TIMETABLE_STORAGE_KEY);
+    let parsed = null;
     if (raw) {
       try {
-        const parsed = JSON.parse(raw);
-        if (parsed.classes?.length > 0 && parsed.slots?.length > 0) {
-          setSubjects(parsed.subjects || []);
-          setTeachers(parsed.teachers || []);
-          setClasses(parsed.classes || []);
-          setPeriods(parsed.periods || DEFAULT_MOCK_PERIODS);
-          setSlots(parsed.slots || []);
-          setAssignments(parsed.assignments || DEFAULT_MOCK_ASSIGNMENTS);
-          setClassifications(parsed.classifications || []);
-          return;
-        }
+        parsed = JSON.parse(raw);
       } catch (e) {
         console.error('Failed to parse local storage in teacher view', e);
       }
     }
-    setSubjects(DEFAULT_MOCK_SUBJECTS);
-    setTeachers(DEFAULT_MOCK_TEACHERS);
-    setClasses(DEFAULT_MOCK_CLASSES);
-    setPeriods(DEFAULT_MOCK_PERIODS);
-    setSlots(MOCK_SLOTS);
-    setAssignments(DEFAULT_MOCK_ASSIGNMENTS);
-    setClassifications([]);
-    localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(MOCK_TIMETABLE_STATE));
+
+    const rawTeachers = parsed?.teachers?.length > 0 ? parsed.teachers : DEFAULT_MOCK_TEACHERS;
+    // Map current user to teacher if user is logged in
+    const mappedTeachers = rawTeachers.map((t, idx) => {
+      if (user?.id && (idx === 0 || (user.email && t.email === user.email))) {
+        return { ...t, auth_id: user.id };
+      }
+      return t;
+    });
+
+    setSubjects(parsed?.subjects?.length > 0 ? parsed.subjects : DEFAULT_MOCK_SUBJECTS);
+    setTeachers(mappedTeachers);
+    setClasses(parsed?.classes?.length > 0 ? parsed.classes : DEFAULT_MOCK_CLASSES);
+    setPeriods(parsed?.periods?.length > 0 ? parsed.periods : DEFAULT_MOCK_PERIODS);
+    setSlots(parsed?.slots?.length > 0 ? parsed.slots : MOCK_SLOTS);
+    setAssignments(parsed?.assignments?.length > 0 ? parsed.assignments : DEFAULT_MOCK_ASSIGNMENTS);
+    setClassifications(parsed?.classifications || []);
+
+    const localRawSeasons = localStorage.getItem('jzv_timetable_seasons_config');
+    let seasonsCfg = null;
+    if (localRawSeasons) {
+      try {
+        seasonsCfg = JSON.parse(localRawSeasons);
+      } catch (e) {}
+    }
+    if (!seasonsCfg) {
+      seasonsCfg = {
+        active_season_id: 'summer',
+        seasons: {
+          summer: {
+            id: 'summer',
+            name: 'Summer',
+            periods: parsed?.periods?.length > 0 ? parsed.periods : DEFAULT_MOCK_PERIODS,
+            slots: parsed?.slots?.length > 0 ? parsed.slots : MOCK_SLOTS,
+            weekday_config: {
+              Monday: 'Weekday',
+              Tuesday: 'Weekday',
+              Wednesday: 'Weekday',
+              Thursday: 'Weekday',
+              Friday: 'Weekday',
+              Saturday: 'Working Weekend',
+              Sunday: 'Holiday Weekend',
+            },
+          },
+        },
+      };
+    }
+    setSeasonsConfig(seasonsCfg);
+
+    if (!raw) {
+      localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(MOCK_TIMETABLE_STATE));
+    }
   };
 
   const fetchTimetableData = async (isInitial = false) => {
@@ -67,8 +102,8 @@ const TeacherTimetableViewer = ({ user }) => {
         .select('id')
         .limit(1);
 
-      if (testErr) {
-        throw new Error('Supabase tables not found. Loading local data.');
+      if (testErr || !testClass || testClass.length === 0) {
+        throw new Error('Supabase classes empty or not accessible. Loading local data.');
       }
 
       const [

@@ -84,9 +84,10 @@ export const renderSchoolHeaderPreview = ({ bleed, blockSize, currentConfig }) =
       {hdr?.showExamTitle !== false && (
         <div className="pt-1">
           <span
-            className="inline-block px-3 py-0.5 rounded-full text-white text-[10px] font-black uppercase tracking-widest"
+            className="inline-block px-3 py-0.5 rounded-full text-white font-black uppercase tracking-widest"
             style={{
               backgroundColor: currentConfig.accentColor || '#0f172a',
+              fontSize: `${hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 9.5}px`,
             }}
           >
             {hdr?.examTitle || 'Official Progress Report'}

@@ -110,7 +110,7 @@ export const AttendanceHorizontalStackBar = ({
             <div className="flex items-center gap-1.5">
               <i className="fas fa-chart-gantt text-rose-500 text-[10px]" />
               <span
-                className="font-black uppercase tracking-wider block"
+                className="font-black uppercase tracking-wider block attendance-bar-label"
                 style={{
                   fontSize: labelFontSize,
                   color: style?.labelColor || '#334155',
@@ -125,17 +125,24 @@ export const AttendanceHorizontalStackBar = ({
             <div className="flex items-center gap-2 ml-auto">
               {hasRecordedAttendance ? (
                 <>
-                  <span className="text-[9px] font-bold text-dark-muted hidden sm:inline">
+                  <span
+                    className="font-bold text-dark-muted hidden sm:inline attendance-bar-label"
+                    style={{ fontSize: labelFontSize }}
+                  >
                     {presentDays} / {totalDays} Days
                   </span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[9.5px] font-black border uppercase tracking-wider ${badgeBg}`}
+                    className={`px-2 py-0.5 rounded-full font-black border uppercase tracking-wider ${badgeBg} attendance-bar-label`}
+                    style={{ fontSize: labelFontSize }}
                   >
                     {presentPct.toFixed(1)}% Attended
                   </span>
                 </>
               ) : (
-                <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold border uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200">
+                <span
+                  className="px-2 py-0.5 rounded-full font-bold border uppercase tracking-wider bg-slate-100 text-slate-500 border-slate-200 attendance-bar-label"
+                  style={{ fontSize: labelFontSize }}
+                >
                   Not Recorded
                 </span>
               )}
@@ -212,10 +219,21 @@ export const AttendanceHorizontalStackBar = ({
 
       {/* ── Stats Chip Row ── */}
       {showStats && (
-        <div className="flex flex-wrap items-center justify-between gap-1.5 mt-2 pt-1.5 border-t border-slate-200/70 text-[9.5px]">
+        <div
+          className="flex flex-wrap items-center justify-between gap-1.5 mt-2 pt-1.5 border-t border-slate-200/70"
+          style={{ fontSize: labelFontSize }}
+        >
           <div className="flex items-center gap-1 font-bold text-dark-muted">
-            <span className="text-[9px] uppercase tracking-wider">Working Days:</span>
-            <span className="font-black text-dark-primary font-mono">
+            <span
+              className="uppercase tracking-wider attendance-bar-label"
+              style={{ fontSize: labelFontSize }}
+            >
+              Working Days:
+            </span>
+            <span
+              className="font-black text-dark-primary font-mono attendance-bar-content"
+              style={{ fontSize: contentFontSize }}
+            >
               {hasRecordedAttendance && totalDays > 0 ? totalDays : '—'}
             </span>
           </div>
@@ -226,10 +244,15 @@ export const AttendanceHorizontalStackBar = ({
                 className="w-2 h-2 rounded-full inline-block"
                 style={{ backgroundColor: presentColor }}
               />
-              <span className="font-bold text-dark-slate">Present:</span>
               <span
-                className="font-black font-mono"
-                style={{ color: style?.contentColor || '#0f172a' }}
+                className="font-bold text-dark-slate attendance-bar-label"
+                style={{ fontSize: labelFontSize }}
+              >
+                Present:
+              </span>
+              <span
+                className="font-black font-mono attendance-bar-content"
+                style={{ color: style?.contentColor || '#0f172a', fontSize: contentFontSize }}
               >
                 {hasRecordedAttendance ? `${presentDays} (${presentPct.toFixed(1)}%)` : '—'}
               </span>
@@ -241,10 +264,15 @@ export const AttendanceHorizontalStackBar = ({
                   className="w-2 h-2 rounded-full inline-block"
                   style={{ backgroundColor: leaveColor }}
                 />
-                <span className="font-bold text-dark-slate">Leave:</span>
                 <span
-                  className="font-black font-mono"
-                  style={{ color: style?.contentColor || '#0f172a' }}
+                  className="font-bold text-dark-slate attendance-bar-label"
+                  style={{ fontSize: labelFontSize }}
+                >
+                  Leave:
+                </span>
+                <span
+                  className="font-black font-mono attendance-bar-content"
+                  style={{ color: style?.contentColor || '#0f172a', fontSize: contentFontSize }}
                 >
                   {hasRecordedAttendance ? `${leaveDays} (${leavePct.toFixed(1)}%)` : '—'}
                 </span>
@@ -256,10 +284,15 @@ export const AttendanceHorizontalStackBar = ({
                 className="w-2 h-2 rounded-full inline-block"
                 style={{ backgroundColor: absentColor }}
               />
-              <span className="font-bold text-dark-slate">Absent:</span>
               <span
-                className="font-black font-mono"
-                style={{ color: style?.contentColor || '#0f172a' }}
+                className="font-bold text-dark-slate attendance-bar-label"
+                style={{ fontSize: labelFontSize }}
+              >
+                Absent:
+              </span>
+              <span
+                className="font-black font-mono attendance-bar-content"
+                style={{ color: style?.contentColor || '#0f172a', fontSize: contentFontSize }}
               >
                 {hasRecordedAttendance ? `${absentDays} (${absentPct.toFixed(1)}%)` : '—'}
               </span>

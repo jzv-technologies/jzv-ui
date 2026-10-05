@@ -51,6 +51,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
       <div className="overflow-x-auto rounded-xl" style={{ border: outlineStyle }}>
         <table
           className={`w-full text-left border-collapse ${isCompact ? 'text-[10px]' : 'text-xs'}`}
+          style={{ ...tblValueStyle }}
         >
           <thead
             className="text-[10px] uppercase font-black tracking-wider"
@@ -75,7 +76,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                   colId;
                 if (colId === 'subject') {
                   return (
-                    <th key={colId} className={`${cellPad}`} style={thBorder}>
+                    <th key={colId} className={`${cellPad}`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
@@ -86,7 +87,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                       key={colId}
                       className={`${cellPad} text-center font-arabic`}
                       dir="rtl"
-                      style={thBorder}
+                      style={{ ...tblLabelStyle, ...thBorder }}
                     >
                       {headerText}
                     </th>
@@ -94,42 +95,42 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                 }
                 if (colId === 'maxMarks') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
                 }
                 if (colId === 'passMarks') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
                 }
                 if (colId === 'marksObtained') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
                 }
                 if (colId === 'percentage') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
                 }
                 if (colId === 'grade') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
                 }
                 if (colId === 'status') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center`} style={thBorder}>
+                    <th key={colId} className={`${cellPad} text-center`} style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
@@ -143,14 +144,15 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
             {previewData.sections.map((grp) => (
               <React.Fragment key={grp.groupName}>
                 <tr
-                  className="font-black text-[10px] text-rose-900"
+                  className="font-black text-rose-900"
                   style={{
                     backgroundColor: hexToRgba('#ffe4e6', 0.6),
                     borderBottom: inlineBorderBottom,
+                    ...tblLabelStyle,
                   }}
                 >
-                  <td colSpan={activeCols.length} className="py-1 px-2.5 uppercase tracking-wider">
-                    <i className="fas fa-layer-group text-[9px] mr-1.5 text-rose-600" />
+                  <td colSpan={activeCols.length} className="py-1 px-2.5 uppercase tracking-wider" style={{ ...tblLabelStyle }}>
+                    <i className="fas fa-layer-group mr-1.5 text-rose-600" />
                     <span>Group: {grp.groupName}</span>
                     <span className="ml-2 font-normal text-slate-600">
                       (Subtotal: {grp.groupTotalObt} / {grp.groupTotalMax} · {grp.groupPct}%)
@@ -184,7 +186,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                             key={colId}
                             className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
                             dir="rtl"
-                            style={tdBorder}
+                            style={{ ...tblValueStyle, ...tdBorder }}
                           >
                             {s.arabicName || s.arabic_name || '—'}
                           </td>
@@ -195,7 +197,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           <td
                             key={colId}
                             className={`${cellPad} text-center font-mono`}
-                            style={tdBorder}
+                            style={{ ...tblValueStyle, ...tdBorder }}
                           >
                             {s.maxMarks}
                           </td>
@@ -206,7 +208,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           <td
                             key={colId}
                             className={`${cellPad} text-center font-mono`}
-                            style={tdBorder}
+                            style={{ ...tblValueStyle, ...tdBorder }}
                           >
                             {s.passMarks}
                           </td>
@@ -235,7 +237,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           <td
                             key={colId}
                             className={`${cellPad} text-center font-black text-dark-primary font-mono relative overflow-hidden`}
-                            style={tdBorder}
+                            style={{ ...tblValueStyle, ...tdBorder }}
                           >
                             {showBar && (
                               <div
@@ -263,7 +265,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           <td
                             key={colId}
                             className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
-                            style={tdBorder}
+                            style={{ ...tblValueStyle, ...tdBorder }}
                           >
                             {Math.round((s.marksObtained / s.maxMarks) * 100)}%
                           </td>
@@ -275,6 +277,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                             key={colId}
                             className={`${cellPad} text-center font-bold`}
                             style={{
+                              ...tblValueStyle,
                               color: tblSt.contentColor || '#047857',
                               ...tdBorder,
                             }}
@@ -289,7 +292,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                             key={colId}
                             className={`${cellPad} text-center font-bold`}
                             style={{
-                              fontSize: `${tblSt.labelFontSize || 10}px`,
+                              ...tblValueStyle,
                               color: tblSt.contentColor || '#047857',
                               ...tdBorder,
                             }}
@@ -336,7 +339,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           key={colId}
                           className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
                           dir="rtl"
-                          style={tdBorder}
+                          style={{ ...tblValueStyle, ...tdBorder }}
                         >
                           {s.arabicName || s.arabic_name || '—'}
                         </td>
@@ -347,7 +350,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         <td
                           key={colId}
                           className={`${cellPad} text-center font-mono`}
-                          style={tdBorder}
+                          style={{ ...tblValueStyle, ...tdBorder }}
                         >
                           {s.maxMarks}
                         </td>
@@ -358,7 +361,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         <td
                           key={colId}
                           className={`${cellPad} text-center font-mono`}
-                          style={tdBorder}
+                          style={{ ...tblValueStyle, ...tdBorder }}
                         >
                           {s.passMarks}
                         </td>
@@ -387,7 +390,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         <td
                           key={colId}
                           className={`${cellPad} text-center font-black text-dark-primary font-mono relative overflow-hidden`}
-                          style={tdBorder}
+                          style={{ ...tblValueStyle, ...tdBorder }}
                         >
                           {showBar && (
                             <div
@@ -415,7 +418,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         <td
                           key={colId}
                           className={`${cellPad} text-center font-mono font-bold text-dark-slate`}
-                          style={tdBorder}
+                          style={{ ...tblValueStyle, ...tdBorder }}
                         >
                           {Math.round((s.marksObtained / s.maxMarks) * 100)}%
                         </td>
@@ -427,6 +430,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           key={colId}
                           className={`${cellPad} text-center font-bold`}
                           style={{
+                            ...tblValueStyle,
                             color: tblSt.contentColor || '#047857',
                             ...tdBorder,
                           }}
@@ -441,7 +445,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                           key={colId}
                           className={`${cellPad} text-center font-bold`}
                           style={{
-                            fontSize: `${tblSt.labelFontSize || 10}px`,
+                            ...tblValueStyle,
                             color: tblSt.contentColor || '#047857',
                             ...tdBorder,
                           }}

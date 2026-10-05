@@ -9,12 +9,112 @@ import {
   invalidateDynamicFormConfigsCache,
 } from '../utils/dynamicFormConfigs';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v19';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v23';
+
+export const STATIC_MANAGED_COMPONENTS = new Set([
+  'academic-calendar',
+  'avc-admin-links',
+  'avc-admin-manager',
+  'calendar-manage-events',
+  'class-schedule',
+  'classes-setup',
+  'dashboard',
+  'emp-add-record',
+  'emp-bulk-import',
+  'emp-delete-record',
+  'emp-edit-record',
+  'emp-edit-roles',
+  'emp-salary-increment',
+  'emp-tab-records',
+  'emp-tab-roles',
+  'emp-tab-salary',
+  'employee-management',
+  'exam-analysis',
+  'exam-analysis-export',
+  'exam-analysis-tab-compare',
+  'exam-analysis-tab-marks',
+  'exam-analysis-tab-std-dev',
+  'exam-attendance-edit',
+  'exam-attendance-upload',
+  'exam-mark-entry-tab',
+  'exam-progress-report',
+  'exam-progress-report-publish',
+  'exam-remarks-edit',
+  'exam-remarks-upload',
+  'exam-results',
+  'exam-results-adhoc',
+  'exam-results-edit-marks',
+  'exam-results-marking-scheme',
+  'exam-results-quick-fill',
+  'exam-results-status-override',
+  'exam-results-tab-attendance',
+  'exam-results-tab-remarks',
+  'exam-results-tab-summary',
+  'exam-sched-publish',
+  'exam-sched-slot-edit',
+  'exam-sched-tab-coverage',
+  'exam-sched-tab-notice-print',
+  'exam-sched-tab-scheduler',
+  'exam-sched-tab-setup',
+  'exam-sched-tab-teacher',
+  'exam-schedule',
+  'exam-schedule-viewer',
+  'form-configurations',
+  'job-applications',
+  'lesson-planner',
+  'manage-user-roles',
+  'my-tickets',
+  'personal-info',
+  'registered-complaints',
+  'report-card-designer',
+  'report-card-designer-edit',
+  'requests-exceptions',
+  'salary-tracker',
+  'scheduler-setup',
+  'season-setup',
+  'student-add-record',
+  'student-delete-record',
+  'student-edit-record',
+  'student-fees',
+  'student-fees-edit',
+  'student-records',
+  'student-tab-fees',
+  'student-tab-records',
+  'switch-teachers',
+  'syl-add-daily-work',
+  'syl-carry-forward-action',
+  'syl-delete-log-entry',
+  'syl-edit-content',
+  'syl-manage-books',
+  'syl-manage-subjects',
+  'syl-tab-lesson-planner',
+  'syl-tab-my-activity',
+  'syl-tab-parent-recent',
+  'syl-tab-syllabus-progress',
+  'syl-tab-teacher-activity',
+  'syl-tab-teacher-adherence',
+  'syl-tab-upcoming-lessons',
+  'syl-teacher-filter',
+  'syllabus-manager',
+  'syllabus-progress-tracker',
+  'take-test',
+  'take-test-management',
+  'teacher-activity',
+  'teachers-mapping',
+  'timetable-json-config',
+  'timetable-planner',
+  'timetable-sync',
+  'timetable-view',
+  'timetable-viewer',
+  'tv-display',
+  'ward-exam-timetable',
+  'ward-progress-report',
+]);
 
 const readSessionCache = (userRoles) => {
   try {
     // Clear legacy caches
-    for (let i = 1; i <= 18; i++) {
+    for (let i = 1; i <= 22; i++) {
       sessionStorage.removeItem(`jzv_view_config_cache_v${i}`);
     }
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
@@ -59,14 +159,14 @@ const readSessionCache = (userRoles) => {
 
 // Module-level cache prevents duplicate queries across hook instances.
 // Cache is now keyed by user roles.
-const viewConfigCache = new Map(); // key: JSON.stringify(sorted userRoles) -> { viewConfigs, dynamicConfigs }
+const viewConfigCache = new Map(); // key: JSON.stringify(sorted userRoles) -> { viewConfigs, dynamicConfigs, registeredNames }
 let viewConfigFetchPromise = null;
 
-const writeSessionCache = (viewConfigs, dynamicConfigs, userRoles) => {
+const writeSessionCache = (viewConfigs, dynamicConfigs, userRoles, registeredNames) => {
   try {
     sessionStorage.setItem(
       VIEW_CONFIG_SESSION_KEY,
-      JSON.stringify({ viewConfigs, dynamicConfigs, userRoles })
+      JSON.stringify({ viewConfigs, dynamicConfigs, userRoles, registeredNames })
     );
   } catch (error) {
     console.warn('[useViewConfig] Failed to cache view configuration for this session:', error);
@@ -100,6 +200,7 @@ export const invalidateViewConfigCache = () => {
 export const useViewConfig = (userRoles = []) => {
   const [viewConfigs, setViewConfigs] = useState([]);
   const [dynamicConfigs, setDynamicConfigs] = useState([]);
+  const [registeredNames, setRegisteredNames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -115,6 +216,7 @@ export const useViewConfig = (userRoles = []) => {
         const cached = viewConfigCache.get(cacheKey);
         setViewConfigs(cached.viewConfigs);
         setDynamicConfigs(cached.dynamicConfigs || []);
+        setRegisteredNames(cached.registeredNames || []);
         setLoading(false);
         return;
       }
@@ -125,9 +227,11 @@ export const useViewConfig = (userRoles = []) => {
         viewConfigCache.set(cacheKey, {
           viewConfigs: sessionCache.viewConfigs,
           dynamicConfigs: sessionCache.dynamicConfigs,
+          registeredNames: sessionCache.registeredNames || [],
         });
         setViewConfigs(sessionCache.viewConfigs);
         setDynamicConfigs(sessionCache.dynamicConfigs || []);
+        setRegisteredNames(sessionCache.registeredNames || []);
         setLoading(false);
         return;
       }
@@ -168,6 +272,20 @@ export const useViewConfig = (userRoles = []) => {
               );
             }
 
+            // Fetch all active component names to dynamically identify managed components
+            let allNames = [];
+            try {
+              const { data: namesData, error: namesError } = await supabase
+                .from('app_view_controller')
+                .select('component_name')
+                .eq('is_active', true);
+              if (!namesError && Array.isArray(namesData)) {
+                allNames = namesData.map((d) => d.component_name);
+              }
+            } catch (err) {
+              console.warn('[useViewConfig] Failed to fetch registered component names:', err);
+            }
+
             // Use session-cached dynamic_form_configs (fetched once per browser session per role)
             let formsData = [];
             try {
@@ -176,7 +294,11 @@ export const useViewConfig = (userRoles = []) => {
               console.warn('[useViewConfig] Failed to fetch dynamic_form_configs:', dfErr);
             }
 
-            return { viewConfigs: avcData || [], dynamicConfigs: formsData || [] };
+            return {
+              viewConfigs: avcData || [],
+              dynamicConfigs: formsData || [],
+              registeredNames: allNames || [],
+            };
           })();
         }
 
@@ -186,13 +308,20 @@ export const useViewConfig = (userRoles = []) => {
         viewConfigCache.set(cacheKey, {
           viewConfigs: resolvedData.viewConfigs,
           dynamicConfigs: resolvedData.dynamicConfigs,
+          registeredNames: resolvedData.registeredNames,
         });
 
         // Update session storage cache
-        writeSessionCache(resolvedData.viewConfigs, resolvedData.dynamicConfigs, userRoles);
+        writeSessionCache(
+          resolvedData.viewConfigs,
+          resolvedData.dynamicConfigs,
+          userRoles,
+          resolvedData.registeredNames
+        );
 
         setViewConfigs(resolvedData.viewConfigs);
         setDynamicConfigs(resolvedData.dynamicConfigs);
+        setRegisteredNames(resolvedData.registeredNames);
       } catch (err) {
         console.error('[useViewConfig] Unexpected fetch error:', err);
         setError(err);
@@ -241,40 +370,12 @@ export const useViewConfig = (userRoles = []) => {
     (userRoles = []) => {
       if (!userRoles || userRoles.length === 0) return [];
 
-      // viewConfigs from RPC are already filtered by user roles
-      // Filter for tile types only
-      const activeTiles = viewConfigs.filter((item) => {
-        const isTile = item.type === 'tile' || Boolean(TILE_METADATA_REGISTRY[item.component_name]);
-        return isTile;
-      });
-
-      // Include fallback tiles from TILE_METADATA_REGISTRY if not yet registered in app_view_controller
-      const dbTileNames = new Set(
-        viewConfigs
-          .filter((c) => c.type === 'tile' || Boolean(TILE_METADATA_REGISTRY[c.component_name]))
-          .map((c) => c.component_name)
-      );
-      const fallbackRegistryTiles = Object.entries(TILE_METADATA_REGISTRY)
-        .filter(([key, meta]) => {
-          if (dbTileNames.has(key)) return false;
-          if (!meta.valid_access_roles) return false;
-          return hasAccess(meta.valid_access_roles, 'none', userRoles);
-        })
-        .map(([key, meta]) => ({
-          component_name: key,
-          type: 'tile',
-          parent_name: meta.group || 'General',
-          display_name: meta.title || key,
-          valid_access_roles: meta.valid_access_roles,
-          display_order: meta.display_order ?? 50,
-          is_active: true,
-          default_access: 'none',
-        }));
-
-      const allActiveTiles = [...activeTiles, ...fallbackRegistryTiles];
+      // viewConfigs from RPC are already filtered by user roles.
+      // Database app_view_controller is the single source of truth for tile visibility and ordering.
+      const activeTiles = viewConfigs.filter((item) => item.type === 'tile');
 
       // Merge with UI metadata
-      const standardTiles = allActiveTiles.map((item) => {
+      const standardTiles = activeTiles.map((item) => {
         const meta = TILE_METADATA_REGISTRY[item.component_name] || {};
         return {
           id: item.component_name,
@@ -297,8 +398,8 @@ export const useViewConfig = (userRoles = []) => {
           shadow: meta.shadow || 'shadow-brand-lbg',
           action: meta.action || 'subview',
           actionTarget: meta.actionTarget || null,
-          valid_access_roles: item.valid_access_roles || meta.valid_access_roles || [],
-          display_order: item.display_order ?? meta.display_order ?? 50,
+          valid_access_roles: item.valid_access_roles || [],
+          display_order: item.display_order ?? 50,
           isDynamic: false,
         };
       });
@@ -350,16 +451,18 @@ export const useViewConfig = (userRoles = []) => {
         (a, b) => (a.display_order || 0) - (b.display_order || 0)
       );
     },
-    [viewConfigs, dynamicConfigs, hasAccess]
+    [viewConfigs, dynamicConfigs]
   );
 
   /**
    * Check if a specific feature or component is permitted and active.
    *
    * Since the RPC functions filter by user roles, viewConfigs only contains
-   * items the user has access to. However, this function is still needed for:
-   * 1. Components not in viewConfigs (built-in fallbacks)
-   * 2. Checking specific component access when viewConfigs might not have it
+   * items the user has access to.
+   * 1. If component is managed by app_view_controller:
+   *    - In viewConfigs: access GRANTED.
+   *    - NOT in viewConfigs: access DENIED (enforcing database configuration).
+   * 2. Fallbacks are only applied to truly unmanaged/legacy components not in DB.
    */
   const isFeatureEnabled = useCallback(
     (componentName, userRoles = []) => {
@@ -374,12 +477,27 @@ export const useViewConfig = (userRoles = []) => {
       } else if (!config && componentName === 'exam-results-tab-entry') {
         config = viewConfigs.find((c) => c.component_name === 'exam-mark-entry-tab');
       }
+
       if (config) {
         // Since RPC filters by roles, if it's in viewConfigs, user has access
         // But we still check is_active for safety
         return config.is_active !== false;
       }
 
+      // 2. If the component is registered in the database table:
+      // The database RPC is the authoritative source of truth.
+      // Its absence from viewConfigs means access was intentionally denied by DB permissions.
+      const isPresentInDb = Array.isArray(registeredNames) && registeredNames.includes(componentName);
+      if (isPresentInDb) {
+        return false;
+      }
+
+      const isManaged = STATIC_MANAGED_COMPONENTS.has(componentName);
+      if (isManaged) {
+        return false;
+      }
+
+      // 3. Built-in fallbacks ONLY for truly unmanaged/legacy components not registered in DB:
       // Builtin fallback for syl-tab-my-activity if not yet inserted in DB
       if (componentName === 'syl-tab-my-activity') {
         return userRoles.some((r) =>
@@ -387,7 +505,7 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for exam results tabs
+      // Builtin fallback for exam results tabs (unmanaged)
       if (
         componentName === 'exam-mark-entry-tab' ||
         componentName === 'exam-results-tab-entry' ||
@@ -411,7 +529,7 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for exam schedule tabs and manager
+      // Builtin fallback for exam schedule tabs and manager (unmanaged)
       if (
         componentName === 'exam-schedule' ||
         componentName === 'exam-sched-tab-scheduler' ||
@@ -427,7 +545,7 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for exam schedule setup and slot editing
+      // Builtin fallback for exam schedule setup and slot editing (unmanaged)
       if (
         componentName === 'exam-sched-tab-setup' ||
         componentName === 'exam-sched-slot-edit' ||
@@ -440,7 +558,7 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for parent exam timetable and progress report
+      // Builtin fallback for parent exam timetable and progress report (unmanaged)
       if (
         componentName === 'ward-exam-timetable' ||
         componentName === 'ward-progress-report'
@@ -458,7 +576,7 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // Builtin fallback for report-card-designer
+      // Builtin fallback for report-card-designer (unmanaged)
       if (
         componentName === 'report-card-designer' ||
         componentName === 'exam-report-designer' ||
@@ -469,11 +587,10 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // 2. If unmanaged/not registered in view controller:
-      // Fail-closed (deny) for exam components, tabs, setups, admin, and mutation variables
+      // 4. Fail-closed (deny) for unmanaged exam components, tabs, setups, admin, and mutation variables
       if (
         componentName.startsWith('exam-') ||
-        componentName.includes('tab') ||
+        (componentName.includes('tab') && !componentName.includes('timetable')) ||
         componentName.includes('setup') ||
         componentName.includes('admin') ||
         componentName.includes('edit') ||
@@ -485,7 +602,7 @@ export const useViewConfig = (userRoles = []) => {
       }
       return true;
     },
-    [viewConfigs]
+    [viewConfigs, registeredNames]
   );
 
   /**

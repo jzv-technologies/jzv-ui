@@ -11,14 +11,24 @@ import ExamNoticeBoardPrint from './ExamNoticeBoardPrint';
 import ParentExamTimetableView from './ParentExamTimetableView';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 
-const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
+const ExamScheduleManager = ({
+  userRoles = [],
+  user,
+  teacherRecord,
+  allowedTabs = null,
+  initialTab = null,
+  title = null,
+  subtitle = null,
+  dataFeature = 'exam-schedule',
+  readOnly = undefined,
+}) => {
   const canAccess = useCanAccess(userRoles);
 
   // Edit capability driven strictly by component name 'exam-sched-slot-edit' in app_view_controller
   const canEditSchedule = canAccess('exam-sched-slot-edit');
 
   // Master workspace tabs configured with component names registered in app_view_controller
-  const WORKSPACE_TABS = useMemo(
+  const ALL_WORKSPACE_TABS = useMemo(
     () => [
       {
         id: 'setup',
@@ -54,17 +64,28 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
     []
   );
 
+  const WORKSPACE_TABS = useMemo(() => {
+    if (!Array.isArray(allowedTabs) || allowedTabs.length === 0) {
+      return ALL_WORKSPACE_TABS;
+    }
+    return ALL_WORKSPACE_TABS.filter(
+      (t) => allowedTabs.includes(t.id) || allowedTabs.includes(t.componentName)
+    );
+  }, [ALL_WORKSPACE_TABS, allowedTabs]);
+
   const availableTabs = useMemo(() => {
     return WORKSPACE_TABS.filter((tab) => canAccess(tab.componentName));
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab && availableTabs.some((t) => t.id === initialTab)) return initialTab;
+    if (availableTabs.length > 0) return availableTabs[0].id;
     if (canAccess('exam-sched-tab-setup')) return 'setup';
     if (canAccess('exam-sched-tab-scheduler')) return 'scheduler';
     if (canAccess('exam-sched-tab-teacher')) return 'teacher';
     if (canAccess('exam-sched-tab-coverage')) return 'coverage';
     if (canAccess('exam-sched-tab-notice-print')) return 'notice_print';
-    return availableTabs[0]?.id || 'scheduler';
+    return 'scheduler';
   });
 
   // Ensure activeTab is always one of the permitted availableTabs
@@ -282,7 +303,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
   return (
     <div
       className="w-full flex flex-col min-h-[500px] m-0 p-0 animate-in fade-in duration-300"
-      data-feature="exam-schedule"
+      data-feature={dataFeature || 'exam-schedule'}
     >
       {/* ── 1. Top Header (Full width, flush to breadcrumbs, no rounded corners) ── */}
       <div className="w-full bg-white border-b border-light-border rounded-none px-4 sm:px-6 py-3 print:hidden shadow-2xs space-y-3">
@@ -295,7 +316,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-base sm:text-lg font-black text-dark-primary tracking-tight">
-                  Exam Schedule
+                  {title || 'Exam Schedule'}
                 </h1>
                 {selectedSchedule && (
                   <span
@@ -321,11 +342,12 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 )}
               </div>
               <p className="text-[11px] font-semibold text-dark-muted hidden sm:block">
-                {canAccess('exam-sched-tab-setup')
-                  ? 'Manage exam sessions, class schedules, invigilation duties, and notice board printouts'
-                  : canAccess('exam-sched-slot-edit')
-                    ? 'Schedule planner — edit slot assignments, invigilators, and view coverage'
-                    : 'Browse exam timetables for classes, duty assignments, and notice printout'}
+                {subtitle ||
+                  (canAccess('exam-sched-tab-setup')
+                    ? 'Manage exam sessions, class schedules, invigilation duties, and notice board printouts'
+                    : canAccess('exam-sched-slot-edit')
+                      ? 'Schedule planner — edit slot assignments, invigilators, and view coverage'
+                      : 'Browse exam timetables for classes, duty assignments, and notice printout')}
               </p>
             </div>
           </div>
@@ -592,7 +614,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
       {/* ── 2. Actual Data Table / Subviews governed by ConditionalBlock ── */}
       <div
         className="w-full p-4 sm:p-6 flex-1 animate-in fade-in duration-200"
-        data-feature="exam-schedule-content"
+        data-feature={`${dataFeature || 'exam-schedule'}-content`}
       >
         {activeTab === 'setup' && (
           <ConditionalBlock name="exam-sched-tab-setup" roles={userRoles}>
@@ -618,7 +640,7 @@ const ExamScheduleManager = ({ userRoles = [], user, teacherRecord }) => {
                 slots={selectedSlots}
                 classSubjects={classSubjects}
                 onRefresh={handleRefresh}
-                readOnly={!canEditSchedule}
+                readOnly={readOnly !== undefined ? readOnly : !canEditSchedule}
                 userRoles={userRoles}
                 selectedClassIds={selectedClassIds}
                 onSelectClasses={setSelectedClassIds}

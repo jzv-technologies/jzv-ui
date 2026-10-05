@@ -1,5 +1,5 @@
 // src/components/portals/admin/timetable/TimetableAdminView.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import TimetableOverview from './TimetableOverview';
 import TimetableScheduler from './TimetableScheduler';
@@ -1396,11 +1396,53 @@ const TimetableAdminView = ({
   const [viewType, setViewType] = useState(defaultView);
   const viewObj = viewOptionsMap[viewType] || viewOptionsMap['scheduler'];
 
-  const [myTab, setMyTab] = useState(showMyTimetable ? 'my' : 'class');
+  // Resolve logged-in teacher if user object is passed
+  const myTeacher = useMemo(() => {
+    if (!user) return null;
+    // 1. Direct auth_id match
+    if (user.id) {
+      const match = teachers.find(
+        (t) => t.auth_id && String(t.auth_id).toLowerCase() === String(user.id).toLowerCase()
+      );
+      if (match) return match;
+    }
+    // 2. Email match
+    if (user.email) {
+      const match = teachers.find(
+        (t) => t.email && String(t.email).toLowerCase() === String(user.email).toLowerCase()
+      );
+      if (match) return match;
+    }
+    // 3. Name match
+    const userName = (user.name || user.user_metadata?.full_name || '').toLowerCase().trim();
+    if (userName) {
+      const match = teachers.find((t) => (t.name || '').toLowerCase().trim() === userName);
+      if (match) return match;
+    }
+    // 4. teacherRecord ID match if present
+    if (user.teacher_id || user.teacherRecord?.id || user.teacherRecord?.teacher_id) {
+      const targetId = String(
+        user.teacher_id || user.teacherRecord?.id || user.teacherRecord?.teacher_id
+      );
+      const match = teachers.find((t) => String(t.id || t.teacher_id) === targetId);
+      if (match) return match;
+    }
+    // 5. In mock mode (no teacher has auth_id), fallback to first teacher
+    const isMock = teachers.length > 0 && teachers.every((t) => !t.auth_id);
+    if (isMock && teachers.length > 0) {
+      return teachers[0];
+    }
+    return null;
+  }, [user, teachers]);
+
+  const [myTab, setMyTab] = useState(() => (showMyTimetable && myTeacher ? 'my' : 'class'));
   const [myView, setMyView] = useState('today'); // 'today' | 'weekly'
 
-  // Resolve logged-in teacher if user object is passed
-  const myTeacher = user?.id ? teachers.find((t) => String(t.auth_id) === String(user.id)) : null;
+  useEffect(() => {
+    if (showMyTimetable && myTeacher && myTab === 'class') {
+      setMyTab('my');
+    }
+  }, [myTeacher, showMyTimetable]);
 
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -2393,14 +2435,36 @@ const TimetableAdminView = ({
 
       {myTab === 'my' ? (
         !myTeacher ? (
-          <div className="flex flex-col items-center justify-center py-16 bg-white border border-light-border rounded-3xl gap-3">
-            <i className="fas fa-user-slash text-3xl text-dark-muted" />
+          <div className="flex flex-col items-center justify-center py-12 px-4 bg-white border border-light-border rounded-3xl gap-3 text-center">
+            <i className="fas fa-info-circle text-3xl text-brand-primary" />
             <p className="text-dark-soft font-semibold text-sm">
-              Your account is not linked to a teacher record.
+              No individual teacher profile linked to your account.
             </p>
-            <p className="text-dark-muted text-xs">
-              Please contact the administrator to link your profile.
+            <p className="text-dark-muted text-xs mb-2 max-w-md">
+              You can still browse all class and teacher timetables across the school using the views below:
             </p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMyTab('class');
+                  setViewType('scheduler');
+                }}
+                className="px-4 py-2 bg-brand-primary text-white rounded-xl text-xs font-bold hover:bg-brand-primary/90 transition-all cursor-pointer shadow-sm"
+              >
+                <i className="fas fa-th-large mr-1.5" /> Open Class View
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMyTab('class');
+                  setViewType('teacher');
+                }}
+                className="px-4 py-2 bg-light-ui text-dark-primary rounded-xl text-xs font-bold hover:bg-light-border transition-all cursor-pointer"
+              >
+                <i className="fas fa-user mr-1.5" /> Open Teacher View
+              </button>
+            </div>
           </div>
         ) : myView === 'today' ? (
           <MyTimetableToday

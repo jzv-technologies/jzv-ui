@@ -87,14 +87,14 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
   },
 });
 
-const TimetableManager = ({ userRoles, user }) => {
+const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const canAccess = useCanAccess(userRoles);
 
   const WORKSPACE_TABS = useMemo(
     () => [
       {
         id: 'viewer',
-        componentName: 'timetable-viewer',
+        componentName: 'timetable-view',
         label: 'Timetable View',
         icon: 'fa-calendar-alt',
       },
@@ -137,6 +137,8 @@ const TimetableManager = ({ userRoles, user }) => {
   }, [WORKSPACE_TABS, canAccess]);
 
   const [activeTab, setActiveTab] = useState(() => {
+    if (initialTab && availableTabs.some((t) => t.id === initialTab)) return initialTab;
+    if (availableTabs.length > 0) return availableTabs[0].id;
     if (canAccess('scheduler-setup')) return 'scheduler';
     return 'viewer';
   });
@@ -180,14 +182,14 @@ const TimetableManager = ({ userRoles, user }) => {
     setLoading(true);
     setError('');
     try {
-      // Test if supabase tables are accessible
+      // Test if supabase tables are accessible and populated
       const { data: testClass, error: testErr } = await supabase
         .from('classes')
         .select('id')
         .limit(1);
 
-      if (testErr) {
-        throw new Error('Supabase tables not found. Falling back to local offline mode.');
+      if (testErr || !testClass || testClass.length === 0) {
+        throw new Error('Supabase tables empty or not accessible. Falling back to local offline mode.');
       }
 
       // Fetch from Supabase
@@ -218,6 +220,10 @@ const TimetableManager = ({ userRoles, user }) => {
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
       ]);
+
+      if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
+        throw new Error('No classes or slots found in database. Falling back to local offline mode.');
+      }
 
       const teacherSubjectMappings = dbTeacherSubjects || [];
 
@@ -2020,7 +2026,7 @@ const TimetableManager = ({ userRoles, user }) => {
       ) : (
         <div className="flex-1" data-feature="timetable-content">
           {activeTab === 'viewer' && (
-            <ConditionalBlock name="timetable-viewer" roles={userRoles}>
+            <ConditionalBlock name="timetable-view" roles={userRoles}>
               <TimetableAdminView
                 classes={classes}
                 teachers={teachers}

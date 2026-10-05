@@ -46,20 +46,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-purple-200',
     group: 'Administration',
     action: 'subview',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 35,
-  },
-  'report-card-designer': {
-    title: 'Report Card Designer',
-    description:
-      'Customize layout, branding, grading scales, block order, and visual cards for examinations.',
-    icon: 'fa-palette',
-    buttonColor: 'bg-rose-600 text-white',
-    shadow: 'shadow-rose-200',
-    group: 'Administration',
-    action: 'subview',
-    valid_access_roles: ['admin', 'management', 'coordinator'],
-    display_order: 38,
   },
 
   // ── Shared admin + management components ───────────────────────────
@@ -89,8 +75,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-green-200',
     group: 'Staff & Students',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'teacher'],
-    display_order: 50,
   },
   'student-fees': {
     title: 'Student Fees',
@@ -101,8 +85,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-teal-200',
     group: 'Staff & Students',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'accountant'],
-    display_order: 56,
   },
   'tv-display': {
     title: 'TV Display Board',
@@ -224,8 +206,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-blue-200',
     group: 'Academics',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'teacher'],
-    display_order: 82,
   },
   'lesson-planner': {
     title: 'Lesson Planner',
@@ -256,8 +236,16 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-rose-200',
     group: 'Calendar and Schedules',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
-    display_order: 35,
+  },
+  'exam-schedule-viewer': {
+    title: 'Exam Schedule Viewer',
+    description:
+      'View exam timetables, invigilator assignments, and notice board printouts.',
+    icon: 'fa-calendar-check',
+    buttonColor: 'bg-rose-600 text-white',
+    shadow: 'shadow-rose-200',
+    group: 'Examinations',
+    action: 'subview',
   },
   'exam-results': {
     title: 'Exam Results',
@@ -268,8 +256,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-emerald-200',
     group: 'Examinations',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'teacher'],
-    display_order: 85,
   },
   'report-card-designer': {
     title: 'Report Card Designer',
@@ -280,8 +266,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-rose-200',
     group: 'Examinations',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'coordinator'],
-    display_order: 38,
   },
   'exam-progress-report': {
     title: 'Progress Reports',
@@ -291,8 +275,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-indigo-200',
     group: 'Examinations',
     action: 'subview',
-    valid_access_roles: ['admin', 'management', 'coordinator', 'teacher'],
-    display_order: 86,
   },
   'exam-analysis': {
     title: 'Exam Analysis',
@@ -302,8 +284,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-violet-200',
     group: 'Examinations',
     action: 'subview',
-    valid_access_roles: ['admin', 'management'],
-    display_order: 87,
   },
   dashboard: {
     title: 'Dashboard',
@@ -359,8 +339,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-rose-200',
     group: 'Calendar and Schedules',
     action: 'subview',
-    valid_access_roles: ['parent'],
-    display_order: 55,
   },
   'ward-progress-report': {
     title: 'Student Progress Report',
@@ -372,8 +350,6 @@ export const TILE_METADATA_REGISTRY = {
     shadow: 'shadow-indigo-200',
     group: 'Calendar and Schedules',
     action: 'subview',
-    valid_access_roles: ['parent'],
-    display_order: 56,
   },
 
   // ── Candidate components ───────────────────────────────────────────
