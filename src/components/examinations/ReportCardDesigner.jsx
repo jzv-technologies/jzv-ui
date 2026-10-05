@@ -7,6 +7,9 @@ import {
   DEFAULT_TEMPLATE,
   RAW_PREVIEW_SCORES,
   TEMPLATES_CONFIG_KEY,
+  CLASSIFICATION_SEQ_FALLBACK,
+  CLASSIFICATION_NAME_SEQ_FALLBACK,
+  KNOWN_SUBJECT_CLASSIFICATIONS,
 } from '../examinations/report-card-designer/constants';
 import DesignerHeader from '../examinations/report-card-designer/components/DesignerHeader';
 import GradeRuleModal from '../examinations/report-card-designer/modals/GradeRuleModal';
@@ -95,7 +98,11 @@ const ReportCardDesigner = ({
   useEffect(() => {
     const loadClassifications = async () => {
       try {
-        const { data } = await supabase.from('syl_classifications').select('*').order('name');
+        const { data } = await supabase
+          .from('syl_classifications')
+          .select('*')
+          .order('seq', { ascending: true })
+          .order('name', { ascending: true });
         if (data && data.length > 0) {
           setClassifications(data);
         }
@@ -599,41 +606,86 @@ const ReportCardDesigner = ({
       Array.isArray(effectiveSubjects) && effectiveSubjects.length > 0
         ? effectiveSubjects.slice(0, 8).map((sub, idx) => {
             const marks = sampleScores[idx % sampleScores.length];
+            const subName = (sub.name || '').trim();
+            const subNorm = subName.toLowerCase();
+            const known = KNOWN_SUBJECT_CLASSIFICATIONS[subNorm];
+            const classId = sub.classification_id ?? known?.classificationId;
+            const classObj =
+              classifications.find((c) => String(c.id) === String(classId)) ||
+              DEFAULT_MOCK_CLASSIFICATIONS.find((c) => String(c.id) === String(classId));
+            const classificationName = classObj?.name || known?.classificationName || '';
+            const classificationSeq =
+              classObj?.seq !== undefined && classObj?.seq !== null
+                ? Number(classObj.seq)
+                : known?.seq !== undefined && known?.seq !== null
+                ? Number(known.seq)
+                : CLASSIFICATION_SEQ_FALLBACK[String(classId)] !== undefined
+                ? CLASSIFICATION_SEQ_FALLBACK[String(classId)]
+                : CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()] !== undefined
+                ? CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()]
+                : 999999;
             return {
               subjectId: String(sub.id),
               subjectName: sub.name,
-              arabicName: sub.arabic_name || '',
+              arabicName: sub.arabic_name || known?.arabicName || '',
               maxMarks: 100,
               passMarks: 35,
               marksObtained: marks,
               status: marks >= 35 ? 'PASS' : 'FAIL',
-              classificationId: sub.classification_id,
-              classificationName: '',
+              classificationId: classId,
+              classificationName,
+              classificationSeq,
             };
           })
         : RAW_PREVIEW_SCORES;
 
-    return sourceSubjects.map((s) => {
+    const mapped = sourceSubjects.map((s) => {
       const dbSub = effectiveSubjects.find(
         (as) =>
           String(as.id) === String(s.subjectId) ||
           as.name?.trim().toLowerCase() === s.subjectName?.trim().toLowerCase()
       );
+      const subName = (s.subjectName || dbSub?.name || '').trim();
+      const subNorm = subName.toLowerCase();
+      const known = KNOWN_SUBJECT_CLASSIFICATIONS[subNorm];
       const pct = (s.marksObtained / s.maxMarks) * 100;
       const grade = calculateGrade(pct, currentConfig.gradingScale);
-      const classId = dbSub?.classification_id || s.classificationId;
-      const classObj = classifications.find((c) => String(c.id) === String(classId));
+      const classId = dbSub?.classification_id || s.classificationId || known?.classificationId;
+      const classObj =
+        classifications.find((c) => String(c.id) === String(classId)) ||
+        DEFAULT_MOCK_CLASSIFICATIONS.find((c) => String(c.id) === String(classId));
       const classificationName =
         classObj?.name ||
         s.classificationName ||
+        known?.classificationName ||
         (classId ? `Classification ${classId}` : 'General');
+      const classificationSeq =
+        classObj?.seq !== undefined && classObj?.seq !== null
+          ? Number(classObj.seq)
+          : s.classificationSeq !== undefined && s.classificationSeq !== null && s.classificationSeq !== 999999
+          ? Number(s.classificationSeq)
+          : known?.seq !== undefined && known?.seq !== null
+          ? Number(known.seq)
+          : CLASSIFICATION_SEQ_FALLBACK[String(classId)] !== undefined
+          ? CLASSIFICATION_SEQ_FALLBACK[String(classId)]
+          : CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()] !== undefined
+          ? CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()]
+          : 999999;
       return {
         ...s,
         arabicName: dbSub?.arabic_name || s.arabicName || '',
         grade,
         classificationId: classId,
         classificationName,
+        classificationSeq,
       };
+    });
+
+    return mapped.sort((a, b) => {
+      const seqA = a.classificationSeq ?? 999999;
+      const seqB = b.classificationSeq ?? 999999;
+      if (seqA !== seqB) return seqA - seqB;
+      return (a.subjectName || '').localeCompare(b.subjectName || '');
     });
   }, [currentConfig.gradingScale, effectiveSubjects, classifications]);
 

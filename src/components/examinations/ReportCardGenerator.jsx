@@ -16,6 +16,9 @@ import {
   DEFAULT_GRADING_SCALE,
   DEFAULT_CHART_COLUMN,
   DEFAULT_MOCK_CLASSIFICATIONS,
+  CLASSIFICATION_SEQ_FALLBACK,
+  CLASSIFICATION_NAME_SEQ_FALLBACK,
+  KNOWN_SUBJECT_CLASSIFICATIONS,
   DEFAULT_BLOCK_STYLE,
   DEFAULT_TABLE_COLUMN_HEADERS,
   DEFAULT_BLOCK_TITLES,
@@ -199,8 +202,55 @@ const ReportCardGenerator = ({
     }
   }, [classes, initialClassId, selectedClassId]);
 
+  // Load syl_classifications ordered by seq hierarchy
   useEffect(() => {
-    if (subjects.length > 0) setInternalSubjects(subjects);
+    let cancelled = false;
+    const fetchClassifications = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('syl_classifications')
+          .select('*')
+          .order('seq', { ascending: true })
+          .order('name', { ascending: true });
+        if (!cancelled && data && data.length > 0) {
+          setInternalClassifications(data);
+        }
+      } catch (err) {
+        console.warn('[ReportCardGenerator] Failed to load syl_classifications:', err);
+      }
+    };
+    fetchClassifications();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (subjects.length > 0) {
+      setInternalSubjects(subjects);
+      // Ensure subjects have classification_id
+      if (subjects.some((s) => s.classification_id === undefined)) {
+        supabase
+          .from('syl_subjects')
+          .select('id, name, arabic_name, classification_id')
+          .then(({ data }) => {
+            if (data && data.length > 0) {
+              setInternalSubjects((prev) => mergeById(prev, data));
+            }
+          })
+          .catch(() => {});
+      }
+    } else {
+      supabase
+        .from('syl_subjects')
+        .select('*')
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setInternalSubjects((prev) => mergeById(prev, data));
+          }
+        })
+        .catch(() => {});
+    }
   }, [subjects]);
 
   // If the schedule list wasn't supplied, fetch only the lightweight schedule list.
@@ -312,7 +362,25 @@ const ReportCardGenerator = ({
 
   const mergeById = (prev, incoming) => {
     const byId = new Map((prev || []).map((x) => [String(x.id), x]));
-    incoming.forEach((x) => byId.set(String(x.id), { ...(byId.get(String(x.id)) || {}), ...x }));
+    incoming.forEach((x) => {
+      const existing = byId.get(String(x.id)) || {};
+      const merged = { ...existing, ...x };
+      if (
+        (merged.classification_id === undefined || merged.classification_id === null) &&
+        existing.classification_id !== undefined &&
+        existing.classification_id !== null
+      ) {
+        merged.classification_id = existing.classification_id;
+      }
+      if (
+        (merged.seq === undefined || merged.seq === null) &&
+        existing.seq !== undefined &&
+        existing.seq !== null
+      ) {
+        merged.seq = existing.seq;
+      }
+      byId.set(String(x.id), merged);
+    });
     return Array.from(byId.values());
   };
 
@@ -320,7 +388,7 @@ const ReportCardGenerator = ({
   // Still avoids the waterfall by running independent queries in parallel.
   const legacyLoad = async (seq) => {
     const hasProps = Array.isArray(propStudentsRef.current) && propStudentsRef.current.length > 0;
-    const [stuRes, resRes, attRes, remRes, subRes] = await Promise.all([
+    const [stuRes, resRes, attRes, remRes, subRes, clsRes] = await Promise.all([
       hasProps
         ? Promise.resolve(null)
         : supabase
@@ -336,6 +404,11 @@ const ReportCardGenerator = ({
       supabase.from('exam_attendance_entries').select('*').eq('schedule_id', selectedScheduleId),
       supabase.from('exam_student_remarks').select('*').eq('schedule_id', selectedScheduleId),
       subjects.length === 0 ? supabase.from('syl_subjects').select('*') : Promise.resolve(null),
+      supabase
+        .from('syl_classifications')
+        .select('*')
+        .order('seq', { ascending: true })
+        .order('name', { ascending: true }),
     ]);
     const resData = resRes?.data || [];
     let entryData = [];
@@ -352,6 +425,7 @@ const ReportCardGenerator = ({
     if (seq !== reportFetchSeq.current) return;
     if (stuRes) setStudents(stuRes.data || []);
     if (subRes?.data) setInternalSubjects(subRes.data);
+    if (clsRes?.data?.length) setInternalClassifications(clsRes.data);
     setResults(resData);
     setEntries(entryData);
     setServerRemarks(remRes?.data || []);
@@ -381,6 +455,10 @@ const ReportCardGenerator = ({
 
       const hasProps =
         Array.isArray(propStudentsRef.current) && propStudentsRef.current.length > 0;
+      console.log('[DEBUG ReportCardGenerator loadReportData]', {
+        rpcClassifications: data?.classifications,
+        rpcSubjects: data?.subjects,
+      });
       setReportPayload(data);
       setResults(data?.results || []);
       setEntries(data?.entries || []);
@@ -388,7 +466,8 @@ const ReportCardGenerator = ({
       setServerRemarks(data?.remarks || []);
       if (!hasProps) setStudents(data?.students || []);
       if (data?.subjects?.length) setInternalSubjects((prev) => mergeById(prev, data.subjects));
-      if (data?.classifications?.length) setInternalClassifications(data.classifications);
+      if (data?.classifications?.length)
+        setInternalClassifications((prev) => mergeById(prev, data.classifications));
       if (data?.class) setInternalClasses((prev) => mergeById(prev, [data.class]));
       applyAttendance(data?.attendance);
       onReportDataLoaded?.(data);
@@ -529,7 +608,7 @@ const ReportCardGenerator = ({
     if (students.length === 0 || results.length === 0) return {};
     const scale = activeTemplate?.gradingScale || DEFAULT_GRADING_SCALE;
 
-    const studentCalculations = students.map((student) => {
+    const studentCalculations = students.map((student, sIdx) => {
       let totalObtained = 0;
       let totalMax = 0;
       let hasFailed = false;
@@ -571,17 +650,42 @@ const ReportCardGenerator = ({
         }
         totalMax += maxMarks;
 
-        const clsObj = internalClassifications.find(
-          (c) => String(c.id) === String(sub?.classification_id)
-        );
-        const classificationName = clsObj?.name || 'General';
+        const subName = (sub?.name || `Subject #${result.subject_id}`).trim();
+        const subNameNorm = subName.toLowerCase();
+        const knownSub =
+          KNOWN_SUBJECT_CLASSIFICATIONS[subNameNorm] ||
+          Object.values(KNOWN_SUBJECT_CLASSIFICATIONS).find(
+            (k) => String(k.subjectId) === String(result.subject_id)
+          );
+
+        const classificationId =
+          sub?.classification_id ?? knownSub?.classificationId ?? null;
+
+        const clsObj =
+          internalClassifications.find((c) => String(c.id) === String(classificationId)) ||
+          DEFAULT_MOCK_CLASSIFICATIONS.find((c) => String(c.id) === String(classificationId));
+
+        const classificationName =
+          clsObj?.name || knownSub?.classificationName || 'General';
+
+        const classificationSeq =
+          clsObj?.seq !== undefined && clsObj?.seq !== null
+            ? Number(clsObj.seq)
+            : knownSub?.seq !== undefined && knownSub?.seq !== null
+            ? Number(knownSub.seq)
+            : CLASSIFICATION_SEQ_FALLBACK[String(classificationId)] !== undefined
+            ? CLASSIFICATION_SEQ_FALLBACK[String(classificationId)]
+            : CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()] !== undefined
+            ? CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()]
+            : 999999;
 
         subjectScores.push({
           subjectId: result.subject_id,
-          subjectName: sub?.name || `Subject #${result.subject_id}`,
-          arabicName: sub?.arabic_name || '',
-          classificationId: sub?.classification_id || null,
+          subjectName: subName,
+          arabicName: sub?.arabic_name || knownSub?.arabicName || '',
+          classificationId,
           classificationName,
+          classificationSeq,
           maxMarks,
           passMarks,
           marksObtained: isAbsent ? 'Absent' : marks !== null ? marks : '—',
@@ -590,6 +694,16 @@ const ReportCardGenerator = ({
           grade,
           status,
         });
+      });
+
+      // Sort subjects by syl_classification seq hierarchy in asc sort order followed by subject name sorting
+      subjectScores.sort((a, b) => {
+        const seqA = a.classificationSeq ?? 999999;
+        const seqB = b.classificationSeq ?? 999999;
+        if (seqA !== seqB) {
+          return seqA - seqB;
+        }
+        return (a.subjectName || '').localeCompare(b.subjectName || '');
       });
 
       const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
@@ -637,7 +751,7 @@ const ReportCardGenerator = ({
     });
 
     return metricsMap;
-  }, [students, results, entries, internalSubjects, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, userRoles]);
+  }, [students, results, entries, internalSubjects, internalClassifications, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, userRoles]);
 
   const handlePrint = () => {
     window.print();
@@ -1528,6 +1642,9 @@ const ReportCardGenerator = ({
                           const isCompact = stuCfg.size === 'compact';
                           const isLarge = stuCfg.size === 'large';
                           const cols = stuCfg.columns || 4;
+                          const align = stuCfg.align || stuCfg.contentAlign || 'left';
+                          const textAlignClass =
+                            align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
                           const colClass =
                             cols === 2
                               ? 'sm:grid-cols-2'
@@ -1547,7 +1664,7 @@ const ReportCardGenerator = ({
                           return (
                             <div
                               key="studentInfo"
-                              className={`border border-slate-200 rounded-2xl print:rounded-lg grid grid-cols-2 ${colClass} ${
+                              className={`border border-slate-200 rounded-2xl print:rounded-lg grid grid-cols-2 ${colClass} ${textAlignClass} ${
                                 isCompact
                                   ? 'p-2.5 print:p-1.5 gap-2 print:gap-1'
                                   : isLarge
@@ -2426,6 +2543,16 @@ const ReportCardGenerator = ({
                                       totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : 0;
                                   }
 
+                                  const groupSeq =
+                                    subList[0]?.classificationSeq !== undefined &&
+                                    subList[0]?.classificationSeq !== 999999
+                                      ? subList[0].classificationSeq
+                                      : CLASSIFICATION_NAME_SEQ_FALLBACK[groupName.toLowerCase()] !== undefined
+                                      ? CLASSIFICATION_NAME_SEQ_FALLBACK[groupName.toLowerCase()]
+                                      : CLASSIFICATION_SEQ_FALLBACK[String(subList[0]?.classificationId)] !== undefined
+                                      ? CLASSIFICATION_SEQ_FALLBACK[String(subList[0]?.classificationId)]
+                                      : 999999;
+
                                   result.push({
                                     name:
                                       groupName.length > 12
@@ -2434,9 +2561,18 @@ const ReportCardGenerator = ({
                                     fullName: `${groupName} (${count} subjects)`,
                                     value: val,
                                     count,
+                                    seq: groupSeq,
                                     Max: agg === 'sum' ? totalMax : 100,
                                   });
                                 });
+
+                                result.sort((a, b) => {
+                                  const sA = a.seq ?? 999999;
+                                  const sB = b.seq ?? 999999;
+                                  if (sA !== sB) return sA - sB;
+                                  return (a.name || '').localeCompare(b.name || '');
+                                });
+
                                 return result;
                               }
 
@@ -2558,7 +2694,9 @@ const ReportCardGenerator = ({
                                   ? 100
                                   : scaleType === 'custom'
                                     ? Number(colCfg.maxScaleValue) || 100
-                                    : 'auto';
+                                    : pctMode
+                                      ? 100
+                                      : 'auto';
                               const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
 
                               const tooltipFormatter = (val, name, item) => {
@@ -2618,11 +2756,11 @@ const ReportCardGenerator = ({
                                   top = tight ? 2 : 4;
                                   right = tight
                                     ? showAnyLabel && placement.position === 'right'
-                                      ? 24
-                                      : 8
+                                      ? 44
+                                      : 24
                                     : showAnyLabel && placement.position === 'right'
-                                      ? 32
-                                      : 12;
+                                      ? 48
+                                      : 28;
                                   left = tight ? 4 : 8;
                                   bottom = tight ? 2 : 4;
                                 } else if (kind === 'line' || kind === 'area') {
@@ -2950,6 +3088,8 @@ const ReportCardGenerator = ({
                                         type="number"
                                         tick={{ fontSize: tight ? 7.5 : 8 }}
                                         domain={axisDomain}
+                                        ticks={axisMax === 100 ? [0, 20, 40, 60, 80, 100] : undefined}
+                                        allowDataOverflow={false}
                                       />
                                       <YAxis
                                         type="category"
@@ -3090,6 +3230,8 @@ const ReportCardGenerator = ({
                                         type="number"
                                         tick={{ fontSize: tight ? 7.5 : 8 }}
                                         domain={axisDomain}
+                                        ticks={axisMax === 100 ? [0, 20, 40, 60, 80, 100] : undefined}
+                                        allowDataOverflow={false}
                                       />
                                       <YAxis
                                         type="category"

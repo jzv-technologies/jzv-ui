@@ -11,11 +11,15 @@ import { DEFAULT_BLOCK_STYLE, PREVIEW_STUDENT } from '../constants';
 export const renderStudentInfoPreview = ({ bleed, blockSize, currentConfig }) => {
   if (!currentConfig.showStudentInfo) return null;
   const flds = currentConfig.studentFields || {};
-  const cols = currentConfig.studentInfoConfig?.columns || 4;
+  const stuCfg = currentConfig.studentInfoConfig || {};
+  const cols = stuCfg.columns || 4;
+  const align = stuCfg.align || stuCfg.contentAlign || 'left';
+  const textAlignClass =
+    align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
   const isCompact = blockSize === 'compact';
   const siSt = {
     ...DEFAULT_BLOCK_STYLE,
-    ...(currentConfig.studentInfoConfig?.style || {}),
+    ...(stuCfg.style || {}),
   };
   const colClass = cols === 2 ? 'sm:grid-cols-2' : cols === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-4';
 
@@ -32,7 +36,7 @@ export const renderStudentInfoPreview = ({ bleed, blockSize, currentConfig }) =>
   return (
     <div
       key="studentInfo"
-      className={`grid grid-cols-2 ${colClass} gap-2 rounded-xl border border-slate-200 ${
+      className={`grid grid-cols-2 ${colClass} ${textAlignClass} gap-2 rounded-xl border border-slate-200 ${
         isCompact ? 'p-2 text-[10px]' : 'p-3 text-xs'
       }`}
       style={bleed.innerBgStyle('#f8fafc')}

@@ -17,7 +17,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { DEFAULT_BLOCK_STYLE, DEFAULT_CHART_COLUMN, DEFAULT_GRADING_SCALE } from '../constants';
+import {
+  DEFAULT_BLOCK_STYLE,
+  DEFAULT_CHART_COLUMN,
+  DEFAULT_GRADING_SCALE,
+  CLASSIFICATION_SEQ_FALLBACK,
+  CLASSIFICATION_NAME_SEQ_FALLBACK,
+} from '../constants';
 import { formatDataLabel, getLabelPlacement, getLegendProps } from '../utils';
 
 /**
@@ -112,14 +118,33 @@ export const renderChartsPreview = ({
                 : 0;
         }
 
+        const groupSeq =
+          subList[0]?.classificationSeq !== undefined &&
+          subList[0]?.classificationSeq !== 999999
+            ? subList[0].classificationSeq
+            : CLASSIFICATION_NAME_SEQ_FALLBACK[groupName.toLowerCase()] !== undefined
+            ? CLASSIFICATION_NAME_SEQ_FALLBACK[groupName.toLowerCase()]
+            : CLASSIFICATION_SEQ_FALLBACK[String(subList[0]?.classificationId)] !== undefined
+            ? CLASSIFICATION_SEQ_FALLBACK[String(subList[0]?.classificationId)]
+            : 999999;
+
         result.push({
           name: groupName.length > 12 ? groupName.slice(0, 10) + '…' : groupName,
           fullName: `${groupName} (${count} subject${count === 1 ? '' : 's'})`,
           value: val,
           count,
+          seq: groupSeq,
           Max: agg === 'sum' ? totalMax : 100,
         });
       });
+
+      result.sort((a, b) => {
+        const sA = a.seq ?? 999999;
+        const sB = b.seq ?? 999999;
+        if (sA !== sB) return sA - sB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
       return result;
     }
 
@@ -234,7 +259,9 @@ export const renderChartsPreview = ({
         ? 100
         : scaleType === 'custom'
           ? Number(colCfg.maxScaleValue) || 100
-          : 'auto';
+          : pctMode
+            ? 100
+            : 'auto';
     const axisDomain = axisMax === 'auto' ? [0, 'auto'] : [0, axisMax];
 
     // ── Common Tooltip Formatter ──
@@ -289,11 +316,11 @@ export const renderChartsPreview = ({
         top = isTight ? 2 : 4;
         right = isTight
           ? showAnyLabel && placement.position === 'right'
-            ? 24
-            : 8
+            ? 44
+            : 24
           : showAnyLabel && placement.position === 'right'
-            ? 32
-            : 12;
+            ? 48
+            : 28;
         left = isTight ? 4 : 8;
         bottom = isTight ? 2 : 4;
       } else if (kind === 'line' || kind === 'area') {
@@ -578,7 +605,13 @@ export const renderChartsPreview = ({
             barCategoryGap={colCfg.barCategoryGap || '15%'}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+            <XAxis
+              type="number"
+              tick={{ fontSize: isTight ? 7.5 : 8 }}
+              domain={axisDomain}
+              ticks={axisMax === 100 ? [0, 20, 40, 60, 80, 100] : undefined}
+              allowDataOverflow={false}
+            />
             <YAxis
               type="category"
               dataKey="name"
@@ -664,7 +697,13 @@ export const renderChartsPreview = ({
             barCategoryGap={colCfg.barCategoryGap || '15%'}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: isTight ? 7.5 : 8 }} domain={axisDomain} />
+            <XAxis
+              type="number"
+              tick={{ fontSize: isTight ? 7.5 : 8 }}
+              domain={axisDomain}
+              ticks={axisMax === 100 ? [0, 20, 40, 60, 80, 100] : undefined}
+              allowDataOverflow={false}
+            />
             <YAxis
               type="category"
               dataKey="name"

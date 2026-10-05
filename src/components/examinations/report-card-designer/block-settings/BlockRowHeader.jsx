@@ -25,7 +25,9 @@ const BlockRowHeader = ({
       onDragOver={(e) => handleDragOver(e, idx)}
       onDragEnd={handleDragEnd}
       onClick={() => setExpandedBlock(isExpanded ? null : blockKey)}
-      className="p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/60 transition-colors"
+      className={`p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50/60 transition-colors ${
+        isExpanded ? 'bg-red-100' : 'bg-blue-100'
+      }`}
     >
       {/* Left: Reorder Up/Down (Leftmost), Drag Handle, Icon, Block Name & Read-Only Eye */}
       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">

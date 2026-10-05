@@ -43,6 +43,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 1,
     classificationName: 'English Literacy',
+    classificationSeq: 4,
   },
   {
     subjectId: '2',
@@ -54,6 +55,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 10,
     classificationName: 'Modern Education',
+    classificationSeq: 5,
   },
   {
     subjectId: '3',
@@ -65,6 +67,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 10,
     classificationName: 'Modern Education',
+    classificationSeq: 5,
   },
   {
     subjectId: '4',
@@ -76,6 +79,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 10,
     classificationName: 'Modern Education',
+    classificationSeq: 5,
   },
   {
     subjectId: '5',
@@ -87,6 +91,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 10,
     classificationName: 'Modern Education',
+    classificationSeq: 5,
   },
   {
     subjectId: '6',
@@ -98,6 +103,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 12,
     classificationName: 'Personality Development',
+    classificationSeq: 9,
   },
   {
     subjectId: '7',
@@ -109,6 +115,7 @@ export const RAW_PREVIEW_SCORES = [
     status: 'PASS',
     classificationId: 10,
     classificationName: 'Modern Education',
+    classificationSeq: 5,
   },
 ];
 
@@ -249,18 +256,88 @@ export const AGGREGATION_LABELS = {
 };
 
 export const DEFAULT_MOCK_CLASSIFICATIONS = [
-  { id: 1, name: 'English Literacy' },
-  { id: 2, name: 'Arabic Literacy' },
-  { id: 3, name: 'Tamil Literacy' },
-  { id: 4, name: 'Urdu Literacy' },
-  { id: 8, name: '10th Board' },
-  { id: 9, name: '12th Board' },
-  { id: 10, name: 'Modern Education' },
-  { id: 11, name: 'Critical Thinking' },
-  { id: 12, name: 'Personality Development' },
-  { id: 13, name: 'Aalimiyat' },
-  { id: 14, name: 'Holy Quran' },
+  { id: 14, name: 'Holy Quran', seq: 1 },
+  { id: 2, name: 'Arabic Literacy', seq: 2 },
+  { id: 13, name: 'Aalimiyat', seq: 3 },
+  { id: 1, name: 'English Literacy', seq: 4 },
+  { id: 10, name: 'Modern Education', seq: 5 },
+  { id: 3, name: 'Tamil Literacy', seq: 6 },
+  { id: 4, name: 'Urdu Literacy', seq: 7 },
+  { id: 11, name: 'Critical Thinking', seq: 8 },
+  { id: 12, name: 'Personality Development', seq: 9 },
+  { id: 8, name: '10th Board', seq: 10 },
+  { id: 9, name: '12th Board', seq: 11 },
 ];
+
+export const CLASSIFICATION_SEQ_FALLBACK = {
+  '14': 1,
+  '2': 2,
+  '13': 3,
+  '1': 4,
+  '10': 5,
+  '3': 6,
+  '4': 7,
+  '11': 8,
+  '12': 9,
+  '8': 10,
+  '9': 11,
+};
+
+export const CLASSIFICATION_NAME_SEQ_FALLBACK = {
+  'holy quran': 1,
+  'arabic literacy': 2,
+  'aalimiyat': 3,
+  'english literacy': 4,
+  'modern education': 5,
+  'tamil literacy': 6,
+  'urdu literacy': 7,
+  'critical thinking': 8,
+  'personality development': 9,
+  '10th board': 10,
+  '12th board': 11,
+};
+
+export const KNOWN_SUBJECT_CLASSIFICATIONS = {
+  'ar - adab': { subjectId: 47, classificationId: 2, seq: 2, classificationName: 'Arabic Literacy', arabicName: '' },
+  'urdu': { subjectId: 24, classificationId: 4, seq: 7, classificationName: 'Urdu Literacy', arabicName: 'اردو' },
+  'ar - tafseer-ul-quran': { subjectId: 10, classificationId: 13, seq: 3, classificationName: 'Aalimiyat', arabicName: 'تفسیر' },
+  'ar - al hadees': { subjectId: 42, classificationId: 13, seq: 3, classificationName: 'Aalimiyat', arabicName: 'الحدیث' },
+  'ar - al fiqh': { subjectId: 8, classificationId: 13, seq: 3, classificationName: 'Aalimiyat', arabicName: 'الفقہ' },
+  'ar - an nahw': { subjectId: 7, classificationId: 13, seq: 3, classificationName: 'Aalimiyat', arabicName: 'النحو الواضح' },
+  'en - grammar': { subjectId: 16, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: 'قواعد اللغة الانجلیزیہ' },
+  'critical thinking': { subjectId: 50, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: '' },
+  '10th - arabic': { subjectId: 45, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'العلوم العربية' },
+  'en - library': { subjectId: 17, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: '' },
+  'ar - bayna yadayk': { subjectId: 11, classificationId: 2, seq: 2, classificationName: 'Arabic Literacy', arabicName: 'العربية بين يديك' },
+  'nazira / hifz': { subjectId: 1, classificationId: 14, seq: 1, classificationName: 'Holy Quran', arabicName: 'حِفْظ/ناظرة' },
+  'character building': { subjectId: 34, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: 'تمرین السنۃ' },
+  'al-sarf': { subjectId: 44, classificationId: 13, seq: 3, classificationName: 'Aalimiyat', arabicName: 'الصَرْف' },
+  'farsi': { subjectId: 23, classificationId: 4, seq: 7, classificationName: 'Urdu Literacy', arabicName: '' },
+  '10th - soc. studies': { subjectId: 31, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'الدراسات الاجتماعية' },
+  '10th - computer': { subjectId: 32, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: '' },
+  'islamic studies': { subjectId: 2, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: '' },
+  'islamic foundation': { subjectId: 33, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: '' },
+  'weekly assessment': { subjectId: 49, classificationId: 10, seq: 5, classificationName: 'Modern Education', arabicName: '' },
+  'presentation skill': { subjectId: 48, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: '' },
+  'assignments': { subjectId: 46, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: '' },
+  'tamil - writing': { subjectId: 22, classificationId: 3, seq: 6, classificationName: 'Tamil Literacy', arabicName: '' },
+  'group discussion': { subjectId: 6, classificationId: 12, seq: 9, classificationName: 'Personality Development', arabicName: '' },
+  'qirath': { subjectId: 5, classificationId: 14, seq: 1, classificationName: 'Holy Quran', arabicName: '' },
+  'en - tpr': { subjectId: 19, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: 'تکلم الانجلیزیہ' },
+  'tamil': { subjectId: 21, classificationId: 3, seq: 6, classificationName: 'Tamil Literacy', arabicName: 'اللغة التاميلية' },
+  'mathematics': { subjectId: 25, classificationId: 10, seq: 5, classificationName: 'Modern Education', arabicName: 'الرياضيات' },
+  'en - writing': { subjectId: 20, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: 'کتابۃ  الانجلیزیہ' },
+  'en - reading': { subjectId: 18, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: 'قرأۃ  الانجلیزیہ' },
+  'en - conversation': { subjectId: 15, classificationId: 1, seq: 4, classificationName: 'English Literacy', arabicName: 'مکالمۃ الانجلیزیہ' },
+  'ar - writing': { subjectId: 14, classificationId: 2, seq: 2, classificationName: 'Arabic Literacy', arabicName: 'کتابۃ العربیۃ' },
+  'ar - reading': { subjectId: 13, classificationId: 2, seq: 2, classificationName: 'Arabic Literacy', arabicName: 'قرأۃ  العربیہ' },
+  'ar - tpr': { subjectId: 12, classificationId: 2, seq: 2, classificationName: 'Arabic Literacy', arabicName: 'تکلم العربیہ' },
+  'science': { subjectId: 26, classificationId: 10, seq: 5, classificationName: 'Modern Education', arabicName: 'العلوم البيئية' },
+  '10th - science & tech': { subjectId: 30, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'العلوم البيئية' },
+  '10th - maths': { subjectId: 29, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'الرياضيات' },
+  '10th - tamil': { subjectId: 27, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'اللغة التاميلية' },
+  '10th - english': { subjectId: 28, classificationId: 8, seq: 10, classificationName: '10th Board', arabicName: 'العلوم   الانجلیزیہ' },
+};
 
 /**
  * Common color palette dictionary for nearest-color name identification
@@ -351,6 +428,7 @@ export const DEFAULT_TEMPLATE = {
   studentInfoConfig: {
     size: 'standard', // 'compact' | 'standard' | 'large'
     columns: 4, // 2 | 3 | 4
+    align: 'left', // 'left' | 'center' | 'right'
     style: { ...DEFAULT_BLOCK_STYLE },
   },
   showSubjectTable: true,

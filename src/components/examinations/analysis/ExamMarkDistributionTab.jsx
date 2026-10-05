@@ -73,6 +73,128 @@ const BUCKET_CONFIGS = [
   },
 ];
 
+/**
+ * 3D Cylindrical Gradients for Class-wise Subject Breakdown charts.
+ * Vertical bar layout: horizontal linear gradient (x1=0, x2=1) with specular highlight at 20%
+ * and deep edge shadow at 100% to simulate a glossy 3D cylindrical column.
+ * Horizontal bar layout: vertical linear gradient (y1=0, y2=1) with top specular reflection
+ * and bottom shadow to simulate a glossy 3D horizontal cylinder.
+ */
+const render3DGradients = (cardId, isHorizontal = false) => {
+  const x1 = '0';
+  const y1 = '0';
+  const x2 = isHorizontal ? '0' : '1';
+  const y2 = isHorizontal ? '1' : '0';
+  const prefix = isHorizontal ? 'h' : 'v';
+
+  const gradientDefs = [
+    {
+      key: 'group1',
+      stops: isHorizontal
+        ? [
+            { offset: '0%', color: '#fca5a5' },
+            { offset: '25%', color: '#ef4444' },
+            { offset: '75%', color: '#dc2626' },
+            { offset: '100%', color: '#991b1b' },
+          ]
+        : [
+            { offset: '0%', color: '#b91c1c' },
+            { offset: '20%', color: '#fca5a5' },
+            { offset: '45%', color: '#ef4444' },
+            { offset: '75%', color: '#dc2626' },
+            { offset: '100%', color: '#7f1d1d' },
+          ],
+    },
+    {
+      key: 'group2',
+      stops: isHorizontal
+        ? [
+            { offset: '0%', color: '#fed7aa' },
+            { offset: '25%', color: '#f97316' },
+            { offset: '75%', color: '#ea580c' },
+            { offset: '100%', color: '#9a3412' },
+          ]
+        : [
+            { offset: '0%', color: '#c2410c' },
+            { offset: '20%', color: '#fed7aa' },
+            { offset: '45%', color: '#f97316' },
+            { offset: '75%', color: '#ea580c' },
+            { offset: '100%', color: '#7c2d12' },
+          ],
+    },
+    {
+      key: 'group3',
+      stops: isHorizontal
+        ? [
+            { offset: '0%', color: '#fef08a' },
+            { offset: '25%', color: '#eab308' },
+            { offset: '75%', color: '#ca8a04' },
+            { offset: '100%', color: '#854d0e' },
+          ]
+        : [
+            { offset: '0%', color: '#a16207' },
+            { offset: '20%', color: '#fef08a' },
+            { offset: '45%', color: '#eab308' },
+            { offset: '75%', color: '#ca8a04' },
+            { offset: '100%', color: '#713f12' },
+          ],
+    },
+    {
+      key: 'group4',
+      stops: isHorizontal
+        ? [
+            { offset: '0%', color: '#bfdbfe' },
+            { offset: '25%', color: '#3b82f6' },
+            { offset: '75%', color: '#2563eb' },
+            { offset: '100%', color: '#1e3a8a' },
+          ]
+        : [
+            { offset: '0%', color: '#1d4ed8' },
+            { offset: '20%', color: '#bfdbfe' },
+            { offset: '45%', color: '#3b82f6' },
+            { offset: '75%', color: '#2563eb' },
+            { offset: '100%', color: '#172554' },
+          ],
+    },
+    {
+      key: 'group5',
+      stops: isHorizontal
+        ? [
+            { offset: '0%', color: '#a7f3d0' },
+            { offset: '25%', color: '#10b981' },
+            { offset: '75%', color: '#059669' },
+            { offset: '100%', color: '#064e3b' },
+          ]
+        : [
+            { offset: '0%', color: '#047857' },
+            { offset: '20%', color: '#a7f3d0' },
+            { offset: '45%', color: '#10b981' },
+            { offset: '75%', color: '#059669' },
+            { offset: '100%', color: '#022c22' },
+          ],
+    },
+  ];
+
+  return (
+    <defs>
+      {gradientDefs.map((g) => (
+        <linearGradient
+          key={g.key}
+          id={`grad-3d-${prefix}-${cardId}-${g.key}`}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+        >
+          {g.stops.map((s, idx) => (
+            <stop key={idx} offset={s.offset} stopColor={s.color} />
+          ))}
+        </linearGradient>
+      ))}
+    </defs>
+  );
+};
+
 const CustomStackedTooltip = ({ active, payload, label, isPercentageMode }) => {
   if (!active || !payload || !payload.length) return null;
 
@@ -90,12 +212,13 @@ const CustomStackedTooltip = ({ active, payload, label, isPercentageMode }) => {
         {[...payload].reverse().map((entry) => {
           const count = entry.payload[`${entry.dataKey}_count`] || 0;
           const pct = entry.payload[`${entry.dataKey}_pct`] || 0;
+          const bucket = BUCKET_CONFIGS.find((b) => b.key === entry.dataKey);
           return (
             <div key={entry.dataKey} className="flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-1.5">
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: entry.color }}
+                  className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                  style={{ backgroundColor: bucket?.color || '#94a3b8' }}
                 />
                 <span className="text-slate-200 font-medium">{entry.name}</span>
               </div>
@@ -923,9 +1046,23 @@ const ExamMarkDistributionTab = ({
             {BUCKET_CONFIGS.map((b) => (
               <div
                 key={b.key}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-slate-50/70 border-slate-200/60 text-dark-primary"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold bg-slate-50/70 border-slate-200/60 text-dark-primary shadow-2xs"
               >
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: b.color }} />
+                <span
+                  className="w-3 h-3 rounded-full shadow-xs border border-white/50 shrink-0"
+                  style={{
+                    background:
+                      b.key === 'group1'
+                        ? 'radial-gradient(circle at 35% 35%, #fca5a5 0%, #ef4444 55%, #7f1d1d 100%)'
+                        : b.key === 'group2'
+                          ? 'radial-gradient(circle at 35% 35%, #fed7aa 0%, #f97316 55%, #7c2d12 100%)'
+                          : b.key === 'group3'
+                            ? 'radial-gradient(circle at 35% 35%, #fef08a 0%, #eab308 55%, #713f12 100%)'
+                            : b.key === 'group4'
+                              ? 'radial-gradient(circle at 35% 35%, #bfdbfe 0%, #3b82f6 55%, #1e3a8a 100%)'
+                              : 'radial-gradient(circle at 35% 35%, #a7f3d0 0%, #10b981 55%, #064e3b 100%)',
+                  }}
+                />
                 <span>{b.range}</span>
               </div>
             ))}
@@ -957,6 +1094,7 @@ const ExamMarkDistributionTab = ({
           <div className={`grid gap-4 sm:gap-6 ${gridColClass}`}>
             {filteredCards.map((card) => {
               const isTableOpen = showAllTables || Boolean(cardTableOpenMap[card.id]);
+              const safeCardId = String(card.id).replace(/[^a-zA-Z0-9_-]/g, '_');
               // Dynamic height for horizontal bar layout based on number of items
               const horizontalHeight = Math.max(220, card.chartData.length * 36 + 45);
 
@@ -1010,6 +1148,7 @@ const ExamMarkDistributionTab = ({
                           margin={{ top: 12, right: 10, left: -20, bottom: 20 }}
                           barSize={graphsPerRow >= 3 ? 18 : 26}
                         >
+                          {render3DGradients(safeCardId, false)}
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                           <XAxis
                             dataKey="name"
@@ -1030,7 +1169,7 @@ const ExamMarkDistributionTab = ({
                               />
                             }
                           />
-                          <Bar dataKey="group1" name="0-30%" stackId="stack" fill="#ef4444">
+                          <Bar dataKey="group1" name="0-30%" stackId="stack" fill={`url(#grad-3d-v-${safeCardId}-group1)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group1"
@@ -1039,12 +1178,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group2" name="31-50%" stackId="stack" fill="#f97316">
+                          <Bar dataKey="group2" name="31-50%" stackId="stack" fill={`url(#grad-3d-v-${safeCardId}-group2)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group2"
@@ -1053,12 +1192,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group3" name="51-75%" stackId="stack" fill="#eab308">
+                          <Bar dataKey="group3" name="51-75%" stackId="stack" fill={`url(#grad-3d-v-${safeCardId}-group3)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group3"
@@ -1067,12 +1206,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group4" name="76-90%" stackId="stack" fill="#3b82f6">
+                          <Bar dataKey="group4" name="76-90%" stackId="stack" fill={`url(#grad-3d-v-${safeCardId}-group4)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group4"
@@ -1081,7 +1220,7 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
@@ -1090,7 +1229,7 @@ const ExamMarkDistributionTab = ({
                             dataKey="group5"
                             name="91-100%"
                             stackId="stack"
-                            fill="#10b981"
+                            fill={`url(#grad-3d-v-${safeCardId}-group5)`}
                             radius={[3, 3, 0, 0]}
                           >
                             {showDataValues && (
@@ -1101,7 +1240,7 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
@@ -1119,6 +1258,7 @@ const ExamMarkDistributionTab = ({
                           margin={{ top: 10, right: 25, left: 10, bottom: 10 }}
                           barSize={18}
                         >
+                          {render3DGradients(safeCardId, true)}
                           <CartesianGrid
                             strokeDasharray="3 3"
                             horizontal={false}
@@ -1146,7 +1286,7 @@ const ExamMarkDistributionTab = ({
                               />
                             }
                           />
-                          <Bar dataKey="group1" name="0-30%" stackId="stack" fill="#ef4444">
+                          <Bar dataKey="group1" name="0-30%" stackId="stack" fill={`url(#grad-3d-h-${safeCardId}-group1)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group1"
@@ -1155,12 +1295,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group2" name="31-50%" stackId="stack" fill="#f97316">
+                          <Bar dataKey="group2" name="31-50%" stackId="stack" fill={`url(#grad-3d-h-${safeCardId}-group2)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group2"
@@ -1169,12 +1309,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group3" name="51-75%" stackId="stack" fill="#eab308">
+                          <Bar dataKey="group3" name="51-75%" stackId="stack" fill={`url(#grad-3d-h-${safeCardId}-group3)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group3"
@@ -1183,12 +1323,12 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group4" name="76-90%" stackId="stack" fill="#3b82f6">
+                          <Bar dataKey="group4" name="76-90%" stackId="stack" fill={`url(#grad-3d-h-${safeCardId}-group4)`}>
                             {showDataValues && (
                               <LabelList
                                 dataKey="group4"
@@ -1197,7 +1337,7 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}
@@ -1206,7 +1346,7 @@ const ExamMarkDistributionTab = ({
                             dataKey="group5"
                             name="91-100%"
                             stackId="stack"
-                            fill="#10b981"
+                            fill={`url(#grad-3d-h-${safeCardId}-group5)`}
                             radius={[0, 3, 3, 0]}
                           >
                             {showDataValues && (
@@ -1217,7 +1357,7 @@ const ExamMarkDistributionTab = ({
                                 fontSize={9}
                                 fontWeight={700}
                                 formatter={(v) =>
-                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                   v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
                                 }
                               />
                             )}

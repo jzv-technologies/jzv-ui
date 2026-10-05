@@ -54,30 +54,66 @@ const StudentInfoSettings = ({ currentConfig, setCurrentConfig }) => {
             fullWidth={true}
           />
         </div>
-        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
-          <span className="text-[10px] font-bold text-dark-muted">Grid Columns:</span>
-          {[2, 3, 4].map((col) => (
-            <button
-              key={col}
-              type="button"
-              onClick={() =>
-                setCurrentConfig({
-                  ...currentConfig,
-                  studentInfoConfig: {
-                    ...currentConfig.studentInfoConfig,
-                    columns: col,
-                  },
-                })
-              }
-              className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition-all ${
-                (currentConfig.studentInfoConfig?.columns || 4) === col
-                  ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
-                  : 'bg-white text-dark-slate border-light-border hover:bg-slate-50'
-              }`}
-            >
-              {col} Cols
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-auto">
+          {/* Content Alignment */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-dark-muted">Align:</span>
+            {[
+              { id: 'left', label: 'Left', icon: 'fa-align-left' },
+              { id: 'center', label: 'Center', icon: 'fa-align-center' },
+              { id: 'right', label: 'Right', icon: 'fa-align-right' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() =>
+                  setCurrentConfig((prev) => ({
+                    ...prev,
+                    studentInfoConfig: {
+                      ...prev.studentInfoConfig,
+                      align: item.id,
+                    },
+                  }))
+                }
+                title={`Align content ${item.label}`}
+                className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition-all flex items-center gap-1 ${
+                  (currentConfig.studentInfoConfig?.align || 'left') === item.id
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                    : 'bg-white text-dark-slate border-light-border hover:bg-slate-50'
+                }`}
+              >
+                <i className={`fas ${item.icon}`} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Grid Columns */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-dark-muted">Grid:</span>
+            {[2, 3, 4].map((col) => (
+              <button
+                key={col}
+                type="button"
+                onClick={() =>
+                  setCurrentConfig((prev) => ({
+                    ...prev,
+                    studentInfoConfig: {
+                      ...prev.studentInfoConfig,
+                      columns: col,
+                    },
+                  }))
+                }
+                className={`px-2 py-1 rounded-lg text-[10px] font-black border cursor-pointer transition-all ${
+                  (currentConfig.studentInfoConfig?.columns || 4) === col
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                    : 'bg-white text-dark-slate border-light-border hover:bg-slate-50'
+                }`}
+              >
+                {col} Cols
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
