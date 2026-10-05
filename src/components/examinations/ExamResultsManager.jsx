@@ -16,6 +16,7 @@ import ExamRemarksTabView from './ExamRemarksTabView';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
 import ConfirmModal from '../ConfirmModal';
+import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../utils/examScheduleUtils';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -44,12 +45,11 @@ const ExamResultsManager = ({
 }) => {
   const canAccess = useCanAccess(userRoles);
 
-  // Capability driven strictly by app_view_controller component
-  const canManageAllMarks =
-    canAccess('exam-results-status-override') ||
-    userRoles.some((r) =>
-      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
-    );
+  // Capability driven strictly by management roles:
+  // Administrators, Principals, and Exam Coordinators retain management permissions
+  const canManageAllMarks = userRoles.some((r) =>
+    ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+  );
   const canPublishReport =
     canAccess('exam-progress-report-publish') ||
     canAccess('exam-sched-publish') ||
@@ -320,7 +320,7 @@ const ExamResultsManager = ({
     const fetchScheduleData = async () => {
       setScheduleLoading(true);
       try {
-        const [slotsRes, resultsRes] = await Promise.all([
+        const [slotsRes, resultsRes, schedRes] = await Promise.all([
           supabase
             .from('exam_schedule_slots')
             .select('*')
@@ -329,12 +329,22 @@ const ExamResultsManager = ({
             .from('exam_results')
             .select('*')
             .eq('schedule_id', Number(selectedScheduleId)),
+          supabase
+            .from('exam_schedules')
+            .select('*')
+            .eq('id', Number(selectedScheduleId))
+            .maybeSingle(),
         ]);
 
         if (currentSeq !== scheduleFetchSeq.current) return;
 
         setSlots(slotsRes.data || []);
         setResults(resultsRes.data || []);
+        if (schedRes?.data) {
+          setSchedules((prev) =>
+            prev.map((s) => (String(s.id) === String(selectedScheduleId) ? schedRes.data : s))
+          );
+        }
         setScheduleDataFor(String(selectedScheduleId));
       } catch (err) {
         console.error('Failed to load schedule results & slots:', err);
@@ -359,7 +369,6 @@ const ExamResultsManager = ({
           supabase
             .from('employees')
             .select('id, name, is_active, is_teacher')
-            .eq('is_teacher', true)
             .eq('is_active', true)
             .order('name'),
           supabase.from('class_assignments').select('*'),
@@ -392,7 +401,7 @@ const ExamResultsManager = ({
   const refreshResults = useCallback(async () => {
     if (!selectedScheduleId) return;
     try {
-      const [slotsRes, resultsRes] = await Promise.all([
+      const [slotsRes, resultsRes, schedRes] = await Promise.all([
         supabase
           .from('exam_schedule_slots')
           .select('*')
@@ -401,9 +410,19 @@ const ExamResultsManager = ({
           .from('exam_results')
           .select('*')
           .eq('schedule_id', Number(selectedScheduleId)),
+        supabase
+          .from('exam_schedules')
+          .select('*')
+          .eq('id', Number(selectedScheduleId))
+          .maybeSingle(),
       ]);
       setSlots(slotsRes.data || []);
       setResults(resultsRes.data || []);
+      if (schedRes?.data) {
+        setSchedules((prev) =>
+          prev.map((s) => (String(s.id) === String(selectedScheduleId) ? schedRes.data : s))
+        );
+      }
       setScheduleDataFor(String(selectedScheduleId));
     } catch (err) {
       console.error('Failed to refresh schedule results:', err);
@@ -426,7 +445,7 @@ const ExamResultsManager = ({
     [schedules, selectedScheduleId]
   );
 
-  const isReportPublished = Boolean(selectedSchedule?.is_report_published);
+  const isReportPublished = isScheduleReportPublished(selectedSchedule);
   const isTeacherLocked = isReportPublished && !canManageAllMarks;
 
   const handleTogglePublishReport = useCallback(async () => {
@@ -435,7 +454,7 @@ const ExamResultsManager = ({
       return;
     }
 
-    const willPublish = !selectedSchedule.is_report_published;
+    const willPublish = !isScheduleReportPublished(selectedSchedule);
 
     setConfirmModalData({
       title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
@@ -463,6 +482,8 @@ const ExamResultsManager = ({
             )
           );
 
+          broadcastSchedulePublishedChange(selectedSchedule.id, willPublish);
+
           showToast(
             willPublish
               ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
@@ -478,6 +499,114 @@ const ExamResultsManager = ({
       },
     });
   }, [selectedScheduleId, selectedSchedule]);
+
+  // Synchronize published changes from local window events
+  useEffect(() => {
+    const handlePublishedChange = (e) => {
+      const { scheduleId, is_report_published } = e.detail || {};
+      if (scheduleId) {
+        setSchedules((prev) =>
+          prev.map((s) =>
+            String(s.id) === String(scheduleId)
+              ? { ...s, is_report_published: Boolean(is_report_published) }
+              : s
+          )
+        );
+      }
+    };
+    window.addEventListener('exam-schedule-published-changed', handlePublishedChange);
+    return () => window.removeEventListener('exam-schedule-published-changed', handlePublishedChange);
+  }, []);
+
+  // Synchronize published changes across browser tabs and windows via BroadcastChannel
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('exam_schedules_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'SCHEDULE_PUBLISHED_CHANGED') {
+          const { scheduleId, is_report_published } = event.data;
+          if (scheduleId) {
+            setSchedules((prev) =>
+              prev.map((s) =>
+                String(s.id) === String(scheduleId)
+                  ? { ...s, is_report_published: Boolean(is_report_published) }
+                  : s
+              )
+            );
+          }
+        }
+      };
+    } catch (e) {}
+    return () => {
+      if (bc) bc.close();
+    };
+  }, []);
+
+  // Supabase Realtime subscription on exam_schedules
+  useEffect(() => {
+    const channel = supabase
+      .channel('exam_schedules_realtime_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'exam_schedules' },
+        (payload) => {
+          if (payload.new && payload.new.id) {
+            setSchedules((prev) =>
+              prev.map((s) =>
+                String(s.id) === String(payload.new.id)
+                  ? { ...s, ...payload.new }
+                  : s
+              )
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Re-fetch selected schedule row from Supabase on tab switch, window focus, or visibility change
+  useEffect(() => {
+    if (!selectedScheduleId) return;
+    let isMounted = true;
+    const fetchFreshSchedule = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('exam_schedules')
+          .select('*')
+          .eq('id', Number(selectedScheduleId))
+          .maybeSingle();
+        if (isMounted && data && !error) {
+          setSchedules((prev) =>
+            prev.map((s) => (String(s.id) === String(selectedScheduleId) ? data : s))
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to fetch fresh schedule row:', e);
+      }
+    };
+
+    fetchFreshSchedule();
+
+    const onFocus = () => fetchFreshSchedule();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchFreshSchedule();
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [selectedScheduleId, activeTab]);
 
   const teacherMap = useMemo(() => {
     const map = {};
@@ -821,53 +950,124 @@ const ExamResultsManager = ({
     return names;
   }, [activeSlots, teacherMap]);
 
+  // Helper to match logged-in teacher IDs across employees table, timetable teachers, and auth
+  const isMatchingTeacher = useCallback(
+    (targetTeacherId) => {
+      if (!targetTeacherId || !teacherRecord) return false;
+      const currentIds = [
+        teacherRecord.id,
+        teacherRecord.teacher_id,
+        teacherRecord.emp_id,
+        teacherRecord.employee_id,
+        user?.id,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      if (currentIds.includes(String(targetTeacherId))) return true;
+
+      // Also check name match against teacherMap if ID is stored in teacherMap
+      if (
+        teacherRecord.name &&
+        teacherMap[String(targetTeacherId)] &&
+        teacherMap[String(targetTeacherId)].toLowerCase().trim() ===
+          teacherRecord.name.toLowerCase().trim()
+      ) {
+        return true;
+      }
+
+      return false;
+    },
+    [teacherRecord, user, teacherMap]
+  );
+
   // Check if logged-in teacher is allocated to this subject in class_assignments
   const isAllocatedSubjectTeacher = useMemo(() => {
     const allocatedMap = {};
-    if (!teacherRecord?.id || !selectedClassId) return allocatedMap;
+    if (!selectedClassId) return allocatedMap;
     activeResults.forEach((result) => {
       const isAssigned = classAssignments.some(
         (ca) =>
           String(ca.class_id) === String(selectedClassId) &&
           String(ca.subject_id) === String(result.subject_id) &&
-          String(ca.teacher_id) === String(teacherRecord.id)
+          isMatchingTeacher(ca.teacher_id)
       );
+      allocatedMap[result.id] = isAssigned;
       allocatedMap[String(result.id)] = isAssigned;
     });
     return allocatedMap;
-  }, [teacherRecord, selectedClassId, activeResults, classAssignments]);
+  }, [isMatchingTeacher, selectedClassId, activeResults, classAssignments]);
 
-  // Enforce access control for mark editing - per subject
-  // When progress report is published, teachers are locked from editing marks
+  // Enforce access control for mark editing - strictly invigilator, subject teacher, coordinator, and management only
+  // Not every teacher can modify marks; only the assigned invigilator or subject teacher can.
+  // When progress report is published, teachers are strictly locked from editing marks.
   const canEditMarksForSubject = useMemo(() => {
     const editMap = {};
+    const canAccessMarkEntry =
+      canAccess('exam-results-edit-marks') ||
+      canAccess('exam-mark-entry-tab') ||
+      canAccess('exam-results-tab-entry') ||
+      canAccess('exam-results') ||
+      canManageAllMarks ||
+      userRoles.some((r) =>
+        ['admin', 'management', 'coordinator', 'teacher', 'staff', 'principal'].includes(
+          String(r).toLowerCase().trim()
+        )
+      );
+
     activeResults.forEach((result) => {
-      const isInvigilator =
-        activeSlots[String(result.id)]?.teacher_id &&
-        String(teacherRecord?.id) === String(activeSlots[String(result.id)]?.teacher_id);
-      const isSubjectTeacherForThis = isAllocatedSubjectTeacher[String(result.id)];
-      const isTeacher = isInvigilator || isSubjectTeacherForThis;
-      const teacherAllowed = isTeacher && !isReportPublished;
-      editMap[String(result.id)] =
-        canAccess('exam-results-edit-marks') &&
-        (canManageAllMarks || teacherAllowed);
+      // 1. When progress report is published, marks editing is strictly locked for teachers.
+      // Only coordinator and management retain edit capabilities.
+      if (isTeacherLocked) {
+        editMap[result.id] = false;
+        editMap[String(result.id)] = false;
+        return;
+      }
+
+      if (!canAccessMarkEntry) {
+        editMap[result.id] = false;
+        editMap[String(result.id)] = false;
+        return;
+      }
+
+      // 2. Management (admin, management, principal) and Coordinator can edit marks for any subject
+      if (canManageAllMarks) {
+        editMap[result.id] = true;
+        editMap[String(result.id)] = true;
+        return;
+      }
+
+      // 3. For teachers: ONLY the assigned invigilator or allocated subject teacher
+      const slot = activeSlots[String(result.id)] || activeSlots[result.id];
+      const isInvigilator = Boolean(slot?.teacher_id && isMatchingTeacher(slot.teacher_id));
+      const isSubjectTeacher = Boolean(
+        isAllocatedSubjectTeacher[result.id] ?? isAllocatedSubjectTeacher[String(result.id)]
+      );
+
+      const canEdit = isInvigilator || isSubjectTeacher;
+      editMap[result.id] = canEdit;
+      editMap[String(result.id)] = canEdit;
     });
     return editMap;
   }, [
     activeResults,
     activeSlots,
-    teacherRecord,
-    canManageAllMarks,
     canAccess,
+    userRoles,
+    canManageAllMarks,
+    isTeacherLocked,
+    isMatchingTeacher,
     isAllocatedSubjectTeacher,
-    isReportPublished,
   ]);
 
   // Quick fill handler - uses activeResults and canEditMarksForSubject which are now defined
   const handleQuickFill = useCallback(async () => {
     if (!quickFillSubjectId || quickFillValue === '') return;
     const targetResult = activeResults.find((r) => String(r.id) === String(quickFillSubjectId));
-    if (!targetResult || !canEditMarksForSubject[targetResult.id]) {
+    if (
+      !targetResult ||
+      !(canEditMarksForSubject[targetResult.id] ?? canEditMarksForSubject[String(targetResult.id)])
+    ) {
       showToast('You do not have permission to edit marks for this subject', 'error');
       return;
     }
@@ -1298,22 +1498,22 @@ const ExamResultsManager = ({
                 {selectedSchedule && (
                   <span
                     className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                      selectedSchedule.is_report_published
+                      isScheduleReportPublished(selectedSchedule)
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                         : 'bg-slate-100 text-slate-600 border-slate-200'
                     }`}
                     title={
-                      selectedSchedule.is_report_published
+                      isScheduleReportPublished(selectedSchedule)
                         ? 'Progress Report cards are published to parent portal'
                         : 'Progress Report cards are draft/unpublished to parents'
                     }
                   >
                     <i
                       className={`fas ${
-                        selectedSchedule.is_report_published ? 'fa-globe' : 'fa-lock'
+                        isScheduleReportPublished(selectedSchedule) ? 'fa-globe' : 'fa-lock'
                       } text-[8px]`}
                     />
-                    {selectedSchedule.is_report_published
+                    {isScheduleReportPublished(selectedSchedule)
                       ? 'Report Published'
                       : 'Report Unpublished'}
                   </span>
@@ -1368,12 +1568,12 @@ const ExamResultsManager = ({
                 onClick={handleTogglePublishReport}
                 disabled={publishingReport}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-60 shrink-0 ${
-                  selectedSchedule.is_report_published
+                  isScheduleReportPublished(selectedSchedule)
                     ? 'bg-amber-600 hover:bg-amber-700 text-white'
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 }`}
                 title={
-                  selectedSchedule.is_report_published
+                  isScheduleReportPublished(selectedSchedule)
                     ? 'Click to unpublish progress reports from the parent portal'
                     : 'Click to publish progress reports to the parent portal'
                 }
@@ -1384,7 +1584,7 @@ const ExamResultsManager = ({
                     <i className="fas fa-spinner fa-spin text-xs" />
                     <span>Updating...</span>
                   </>
-                ) : selectedSchedule.is_report_published ? (
+                ) : isScheduleReportPublished(selectedSchedule) ? (
                   <>
                     <i className="fas fa-eye-slash text-xs" />
                     <span>Unpublish Report</span>
@@ -1770,7 +1970,7 @@ const ExamResultsManager = ({
             {activeTab === 'entry' &&
               selectedScheduleId &&
               selectedClassId &&
-              activeResults.some((r) => canEditMarksForSubject[r.id]) && (
+              activeResults.some((r) => canEditMarksForSubject[r.id] ?? canEditMarksForSubject[String(r.id)]) && (
                 <div
                   className="flex items-center gap-2"
                   data-feature-filter="exam-results-save-mode"
@@ -1798,14 +1998,19 @@ const ExamResultsManager = ({
             {activeTab === 'entry' &&
               selectedScheduleId &&
               selectedClassId &&
-              activeResults.some((r) => canEditMarksForSubject[r.id]) &&
+              activeResults.length > 0 &&
               saveMode === 'manual' &&
               hasUnsavedChanges && (
                 <button
                   type="button"
                   onClick={saveAllPendingChanges}
+                  disabled={isTeacherLocked}
                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-                  title="Save all pending changes"
+                  title={
+                    isTeacherLocked
+                      ? 'Progress report is published for this examination. Saving marks is locked for teachers.'
+                      : 'Save all pending changes'
+                  }
                   data-feature-filter="exam-results-save-all"
                 >
                   <i className="fa-solid fa-floppy-disk text-xl" />
@@ -1817,13 +2022,23 @@ const ExamResultsManager = ({
             {activeTab === 'entry' &&
               selectedScheduleId &&
               selectedClassId &&
-              activeResults.some((r) => canEditMarksForSubject[r.id]) && (
+              activeResults.length > 0 && (
                 <div data-feature-filter="exam-results-quick-fill">
                   <button
                     type="button"
                     onClick={() => setShowQuickFillModal(true)}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="Quick fill marks for unfilled students"
+                    disabled={
+                      isTeacherLocked ||
+                      !activeResults.some(
+                        (r) => canEditMarksForSubject[r.id] ?? canEditMarksForSubject[String(r.id)]
+                      )
+                    }
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                    title={
+                      isTeacherLocked
+                        ? 'Progress report is published for this examination. Quick Fill is locked for teachers.'
+                        : 'Quick fill marks for unfilled students'
+                    }
                   >
                     <i className="fas fa-magic text-[10px]" />
                     <span>Quick Fill</span>
@@ -1968,6 +2183,14 @@ const ExamResultsManager = ({
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full min-h-[360px] bg-white border border-light-border rounded-2xl sm:rounded-3xl p-8 shadow-xs">
+                    {isTeacherLocked && (
+                      <div className="w-full mb-4 flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold shadow-2xs">
+                        <i className="fas fa-lock text-amber-600 text-sm shrink-0" />
+                        <span>
+                          Progress Report is published for this examination. Marks editing is locked for teachers.
+                        </span>
+                      </div>
+                    )}
                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mb-3 shadow-2xs">
                       <i className="fas fa-hand-pointer" />
                     </div>
@@ -2053,6 +2276,7 @@ const ExamResultsManager = ({
                 selectedClassIds={attendanceClassIds}
                 onClassIdsChange={setAttendanceClassIds}
                 onOpenUploadModal={() => setIsAttendanceModalOpen(true)}
+                isLocked={isTeacherLocked}
               />
             }
           >
@@ -2066,6 +2290,7 @@ const ExamResultsManager = ({
               selectedClassIds={attendanceClassIds}
               onClassIdsChange={setAttendanceClassIds}
               onOpenUploadModal={() => setIsAttendanceModalOpen(true)}
+              isLocked={isTeacherLocked}
             />
           </ConditionalBlock>
         )}
@@ -2089,6 +2314,7 @@ const ExamResultsManager = ({
                   setRemarksModalMode('upload');
                   setIsRemarksModalOpen(true);
                 }}
+                isLocked={isTeacherLocked}
               />
             }
           >
@@ -2105,6 +2331,7 @@ const ExamResultsManager = ({
                 setRemarksModalMode('upload');
                 setIsRemarksModalOpen(true);
               }}
+              isLocked={isTeacherLocked}
             />
           </ConditionalBlock>
         )}
@@ -2134,6 +2361,15 @@ const ExamResultsManager = ({
               onRemarksModalOpenChange={setIsRemarksModalOpen}
               onAttendanceCountChange={setAttendanceCount}
               onRemarksCountChange={setRemarksCount}
+              onSchedulePublishedChange={(schedId, isPub) => {
+                setSchedules((prev) =>
+                  prev.map((s) =>
+                    String(s.id) === String(schedId)
+                      ? { ...s, is_report_published: isPub }
+                      : s
+                  )
+                );
+              }}
             />
           </ConditionalBlock>
         )}

@@ -9,12 +9,12 @@ import {
   invalidateDynamicFormConfigsCache,
 } from '../utils/dynamicFormConfigs';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v18';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v19';
 
 const readSessionCache = (userRoles) => {
   try {
     // Clear legacy caches
-    for (let i = 1; i <= 17; i++) {
+    for (let i = 1; i <= 18; i++) {
       sessionStorage.removeItem(`jzv_view_config_cache_v${i}`);
     }
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);
@@ -400,7 +400,8 @@ export const useViewConfig = (userRoles = []) => {
         componentName === 'exam-attendance-upload' ||
         componentName === 'exam-attendance-edit' ||
         componentName === 'exam-remarks-upload' ||
-        componentName === 'exam-remarks-edit'
+        componentName === 'exam-remarks-edit' ||
+        componentName === 'exam-results-edit-marks'
       ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>

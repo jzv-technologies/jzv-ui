@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { formatDateDisplay, normalizeDateStr } from '../../utils/dateUtils';
+import { isScheduleReportPublished } from '../../utils/examScheduleUtils';
 
 /**
  * Parent view for upcoming published Exam Schedule.
@@ -281,7 +282,7 @@ const ParentExamTimetableView = ({
 
           {selectedSchedule && (
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-              {Boolean(selectedSchedule.is_report_published) && typeof onNavigate === 'function' && (
+              {isScheduleReportPublished(selectedSchedule) && typeof onNavigate === 'function' && (
                 <button
                   type="button"
                   onClick={() => onNavigate('ward-progress-report')}

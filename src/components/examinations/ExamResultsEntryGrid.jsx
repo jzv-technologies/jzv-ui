@@ -200,7 +200,7 @@ const ExamResultsEntryGrid = ({
     const handleQuickFill = async (event) => {
       const { subjectId, value, targetResult } = event.detail;
       if (!subjectId || value === '') return;
-      if (!targetResult || !canEditMap[targetResult.id]) {
+      if (!targetResult || !(canEditMap[targetResult.id] ?? canEditMap[String(targetResult.id)])) {
         showToast('You do not have permission to edit marks for this subject', 'error');
         return;
       }
@@ -319,7 +319,9 @@ const ExamResultsEntryGrid = ({
         const updatedEntries = {
           ...currentResultEntries,
           [String(studentId)]: { ...(existing || {}), ...payload, id: savedId },
-          ...(admissionNo ? { [String(admissionNo)]: { ...(existing || {}), ...payload, id: savedId } } : {}),
+          ...(admissionNo
+            ? { [String(admissionNo)]: { ...(existing || {}), ...payload, id: savedId } }
+            : {}),
         };
         const allFilled = students.every((s) => {
           const key1 = String(s.id);
@@ -365,10 +367,11 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const currentRes = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = currentRes[String(studentId)] || currentRes[stuKey] || {
-        student_id: studentId,
-        result_id: resultId,
-      };
+      const existing = currentRes[String(studentId)] ||
+        currentRes[stuKey] || {
+          student_id: studentId,
+          result_id: resultId,
+        };
       const updatedEntry = { ...existing, marks_obtained: value, is_absent: false };
       currentRes[String(studentId)] = updatedEntry;
       if (admissionNo) {
@@ -413,10 +416,11 @@ const ExamResultsEntryGrid = ({
     setAllEntries((prev) => {
       const next = { ...prev };
       const resMap = next[String(resultId)] ? { ...next[String(resultId)] } : {};
-      const existing = resMap[String(studentId)] || resMap[stuKey] || {
-        student_id: studentId,
-        result_id: resultId,
-      };
+      const existing = resMap[String(studentId)] ||
+        resMap[stuKey] || {
+          student_id: studentId,
+          result_id: resultId,
+        };
       const updatedEntry = {
         ...existing,
         is_absent: newAbsent,
@@ -486,7 +490,8 @@ const ExamResultsEntryGrid = ({
   // Mark all remaining unfilled students as absent for editable subjects
   const handleMarkRemainingAbsent = async (targetResultId) => {
     const targetResult = results.find((r) => String(r.id) === String(targetResultId));
-    if (!targetResult || !canEditMap[targetResult.id]) return;
+    if (!targetResult || !(canEditMap[targetResult.id] ?? canEditMap[String(targetResult.id)]))
+      return;
 
     const currentResEntries = allEntries[String(targetResult.id)] || {};
     const unfilled = students.filter((stu) => {
@@ -627,8 +632,9 @@ const ExamResultsEntryGrid = ({
                 {/* Dynamic Subject Columns */}
                 {results.map((result, colIdx) => {
                   const subject = subjects[colIdx];
-                  const canEdit = canEditMap[result.id];
-                  const invigName = invigilatorNames[result.id];
+                  const canEdit = Boolean(canEditMap[result.id] ?? canEditMap[String(result.id)]);
+                  const invigName =
+                    invigilatorNames[result.id] || invigilatorNames[String(result.id)];
                   const stats = columnStats[result.id] || { total: 0, filled: 0, pct: 0 };
 
                   // Determine border color based on completion status
@@ -719,7 +725,7 @@ const ExamResultsEntryGrid = ({
                           {stats.filled}/{stats.total} ({stats.pct}%)
                         </span>
                       </div>
-                      {canEdit && (
+                      {canEdit && !isLocked && (
                         <div className="mt-1 flex items-center justify-center gap-1">
                           <button
                             type="button"
@@ -782,7 +788,9 @@ const ExamResultsEntryGrid = ({
 
                       {/* Subject Mark Columns */}
                       {results.map((result, colIdx) => {
-                        const canEdit = canEditMap[result.id];
+                        const canEdit =
+                          !isLocked &&
+                          Boolean(canEditMap[result.id] ?? canEditMap[String(result.id)]);
                         const stuKey = String(stu.admission_no || stu.id);
                         const cellKey = `${result.id}_${stuKey}`;
                         const entry = allEntries[String(result.id)]?.[stuKey];
@@ -845,7 +853,7 @@ const ExamResultsEntryGrid = ({
                                     inputMode="decimal"
                                     min="0"
                                     max={result.max_marks}
-                                    step="0.5"
+                                    step="1"
                                     disabled={isAbsent}
                                     placeholder="—"
                                     value={isAbsent ? '' : (marks ?? '')}
@@ -989,7 +997,7 @@ const ExamResultsEntryGrid = ({
                   className="w-full px-3 py-2 text-xs border border-light-border rounded-xl bg-white focus:ring-2 focus:ring-emerald-300 outline-none"
                 >
                   {results
-                    .filter((r) => canEditMap[r.id])
+                    .filter((r) => Boolean(canEditMap[r.id] ?? canEditMap[String(r.id)]))
                     .map((r, idx) => (
                       <option key={r.id} value={r.id}>
                         {subjects[idx]?.name || `Subject #${r.subject_id}`} (Max: {r.max_marks})
@@ -1005,7 +1013,7 @@ const ExamResultsEntryGrid = ({
                 <input
                   type="number"
                   min="0"
-                  step="0.5"
+                  step="1"
                   value={quickFillValue}
                   onChange={(e) => setQuickFillValue(e.target.value)}
                   placeholder="e.g. 80"

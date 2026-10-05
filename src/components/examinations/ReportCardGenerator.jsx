@@ -9,6 +9,7 @@ import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
 import ConfirmModal from '../ConfirmModal';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
+import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../utils/examScheduleUtils';
 import { ExtraComponentLayers } from './report-card-designer/components/ExtraComponent';
 import {
   DEFAULT_TEMPLATE,
@@ -91,6 +92,7 @@ const ReportCardGenerator = ({
   onRemarksModalOpenChange,
   onAttendanceCountChange,
   onRemarksCountChange,
+  onSchedulePublishedChange = null,
 }) => {
   // Access control — driven by app_view_controller, no hardcoded role checks
   const canAccess = useCanAccess(userRoles);
@@ -113,6 +115,49 @@ const ReportCardGenerator = ({
   const [internalClassifications, setInternalClassifications] = useState(
     DEFAULT_MOCK_CLASSIFICATIONS
   );
+
+  // Listen for schedule published changes dispatched locally or via BroadcastChannel
+  useEffect(() => {
+    const handlePublishedChange = (e) => {
+      const { scheduleId, is_report_published } = e.detail || {};
+      if (scheduleId) {
+        setInternalSchedules((prev) =>
+          prev.map((s) =>
+            String(s.id) === String(scheduleId)
+              ? { ...s, is_report_published: Boolean(is_report_published) }
+              : s
+          )
+        );
+      }
+    };
+    window.addEventListener('exam-schedule-published-changed', handlePublishedChange);
+    return () => window.removeEventListener('exam-schedule-published-changed', handlePublishedChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('exam_schedules_sync');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'SCHEDULE_PUBLISHED_CHANGED') {
+          const { scheduleId, is_report_published } = event.data;
+          if (scheduleId) {
+            setInternalSchedules((prev) =>
+              prev.map((s) =>
+                String(s.id) === String(scheduleId)
+                  ? { ...s, is_report_published: Boolean(is_report_published) }
+                  : s
+              )
+            );
+          }
+        }
+      };
+    } catch (e) {}
+    return () => {
+      if (bc) bc.close();
+    };
+  }, []);
 
   const [selectedScheduleId, setSelectedScheduleId] = useState(
     initialScheduleId ? String(initialScheduleId) : schedules[0]?.id ? String(schedules[0].id) : ''
@@ -410,7 +455,7 @@ const ReportCardGenerator = ({
       return;
     }
 
-    const willPublish = !selectedSchedule.is_report_published;
+    const willPublish = !isScheduleReportPublished(selectedSchedule);
 
     setConfirmModalData({
       title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
@@ -438,6 +483,11 @@ const ReportCardGenerator = ({
             )
           );
 
+          if (typeof onSchedulePublishedChange === 'function') {
+            onSchedulePublishedChange(selectedSchedule.id, willPublish);
+          }
+          broadcastSchedulePublishedChange(selectedSchedule.id, willPublish);
+
           showToast(
             willPublish
               ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
@@ -452,7 +502,7 @@ const ReportCardGenerator = ({
         }
       },
     });
-  }, [selectedScheduleId, selectedSchedule]);
+  }, [selectedScheduleId, selectedSchedule, onSchedulePublishedChange]);
 
   // Selected class object
   const selectedClass = useMemo(() => {
@@ -682,22 +732,22 @@ const ReportCardGenerator = ({
                   {selectedSchedule && (
                     <span
                       className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                        selectedSchedule.is_report_published
+                        isScheduleReportPublished(selectedSchedule)
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                       title={
-                        selectedSchedule.is_report_published
+                        isScheduleReportPublished(selectedSchedule)
                           ? 'Progress Report cards are published to parent portal'
                           : 'Progress Report cards are draft/unpublished to parents'
                       }
                     >
                       <i
                         className={`fas ${
-                          selectedSchedule.is_report_published ? 'fa-globe' : 'fa-lock'
+                          isScheduleReportPublished(selectedSchedule) ? 'fa-globe' : 'fa-lock'
                         } text-[8px]`}
                       />
-                      {selectedSchedule.is_report_published
+                      {isScheduleReportPublished(selectedSchedule)
                         ? 'Report Published'
                         : 'Report Unpublished'}
                     </span>

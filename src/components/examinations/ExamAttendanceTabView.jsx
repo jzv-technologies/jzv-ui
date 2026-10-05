@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
+import { isScheduleReportPublished } from '../../utils/examScheduleUtils';
 
 const LOCAL_ATTENDANCE_STORAGE_PREFIX = 'jzv_exam_attendance_';
 
@@ -20,15 +21,15 @@ const ExamAttendanceTabView = forwardRef(({
   userRoles = [],
   selectedClassIds = [],
   onOpenUploadModal,
+  isLocked = null,
 }, ref) => {
   const canAccess = useCanAccess(userRoles);
-  const canManageAll =
-    canAccess('exam-results-status-override') ||
-    userRoles.some((r) =>
-      ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
-    );
-  const isReportPublished = Boolean(schedule?.is_report_published);
-  const isTeacherLocked = isReportPublished && !canManageAll;
+  const canManageAll = userRoles.some((r) =>
+    ['admin', 'management', 'coordinator', 'principal'].includes(String(r).toLowerCase().trim())
+  );
+  const isReportPublished = isScheduleReportPublished(schedule);
+  const isTeacherLocked =
+    typeof isLocked === 'boolean' ? isLocked : (isReportPublished && !canManageAll);
   const canEdit =
     !isTeacherLocked &&
     (canAccess('exam-attendance-edit') ||
@@ -661,7 +662,7 @@ const ExamAttendanceTabView = forwardRef(({
                       )}
                     </td>
                     <td className="py-2.5 px-3.5 text-right">
-                      {canEdit && (
+                      {canEdit && !isTeacherLocked && (
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(r)}
