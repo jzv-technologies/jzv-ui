@@ -16,7 +16,10 @@ import ExamRemarksTabView from './ExamRemarksTabView';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
 import ConfirmModal from '../ConfirmModal';
-import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../utils/examScheduleUtils';
+import {
+  isScheduleReportPublished,
+  broadcastSchedulePublishedChange,
+} from '../../utils/examScheduleUtils';
 
 const ENTRY_STATUS_CONFIG = {
   pending: {
@@ -208,7 +211,8 @@ const ExamResultsManager = ({
   const scheduleFetchSeq = useRef(0);
   const needsScheduleData = activeTab === 'entry' || activeTab === 'summary';
   const needsEntrySupport = activeTab === 'entry';
-  const scheduleReady = Boolean(selectedScheduleId) && scheduleDataFor === String(selectedScheduleId);
+  const scheduleReady =
+    Boolean(selectedScheduleId) && scheduleDataFor === String(selectedScheduleId);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
   // Class selection for Attendance & Remarks tabs (supports single, multiple, or all classes)
   const [attendanceClassIds, setAttendanceClassIds] = useState([]);
@@ -325,10 +329,7 @@ const ExamResultsManager = ({
             .from('exam_schedule_slots')
             .select('*')
             .eq('schedule_id', Number(selectedScheduleId)),
-          supabase
-            .from('exam_results')
-            .select('*')
-            .eq('schedule_id', Number(selectedScheduleId)),
+          supabase.from('exam_results').select('*').eq('schedule_id', Number(selectedScheduleId)),
           supabase
             .from('exam_schedules')
             .select('*')
@@ -406,10 +407,7 @@ const ExamResultsManager = ({
           .from('exam_schedule_slots')
           .select('*')
           .eq('schedule_id', Number(selectedScheduleId)),
-        supabase
-          .from('exam_results')
-          .select('*')
-          .eq('schedule_id', Number(selectedScheduleId)),
+        supabase.from('exam_results').select('*').eq('schedule_id', Number(selectedScheduleId)),
         supabase
           .from('exam_schedules')
           .select('*')
@@ -515,7 +513,8 @@ const ExamResultsManager = ({
       }
     };
     window.addEventListener('exam-schedule-published-changed', handlePublishedChange);
-    return () => window.removeEventListener('exam-schedule-published-changed', handlePublishedChange);
+    return () =>
+      window.removeEventListener('exam-schedule-published-changed', handlePublishedChange);
   }, []);
 
   // Synchronize published changes across browser tabs and windows via BroadcastChannel
@@ -555,9 +554,7 @@ const ExamResultsManager = ({
           if (payload.new && payload.new.id) {
             setSchedules((prev) =>
               prev.map((s) =>
-                String(s.id) === String(payload.new.id)
-                  ? { ...s, ...payload.new }
-                  : s
+                String(s.id) === String(payload.new.id) ? { ...s, ...payload.new } : s
               )
             );
           }
@@ -898,7 +895,13 @@ const ExamResultsManager = ({
 
   // Ensure DB rows exist for all selected subjects (only runs once schedule results are fully loaded)
   useEffect(() => {
-    if (!selectedScheduleId || !selectedClassId || selectedSubjectIds.length === 0 || !scheduleReady) return;
+    if (
+      !selectedScheduleId ||
+      !selectedClassId ||
+      selectedSubjectIds.length === 0 ||
+      !scheduleReady
+    )
+      return;
     const initMissing = async () => {
       let created = false;
       for (const sId of selectedSubjectIds) {
@@ -1134,9 +1137,7 @@ const ExamResultsManager = ({
 
     return subjects
       .filter(
-        (s) =>
-          activeClassSubjectIds.has(String(s.id)) &&
-          !existingSubjectIds.has(String(s.id))
+        (s) => activeClassSubjectIds.has(String(s.id)) && !existingSubjectIds.has(String(s.id))
       )
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [selectedClassId, classSubjects, allSubjectsToShow, subjects]);
@@ -1153,7 +1154,8 @@ const ExamResultsManager = ({
       const existingResult = classResultsIndex[sIdStr];
       const hasMarks =
         existingResult &&
-        (existingResult.entry_status === 'completed' || existingResult.entry_status === 'in_progress');
+        (existingResult.entry_status === 'completed' ||
+          existingResult.entry_status === 'in_progress');
 
       const isAdHoc = sub?.isAdHoc ?? (existingResult ? !existingResult.is_from_schedule : false);
       const typeLabel = isAdHoc ? 'Ad-Hoc Subject' : 'Scheduled Subject';
@@ -1179,10 +1181,7 @@ const ExamResultsManager = ({
 
             if (matchingResults && matchingResults.length > 0) {
               const resIds = matchingResults.map((r) => r.id);
-              await supabase
-                .from('exam_result_entries')
-                .delete()
-                .in('result_id', resIds);
+              await supabase.from('exam_result_entries').delete().in('result_id', resIds);
 
               const { error: resErr } = await supabase
                 .from('exam_results')
@@ -1853,32 +1852,14 @@ const ExamResultsManager = ({
                   }))}
                   selected={selectedSubjectIds}
                   onChange={setSelectedSubjectIds}
-                  onRemoveOption={canManageAllMarks && !isTeacherLocked ? (val) => handleRemoveSubject(val) : null}
-                  placeholder={scheduleReady ? "Select subjects..." : "Loading subjects..."}
+                  onRemoveOption={
+                    canManageAllMarks && !isTeacherLocked ? (val) => handleRemoveSubject(val) : null
+                  }
+                  placeholder={scheduleReady ? 'Select subjects...' : 'Loading subjects...'}
                   fullWidth={false}
                   disabled={!scheduleReady}
                 />
               </div>
-            )}
-
-            {/* Ad-Hoc Subject Button guarded by ConditionalBlock */}
-            {activeTab === 'entry' && selectedScheduleId && selectedClassId && (
-              <ConditionalBlock name="exam-results-adhoc" roles={userRoles}>
-                <button
-                  type="button"
-                  onClick={() => setShowAdHocForm(true)}
-                  disabled={isTeacherLocked}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
-                  title={
-                    isTeacherLocked
-                      ? 'Progress report is published. Adding subjects is locked for teachers.'
-                      : 'Add ad-hoc subject not in exam schedule'
-                  }
-                >
-                  <i className="fas fa-plus text-[10px]" />
-                  <span>Ad-Hoc Subject</span>
-                </button>
-              </ConditionalBlock>
             )}
 
             {/* Student Search Field in data-feature-filter (Requirement 2.1) */}
@@ -1970,7 +1951,9 @@ const ExamResultsManager = ({
             {activeTab === 'entry' &&
               selectedScheduleId &&
               selectedClassId &&
-              activeResults.some((r) => canEditMarksForSubject[r.id] ?? canEditMarksForSubject[String(r.id)]) && (
+              activeResults.some(
+                (r) => canEditMarksForSubject[r.id] ?? canEditMarksForSubject[String(r.id)]
+              ) && (
                 <div
                   className="flex items-center gap-2"
                   data-feature-filter="exam-results-save-mode"
@@ -2187,7 +2170,8 @@ const ExamResultsManager = ({
                       <div className="w-full mb-4 flex items-center gap-2.5 p-3.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold shadow-2xs">
                         <i className="fas fa-lock text-amber-600 text-sm shrink-0" />
                         <span>
-                          Progress Report is published for this examination. Marks editing is locked for teachers.
+                          Progress Report is published for this examination. Marks editing is locked
+                          for teachers.
                         </span>
                       </div>
                     )}
@@ -2364,9 +2348,7 @@ const ExamResultsManager = ({
               onSchedulePublishedChange={(schedId, isPub) => {
                 setSchedules((prev) =>
                   prev.map((s) =>
-                    String(s.id) === String(schedId)
-                      ? { ...s, is_report_published: isPub }
-                      : s
+                    String(s.id) === String(schedId) ? { ...s, is_report_published: isPub } : s
                   )
                 );
               }}
@@ -2438,9 +2420,27 @@ const ExamResultsManager = ({
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer flex items-center gap-1.5"
                   >
                     <i className="fas fa-check-double text-[10px]" />
-                    <span>Apply to All Subjects</span>
+                    <span>Apply to All</span>
                   </button>
+                  <ConditionalBlock name="exam-results-adhoc" roles={userRoles}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdHocForm(true)}
+                      disabled={isTeacherLocked}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                      title={
+                        isTeacherLocked
+                          ? 'Progress report is published. Adding subjects is locked for teachers.'
+                          : 'Add ad-hoc subject not in exam schedule'
+                      }
+                    >
+                      <i className="fas fa-plus text-[10px]" />
+                      <span>Ad-Hoc Subject</span>
+                    </button>
+                  </ConditionalBlock>
                 </div>
+              </div>
+              <div className="flex items-center gap-2.5">
                 <span className="text-[11px] text-dark-muted font-semibold">
                   {allSubjectsToShow.length}{' '}
                   {allSubjectsToShow.length === 1 ? 'subject' : 'subjects'}
@@ -2451,8 +2451,21 @@ const ExamResultsManager = ({
             {/* Subjects Table */}
             <div className="flex-1 overflow-y-auto p-4">
               {allSubjectsToShow.length === 0 ? (
-                <div className="text-center py-10 text-dark-muted text-xs font-semibold">
-                  No subjects found for this class.
+                <div className="text-center py-10 space-y-3">
+                  <p className="text-dark-muted text-xs font-semibold">
+                    No subjects found for this class.
+                  </p>
+                  <ConditionalBlock name="exam-results-adhoc" roles={userRoles}>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdHocForm(true)}
+                      disabled={isTeacherLocked}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                    >
+                      <i className="fas fa-plus text-[10px]" />
+                      <span>Add Ad-Hoc Subject</span>
+                    </button>
+                  </ConditionalBlock>
                 </div>
               ) : (
                 <div className="border border-light-border rounded-2xl overflow-hidden shadow-2xs">
@@ -2619,7 +2632,7 @@ const ExamResultsManager = ({
 
       {/* Ad-hoc Subject Modal */}
       {showAdHocForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-light-border bg-emerald-50/50">
               <h3 className="text-base font-bold text-dark-primary">Add Ad-Hoc Subject</h3>

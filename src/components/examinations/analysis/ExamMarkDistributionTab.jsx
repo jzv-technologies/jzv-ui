@@ -123,13 +123,13 @@ const ExamMarkDistributionTab = ({
   loading = false,
 }) => {
   // View orientation: 'by-subject' (one card per subject, classes on X-axis) vs 'by-class' (one card per class, subjects on X-axis)
-  const [viewOrientation, setViewOrientation] = useState('by-subject'); // 'by-subject' | 'by-class'
+  const [viewOrientation, setViewOrientation] = useState('by-class'); // 'by-subject' | 'by-class'
 
   // Configurable graphs per row: 1, 2, 3, or 4
   const [graphsPerRow, setGraphsPerRow] = useState(2); // 1 | 2 | 3 | 4
 
   // Bar Layout: Vertical vs Horizontal bars (Requirement: Option to change vertical bar to horizontal bars)
-  const [barLayout, setBarLayout] = useState('vertical'); // 'vertical' | 'horizontal'
+  const [barLayout, setBarLayout] = useState('horizontal'); // 'vertical' | 'horizontal'
 
   // Show/Hide data value inside the chart (Requirement: Show or hide the data value inside the chart)
   const [showDataValues, setShowDataValues] = useState(false);
@@ -217,9 +217,11 @@ const ExamMarkDistributionTab = ({
     const g3_pct = totalStudents > 0 ? Math.round((g3 / totalStudents) * 100 * 10) / 10 : 0;
     const g4_pct = totalStudents > 0 ? Math.round((g4 / totalStudents) * 100 * 10) / 10 : 0;
     const g5_pct = totalStudents > 0 ? Math.round((g5 / totalStudents) * 100 * 10) / 10 : 0;
-    const avgPct = totalStudents > 0 ? Math.round((totalPercentageSum / totalStudents) * 10) / 10 : 0;
+    const avgPct =
+      totalStudents > 0 ? Math.round((totalPercentageSum / totalStudents) * 10) / 10 : 0;
     const passingStudents = g2 + g3 + g4 + g5;
-    const passRate = totalStudents > 0 ? Math.round((passingStudents / totalStudents) * 100 * 10) / 10 : 0;
+    const passRate =
+      totalStudents > 0 ? Math.round((passingStudents / totalStudents) * 100 * 10) / 10 : 0;
 
     return {
       totalStudents,
@@ -259,13 +261,23 @@ const ExamMarkDistributionTab = ({
       if (!res) return;
 
       // Filter by schedule, class, subject
-      if (selectedClassIds.length > 0 && !selectedClassIds.map(String).includes(String(res.class_id))) {
+      if (
+        selectedClassIds.length > 0 &&
+        !selectedClassIds.map(String).includes(String(res.class_id))
+      ) {
         return;
       }
-      if (selectedSubjectIds.length > 0 && !selectedSubjectIds.map(String).includes(String(res.subject_id))) {
+      if (
+        selectedSubjectIds.length > 0 &&
+        !selectedSubjectIds.map(String).includes(String(res.subject_id))
+      ) {
         return;
       }
-      if (selectedSubjectId && selectedSubjectId !== 'all' && String(res.subject_id) !== String(selectedSubjectId)) {
+      if (
+        selectedSubjectId &&
+        selectedSubjectId !== 'all' &&
+        String(res.subject_id) !== String(selectedSubjectId)
+      ) {
         return;
       }
 
@@ -283,7 +295,8 @@ const ExamMarkDistributionTab = ({
       else g5++;
     });
 
-    const getPct = (cnt) => (totalAssessed > 0 ? Math.round((cnt / totalAssessed) * 100 * 10) / 10 : 0);
+    const getPct = (cnt) =>
+      totalAssessed > 0 ? Math.round((cnt / totalAssessed) * 100 * 10) / 10 : 0;
 
     return {
       totalAssessed,
@@ -387,7 +400,8 @@ const ExamMarkDistributionTab = ({
         if (total === 0) return;
 
         const distinctionPct = Math.round((distinctionCount / total) * 100 * 10) / 10;
-        const goodPlusDistinctionPct = Math.round(((distinctionCount + goodCount) / total) * 100 * 10) / 10;
+        const goodPlusDistinctionPct =
+          Math.round(((distinctionCount + goodCount) / total) * 100 * 10) / 10;
         const avgMark = Math.round((sumPct / total) * 10) / 10;
 
         list.push({
@@ -424,7 +438,8 @@ const ExamMarkDistributionTab = ({
           const classChartData = targetClasses
             .map((cls) => {
               const res = results.find(
-                (r) => String(r.class_id) === String(cls.id) && String(r.subject_id) === String(sub.id)
+                (r) =>
+                  String(r.class_id) === String(cls.id) && String(r.subject_id) === String(sub.id)
               );
               const matchingEntries = res
                 ? entries.filter((e) => String(e.result_id) === String(res.id))
@@ -463,7 +478,8 @@ const ExamMarkDistributionTab = ({
           const subjectChartData = targetSubjects
             .map((sub) => {
               const res = results.find(
-                (r) => String(r.class_id) === String(cls.id) && String(r.subject_id) === String(sub.id)
+                (r) =>
+                  String(r.class_id) === String(cls.id) && String(r.subject_id) === String(sub.id)
               );
               const matchingEntries = res
                 ? entries.filter((e) => String(e.result_id) === String(res.id))
@@ -547,7 +563,9 @@ const ExamMarkDistributionTab = ({
       <div className="text-center py-20 bg-white border border-light-border rounded-3xl p-8 shadow-xs max-w-lg mx-auto">
         <i className="fas fa-calendar-xmark text-4xl text-slate-300 mb-3 block" />
         <p className="text-sm font-bold text-dark-primary">No Exam Schedule Selected</p>
-        <p className="text-xs text-dark-muted mt-1">Please select an examination schedule from the top filter.</p>
+        <p className="text-xs text-dark-muted mt-1">
+          Please select an examination schedule from the top filter.
+        </p>
       </div>
     );
   }
@@ -557,7 +575,7 @@ const ExamMarkDistributionTab = ({
     'bg-rose-700 text-white shadow-rose-200', // #1 (Apex)
     'bg-rose-600 text-white shadow-rose-200', // #2
     'bg-rose-500 text-white shadow-rose-100', // #3
-    'bg-red-500 text-white shadow-red-100',   // #4
+    'bg-red-500 text-white shadow-red-100', // #4
     'bg-orange-600 text-white shadow-orange-100', // #5
     'bg-orange-500 text-white shadow-orange-100', // #6
     'bg-amber-600 text-white shadow-amber-100', // #7
@@ -571,13 +589,13 @@ const ExamMarkDistributionTab = ({
     'bg-emerald-700 text-white shadow-emerald-200', // #1 (Widest Top)
     'bg-emerald-600 text-white shadow-emerald-200', // #2
     'bg-emerald-500 text-white shadow-emerald-100', // #3
-    'bg-teal-600 text-white shadow-teal-100',       // #4
-    'bg-teal-500 text-white shadow-teal-100',       // #5
-    'bg-green-600 text-white shadow-green-100',     // #6
-    'bg-green-500 text-white shadow-green-100',     // #7
+    'bg-teal-600 text-white shadow-teal-100', // #4
+    'bg-teal-500 text-white shadow-teal-100', // #5
+    'bg-green-600 text-white shadow-green-100', // #6
+    'bg-green-500 text-white shadow-green-100', // #7
     'bg-emerald-800 text-white shadow-emerald-200', // #8
-    'bg-teal-700 text-white shadow-teal-200',       // #9
-    'bg-green-700 text-white shadow-green-200',     // #10 (Narrowest Bottom)
+    'bg-teal-700 text-white shadow-teal-200', // #9
+    'bg-green-700 text-white shadow-green-200', // #10 (Narrowest Bottom)
   ];
 
   return (
@@ -634,7 +652,9 @@ const ExamMarkDistributionTab = ({
 
             {/* Stepped Standard Pyramid (Apex at top, Base at bottom) */}
             {top10LowMarksPyramid.length === 0 ? (
-              <div className="py-12 text-center text-xs text-dark-muted">No low mark records found</div>
+              <div className="py-12 text-center text-xs text-dark-muted">
+                No low mark records found
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-1.5 py-1 w-full">
                 {top10LowMarksPyramid.map((item, idx) => {
@@ -696,7 +716,9 @@ const ExamMarkDistributionTab = ({
 
             {/* Inverted / Reverse Pyramid (Base at top 100%, Apex at bottom 52%) */}
             {top10HighMarksPyramid.length === 0 ? (
-              <div className="py-12 text-center text-xs text-dark-muted">No high mark records found</div>
+              <div className="py-12 text-center text-xs text-dark-muted">
+                No high mark records found
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-1.5 py-1 w-full">
                 {top10HighMarksPyramid.map((item, idx) => {
@@ -946,11 +968,15 @@ const ExamMarkDistributionTab = ({
                   {/* Card Header */}
                   <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
                     <div>
-                      <h3 className="text-xs sm:text-sm font-extrabold text-dark-primary truncate" title={card.title}>
+                      <h3
+                        className="text-xs sm:text-sm font-extrabold text-dark-primary truncate"
+                        title={card.title}
+                      >
                         {card.title}
                       </h3>
                       <p className="text-[10px] text-dark-muted font-medium mt-0.5">
-                        {card.totalAssessed} students assessed • Mean: <span className="font-bold text-violet-700">{card.overallAvg}%</span>
+                        {card.totalAssessed} students assessed • Mean:{' '}
+                        <span className="font-bold text-violet-700">{card.overallAvg}%</span>
                       </p>
                     </div>
 
@@ -997,7 +1023,13 @@ const ExamMarkDistributionTab = ({
                             tickLine={false}
                             unit={displayMode === 'percentage' ? '%' : ''}
                           />
-                          <Tooltip content={<CustomStackedTooltip isPercentageMode={displayMode === 'percentage'} />} />
+                          <Tooltip
+                            content={
+                              <CustomStackedTooltip
+                                isPercentageMode={displayMode === 'percentage'}
+                              />
+                            }
+                          />
                           <Bar dataKey="group1" name="0-30%" stackId="stack" fill="#ef4444">
                             {showDataValues && (
                               <LabelList
@@ -1006,7 +1038,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1018,7 +1052,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1030,7 +1066,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1042,11 +1080,19 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group5" name="91-100%" stackId="stack" fill="#10b981" radius={[3, 3, 0, 0]}>
+                          <Bar
+                            dataKey="group5"
+                            name="91-100%"
+                            stackId="stack"
+                            fill="#10b981"
+                            radius={[3, 3, 0, 0]}
+                          >
                             {showDataValues && (
                               <LabelList
                                 dataKey="group5"
@@ -1054,7 +1100,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1071,7 +1119,11 @@ const ExamMarkDistributionTab = ({
                           margin={{ top: 10, right: 25, left: 10, bottom: 10 }}
                           barSize={18}
                         >
-                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            horizontal={false}
+                            stroke="#f1f5f9"
+                          />
                           <XAxis
                             type="number"
                             tick={{ fill: '#475569', fontSize: 10 }}
@@ -1087,7 +1139,13 @@ const ExamMarkDistributionTab = ({
                             tickLine={false}
                             width={75}
                           />
-                          <Tooltip content={<CustomStackedTooltip isPercentageMode={displayMode === 'percentage'} />} />
+                          <Tooltip
+                            content={
+                              <CustomStackedTooltip
+                                isPercentageMode={displayMode === 'percentage'}
+                              />
+                            }
+                          />
                           <Bar dataKey="group1" name="0-30%" stackId="stack" fill="#ef4444">
                             {showDataValues && (
                               <LabelList
@@ -1096,7 +1154,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1108,7 +1168,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1120,7 +1182,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1132,11 +1196,19 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
-                          <Bar dataKey="group5" name="91-100%" stackId="stack" fill="#10b981" radius={[0, 3, 3, 0]}>
+                          <Bar
+                            dataKey="group5"
+                            name="91-100%"
+                            stackId="stack"
+                            fill="#10b981"
+                            radius={[0, 3, 3, 0]}
+                          >
                             {showDataValues && (
                               <LabelList
                                 dataKey="group5"
@@ -1144,7 +1216,9 @@ const ExamMarkDistributionTab = ({
                                 fill="#ffffff"
                                 fontSize={9}
                                 fontWeight={700}
-                                formatter={(v) => (v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : '')}
+                                formatter={(v) =>
+                                  v > 0 ? (displayMode === 'percentage' ? `${v}%` : v) : ''
+                                }
                               />
                             )}
                           </Bar>
@@ -1181,23 +1255,33 @@ const ExamMarkDistributionTab = ({
                                 </td>
                                 <td className="py-1 px-1.5 text-right font-medium text-rose-700 bg-rose-50/20">
                                   {row.group1_count}{' '}
-                                  <span className="text-[9px] text-slate-400">({row.group1_pct}%)</span>
+                                  <span className="text-[9px] text-slate-400">
+                                    ({row.group1_pct}%)
+                                  </span>
                                 </td>
                                 <td className="py-1 px-1.5 text-right font-medium text-orange-700 bg-orange-50/20">
                                   {row.group2_count}{' '}
-                                  <span className="text-[9px] text-slate-400">({row.group2_pct}%)</span>
+                                  <span className="text-[9px] text-slate-400">
+                                    ({row.group2_pct}%)
+                                  </span>
                                 </td>
                                 <td className="py-1 px-1.5 text-right font-medium text-amber-700 bg-amber-50/20">
                                   {row.group3_count}{' '}
-                                  <span className="text-[9px] text-slate-400">({row.group3_pct}%)</span>
+                                  <span className="text-[9px] text-slate-400">
+                                    ({row.group3_pct}%)
+                                  </span>
                                 </td>
                                 <td className="py-1 px-1.5 text-right font-medium text-blue-700 bg-blue-50/20">
                                   {row.group4_count}{' '}
-                                  <span className="text-[9px] text-slate-400">({row.group4_pct}%)</span>
+                                  <span className="text-[9px] text-slate-400">
+                                    ({row.group4_pct}%)
+                                  </span>
                                 </td>
                                 <td className="py-1 px-1.5 text-right font-medium text-emerald-700 bg-emerald-50/20">
                                   {row.group5_count}{' '}
-                                  <span className="text-[9px] text-slate-400">({row.group5_pct}%)</span>
+                                  <span className="text-[9px] text-slate-400">
+                                    ({row.group5_pct}%)
+                                  </span>
                                 </td>
                                 <td className="py-1 px-2 text-right font-extrabold text-dark-primary">
                                   {row.avgPct}%
