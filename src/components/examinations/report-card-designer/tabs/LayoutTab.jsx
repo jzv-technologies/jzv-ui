@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BLOCK_LABELS } from '../constants';
 import BlockRowHeader from '../block-settings/BlockRowHeader';
 import BlockSettingsPanel from '../block-settings/BlockSettingsPanel';
@@ -7,8 +7,8 @@ import ExtraComponentConfig from '../components/ExtraComponent';
 
 /**
  * LayoutTab
- * The "Blocks & Layout" tab: spacing card, Extra Components card and the sortable block list.
- * Extracted from the original ReportCardDesigner.jsx — no behaviour change.
+ * The "Blocks & Layout" tab: spacing card with block filter, Extra Components card and the sortable block list.
+ * Extracted from the original ReportCardDesigner.jsx — enhanced with selective block loading.
  */
 const LayoutTab = ({
   currentConfig,
@@ -26,11 +26,36 @@ const LayoutTab = ({
   setExpandedBlock,
   setIsExtraComponentExpanded,
   toggleBlockVisibility,
+  selectedBlocks: propSelectedBlocks,
+  setSelectedBlocks: propSetSelectedBlocks,
 }) => {
+  const [internalSelectedBlocks, setInternalSelectedBlocks] = useState(() =>
+    Object.keys(BLOCK_LABELS)
+  );
+  const selectedBlocks =
+    propSelectedBlocks !== undefined ? propSelectedBlocks : internalSelectedBlocks;
+  const setSelectedBlocks = propSetSelectedBlocks || setInternalSelectedBlocks;
+
+  const handleSelectedBlocksChange = (newSelected) => {
+    setSelectedBlocks(newSelected);
+    if (Array.isArray(newSelected) && newSelected.length === 1) {
+      setExpandedBlock(newSelected[0]);
+    }
+  };
+
+  const hasAnyBlockSelected =
+    Array.isArray(selectedBlocks) &&
+    currentConfig.blockOrder.some((blockKey) => selectedBlocks.includes(blockKey));
+
   return (
     <div>
-      {/* ── Block Spacing / Gap Control Card ── */}
-      <BlockSpacingCard currentConfig={currentConfig} setCurrentConfig={setCurrentConfig} />
+      {/* ── Block Spacing / Gap Control & Block Selection Card ── */}
+      <BlockSpacingCard
+        currentConfig={currentConfig}
+        setCurrentConfig={setCurrentConfig}
+        selectedBlocks={selectedBlocks}
+        setSelectedBlocks={handleSelectedBlocksChange}
+      />
 
       {/* ── ExtraComponent / Logo Layers Configuration Card ── */}
       <ExtraComponentConfig
@@ -40,9 +65,14 @@ const LayoutTab = ({
         onExpandedChange={setIsExtraComponentExpanded}
       />
 
-      {/* Block List with Inline Details & Size Controls */}
+      {/* Block List with Inline Details & Size Controls (Only selected BLOCK_LABELS loaded) */}
       <div>
         {currentConfig.blockOrder.map((blockKey, idx) => {
+          // Only selected BLOCK_LABELS are loaded in Block List
+          if (Array.isArray(selectedBlocks) && !selectedBlocks.includes(blockKey)) {
+            return null;
+          }
+
           const blockInfo = BLOCK_LABELS[blockKey] || {
             name: blockKey,
             icon: 'fa-cube',
@@ -93,6 +123,29 @@ const LayoutTab = ({
             </div>
           );
         })}
+
+        {/* Empty state when no blocks are selected */}
+        {!hasAnyBlockSelected && (
+          <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center my-2 shadow-2xs">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-sm mb-2 shadow-2xs">
+              <i className="fas fa-layer-group" />
+            </div>
+            <h4 className="text-xs font-black text-dark-primary mb-1">
+              No Component Blocks Selected
+            </h4>
+            <p className="text-[11px] text-dark-muted max-w-xs mx-auto mb-3">
+              Select component blocks in the Visible Component Blocks dropdown above to display their controls here.
+            </p>
+            <button
+              type="button"
+              onClick={() => handleSelectedBlocksChange(Object.keys(BLOCK_LABELS))}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs active:scale-95"
+            >
+              <i className="fas fa-check-double text-[10px]" />
+              <span>Show All Blocks</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

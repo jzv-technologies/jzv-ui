@@ -10,6 +10,7 @@ import {
   CLASSIFICATION_SEQ_FALLBACK,
   CLASSIFICATION_NAME_SEQ_FALLBACK,
   KNOWN_SUBJECT_CLASSIFICATIONS,
+  BLOCK_LABELS,
 } from '../examinations/report-card-designer/constants';
 import DesignerHeader from '../examinations/report-card-designer/components/DesignerHeader';
 import GradeRuleModal from '../examinations/report-card-designer/modals/GradeRuleModal';
@@ -167,6 +168,7 @@ const ReportCardDesigner = ({
   const [mobileView, setMobileView] = useState('config'); // 'config' | 'preview'
   const [expandedBlock, setExpandedBlock] = useState('schoolHeader'); // Key of currently expanded block in layout tab
   const [isExtraComponentExpanded, setIsExtraComponentExpanded] = useState(false);
+  const [selectedBlocks, setSelectedBlocks] = useState(() => Object.keys(BLOCK_LABELS));
 
   // Split-pane width state & dragging
   const [leftWidthPercent, setLeftWidthPercent] = useState(48);
@@ -793,6 +795,8 @@ const ReportCardDesigner = ({
                 setExpandedBlock={setExpandedBlock}
                 setIsExtraComponentExpanded={setIsExtraComponentExpanded}
                 toggleBlockVisibility={toggleBlockVisibility}
+                selectedBlocks={selectedBlocks}
+                setSelectedBlocks={setSelectedBlocks}
               />
             )}
 
