@@ -9,7 +9,7 @@ import {
   invalidateDynamicFormConfigsCache,
 } from '../utils/dynamicFormConfigs';
 
-const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v23';
+const VIEW_CONFIG_SESSION_KEY = 'jzv_view_config_cache_v24';
 
 export const STATIC_MANAGED_COMPONENTS = new Set([
   'academic-calendar',
@@ -125,7 +125,7 @@ export const STATIC_MANAGED_COMPONENTS = new Set([
 const readSessionCache = (userRoles) => {
   try {
     // Clear legacy caches
-    for (let i = 1; i <= 22; i++) {
+    for (let i = 1; i <= 23; i++) {
       sessionStorage.removeItem(`jzv_view_config_cache_v${i}`);
     }
     const rawCache = sessionStorage.getItem(VIEW_CONFIG_SESSION_KEY);

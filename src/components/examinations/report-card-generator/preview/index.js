@@ -1,0 +1,9 @@
+export { renderSchoolHeader } from './renderSchoolHeader';
+export { renderStudentInfo } from './renderStudentInfo';
+export { renderSubjectTable } from './renderSubjectTable';
+export { renderSummary } from './renderSummary';
+export { renderCharts } from './renderCharts';
+export { renderRemarks } from './renderRemarks';
+export { renderSignatures } from './renderSignatures';
+export { renderAttendanceBar } from './renderAttendanceBar';
+export { renderRankHolders } from './renderRankHolders';
