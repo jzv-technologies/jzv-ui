@@ -1,5 +1,6 @@
 import React from 'react';
 import AttendanceBarSettings from './AttendanceBarSettings';
+import RankHoldersSettings from './RankHoldersSettings';
 import BlockCommonSettings from './BlockCommonSettings';
 import ChartsSettings from './ChartsSettings';
 import { DEFAULT_BLOCK_STYLE } from '../constants';
@@ -33,6 +34,8 @@ const BlockSettingsPanel = ({
         return currentConfig.studentInfoConfig?.style || {};
       case 'attendanceBar':
         return currentConfig.attendanceBarConfig?.style || {};
+      case 'rankHolders':
+        return currentConfig.rankHoldersConfig?.style || {};
       case 'subjectTable':
         return currentConfig.subjectTableConfig?.style || {};
       case 'summaryCalculations':
@@ -71,6 +74,15 @@ const BlockSettingsPanel = ({
           ...p,
           attendanceBarConfig: {
             ...p.attendanceBarConfig,
+            style: merged,
+          },
+        }));
+        break;
+      case 'rankHolders':
+        setCurrentConfig((p) => ({
+          ...p,
+          rankHoldersConfig: {
+            ...p.rankHoldersConfig,
             style: merged,
           },
         }));
@@ -135,6 +147,11 @@ const BlockSettingsPanel = ({
       {/* Attendance Horizontal Stack Bar Details */}
       {blockKey === 'attendanceBar' && (
         <AttendanceBarSettings currentConfig={currentConfig} setCurrentConfig={setCurrentConfig} />
+      )}
+
+      {/* Rank Holders Details */}
+      {blockKey === 'rankHolders' && (
+        <RankHoldersSettings currentConfig={currentConfig} setCurrentConfig={setCurrentConfig} />
       )}
 
       {/* 3. Subject Table Details */}

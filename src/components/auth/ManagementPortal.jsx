@@ -18,6 +18,7 @@ import AdminStudentsView from '../students/AdminStudentsView';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import { CARD_THEMES } from '../../utils/cardTheme';
 import AcademicCalendarView from '../academic-calendar/AcademicCalendarView';
+import BookPlannerView from '../syllabus/BookPlannerView';
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -1613,6 +1614,11 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
       {subView === 'lesson-planner' && (
         <div data-feature="lesson-planner">
           <LessonManager role="management" user={user} />
+        </div>
+      )}
+      {subView === 'book-planner' && (
+        <div data-feature="book-planner">
+          <BookPlannerView role="management" user={user} userRoles={userRoles} />
         </div>
       )}
       {(subView === 'timetable-planner' || subView === 'timetable-viewer') && (

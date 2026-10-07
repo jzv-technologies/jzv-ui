@@ -5,6 +5,7 @@ import { showToast } from '../../utils/toast';
 import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
+import RankHolders from './RankHolders';
 import ExamAttendanceUploadModal from './ExamAttendanceUploadModal';
 import ExamRemarksModal from './ExamRemarksModal';
 import ConfirmModal from '../ConfirmModal';
@@ -75,6 +76,8 @@ const ReportCardGenerator = ({
   students: propStudents = null,
   initialScheduleId = null,
   initialClassId = null,
+  selectedClassIds: propSelectedClassIds = null,
+  reportMode = 'progress',
   userRoles = [],
   studentRanksMap = null,
   propAttendanceMap = null,
@@ -331,6 +334,10 @@ const ReportCardGenerator = ({
   const reportFetchSeq = useRef(0);
   const propStudentsRef = useRef(propStudents);
   propStudentsRef.current = propStudents;
+  const internalClassesRef = useRef(internalClasses);
+  internalClassesRef.current = internalClasses;
+  const classesRef = useRef(classes);
+  classesRef.current = classes;
   const isParentView = userRoles.includes('parent');
   const parentStudentIdsKey =
     isParentView && Array.isArray(selectedStudentIds) ? selectedStudentIds.map(String).join(',') : '';
@@ -432,8 +439,163 @@ const ReportCardGenerator = ({
     applyAttendance(attRes?.data);
   };
 
+  const propSelectedClassIdsKey = useMemo(() => {
+    return Array.isArray(propSelectedClassIds)
+      ? propSelectedClassIds.map(String).sort().join(',')
+      : '';
+  }, [propSelectedClassIds]);
+
   const loadReportData = useCallback(async () => {
-    if (!selectedClassId || !selectedScheduleId) {
+    if (reportMode === 'excellence') {
+      setLoading(false);
+      return;
+    }
+
+    if (!selectedScheduleId) {
+      setStudents([]);
+      setResults([]);
+      setEntries([]);
+      setReportPayload(null);
+      return;
+    }
+
+    // ── Rank Holder Report mode: load data for selected classes (or all classes) concurrently ──
+    if (reportMode === 'rank_holder') {
+      const isExplicit = Array.isArray(propSelectedClassIds) && propSelectedClassIds.length > 0;
+      const currentClasses =
+        internalClassesRef.current && internalClassesRef.current.length > 0
+          ? internalClassesRef.current
+          : classesRef.current || [];
+      const targetClassIds = isExplicit
+        ? propSelectedClassIds.map(String)
+        : currentClasses.map((c) => String(c.id));
+
+      if (targetClassIds.length === 0) {
+        setStudents([]);
+        setResults([]);
+        setEntries([]);
+        setReportPayload(null);
+        return;
+      }
+
+      const seq = ++reportFetchSeq.current;
+      setLoading(true);
+      try {
+        const batchResults = await Promise.allSettled(
+          targetClassIds.map((cId) =>
+            supabase.rpc('get_progress_report_data', {
+              p_schedule_id: Number(selectedScheduleId),
+              p_class_id: Number(cId),
+              p_student_ids: null,
+            })
+          )
+        );
+
+        if (seq !== reportFetchSeq.current) return;
+
+        const allStudents = [];
+        const allResults = [];
+        const allEntries = [];
+        const combinedRanks = {};
+        const combinedRemarks = [];
+        let combinedSubjects = [];
+        let combinedClassifications = [];
+        let combinedClasses = [];
+        const failedClassIds = [];
+
+        batchResults.forEach((res, idx) => {
+          const cId = targetClassIds[idx];
+          if (res.status === 'fulfilled' && res.value?.data) {
+            const d = res.value.data;
+            if (Array.isArray(d.students)) allStudents.push(...d.students);
+            if (Array.isArray(d.results)) allResults.push(...d.results);
+            if (Array.isArray(d.entries)) allEntries.push(...d.entries);
+            if (d.ranks) Object.assign(combinedRanks, d.ranks);
+            if (Array.isArray(d.remarks)) combinedRemarks.push(...d.remarks);
+            if (Array.isArray(d.subjects)) combinedSubjects = mergeById(combinedSubjects, d.subjects);
+            if (Array.isArray(d.classifications))
+              combinedClassifications = mergeById(combinedClassifications, d.classifications);
+            if (d.class) combinedClasses = mergeById(combinedClasses, [d.class]);
+          } else {
+            failedClassIds.push(cId);
+          }
+        });
+
+        // Run direct query fallback for classes where RPC was unavailable
+        if (failedClassIds.length > 0) {
+          try {
+            const [stuRes, resRes, remRes] = await Promise.all([
+              supabase
+                .from('students')
+                .select('*')
+                .in('class_id', failedClassIds)
+                .order('student_name'),
+              supabase
+                .from('exam_results')
+                .select('*')
+                .eq('schedule_id', selectedScheduleId)
+                .in('class_id', failedClassIds),
+              supabase
+                .from('exam_student_remarks')
+                .select('*')
+                .eq('schedule_id', selectedScheduleId),
+            ]);
+            const fbResults = resRes?.data || [];
+            let fbEntries = [];
+            if (fbResults.length > 0) {
+              const { data: ed } = await supabase
+                .from('exam_result_entries')
+                .select('*')
+                .in(
+                  'result_id',
+                  fbResults.map((r) => r.id)
+                );
+              fbEntries = ed || [];
+            }
+            if (stuRes?.data) allStudents.push(...stuRes.data);
+            allResults.push(...fbResults);
+            allEntries.push(...fbEntries);
+            if (remRes?.data) combinedRemarks.push(...remRes.data);
+          } catch (fbErr) {
+            console.warn('[ReportCardGenerator] Fallback query for rank holders failed:', fbErr);
+          }
+        }
+
+        const uniqueStudents = Array.from(
+          new Map(allStudents.map((s) => [String(s.id), s])).values()
+        );
+        const uniqueResults = Array.from(
+          new Map(allResults.map((r) => [String(r.id), r])).values()
+        );
+        const uniqueEntries = Array.from(
+          new Map(
+            allEntries.map((e) => [
+              String(e.id || `${e.result_id}_${e.student_id || ''}_${e.admission_no || ''}`),
+              e,
+            ])
+          ).values()
+        );
+
+        setStudents(uniqueStudents);
+        setResults(uniqueResults);
+        setEntries(uniqueEntries);
+        setServerRanksMap(combinedRanks);
+        setServerRemarks(combinedRemarks);
+        if (combinedSubjects.length) setInternalSubjects((prev) => mergeById(prev, combinedSubjects));
+        if (combinedClassifications.length)
+          setInternalClassifications((prev) => mergeById(prev, combinedClassifications));
+        if (combinedClasses.length) setInternalClasses((prev) => mergeById(prev, combinedClasses));
+      } catch (err) {
+        console.error('[ReportCardGenerator] Failed to load rank holders data:', err);
+        showToast('Error loading rank holder data', 'error');
+      } finally {
+        if (seq === reportFetchSeq.current) setLoading(false);
+      }
+      return;
+    }
+
+    // ── Default / Progress Report mode (Preserved exactly as is) ──
+    if (!selectedClassId) {
       setStudents([]);
       setResults([]);
       setEntries([]);
@@ -485,7 +647,14 @@ const ReportCardGenerator = ({
     } finally {
       if (seq === reportFetchSeq.current) setLoading(false);
     }
-  }, [selectedScheduleId, selectedClassId, isParentView, parentStudentIdsKey]);
+  }, [
+    reportMode,
+    selectedScheduleId,
+    selectedClassId,
+    propSelectedClassIdsKey,
+    isParentView,
+    parentStudentIdsKey,
+  ]);
 
   useEffect(() => {
     loadReportData();
@@ -512,7 +681,34 @@ const ReportCardGenerator = ({
 
   // Active template
   const activeTemplate = useMemo(() => {
-    return templates.find((t) => t.id === selectedTemplateId) || templates[0] || DEFAULT_TEMPLATE;
+    const raw =
+      templates.find((t) => t.id === selectedTemplateId) || templates[0] || DEFAULT_TEMPLATE;
+    const baseOrder = raw.blockOrder || DEFAULT_TEMPLATE.blockOrder;
+    let blockOrder = baseOrder;
+    if (Array.isArray(baseOrder) && !baseOrder.includes('rankHolders')) {
+      const copy = [...baseOrder];
+      const attIdx = copy.indexOf('attendanceBar');
+      if (attIdx !== -1) {
+        copy.splice(attIdx + 1, 0, 'rankHolders');
+      } else {
+        copy.push('rankHolders');
+      }
+      blockOrder = copy;
+    }
+    return {
+      ...DEFAULT_TEMPLATE,
+      ...raw,
+      blockOrder,
+      rankHoldersConfig: {
+        ...DEFAULT_TEMPLATE.rankHoldersConfig,
+        ...(raw.rankHoldersConfig || {}),
+        style: {
+          ...DEFAULT_BLOCK_STYLE,
+          ...DEFAULT_TEMPLATE.rankHoldersConfig?.style,
+          ...(raw.rankHoldersConfig?.style || {}),
+        },
+      },
+    };
   }, [templates, selectedTemplateId]);
 
   // If propStudents is passed, sync students state directly
@@ -613,8 +809,12 @@ const ReportCardGenerator = ({
       let totalMax = 0;
       let hasFailed = false;
       const subjectScores = [];
+      const stuClassId = String(student.class_id || selectedClassId || '');
+      const relevantResults = results.filter(
+        (r) => !r.class_id || !stuClassId || String(r.class_id) === stuClassId
+      );
 
-      results.forEach((result) => {
+      relevantResults.forEach((result) => {
         const sub = internalSubjects.find((s) => String(s.id) === String(result.subject_id));
         const entry = entries.find(
           (e) =>
@@ -752,6 +952,73 @@ const ReportCardGenerator = ({
 
     return metricsMap;
   }, [students, results, entries, internalSubjects, internalClassifications, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, userRoles]);
+
+  // Compute rank holders grouped by class for the RankHolders component
+  const classRankHoldersMap = useMemo(() => {
+    if (!students || students.length === 0 || !studentMetricsMap) return {};
+
+    const byClass = {};
+    students.forEach((stu) => {
+      const clsId = String(stu.class_id || selectedClassId || 'default');
+      const metrics = studentMetricsMap[String(stu.id)] || {};
+      if (!byClass[clsId]) byClass[clsId] = [];
+      byClass[clsId].push({
+        id: stu.id,
+        student_id: stu.id,
+        student_name: stu.student_name,
+        admission_no: stu.admission_no,
+        photo_id: stu.photo_id,
+        class_id: stu.class_id,
+        class_name:
+          internalClasses.find((c) => String(c.id) === String(stu.class_id))?.name ||
+          classes.find((c) => String(c.id) === String(stu.class_id))?.name ||
+          selectedClass?.name ||
+          `Class ${stu.class_id}`,
+        percentage: metrics.percentage ?? 0,
+        totalObtained: metrics.totalObtained ?? 0,
+        classRank: metrics.classRank,
+        rank: metrics.classRank,
+      });
+    });
+
+    const result = {};
+    Object.entries(byClass).forEach(([clsId, list]) => {
+      const sorted = [...list].sort((a, b) => {
+        return (b.percentage || 0) - (a.percentage || 0) || (b.totalObtained || 0) - (a.totalObtained || 0);
+      });
+      sorted.forEach((item, idx) => {
+        item.classRank = idx + 1;
+        item.rank = idx + 1;
+      });
+      result[clsId] = sorted;
+    });
+
+    return result;
+  }, [students, studentMetricsMap, selectedClassId, internalClasses, classes, selectedClass]);
+
+  // Rank Holder Report target classes to render (one page card per class)
+  const rankHolderClassesToRender = useMemo(() => {
+    if (reportMode !== 'rank_holder') return [];
+    const isExplicit = Array.isArray(propSelectedClassIds) && propSelectedClassIds.length > 0;
+    const targetIds = isExplicit
+      ? propSelectedClassIds.map(String)
+      : (internalClasses.length > 0 ? internalClasses : classes).map((c) => String(c.id));
+
+    return targetIds
+      .map((cId) => {
+        const classObj =
+          internalClasses.find((c) => String(c.id) === String(cId)) ||
+          classes.find((c) => String(c.id) === String(cId));
+        const list = classRankHoldersMap[cId] || [];
+        return {
+          id: cId,
+          name: classObj?.name || `Class ${cId}`,
+          classObj,
+          students: list,
+        };
+      })
+      .filter((item) => isExplicit || item.students.length > 0);
+  }, [reportMode, propSelectedClassIds, internalClasses, classes, classRankHoldersMap]);
 
   const handlePrint = () => {
     window.print();
@@ -919,9 +1186,410 @@ const ReportCardGenerator = ({
     setStudentRemarksMap(map);
   }, [serverRemarks, students, selectedScheduleId]);
 
-  useEffect(() => {
-    onRemarksCountChange?.(Object.keys(studentRemarksMap).length);
-  }, [studentRemarksMap, onRemarksCountChange]);
+  const rankHolderActiveSigs = useMemo(() => {
+    const sigCfg = activeTemplate?.signaturesConfig || {};
+    const isSig1 = sigCfg.showSignature1 !== undefined ? !!sigCfg.showSignature1 : true;
+    const isSig2 = sigCfg.showSignature2 !== undefined ? !!sigCfg.showSignature2 : true;
+    const isSig3 = sigCfg.showSignature3 !== undefined ? !!sigCfg.showSignature3 : true;
+    const isSig4 = sigCfg.showSignature4 !== undefined ? !!sigCfg.showSignature4 : true;
+
+    return [
+      isSig1 && {
+        id: 'signature1',
+        title: activeTemplate?.signatures?.signature1 || 'Signature 1',
+        subtitle: 'Signature',
+      },
+      isSig2 && {
+        id: 'signature2',
+        title: activeTemplate?.signatures?.signature2 || 'Signature 2',
+        subtitle: 'Signature',
+      },
+      isSig3 && {
+        id: 'signature3',
+        title: activeTemplate?.signatures?.signature3 || 'Signature 3',
+        subtitle: 'Seal & Signature',
+      },
+      isSig4 && {
+        id: 'signature4',
+        title: activeTemplate?.signatures?.signature4 || 'Signature 4',
+        subtitle: 'Signature',
+      },
+    ].filter(Boolean);
+  }, [activeTemplate?.signaturesConfig, activeTemplate?.signatures]);
+
+  const renderRankHolderSchoolHeader = (clsName) => {
+    if (!activeTemplate.showSchoolHeader) return null;
+    const hdr = activeTemplate.schoolHeader || {};
+    const isCompact = hdr.size === 'compact';
+    const isLarge = hdr.size === 'large';
+    const hdrSt = { ...DEFAULT_BLOCK_STYLE, ...(hdr.style || {}) };
+    const logoSize = hdr?.logoSize
+      ? Number(hdr.logoSize)
+      : isCompact
+        ? 32
+        : isLarge
+          ? 64
+          : 48;
+    const logoAlign = hdr?.logoAlign || 'center';
+    const logoVAlign = hdr?.logoVerticalAlign || 'above';
+    const logoOffsetY = hdr?.logoOffsetY ? Number(hdr.logoOffsetY) : 0;
+
+    const logoEl =
+      hdr.showLogo !== false && hdr.logoUrl ? (
+        <div
+          className={`flex ${
+            logoAlign === 'left'
+              ? 'justify-start'
+              : logoAlign === 'right'
+                ? 'justify-end'
+                : 'justify-center'
+          }`}
+          style={{
+            transform: logoOffsetY ? `translateY(${logoOffsetY}px)` : undefined,
+          }}
+        >
+          <img
+            src={hdr.logoUrl}
+            alt="School Logo"
+            style={{ height: `${logoSize}px` }}
+            className="object-contain print:print-color-adjust-exact"
+          />
+        </div>
+      ) : null;
+
+    const textContentEl = (
+      <div
+        className={`space-y-1 print:space-y-0.5 ${
+          logoAlign === 'left' && logoVAlign === 'inline'
+            ? 'text-left'
+            : logoAlign === 'right' && logoVAlign === 'inline'
+              ? 'text-right'
+              : 'text-center'
+        }`}
+      >
+        {hdr.showTitle !== false && hdr.title && (
+          <h1
+            className={`font-black tracking-tight uppercase school-header-title ${
+              isCompact ? 'text-lg' : isLarge ? 'text-2xl' : 'text-xl sm:text-2xl'
+            }`}
+            style={{
+              color: hdrSt.contentColor || activeTemplate.accentColor || '#0f172a',
+              fontSize: `${schoolHeaderPrint.titleFontSize}px`,
+            }}
+          >
+            {hdr.title}
+          </h1>
+        )}
+        {hdr.showSubtitle !== false && hdr.subtitle && (
+          <p
+            className="text-xs font-bold uppercase tracking-wider school-header-subtitle"
+            style={{
+              fontSize: `${schoolHeaderPrint.subtitleFontSize}px`,
+              color: hdrSt.labelColor || '#64748b',
+            }}
+          >
+            {hdr.subtitle}
+          </p>
+        )}
+        {hdr.showAddress !== false && hdr.address && (
+          <p
+            className="text-[10px] font-semibold school-header-address"
+            style={{
+              fontSize: `${schoolHeaderPrint.addressFontSize}px`,
+              color: hdrSt.labelColor || '#94a3b8',
+            }}
+          >
+            {hdr.address}
+          </p>
+        )}
+        {hdr.showExamTitle !== false && (
+          <div className="pt-1 print:pt-0.5">
+            <span
+              className="inline-block px-3 py-0.5 print:py-0.2 print:px-2 rounded-full text-white font-black uppercase tracking-widest school-header-exam-badge"
+              style={{
+                backgroundColor: activeTemplate.accentColor || '#0f172a',
+                fontSize: `${schoolHeaderPrint.examTitleFontSize}px`,
+              }}
+            >
+              {selectedSchedule?.name
+                ? `${selectedSchedule.name} · Rank Holder Report`
+                : hdr.examTitle || 'Rank Holder Report'}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div
+        className="border-b-2 border-slate-900 print:border-b space-y-1 print:space-y-0.5 relative pb-3 print:pb-1"
+        style={{
+          backgroundColor: hdrSt.backgroundColor || 'transparent',
+        }}
+      >
+        {hdr.showHeaderImage && hdr.headerImageUrl && (
+          <div className="w-full mb-2 print:mb-1 overflow-hidden">
+            <img
+              src={hdr.headerImageUrl}
+              alt="School Header Banner"
+              className="w-full h-auto object-contain max-h-48 print:max-h-28 rounded-lg mx-auto block"
+            />
+          </div>
+        )}
+
+        {logoVAlign === 'above' && logoEl}
+
+        {logoVAlign === 'inline' ? (
+          <div
+            className={`flex items-center gap-3 ${
+              logoAlign === 'right'
+                ? 'flex-row-reverse'
+                : logoAlign === 'left'
+                  ? 'flex-row'
+                  : 'flex-row justify-center'
+            }`}
+          >
+            {logoEl}
+            {textContentEl}
+          </div>
+        ) : (
+          textContentEl
+        )}
+      </div>
+    );
+  };
+
+  const printStyles = useMemo(() => `
+    @media print {
+      @page {
+        size: ${paperSize} ${orientation};
+        margin: 0 !important;
+      }
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-sizing: border-box !important;
+        min-height: 0 !important;
+        height: auto !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        overflow: visible !important;
+      }
+      #root,
+      #root > div,
+      #dashboard-section,
+      main,
+      [data-feature="exam-progress-report"],
+      [data-feature="exam-results"],
+      [data-feature="exam-results-content"],
+      [data-feature="progress-report-generator"],
+      .min-h-screen,
+      .animate-in {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        display: block !important;
+        transform: none !important;
+        animation: none !important;
+        background: transparent !important;
+        overflow: visible !important;
+      }
+      header, nav, aside, footer, [data-feature-filter], [data-feature-tab], .print\\:hidden, button.print\\:hidden {
+        display: none !important;
+      }
+      .print-cards-container {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        height: auto !important;
+        border: none !important;
+      }
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .progress-report-card-page {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: ${cardPrintHeight} !important;
+        max-height: ${cardPrintHeight} !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: ${orientation === 'landscape' ? '5mm 7mm' : '6mm 8mm'} !important;
+        --page-pad-x: ${orientation === 'landscape' ? '7mm' : '8mm'} !important;
+        --page-pad-y: ${orientation === 'landscape' ? '5mm' : '6mm'} !important;
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-before: auto !important;
+        break-before: auto !important;
+      }
+      [data-bleed-page="true"] {
+        margin-left: calc(-1 * var(--page-pad-x, 8mm)) !important;
+        margin-right: calc(-1 * var(--page-pad-x, 8mm)) !important;
+        padding-left: var(--page-pad-x, 8mm) !important;
+        padding-right: var(--page-pad-x, 8mm) !important;
+        width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
+        max-width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
+        box-sizing: border-box !important;
+      }
+      [data-bleed-top="true"] {
+        margin-top: calc(-1 * var(--page-pad-y, 6mm)) !important;
+        padding-top: calc(var(--page-pad-y, 6mm) + 2mm) !important;
+      }
+      [data-bleed-bottom="true"] {
+        margin-bottom: calc(-1 * var(--page-pad-y, 6mm)) !important;
+        padding-bottom: calc(var(--page-pad-y, 6mm) + 2mm) !important;
+      }
+      .progress-report-card-page:not(:last-child) {
+        page-break-after: always !important;
+        break-after: page !important;
+      }
+      .progress-report-card-page:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+      .progress-report-card-page > .relative.z-10 {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 0% !important;
+        width: 100% !important;
+        min-height: 0 !important;
+        box-sizing: border-box !important;
+        gap: ${activeTemplate.blockSpacing !== undefined ? `${(activeTemplate.blockSpacing * 0.22).toFixed(1)}mm` : orientation === 'landscape' ? '2mm' : '2.5mm'} !important;
+      }
+      .progress-report-card-page > * {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+      }
+      .progress-report-card-page .report-card-signatures-wrapper {
+        margin-top: auto !important;
+      }
+      .progress-report-card-page .report-card-signatures {
+        margin-top: auto !important;
+        padding-top: 2mm !important;
+      }
+      /* Mark Table */
+      .progress-report-card-page table {
+        font-size: ${tablePrintContentFontSize}px !important;
+      }
+      .progress-report-card-page thead tr,
+      .progress-report-card-page thead th {
+        font-size: ${tablePrintLabelFontSize}px !important;
+      }
+      .progress-report-card-page tbody tr,
+      .progress-report-card-page tbody td {
+        font-size: ${tablePrintContentFontSize}px !important;
+      }
+      .progress-report-card-page th,
+      .progress-report-card-page td {
+        padding: ${activeTemplate?.subjectTableConfig?.size === 'compact' ? '2px 4px' : activeTemplate?.subjectTableConfig?.size === 'spacious' ? '5px 8px' : '3px 6px'} !important;
+      }
+
+      /* School Header */
+      .progress-report-card-page .school-header-title {
+        font-size: ${schoolHeaderPrint.titleFontSize}px !important;
+      }
+      .progress-report-card-page .school-header-subtitle {
+        font-size: ${schoolHeaderPrint.subtitleFontSize}px !important;
+      }
+      .progress-report-card-page .school-header-address {
+        font-size: ${schoolHeaderPrint.addressFontSize}px !important;
+      }
+      .progress-report-card-page .school-header-exam-badge {
+        font-size: ${schoolHeaderPrint.examTitleFontSize}px !important;
+      }
+
+      /* Student Info */
+      .progress-report-card-page .student-info-label {
+        font-size: ${studentInfoPrint.labelFontSize}px !important;
+      }
+      .progress-report-card-page .student-info-value {
+        font-size: ${studentInfoPrint.contentFontSize}px !important;
+      }
+
+      /* Summary Calculations */
+      .progress-report-card-page .summary-calc-label {
+        font-size: ${summaryPrint.labelFontSize}px !important;
+      }
+      .progress-report-card-page .summary-calc-value {
+        font-size: ${summaryPrint.contentFontSize}px !important;
+      }
+
+      /* Teacher Remarks */
+      .progress-report-card-page .remarks-label {
+        font-size: ${remarksPrint.labelFontSize}px !important;
+      }
+      .progress-report-card-page .remarks-content {
+        font-size: ${remarksPrint.contentFontSize}px !important;
+      }
+
+      /* Signatures */
+      .progress-report-card-page .signature-title {
+        font-size: ${signaturesPrint.labelFontSize}px !important;
+      }
+      .progress-report-card-page .signature-subtitle {
+        font-size: ${signaturesPrint.contentFontSize}px !important;
+      }
+
+      /* Attendance Bar */
+      .progress-report-card-page .attendance-bar-label {
+        font-size: ${attendanceBarPrint.labelFontSize}px !important;
+      }
+      .progress-report-card-page .attendance-bar-content {
+        font-size: ${attendanceBarPrint.contentFontSize}px !important;
+      }
+
+      /* Rank Holders */
+      .progress-report-card-page .rank-holders-print-block {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Charts */
+      .progress-report-card-page .chart-column-title {
+        font-size: ${chartPrint.titleFontSize}px !important;
+      }
+
+      /* Grading Scale Legend */
+      .progress-report-card-page .grading-scale-legend,
+      .progress-report-card-page .grading-scale-legend * {
+        font-size: ${gradingScalePrint.fontSize}px !important;
+      }
+    }
+  `, [
+    paperSize,
+    orientation,
+    cardPrintHeight,
+    activeTemplate,
+    tablePrintContentFontSize,
+    tablePrintLabelFontSize,
+    schoolHeaderPrint,
+    studentInfoPrint,
+    summaryPrint,
+    remarksPrint,
+    signaturesPrint,
+    attendanceBarPrint,
+    chartPrint,
+    gradingScalePrint,
+  ]);
 
   return (
     <div className="space-y-6" data-feature="progress-report-generator">
@@ -1079,6 +1747,165 @@ const ReportCardGenerator = ({
         <div className="flex justify-center py-20 bg-white rounded-3xl border border-light-border">
           <div className="w-10 h-10 border-4 border-rose-500 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : reportMode === 'excellence' ? (
+        <div className="text-center py-20 bg-white border border-slate-200 rounded-3xl p-10 shadow-xs max-w-2xl mx-auto my-12 animate-in fade-in duration-300">
+          <div className="w-16 h-16 bg-gradient-to-tr from-amber-500 to-amber-300 text-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-md shadow-amber-200">
+            <i className="fas fa-award text-3xl" />
+          </div>
+          <h3 className="text-xl font-black text-dark-primary">Excellence Report</h3>
+          <p className="text-xs text-dark-muted mt-2 max-w-md mx-auto leading-relaxed">
+            The Excellence Report feature is currently under active development. This report will highlight subject-wise distinction holders, outstanding student achievements, and honor roll certificates.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-50 text-amber-800 text-xs font-bold border border-amber-200 shadow-2xs">
+            <i className="fas fa-sparkles text-amber-500" />
+            <span>Feature Coming Soon</span>
+          </div>
+        </div>
+      ) : reportMode === 'rank_holder' ? (
+        !selectedScheduleId ? (
+          <div className="text-center py-16 bg-white border border-light-border rounded-3xl p-8 shadow-xs">
+            <i className="fas fa-trophy text-3xl text-slate-300 mb-2 block" />
+            <p className="text-sm font-bold text-dark-primary">Select an Examination</p>
+            <p className="text-xs text-dark-muted mt-1">
+              Choose an examination event above to generate Rank Holder Reports for the selected classes.
+            </p>
+          </div>
+        ) : rankHolderClassesToRender.length === 0 ? (
+          <div className="text-center py-16 bg-white border border-light-border rounded-3xl p-8 shadow-xs">
+            <i className="fas fa-trophy text-3xl text-amber-400 mb-2 block" />
+            <p className="text-sm font-bold text-dark-primary">No Rank Holders Found</p>
+            <p className="text-xs text-dark-muted mt-1">
+              No students or exam results recorded for the selected classes in{' '}
+              {selectedSchedule?.name || 'this examination'}.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-8 print:space-y-0 print-cards-container">
+            <style>{printStyles}</style>
+
+            {rankHolderClassesToRender.map((clsItem) => {
+              const rkCfg = activeTemplate.rankHoldersConfig || {};
+              return (
+                <div
+                  key={`rank-holder-page-${clsItem.id}`}
+                  style={{
+                    '--page-pad-x': '24px',
+                    '--page-pad-y': '24px',
+                  }}
+                  className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
+                >
+                  {/* ── ExtraComponent / Logo Layers: Background ── */}
+                  <ExtraComponentLayers currentConfig={activeTemplate} position="background" />
+
+                  <div
+                    className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
+                    style={{ gap: `${activeTemplate.blockSpacing ?? 16}px` }}
+                  >
+                    {/* 1. Header Component */}
+                    {renderRankHolderSchoolHeader(clsItem.name)}
+
+                    {/* 2. Rank Holders Component (one per class) */}
+                    <div className="rank-holders-print-block my-auto py-2">
+                      <RankHolders
+                        students={clsItem.students}
+                        classNameText={rkCfg.classNameText || clsItem.name}
+                        config={rkCfg}
+                        isCompact={rkCfg.size === 'compact'}
+                      />
+                    </div>
+
+                    {/* 3. Remarks Component */}
+                    {activeTemplate.showTeacherRemarks !== false && (
+                      <div
+                        className={`border border-amber-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5 relative ${
+                          activeTemplate.remarksConfig?.size === 'compact'
+                            ? 'p-2 print:p-1'
+                            : 'p-3.5 print:p-1.5'
+                        }`}
+                        style={{
+                          backgroundColor:
+                            activeTemplate.remarksConfig?.style?.backgroundColor ||
+                            'rgb(255 251 235 / 0.6)',
+                        }}
+                      >
+                        <span
+                          className="font-black uppercase tracking-wider block remarks-label text-amber-900"
+                          style={{
+                            fontSize: `${remarksPrint.labelFontSize}px`,
+                            color: activeTemplate.remarksConfig?.style?.labelColor || '#78350f',
+                          }}
+                        >
+                          {activeTemplate.remarksConfig?.title || 'Remarks'}:
+                        </span>
+                        <p
+                          className="italic font-medium remarks-content"
+                          style={{
+                            fontSize: `${remarksPrint.contentFontSize}px`,
+                            color: activeTemplate.remarksConfig?.style?.contentColor || '#0f172a',
+                          }}
+                        >
+                          &quot;
+                          {activeTemplate.remarksText ||
+                            activeTemplate.remarksConfig?.defaultRemarks ||
+                            'Congratulations to all the rank holders and high achievers for their outstanding academic performance and dedication!'}
+                          &quot;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* 4. Footer Signature components */}
+                    {activeTemplate.showSignatures !== false && rankHolderActiveSigs.length > 0 && (
+                      <div
+                        className={`report-card-signatures mt-auto ${
+                          activeTemplate.signaturesConfig?.size === 'compact'
+                            ? 'pt-3 print:pt-1.5'
+                            : activeTemplate.signaturesConfig?.size === 'tall'
+                              ? 'pt-8 print:pt-3'
+                              : 'pt-6 print:pt-2'
+                        } grid gap-4 print:gap-2 text-center ${
+                          rankHolderActiveSigs.length === 1 ? 'max-w-xs mx-auto' : ''
+                        }`}
+                        style={{
+                          gridTemplateColumns: `repeat(${rankHolderActiveSigs.length}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {rankHolderActiveSigs.map((sig) => (
+                          <div
+                            key={sig.id}
+                            className="border-t border-slate-900 pt-1.5 print:pt-0.5 space-y-0.5"
+                          >
+                            <span
+                              className="font-bold text-dark-slate block truncate signature-title"
+                              style={{
+                                fontSize: `${signaturesPrint.labelFontSize}px`,
+                                color: activeTemplate.signaturesConfig?.style?.labelColor || undefined,
+                              }}
+                            >
+                              {sig.title}
+                            </span>
+                            <span
+                              className="text-dark-muted block truncate signature-subtitle"
+                              style={{
+                                fontSize: `${signaturesPrint.contentFontSize}px`,
+                                color:
+                                  activeTemplate.signaturesConfig?.style?.contentColor || undefined,
+                              }}
+                            >
+                              {sig.subtitle}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── ExtraComponent / Logo Layers: Foreground ── */}
+                  <ExtraComponentLayers currentConfig={activeTemplate} position="foreground" />
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : !selectedClassId ? (
         <div className="text-center py-16 bg-white border border-light-border rounded-3xl p-8 shadow-xs">
           <i className="fas fa-chalkboard text-3xl text-slate-300 mb-2 block" />
@@ -1113,214 +1940,7 @@ const ReportCardGenerator = ({
         /* Report Cards List (One card per student, strictly 1 full page without border) */
         <div className="space-y-8 print:space-y-0 print-cards-container">
           {/* Dynamic Print Stylesheet for 1 Full Page Per Card & Zero Border */}
-          <style>{`
-            @media print {
-              @page {
-                size: ${paperSize} ${orientation};
-                margin: 0 !important;
-              }
-              html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                box-sizing: border-box !important;
-                min-height: 0 !important;
-                height: auto !important;
-                background: #ffffff !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                overflow: visible !important;
-              }
-              #root,
-              #root > div,
-              #dashboard-section,
-              main,
-              [data-feature="exam-progress-report"],
-              [data-feature="exam-results"],
-              [data-feature="exam-results-content"],
-              [data-feature="progress-report-generator"],
-              .min-h-screen,
-              .animate-in {
-                margin: 0 !important;
-                padding: 0 !important;
-                border: none !important;
-                box-shadow: none !important;
-                min-height: 0 !important;
-                height: auto !important;
-                max-height: none !important;
-                display: block !important;
-                transform: none !important;
-                animation: none !important;
-                background: transparent !important;
-                overflow: visible !important;
-              }
-              header, nav, aside, footer, [data-feature-filter], [data-feature-tab], .print\\:hidden, button.print\\:hidden {
-                display: none !important;
-              }
-              .print-cards-container {
-                display: block !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 100% !important;
-                min-height: 0 !important;
-                height: auto !important;
-                border: none !important;
-              }
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .progress-report-card-page {
-                width: 100% !important;
-                max-width: 100% !important;
-                height: ${cardPrintHeight} !important;
-                max-height: ${cardPrintHeight} !important;
-                box-sizing: border-box !important;
-                margin: 0 !important;
-                padding: ${orientation === 'landscape' ? '5mm 7mm' : '6mm 8mm'} !important;
-                --page-pad-x: ${orientation === 'landscape' ? '7mm' : '8mm'} !important;
-                --page-pad-y: ${orientation === 'landscape' ? '5mm' : '6mm'} !important;
-                border: none !important;
-                box-shadow: none !important;
-                border-radius: 0 !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: flex-start !important;
-                overflow: hidden !important;
-                background: #ffffff !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                page-break-before: auto !important;
-                break-before: auto !important;
-              }
-              [data-bleed-page="true"] {
-                margin-left: calc(-1 * var(--page-pad-x, 8mm)) !important;
-                margin-right: calc(-1 * var(--page-pad-x, 8mm)) !important;
-                padding-left: var(--page-pad-x, 8mm) !important;
-                padding-right: var(--page-pad-x, 8mm) !important;
-                width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
-                max-width: calc(100% + (2 * var(--page-pad-x, 8mm))) !important;
-                box-sizing: border-box !important;
-              }
-              [data-bleed-top="true"] {
-                margin-top: calc(-1 * var(--page-pad-y, 6mm)) !important;
-                padding-top: calc(var(--page-pad-y, 6mm) + 2mm) !important;
-              }
-              [data-bleed-bottom="true"] {
-                margin-bottom: calc(-1 * var(--page-pad-y, 6mm)) !important;
-                padding-bottom: calc(var(--page-pad-y, 6mm) + 2mm) !important;
-              }
-              .progress-report-card-page:not(:last-child) {
-                page-break-after: always !important;
-                break-after: page !important;
-              }
-              .progress-report-card-page:last-child {
-                page-break-after: auto !important;
-                break-after: auto !important;
-              }
-              .progress-report-card-page > .relative.z-10 {
-                display: flex !important;
-                flex-direction: column !important;
-                flex: 1 1 0% !important;
-                width: 100% !important;
-                min-height: 0 !important;
-                box-sizing: border-box !important;
-                gap: ${activeTemplate.blockSpacing !== undefined ? `${(activeTemplate.blockSpacing * 0.22).toFixed(1)}mm` : orientation === 'landscape' ? '2mm' : '2.5mm'} !important;
-              }
-              .progress-report-card-page > * {
-                margin-top: 0 !important;
-                margin-bottom: 0 !important;
-              }
-              .progress-report-card-page .report-card-signatures-wrapper {
-                margin-top: auto !important;
-              }
-              .progress-report-card-page .report-card-signatures {
-                margin-top: auto !important;
-                padding-top: 2mm !important;
-              }
-              /* Mark Table */
-              .progress-report-card-page table {
-                font-size: ${tablePrintContentFontSize}px !important;
-              }
-              .progress-report-card-page thead tr,
-              .progress-report-card-page thead th {
-                font-size: ${tablePrintLabelFontSize}px !important;
-              }
-              .progress-report-card-page tbody tr,
-              .progress-report-card-page tbody td {
-                font-size: ${tablePrintContentFontSize}px !important;
-              }
-              .progress-report-card-page th,
-              .progress-report-card-page td {
-                padding: ${activeTemplate?.subjectTableConfig?.size === 'compact' ? '2px 4px' : activeTemplate?.subjectTableConfig?.size === 'spacious' ? '5px 8px' : '3px 6px'} !important;
-              }
-
-              /* School Header */
-              .progress-report-card-page .school-header-title {
-                font-size: ${schoolHeaderPrint.titleFontSize}px !important;
-              }
-              .progress-report-card-page .school-header-subtitle {
-                font-size: ${schoolHeaderPrint.subtitleFontSize}px !important;
-              }
-              .progress-report-card-page .school-header-address {
-                font-size: ${schoolHeaderPrint.addressFontSize}px !important;
-              }
-              .progress-report-card-page .school-header-exam-badge {
-                font-size: ${schoolHeaderPrint.examTitleFontSize}px !important;
-              }
-
-              /* Student Info */
-              .progress-report-card-page .student-info-label {
-                font-size: ${studentInfoPrint.labelFontSize}px !important;
-              }
-              .progress-report-card-page .student-info-value {
-                font-size: ${studentInfoPrint.contentFontSize}px !important;
-              }
-
-              /* Summary Calculations */
-              .progress-report-card-page .summary-calc-label {
-                font-size: ${summaryPrint.labelFontSize}px !important;
-              }
-              .progress-report-card-page .summary-calc-value {
-                font-size: ${summaryPrint.contentFontSize}px !important;
-              }
-
-              /* Teacher Remarks */
-              .progress-report-card-page .remarks-label {
-                font-size: ${remarksPrint.labelFontSize}px !important;
-              }
-              .progress-report-card-page .remarks-content {
-                font-size: ${remarksPrint.contentFontSize}px !important;
-              }
-
-              /* Signatures */
-              .progress-report-card-page .signature-title {
-                font-size: ${signaturesPrint.labelFontSize}px !important;
-              }
-              .progress-report-card-page .signature-subtitle {
-                font-size: ${signaturesPrint.contentFontSize}px !important;
-              }
-
-              /* Attendance Bar */
-              .progress-report-card-page .attendance-bar-label {
-                font-size: ${attendanceBarPrint.labelFontSize}px !important;
-              }
-              .progress-report-card-page .attendance-bar-content {
-                font-size: ${attendanceBarPrint.contentFontSize}px !important;
-              }
-
-              /* Charts */
-              .progress-report-card-page .chart-column-title {
-                font-size: ${chartPrint.titleFontSize}px !important;
-              }
-
-              /* Grading Scale Legend */
-              .progress-report-card-page .grading-scale-legend,
-              .progress-report-card-page .grading-scale-legend * {
-                font-size: ${gradingScalePrint.fontSize}px !important;
-              }
-            }
-          `}</style>
+          <style>{printStyles}</style>
           {displayedStudents.map((rawStudent, studentIdx) => {
             const admKey = String(rawStudent.admission_no || rawStudent.admission_number || '')
               .trim()
@@ -1443,6 +2063,11 @@ const ReportCardGenerator = ({
                           return {
                             ...DEFAULT_BLOCK_STYLE,
                             ...(activeTemplate.attendanceBarConfig?.style || {}),
+                          };
+                        case 'rankHolders':
+                          return {
+                            ...DEFAULT_BLOCK_STYLE,
+                            ...(activeTemplate.rankHoldersConfig?.style || {}),
                           };
                         case 'subjectTable':
                           return {
@@ -1787,6 +2412,38 @@ const ReportCardGenerator = ({
                                 student={student}
                                 config={activeTemplate.attendanceBarConfig}
                                 isCompact={activeTemplate.attendanceBarConfig?.size === 'compact'}
+                              />
+                            </div>
+                          );
+                        }
+
+                        case 'rankHolders': {
+                          if (!activeTemplate.showRankHolders) return null;
+                          const rkCfg = activeTemplate.rankHoldersConfig || {};
+                          const stuClassId = String(student.class_id || selectedClassId || 'default');
+                          const classStudents = classRankHoldersMap[stuClassId] || [];
+                          const currentClassName =
+                            internalClasses.find((c) => String(c.id) === stuClassId)?.name ||
+                            selectedClass?.name ||
+                            (student.class_name || 'Class');
+
+                          const allClassHolders = {};
+                          if (rkCfg.repeatForEveryClass) {
+                            Object.entries(classRankHoldersMap).forEach(([cId, cList]) => {
+                              const cName =
+                                internalClasses.find((c) => String(c.id) === String(cId))?.name || `Class ${cId}`;
+                              allClassHolders[cName] = cList;
+                            });
+                          }
+
+                          return (
+                            <div key="rankHolders" className="rank-holders-print-block">
+                              <RankHolders
+                                students={classStudents}
+                                classNameText={rkCfg.classNameText || currentClassName}
+                                config={rkCfg}
+                                isCompact={rkCfg.size === 'compact'}
+                                allClassRankHolders={rkCfg.repeatForEveryClass ? allClassHolders : null}
                               />
                             </div>
                           );

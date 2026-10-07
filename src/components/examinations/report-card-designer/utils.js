@@ -369,6 +369,16 @@ export const mergeConfig = (base, override) => ({
       ...(override?.attendanceBarConfig?.style || {}),
     },
   },
+  showRankHolders: override?.showRankHolders ?? base.showRankHolders ?? false,
+  rankHoldersConfig: {
+    ...base.rankHoldersConfig,
+    ...(override?.rankHoldersConfig || {}),
+    style: {
+      ...DEFAULT_BLOCK_STYLE,
+      ...base.rankHoldersConfig?.style,
+      ...(override?.rankHoldersConfig?.style || {}),
+    },
+  },
   schoolHeader: {
     ...base.schoolHeader,
     ...(override?.schoolHeader || {}),
@@ -459,13 +469,23 @@ export const mergeConfig = (base, override) => ({
   showGradingScale: override?.showGradingScale ?? base.showGradingScale ?? false,
   blockOrder: (() => {
     const bo = override?.blockOrder || base.blockOrder || DEFAULT_TEMPLATE.blockOrder;
-    if (Array.isArray(bo) && !bo.includes('attendanceBar')) {
+    if (Array.isArray(bo)) {
       const copy = [...bo];
-      const studentIdx = copy.indexOf('studentInfo');
-      if (studentIdx !== -1) {
-        copy.splice(studentIdx + 1, 0, 'attendanceBar');
-      } else {
-        copy.push('attendanceBar');
+      if (!copy.includes('attendanceBar')) {
+        const studentIdx = copy.indexOf('studentInfo');
+        if (studentIdx !== -1) {
+          copy.splice(studentIdx + 1, 0, 'attendanceBar');
+        } else {
+          copy.push('attendanceBar');
+        }
+      }
+      if (!copy.includes('rankHolders')) {
+        const attIdx = copy.indexOf('attendanceBar');
+        if (attIdx !== -1) {
+          copy.splice(attIdx + 1, 0, 'rankHolders');
+        } else {
+          copy.push('rankHolders');
+        }
       }
       return copy;
     }

@@ -293,7 +293,7 @@ const AcademicCalendarModal = ({
             }`}
           >
             <i className="fas fa-calendar-days text-[11px]" />
-            Academic Calendar & Year Range
+            Calendar Overview
           </button>
           <button
             type="button"
@@ -315,60 +315,6 @@ const AcademicCalendarModal = ({
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {activeTab === 'calendar' && (
             <>
-              <section className="rounded-2xl border border-light-border p-4 bg-gray-50/60 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <h4 className="text-xs font-black text-dark-primary flex items-center gap-2">
-                    <i className="fas fa-calendar-alt text-brand-primary" /> Academic Year Range
-                  </h4>
-                  <p className="text-[11px] font-bold text-gray-400 mt-0.5">
-                    Define the starting and ending months for your institution's academic cycle.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold text-gray-500">Start:</span>
-                    <select
-                      value={startMonth}
-                      onChange={(e) => setStartMonth(Number(e.target.value))}
-                      disabled={!canEdit}
-                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
-                    >
-                      {ALL_MONTHS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold text-gray-500">End:</span>
-                    <select
-                      value={endMonth}
-                      onChange={(e) => setEndMonth(Number(e.target.value))}
-                      disabled={!canEdit}
-                      className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none"
-                    >
-                      {ALL_MONTHS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleSaveRangeClick}
-                    disabled={!canEdit || isSavingRange}
-                    className="px-4 py-1.5 rounded-xl bg-brand-primary text-white text-xs font-black shadow-2xs hover:bg-brand-primary/90 transition-all disabled:opacity-50"
-                  >
-                    {isSavingRange ? 'Saving...' : 'Save Year Range'}
-                  </button>
-                </div>
-              </section>
-
               <section className="rounded-2xl border border-light-border p-4 sm:p-5 bg-light-bg/30 space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>

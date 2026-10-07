@@ -15,10 +15,21 @@ export const STATIC_MANAGED_COMPONENTS = new Set([
   'academic-calendar',
   'avc-admin-links',
   'avc-admin-manager',
+  'book-planner',
+  'book-planner-edit',
+  'book-planner-tab-pacing',
+  'book-planner-tab-targets',
   'calendar-manage-events',
   'class-schedule',
   'classes-setup',
   'dashboard',
+  'dash-calendar-edit',
+  'dash-tab-attention-required',
+  'dash-tab-calendar-overview',
+  'dash-tab-class-dashboard',
+  'dash-tab-subject-heatmap',
+  'dash-tab-tracker-heatmap',
+  'dash-tab-weekly-trend',
   'emp-add-record',
   'emp-bulk-import',
   'emp-delete-record',
@@ -492,12 +503,54 @@ export const useViewConfig = (userRoles = []) => {
         return false;
       }
 
-      const isManaged = STATIC_MANAGED_COMPONENTS.has(componentName);
-      if (isManaged) {
-        return false;
+      // 3. Built-in fallbacks when component is not yet registered in DB (e.g., pending migration):
+      // Dashboard sub-tabs
+      if (
+        componentName === 'dash-tab-calendar-overview' ||
+        componentName === 'dash-tab-class-dashboard' ||
+        componentName === 'dash-tab-subject-heatmap' ||
+        componentName === 'dash-tab-tracker-heatmap' ||
+        componentName === 'dash-tab-weekly-trend'
+      ) {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator', 'teacher'].includes(
+            String(r).toLowerCase().trim()
+          )
+        );
       }
 
-      // 3. Built-in fallbacks ONLY for truly unmanaged/legacy components not registered in DB:
+      if (
+        componentName === 'dash-tab-attention-required' ||
+        componentName === 'dash-calendar-edit'
+      ) {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
+      // Book Planner tile & sub-tabs
+      if (
+        componentName === 'book-planner' ||
+        componentName === 'book-planner-tab-targets' ||
+        componentName === 'book-planner-tab-pacing'
+      ) {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator', 'teacher'].includes(
+            String(r).toLowerCase().trim()
+          )
+        );
+      }
+
+      if (componentName === 'book-planner-edit') {
+        if (!userRoles || userRoles.length === 0) return true;
+        return userRoles.some((r) =>
+          ['admin', 'management', 'coordinator'].includes(String(r).toLowerCase().trim())
+        );
+      }
+
       // Builtin fallback for syl-tab-my-activity if not yet inserted in DB
       if (componentName === 'syl-tab-my-activity') {
         return userRoles.some((r) =>
@@ -587,7 +640,13 @@ export const useViewConfig = (userRoles = []) => {
         );
       }
 
-      // 4. Fail-closed (deny) for unmanaged exam components, tabs, setups, admin, and mutation variables
+      // 4. Managed components with no explicit fallback and not returned by DB are denied
+      const isManaged = STATIC_MANAGED_COMPONENTS.has(componentName);
+      if (isManaged) {
+        return false;
+      }
+
+      // 5. Fail-closed (deny) for unmanaged exam components, tabs, setups, admin, and mutation variables
       if (
         componentName.startsWith('exam-') ||
         (componentName.includes('tab') && !componentName.includes('timetable')) ||

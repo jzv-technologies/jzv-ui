@@ -7,6 +7,8 @@ import AttentionRequiredPanel from './dashboard/AttentionRequiredPanel';
 import ClassDonutCharts from './dashboard/ClassDonutCharts';
 import TeacherSubmissionHeatmap from './dashboard/TeacherSubmissionHeatmap';
 import AcademicCalendarModal from './dashboard/AcademicCalendarModal';
+import DashboardCalendarOverview from './dashboard/DashboardCalendarOverview';
+import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import {
   buildAcademicCalendarRows,
   buildAcademicMonths,
@@ -49,6 +51,7 @@ const getHeatmapDateRange = (range, customStart, customEnd) => {
 
 const SyllabusOverviewDashboard = ({
   role,
+  userRoles = [],
   classes = [],
   subjects = [],
   books = [],
@@ -82,6 +85,7 @@ const SyllabusOverviewDashboard = ({
   // Configurable academic year range (start/end month numbers)
   const [academicStartMonth, setAcademicStartMonth] = useState(6);
   const [academicEndMonth, setAcademicEndMonth] = useState(5);
+  const [academicEvents, setAcademicEvents] = useState([]);
 
   const [periods, setPeriods] = useState([]);
   const heatmapDateRange = useMemo(
@@ -96,7 +100,7 @@ const SyllabusOverviewDashboard = ({
       overviewDataFetchPromise = Promise.all([
         supabase
           .from('academic_calendar')
-          .select('id, year, month, working_days, teaching_days, ay')
+          .select('*')
           .order('year', { ascending: true })
           .order('month', { ascending: true }),
         supabase
@@ -109,13 +113,20 @@ const SyllabusOverviewDashboard = ({
           .eq('key', 'academic_year_range')
           .maybeSingle(),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
+        supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
       ]).finally(() => {
         overviewDataFetchPromise = null;
       });
     }
 
-    const [calendarResult, timetableResult, dailyLogsResult, configResult, periodsResult] =
-      await overviewDataFetchPromise;
+    const [
+      calendarResult,
+      timetableResult,
+      dailyLogsResult,
+      configResult,
+      periodsResult,
+      eventsResult,
+    ] = await overviewDataFetchPromise;
 
     if (calendarResult.error) {
       console.warn('Academic calendar unavailable:', calendarResult.error.message);
@@ -155,6 +166,12 @@ const SyllabusOverviewDashboard = ({
           }
         } catch (e) {}
       }
+    }
+
+    if (!eventsResult?.error && eventsResult?.data) {
+      setAcademicEvents(eventsResult.data);
+    } else {
+      setAcademicEvents([]);
     }
 
     if (!configResult.error && configResult.data?.val) {
@@ -210,8 +227,8 @@ const SyllabusOverviewDashboard = ({
   );
 
   const academicYearOptions = useMemo(
-    () => getAcademicYearOptions(calendarEntries),
-    [calendarEntries]
+    () => getAcademicYearOptions(calendarEntries, new Date(), academicStartMonth),
+    [calendarEntries, academicStartMonth]
   );
 
   useEffect(() => {
@@ -223,7 +240,7 @@ const SyllabusOverviewDashboard = ({
   const academicYearStartDate = useMemo(() => {
     const startYear = parseAcademicYearLabel(selectedAcademicYear);
     const startMonthNum = Number(academicStartMonth) || 6;
-    const startYear4 = getAcademicMonthYear(startYear, startMonthNum);
+    const startYear4 = getAcademicMonthYear(startYear, startMonthNum, academicStartMonth);
     return new Date(startYear4, startMonthNum - 1, 1);
   }, [selectedAcademicYear, academicStartMonth]);
 
@@ -233,9 +250,10 @@ const SyllabusOverviewDashboard = ({
         selectedAcademicYear,
         calendarEntries,
         academicStartMonth,
-        academicEndMonth
+        academicEndMonth,
+        academicEvents
       ),
-    [selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth]
+    [selectedAcademicYear, calendarEntries, academicStartMonth, academicEndMonth, academicEvents]
   );
 
   const periodsPerWeekMap = useMemo(() => buildPeriodsPerWeekMap(timetableSlots), [timetableSlots]);
@@ -519,44 +537,71 @@ const SyllabusOverviewDashboard = ({
     onHeaderStateChange,
   ]);
 
-  const canEditSettings = role === 'admin' || role === 'management';
+  const canAccess = useCanAccess(userRoles);
+  const canEditSettings =
+    canAccess('dash-calendar-edit') || canAccess('dash-tab-calendar-overview');
 
-  const subTabs = [
-    {
-      key: 'class-dashboard',
-      label: 'Class Dashboard',
-      shortLabel: 'Class Dashboard',
-      icon: 'fa-chart-pie',
-    },
-    {
-      key: 'subject-heatmap',
-      label: 'Subject Heatmap',
-      shortLabel: 'Subject Heatmap',
-      icon: 'fa-table-cells',
-    },
-    {
-      key: 'tracker-heatmap',
-      label: 'Tracker Heatmap',
-      shortLabel: 'Tracker Heatmap',
-      icon: 'fa-clipboard-user',
-    },
-    {
-      key: 'weekly-progress-trend',
-      label: 'Weekly Book Progress Trend',
-      shortLabel: 'Weekly Trend',
-      icon: 'fa-chart-line',
-    },
-    {
-      key: 'attention-required',
-      label: 'Attention Required',
-      shortLabel: 'Attention',
-      icon: 'fa-triangle-exclamation',
-      badge: alerts?.length > 0 ? alerts.length : null,
-    },
-  ];
+  const SUB_TABS = useMemo(
+    () => [
+      {
+        key: 'class-dashboard',
+        componentName: 'dash-tab-class-dashboard',
+        label: 'Class Dashboard',
+        shortLabel: 'Class Dashboard',
+        icon: 'fa-chart-pie',
+      },
+      {
+        key: 'subject-heatmap',
+        componentName: 'dash-tab-subject-heatmap',
+        label: 'Subject Heatmap',
+        shortLabel: 'Subject Heatmap',
+        icon: 'fa-table-cells',
+      },
+      {
+        key: 'tracker-heatmap',
+        componentName: 'dash-tab-tracker-heatmap',
+        label: 'Tracker Heatmap',
+        shortLabel: 'Tracker Heatmap',
+        icon: 'fa-clipboard-user',
+      },
+      {
+        key: 'weekly-progress-trend',
+        componentName: 'dash-tab-weekly-trend',
+        label: 'Weekly Book Progress Trend',
+        shortLabel: 'Weekly Trend',
+        icon: 'fa-chart-line',
+      },
+      {
+        key: 'attention-required',
+        componentName: 'dash-tab-attention-required',
+        label: 'Attention Required',
+        shortLabel: 'Attention',
+        icon: 'fa-triangle-exclamation',
+        badge: alerts?.length > 0 ? alerts.length : null,
+      },
+      {
+        key: 'calendar-overview',
+        componentName: 'dash-tab-calendar-overview',
+        label: 'Calendar Overview',
+        shortLabel: 'Calendar',
+        icon: 'fa-calendar-days',
+      },
+    ],
+    [alerts]
+  );
+
+  const availableTabs = useMemo(() => {
+    return SUB_TABS.filter((tab) => canAccess(tab.componentName));
+  }, [SUB_TABS, canAccess]);
+
+  useEffect(() => {
+    if (availableTabs.length > 0 && !availableTabs.some((t) => t.key === activeSubTab)) {
+      setActiveSubTab(availableTabs[0].key);
+    }
+  }, [availableTabs, activeSubTab]);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6" data-feature="syllabus-dashboard">
       {/* Calendar Fallback Warning */}
       {calendarFallbackReason && (
         <div className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 inline-flex items-center gap-2">
@@ -565,15 +610,15 @@ const SyllabusOverviewDashboard = ({
         </div>
       )}
 
-      {/* Mobile sub-view selector */}
-      <div className="md:hidden flex items-center gap-2">
+      {/* Mobile sub-view selector (Rule 2.2) */}
+      <div className="md:hidden flex items-center gap-2" data-feature-tab="dashboard-tabs-mobile">
         <div className="relative flex-1">
           <select
             value={activeSubTab}
             onChange={(event) => setActiveSubTab(event.target.value)}
             className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
           >
-            {subTabs.map((tab) => (
+            {availableTabs.map((tab) => (
               <option key={tab.key} value={tab.key}>
                 {tab.label}
                 {tab.badge ? ` (${tab.badge})` : ''}
@@ -582,22 +627,14 @@ const SyllabusOverviewDashboard = ({
           </select>
           <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
         </div>
-        {role === 'management' && (
-          <button
-            type="button"
-            onClick={() => setIsSettingsOpen(true)}
-            title="Academic Calendar and Book Targets"
-            aria-label="Academic Calendar and Book Targets"
-            className="shrink-0 w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:bg-light-bg transition-colors inline-flex items-center justify-center"
-          >
-            <i className="fas fa-gear text-sm"></i>
-          </button>
-        )}
       </div>
 
-      {/* Desktop sub-view tabs */}
-      <div className="hidden md:flex bg-white border border-light-border p-1.5 sm:p-2 rounded-2xl shadow-sm items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide">
-        {subTabs.map((tab) => (
+      {/* Desktop sub-view tabs (Rule 2.2) */}
+      <div
+        className="hidden md:flex bg-white border border-light-border p-1.5 sm:p-2 rounded-2xl shadow-sm items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide"
+        data-feature-tab="dashboard-tabs"
+      >
+        {availableTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
@@ -623,21 +660,10 @@ const SyllabusOverviewDashboard = ({
             )}
           </button>
         ))}
-        {role === 'management' && (
-          <button
-            type="button"
-            onClick={() => setIsSettingsOpen(true)}
-            title="Academic Calendar and Book Targets"
-            aria-label="Academic Calendar and Book Targets"
-            className="ml-auto shrink-0 w-9 h-9 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:bg-light-bg transition-colors inline-flex items-center justify-center"
-          >
-            <i className="fas fa-gear text-sm"></i>
-          </button>
-        )}
       </div>
 
       {/* Active Sub-View Content */}
-      <div className="w-full">
+      <div className="w-full" data-feature="dashboard-content" data-feature-filter={activeSubTab}>
         {activeSubTab === 'tracker-heatmap' && (
           <div className="mb-3 flex flex-wrap items-end gap-2">
             <div className="inline-flex rounded-lg border border-light-border bg-white p-1 shadow-sm">
@@ -680,25 +706,51 @@ const SyllabusOverviewDashboard = ({
             )}
           </div>
         )}
-        {activeSubTab === 'class-dashboard' && <ClassDonutCharts classDonutData={classDonutData} />}
+        {activeSubTab === 'class-dashboard' && (
+          <ConditionalBlock name="dash-tab-class-dashboard" roles={userRoles}>
+            <ClassDonutCharts classDonutData={classDonutData} />
+          </ConditionalBlock>
+        )}
 
         {activeSubTab === 'subject-heatmap' && (
-          <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
+          <ConditionalBlock name="dash-tab-subject-heatmap" roles={userRoles}>
+            <ClassSubjectHeatmap heatmap={heatmap} onCellClick={onOpenClassProgress} />
+          </ConditionalBlock>
         )}
 
         {activeSubTab === 'tracker-heatmap' && (
-          <TeacherSubmissionHeatmap heatmapData={teacherSubmissionHeatmapData} />
+          <ConditionalBlock name="dash-tab-tracker-heatmap" roles={userRoles}>
+            <TeacherSubmissionHeatmap heatmapData={teacherSubmissionHeatmapData} />
+          </ConditionalBlock>
         )}
 
         {activeSubTab === 'weekly-progress-trend' && (
-          <ProgressTrendChart
-            classes={classes}
-            bookWeeklyData={bookWeeklyTrendData}
-            loading={loadingAuxData}
-          />
+          <ConditionalBlock name="dash-tab-weekly-trend" roles={userRoles}>
+            <ProgressTrendChart
+              classes={classes}
+              bookWeeklyData={bookWeeklyTrendData}
+              loading={loadingAuxData}
+            />
+          </ConditionalBlock>
         )}
 
-        {activeSubTab === 'attention-required' && <AttentionRequiredPanel alerts={alerts} />}
+        {activeSubTab === 'attention-required' && (
+          <ConditionalBlock name="dash-tab-attention-required" roles={userRoles}>
+            <AttentionRequiredPanel alerts={alerts} />
+          </ConditionalBlock>
+        )}
+
+        {activeSubTab === 'calendar-overview' && (
+          <ConditionalBlock name="dash-tab-calendar-overview" roles={userRoles}>
+            <DashboardCalendarOverview
+              academicYear={selectedAcademicYear}
+              academicYearOptions={academicYearOptions}
+              onAcademicYearChange={setSelectedAcademicYear}
+              calendarRows={calendarRows}
+              canEdit={canEditSettings}
+            />
+          </ConditionalBlock>
+        )}
       </div>
 
       {/* Settings Modal */}

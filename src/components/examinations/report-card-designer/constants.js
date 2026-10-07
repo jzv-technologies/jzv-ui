@@ -32,6 +32,54 @@ export const PREVIEW_STUDENT = {
   attendance: '96%',
 };
 
+export const PREVIEW_RANK_HOLDERS = [
+  {
+    id: 'rank_1',
+    student_name: 'NAZEER M',
+    photo_id: 'PH-101',
+    percentage: 96,
+    rank: 1,
+    classRank: 1,
+    class_name: 'PLATINUM - 3',
+  },
+  {
+    id: 'rank_2',
+    student_name: 'ADHIL R',
+    photo_id: 'PH-102',
+    percentage: 93,
+    rank: 2,
+    classRank: 2,
+    class_name: 'PLATINUM - 3',
+  },
+  {
+    id: 'rank_3',
+    student_name: 'MD ASHRAF',
+    photo_id: 'PH-103',
+    percentage: 89,
+    rank: 3,
+    classRank: 3,
+    class_name: 'PLATINUM - 3',
+  },
+  {
+    id: 'rank_4',
+    student_name: 'FAHIM K',
+    photo_id: 'PH-104',
+    percentage: 86,
+    rank: 4,
+    classRank: 4,
+    class_name: 'PLATINUM - 3',
+  },
+  {
+    id: 'rank_5',
+    student_name: 'RAYAN S',
+    photo_id: 'PH-105',
+    percentage: 84,
+    rank: 5,
+    classRank: 5,
+    class_name: 'PLATINUM - 3',
+  },
+];
+
 export const RAW_PREVIEW_SCORES = [
   {
     subjectId: '1',
@@ -161,6 +209,7 @@ export const DEFAULT_BLOCK_TITLES = {
   schoolHeader: 'Header Details',
   studentInfo: 'Student Information',
   attendanceBar: 'Attendance Record & Summary',
+  rankHolders: 'Class Rank Holders',
   subjectTable: 'Academic Marks & Evaluation',
   summaryCalculations: 'Performance Summary',
   charts: 'Performance Analytics',
@@ -189,6 +238,7 @@ export const BLOCK_DEFAULT_BG = {
   schoolHeader: 'transparent',
   studentInfo: '#f8fafc',
   attendanceBar: 'transparent',
+  rankHolders: 'transparent',
   subjectTable: 'transparent',
   summaryCalculations: '#0f172a',
   charts: '#f8fafc',
@@ -394,9 +444,9 @@ export const DEFAULT_TEMPLATE = {
   secondaryColor: '#059669', // emerald-600
   showSchoolHeader: true,
   schoolHeader: {
-    title: 'Jamia Zaytoonah High School',
+    title: 'Jamia Zaytoonah',
     subtitle: 'Centre for Academic & Islamic Excellence',
-    address: 'Campus Road, Bangalore, Karnataka',
+    address: 'Anaicut Main Road, Budur Village, Vellore - 632105',
     logoUrl: '/media/jzv-round-full-trans.png',
     examTitle: 'Annual Assessment & Term Examination',
     size: 'standard', // 'compact' | 'standard' | 'large'
@@ -511,6 +561,25 @@ export const DEFAULT_TEMPLATE = {
     totalWorkingDays: 200,
     style: { ...DEFAULT_BLOCK_STYLE },
   },
+  showRankHolders: false,
+  rankHoldersConfig: {
+    title: 'Class Rank Holders',
+    size: 'standard', // 'compact' | 'standard' | 'large'
+    showTitle: false,
+    displayFilterMode: 'top_x', // 'top_x' | 'upto_x'
+    displayLimit: 3, // Top X or Upto X (default 3)
+    itemsPerRow: 3, // Number of items to display in a row (default 3)
+    repeatForEveryClass: false, // Repeat for Every Class Yes/No (default No)
+    showClassName: true,
+    classNameText: '',
+    podiumHeights: true, // stepped height like podium (rank 1 tallest, rank 2 medium, rank 3 shorter)
+    barBaseHeight: 220, // px height base
+    showPercentage: true,
+    showRank: true,
+    showStudentName: true,
+    showPhoto: true,
+    style: { ...DEFAULT_BLOCK_STYLE },
+  },
   showSummaryCalculations: true,
   summaryConfig: {
     showGrandTotal: true,
@@ -572,6 +641,7 @@ export const DEFAULT_TEMPLATE = {
     'schoolHeader',
     'studentInfo',
     'attendanceBar',
+    'rankHolders',
     'subjectTable',
     'summaryCalculations',
     'charts',
@@ -587,6 +657,7 @@ export const BLOCK_LABELS = {
   summaryCalculations: { name: 'Summary Table', icon: 'fa-calculator' },
   charts: { name: 'Graph Component', icon: 'fa-chart-column' },
   attendanceBar: { name: 'Attendance Graph', icon: 'fa-chart-gantt' },
+  rankHolders: { name: 'Rank Holders', icon: 'fa-trophy' },
   remarks: { name: 'Remarks Component', icon: 'fa-comment-dots' },
   signatures: { name: 'Footer Signatures', icon: 'fa-file-signature' },
 };

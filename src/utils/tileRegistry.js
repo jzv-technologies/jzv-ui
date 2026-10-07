@@ -216,6 +216,16 @@ export const TILE_METADATA_REGISTRY = {
     group: 'Academics',
     action: 'subview',
   },
+  'book-planner': {
+    title: 'Book Planner',
+    description:
+      'Set and track target completion dates, expected pacing, and timelines for textbooks and books.',
+    icon: 'fa-book-bookmark',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Academic & Curriculum',
+    action: 'subview',
+  },
 
   // ── Calendar / Dashboard ───────────────────────────────────────────
   'academic-calendar': {

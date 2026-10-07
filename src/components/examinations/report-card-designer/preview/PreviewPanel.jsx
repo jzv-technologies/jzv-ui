@@ -4,6 +4,7 @@ import { ExtraComponentLayers } from '../components/ExtraComponent';
 import GradingScaleLegend from '../components/GradingScaleLegend';
 import { getBlockBleedStyles } from '../utils';
 import { renderAttendanceBarPreview } from './renderAttendanceBarPreview';
+import { renderRankHoldersPreview } from './renderRankHoldersPreview';
 import { renderBlockTitle } from '../renderBlockTitle';
 import { renderChartsPreview } from './renderChartsPreview';
 import { renderRemarksPreview } from './renderRemarksPreview';
@@ -140,6 +141,11 @@ const PreviewPanel = ({
                         ...DEFAULT_BLOCK_STYLE,
                         ...(currentConfig.attendanceBarConfig?.style || {}),
                       };
+                    case 'rankHolders':
+                      return {
+                        ...DEFAULT_BLOCK_STYLE,
+                        ...(currentConfig.rankHoldersConfig?.style || {}),
+                      };
                     case 'subjectTable':
                       return {
                         ...DEFAULT_BLOCK_STYLE,
@@ -185,6 +191,10 @@ const PreviewPanel = ({
 
                     case 'attendanceBar': {
                       return renderAttendanceBarPreview({ blockSize, currentConfig });
+                    }
+
+                    case 'rankHolders': {
+                      return renderRankHoldersPreview({ blockSize, currentConfig });
                     }
 
                     case 'subjectTable': {

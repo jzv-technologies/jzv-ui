@@ -1,6 +1,21 @@
 export const DEFAULT_WORKING_DAYS = 22;
 export const DEFAULT_TEACHING_DAYS = 20;
 
+export const ALL_MONTHS = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+
 const MONTH_LABELS = {
   1: 'Jan',
   2: 'Feb',
@@ -68,43 +83,124 @@ export const getCurrentAcademicYearLabel = (today = new Date()) => {
   return formatAcademicYearLabel(startYear);
 };
 
-export const getAcademicMonthYear = (startYear, month) => {
+export const getAcademicMonthYear = (startYear, month, startMonth = 6) => {
   const m =
     typeof month === 'object' ? Number(month?.month || month?.start_month || 6) : Number(month);
   const cleanMonth = Number.isFinite(m) ? m : 6;
+  const sMonth = Number(startMonth) || 6;
   const y = Number(startYear) || new Date().getFullYear();
-  return cleanMonth >= 6 ? y : y + 1;
+  return cleanMonth >= sMonth ? y : y + 1;
 };
 
 export const buildAcademicCalendarRows = (
   academicYearLabel,
   calendarEntries = [],
   startMonth = 6,
-  endMonth = 5
+  endMonth = 5,
+  events = []
 ) => {
   const startYear = parseAcademicYearLabel(academicYearLabel);
   const months = buildAcademicMonths(startMonth, endMonth);
   const entryMap = new Map(calendarEntries.map((entry) => [`${entry.year}-${entry.month}`, entry]));
 
   return months.map(({ month, label }) => {
-    const year = getAcademicMonthYear(startYear, month);
+    const year = getAcademicMonthYear(startYear, month, startMonth);
     const entry = entryMap.get(`${year}-${month}`);
+
+    // If entry exists in database with recorded values
+    if (entry && (entry.working_days !== undefined || entry.teaching_days !== undefined)) {
+      return {
+        id: entry?.id ?? null,
+        year,
+        month,
+        monthLabel: label,
+        total_days: toNumber(entry?.total_days, new Date(year, month, 0).getDate()),
+        working_days: toNumber(entry?.working_days, DEFAULT_WORKING_DAYS),
+        teaching_days: toNumber(entry?.teaching_days, DEFAULT_TEACHING_DAYS),
+        activity_days: toNumber(entry?.activity_days, 0),
+        holidays: toNumber(entry?.holidays ?? entry?.student_holidays, 0),
+        weekend_days: toNumber(entry?.weekend_days, 0),
+        exam_days: toNumber(entry?.exam_days, 0),
+        source: 'database',
+      };
+    }
+
+    // Dynamic month calculation based on day counts in that month and any events
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let weekendDays = 0;
+    let teachingDays = 0;
+    let activityDays = 0;
+    let studentHolidays = 0;
+    let teacherHolidays = 0;
+    let workingDays = 0;
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month - 1, d);
+      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+      const isSunday = dayOfWeek === 0;
+      const isSaturday = dayOfWeek === 6;
+
+      // Filter events matching this day
+      const dayEvents = (events || []).filter((e) => {
+        const start = new Date(`${e.start_date}T00:00:00`);
+        const end = new Date(`${e.end_date || e.start_date}T00:00:00`);
+        return start <= dateObj && end >= dateObj;
+      });
+
+      const isHoliday = dayEvents.some(
+        (e) =>
+          Boolean(e.is_student_holiday) ||
+          ['planned_holiday', 'emergency_holiday', 'teacher_preparation', 'student_holiday'].includes(
+            e.event_type
+          ) ||
+          (Boolean(e.ignore_attendence) && !e.is_teaching_day)
+      );
+      const isTeacherHol = dayEvents.some(
+        (e) =>
+          Boolean(e.is_teacher_holiday) ||
+          ['planned_holiday', 'emergency_holiday', 'teacher_holiday'].includes(e.event_type)
+      );
+      const hasExplicitTeaching = dayEvents.some((e) => e.is_teaching_day === true);
+      const hasExplicitNonTeaching = dayEvents.some((e) => e.is_teaching_day === false);
+
+      if (isSunday) {
+        weekendDays++;
+      } else {
+        if (isHoliday) studentHolidays++;
+        if (isTeacherHol) teacherHolidays++;
+        if (!isTeacherHol) workingDays++;
+      }
+
+      if (hasExplicitTeaching) {
+        teachingDays++;
+      } else if (!isSunday && !isHoliday) {
+        if (!isSaturday && !hasExplicitNonTeaching) {
+          teachingDays++;
+        } else if (isSaturday && !hasExplicitNonTeaching) {
+          activityDays++;
+        }
+      }
+    }
+
     return {
-      id: entry?.id ?? null,
+      id: null,
       year,
       month,
       monthLabel: label,
-      total_days: toNumber(entry?.total_days, new Date(year, month, 0).getDate()),
-      working_days: toNumber(entry?.working_days, DEFAULT_WORKING_DAYS),
-      teaching_days: toNumber(entry?.teaching_days, DEFAULT_TEACHING_DAYS),
-      activity_days: toNumber(entry?.activity_days, 0),
-      holidays: toNumber(entry?.holidays ?? entry?.student_holidays, 0),
-      source: entry ? 'database' : 'default',
+      total_days: daysInMonth,
+      working_days: workingDays,
+      teaching_days: teachingDays,
+      activity_days: activityDays,
+      holidays: studentHolidays,
+      weekend_days: weekendDays,
+      exam_days: 0,
+      source: 'computed',
     };
   });
 };
 
-export const getAcademicYearOptions = (calendarEntries = [], today = new Date()) => {
+export const getAcademicYearOptions = (calendarEntries = [], today = new Date(), startMonth = 6) => {
+  const sMonth = Number(startMonth) || 6;
   const startYears = new Set([
     parseAcademicYearLabel(getCurrentAcademicYearLabel(today)),
     parseAcademicYearLabel(
@@ -116,7 +212,7 @@ export const getAcademicYearOptions = (calendarEntries = [], today = new Date())
 
   calendarEntries.forEach((entry) => {
     if (!entry?.year || !entry?.month) return;
-    startYears.add(entry.month >= 6 ? Number(entry.year) : Number(entry.year) - 1);
+    startYears.add(entry.month >= sMonth ? Number(entry.year) : Number(entry.year) - 1);
   });
 
   return Array.from(startYears)

@@ -2636,6 +2636,7 @@ const SyllabusTrackerPortal = ({
           <div data-feature="overview">
             <SyllabusOverviewDashboard
               role={effectiveRole}
+              userRoles={userRoles}
               classes={classes}
               subjects={subjects}
               books={books}

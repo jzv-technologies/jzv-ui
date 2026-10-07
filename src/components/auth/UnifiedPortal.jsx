@@ -20,6 +20,7 @@ import ReporterTicketsView from '../tickets/ReporterTicketsView';
 import DynamicForm from '../DynamicForm';
 import AddWorkExceptionsModal from '../syllabus/AddWorkExceptionsModal';
 import LessonManager from '../syllabus/lesson-manager/LessonManager';
+import BookPlannerView from '../syllabus/BookPlannerView';
 import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
@@ -481,6 +482,27 @@ export const UnifiedPortal = ({
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
+            />
+          </div>
+        );
+
+      case 'book-planner':
+        return (
+          <div data-feature="book-planner">
+            <BookPlannerView
+              role={
+                isAdmin
+                  ? 'admin'
+                  : isManagement
+                    ? 'management'
+                    : isTeacher
+                      ? 'teacher'
+                      : 'management'
+              }
+              user={user}
+              userRoles={userRoles}
+              teacherRecord={teacherRecord}
+              onBack={() => setSubView(null)}
             />
           </div>
         );

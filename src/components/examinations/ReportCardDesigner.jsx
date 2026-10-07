@@ -292,6 +292,9 @@ const ReportCardDesigner = ({
       case 'attendanceBar':
         setCurrentConfig((prev) => ({ ...prev, showAttendanceBar: !prev.showAttendanceBar }));
         break;
+      case 'rankHolders':
+        setCurrentConfig((prev) => ({ ...prev, showRankHolders: !prev.showRankHolders }));
+        break;
       case 'subjectTable':
         setCurrentConfig((prev) => ({ ...prev, showSubjectTable: !prev.showSubjectTable }));
         break;
@@ -334,6 +337,12 @@ const ReportCardDesigner = ({
         setCurrentConfig((prev) => ({
           ...prev,
           attendanceBarConfig: { ...prev.attendanceBarConfig, size },
+        }));
+        break;
+      case 'rankHolders':
+        setCurrentConfig((prev) => ({
+          ...prev,
+          rankHoldersConfig: { ...prev.rankHoldersConfig, size },
         }));
         break;
       case 'subjectTable':
@@ -383,6 +392,8 @@ const ReportCardDesigner = ({
         return currentConfig.studentInfoConfig?.size || 'standard';
       case 'attendanceBar':
         return currentConfig.attendanceBarConfig?.size || 'standard';
+      case 'rankHolders':
+        return currentConfig.rankHoldersConfig?.size || 'standard';
       case 'subjectTable':
         return currentConfig.subjectTableConfig?.size || 'standard';
       case 'summaryCalculations':
@@ -406,6 +417,8 @@ const ReportCardDesigner = ({
         return currentConfig.showStudentInfo;
       case 'attendanceBar':
         return currentConfig.showAttendanceBar !== false;
+      case 'rankHolders':
+        return Boolean(currentConfig.showRankHolders);
       case 'subjectTable':
         return currentConfig.showSubjectTable;
       case 'summaryCalculations':

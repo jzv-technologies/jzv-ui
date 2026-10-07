@@ -34,14 +34,45 @@ const isDateWeekend = (date, weeklyOffDays = ['Sunday']) => {
   return (weeklyOffDays || []).includes(dayName);
 };
 
-// --- Helper: Convert academic month index (0=June, 11=May) to Gregorian ---
-const getGregorianFromAcademic = (academicIndex, baseYear) => {
-  const month = (5 + academicIndex) % 12;
-  const yearOffset = academicIndex > 6 ? 1 : 0;
+export const ALL_MONTHS = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+
+// --- Helper: Convert academic month index (0..11) to Gregorian with configurable startMonth ---
+export const getGregorianFromAcademic = (academicIndex, baseYear, startMonth = 6) => {
+  const sMonth = Number(startMonth) || 6;
+  const month = (sMonth - 1 + academicIndex) % 12;
+  const yearOffset = Math.floor((sMonth - 1 + academicIndex) / 12);
   return { year: baseYear + yearOffset, month };
 };
 
 const getAcademicYearLabel = (baseYear) => `${baseYear}-${String(baseYear + 1).slice(-2)}`;
+
+// --- Helper: Get array of { year, month } spanned by a date range ---
+const getMonthsSpannedByDateRange = (startDateStr, endDateStr) => {
+  if (!startDateStr) return [];
+  const start = new Date(`${startDateStr}T00:00:00`);
+  const end = new Date(`${endDateStr || startDateStr}T00:00:00`);
+  const months = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cur <= last) {
+    months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return months;
+};
 
 // --- Helper: Compute day-by-day month summary with strict event_type rules ---
 export const computeMonthSummary = (
@@ -200,6 +231,11 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
   const [editingEvent, setEditingEvent] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  // Configurable Academic Year Range (start/end month numbers)
+  const [academicStartMonth, setAcademicStartMonth] = useState(6);
+  const [academicEndMonth, setAcademicEndMonth] = useState(5);
+  const [isSavingRange, setIsSavingRange] = useState(false);
+
   // Unified Day Schedule state (matrix configuration)
   const [daySchedule, setDaySchedule] = useState(() => {
     try {
@@ -237,14 +273,32 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
   const loadEvents = async () => {
     setError('');
     try {
-      const [{ data, error: fetchError }, { data: months, error: monthError }] = await Promise.all([
-        supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
-        supabase
-          .from('academic_calendar')
-          .select('*')
-          .order('year', { ascending: true })
-          .order('month', { ascending: true }),
-      ]);
+      const [{ data, error: fetchError }, { data: months, error: monthError }, { data: configData }] =
+        await Promise.all([
+          supabase.from('academic_events').select('*').order('start_date', { ascending: true }),
+          supabase
+            .from('academic_calendar')
+            .select('*')
+            .order('year', { ascending: true })
+            .order('month', { ascending: true }),
+          supabase
+            .from('admin_configruation')
+            .select('val')
+            .eq('key', 'academic_year_range')
+            .maybeSingle(),
+        ]);
+
+      if (configData?.val) {
+        const cfg = configData.val;
+        const rawStart =
+          typeof cfg.start_month === 'object' ? cfg.start_month?.start_month : cfg.start_month;
+        const rawEnd =
+          typeof cfg.end_month === 'object' ? cfg.end_month?.end_month : cfg.end_month;
+        const sm = Number(rawStart);
+        const em = Number(rawEnd);
+        if (Number.isFinite(sm) && sm >= 1 && sm <= 12) setAcademicStartMonth(sm);
+        if (Number.isFinite(em) && em >= 1 && em <= 12) setAcademicEndMonth(em);
+      }
 
       if (fetchError || monthError) {
         console.warn('Academic calendar Supabase fetch notice:', fetchError || monthError);
@@ -302,7 +356,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
   }, []);
 
   // ----- Navigation & utils -----
-  const currentGregorian = getGregorianFromAcademic(academicIndex, baseYear);
+  const currentGregorian = getGregorianFromAcademic(academicIndex, baseYear, academicStartMonth);
   const currentYearMonth = { year: currentGregorian.year, month: currentGregorian.month + 1 };
 
   const navigateMonth = (delta) => {
@@ -345,7 +399,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     let examDays = 0;
 
     for (let idx = 0; idx < 12; idx++) {
-      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear);
+      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear, academicStartMonth);
       const mSummary = computeMonthSummary(
         gYear,
         gMonth + 1,
@@ -405,9 +459,15 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     });
   }, [events, currentGregorian, typeFilter]);
 
-  // Events for entire academic year (June 1st to May 31st)
-  const ayStartDate = useMemo(() => new Date(baseYear, 5, 1), [baseYear]);
-  const ayEndDate = useMemo(() => new Date(baseYear + 1, 4, 31, 23, 59, 59), [baseYear]);
+  // Events for entire academic year (June 1st to May 31st by default or configured range)
+  const ayStartDate = useMemo(
+    () => new Date(baseYear, academicStartMonth - 1, 1),
+    [baseYear, academicStartMonth]
+  );
+  const ayEndDate = useMemo(() => {
+    const endYear = academicEndMonth < academicStartMonth ? baseYear + 1 : baseYear;
+    return new Date(endYear, academicEndMonth, 0, 23, 59, 59);
+  }, [baseYear, academicStartMonth, academicEndMonth]);
 
   const yearlyEvents = useMemo(() => {
     return events
@@ -431,7 +491,7 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
   const yearlyEventsGroupedByMonth = useMemo(() => {
     const groups = [];
     for (let idx = 0; idx < 12; idx++) {
-      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear);
+      const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, baseYear, academicStartMonth);
       const monthStart = new Date(gYear, gMonth, 1);
       const monthEnd = new Date(gYear, gMonth + 1, 0, 23, 59, 59);
 
@@ -483,6 +543,82 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     touchStartYRef.current = null;
   };
 
+  // ----- Synchronization of academic_calendar table from academic_events -----
+  const syncCalendarMonthSummaries = async (
+    yearMonths,
+    eventsList = events,
+    currentSchedule = daySchedule
+  ) => {
+    if (!yearMonths || yearMonths.length === 0) return;
+
+    // Deduplicate year-month combinations
+    const seen = new Set();
+    const uniqueYearMonths = [];
+    for (const ym of yearMonths) {
+      const key = `${ym.year}-${ym.month}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueYearMonths.push(ym);
+      }
+    }
+
+    const wOff = WEEK_DAYS.filter((d) => currentSchedule[d] === 'weekly_off');
+    const dTeach = WEEK_DAYS.filter((d) => currentSchedule[d] === 'teaching');
+    const dAct = WEEK_DAYS.filter((d) => currentSchedule[d] === 'activity');
+
+    for (const { year, month } of uniqueYearMonths) {
+      const summary = computeMonthSummary(year, month, eventsList, wOff, dTeach, dAct);
+      const ayLabel = getAcademicYearLabel(month >= 6 ? year : year - 1);
+
+      const { error: upsertErr } = await supabase
+        .from('academic_calendar')
+        .upsert(
+          {
+            year,
+            month,
+            ay: ayLabel,
+            total_days: summary.total_days,
+            working_days: summary.working_days,
+            teaching_days: summary.teaching_days,
+            activity_days: summary.activity_days,
+            weekend_days: summary.weekend_days,
+            student_holidays: summary.student_holidays,
+            teacher_holidays: summary.teacher_holidays,
+            holidays: summary.holidays,
+            exam_days: summary.exam_days,
+            day_schedule: currentSchedule,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'year,month' }
+        );
+
+      if (upsertErr) {
+        console.warn(`Sync notice for academic_calendar ${year}-${month}:`, upsertErr.message);
+      }
+    }
+  };
+
+  const syncAllCalendarMonths = async () => {
+    setSaving(true);
+    try {
+      const allMonths =
+        calendarMonths.length > 0
+          ? calendarMonths.map((row) => ({ year: row.year, month: row.month }))
+          : Array.from({ length: 12 }, (_, idx) => {
+              const { year, month } = getGregorianFromAcademic(idx, baseYear, academicStartMonth);
+              return { year, month: month + 1 };
+            });
+
+      await syncCalendarMonthSummaries(allMonths, events, daySchedule);
+      showToast('Academic calendar table successfully updated from events.', 'success');
+      await loadEvents();
+    } catch (err) {
+      showToast(`Sync failed: ${err.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // ----- CRUD operations -----
   const saveEvent = async (draft) => {
     setSaving(true);
@@ -494,24 +630,27 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     let calendarRow = calendarMonths.find((row) => row.year === year && row.month === month);
 
     if (!calendarRow) {
-      const totalDays = new Date(year, month - 1, 0).getDate();
+      const totalDays = new Date(year, month, 0).getDate();
       const { data, error } = await supabase
         .from('academic_calendar')
-        .insert({
-          year,
-          month,
-          ay: `${year}-${String(year + 1).slice(-2)}`,
-          total_days: totalDays,
-          working_days: 0,
-          teaching_days: 0,
-          activity_days: 0,
-          weekend_days: 0,
-          student_holidays: 0,
-          teacher_holidays: 0,
-          holidays: 0,
-          exam_days: 0,
-          day_schedule: daySchedule,
-        })
+        .upsert(
+          {
+            year,
+            month,
+            ay: getAcademicYearLabel(month >= 6 ? year : year - 1),
+            total_days: totalDays,
+            working_days: 0,
+            teaching_days: 0,
+            activity_days: 0,
+            weekend_days: 0,
+            student_holidays: 0,
+            teacher_holidays: 0,
+            holidays: 0,
+            exam_days: 0,
+            day_schedule: daySchedule,
+          },
+          { onConflict: 'year,month' }
+        )
         .select()
         .single();
 
@@ -555,6 +694,17 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     } else {
       showToast('Calendar event saved.', 'success');
       setEditingEvent(null);
+
+      // Recalculate and update academic_calendar table for all affected months
+      const affectedMonths = [
+        ...getMonthsSpannedByDateRange(draft.start_date, draft.end_date),
+        ...(editingEvent ? getMonthsSpannedByDateRange(editingEvent.start_date, editingEvent.end_date) : []),
+      ];
+      const updatedEvents = isEditingExisting
+        ? events.map((e) => (e.id === editingEvent.id ? { ...e, ...payload } : e))
+        : [...events, { ...payload, id: 'temp-' + Date.now() }];
+
+      await syncCalendarMonthSummaries(affectedMonths, updatedEvents, daySchedule);
       await loadEvents();
     }
     setSaving(false);
@@ -571,18 +721,45 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
         'id',
         calendarMonths.map((row) => row.id)
       );
-    if (rulesError) showToast(`Failed to save calendar rules: ${rulesError.message}`, 'error');
-    else {
-      showToast('Calendar rules updated successfully.', 'success');
+    if (rulesError) {
+      showToast(`Failed to save calendar rules: ${rulesError.message}`, 'error');
+    } else {
+      // Recalculate summary metrics for all months with the new rules
+      const allMonths = calendarMonths.map((row) => ({ year: row.year, month: row.month }));
+      await syncCalendarMonthSummaries(allMonths, events, daySchedule);
+      showToast('Calendar rules updated and metrics synchronized.', 'success');
       setShowRulesModal(false);
       await loadEvents();
     }
     setSaving(false);
   };
 
+  const handleSaveAcademicRange = async () => {
+    setIsSavingRange(true);
+    const { error: rangeError } = await supabase.from('admin_configruation').upsert(
+      {
+        key: 'academic_year_range',
+        val: { start_month: academicStartMonth, end_month: academicEndMonth },
+      },
+      { onConflict: 'key' }
+    );
+    setIsSavingRange(false);
+    if (rangeError) {
+      showToast(`Failed to save academic year range: ${rangeError.message}`, 'error');
+    } else {
+      showToast('Academic year range updated successfully.', 'success');
+      await loadEvents();
+    }
+  };
+
   const deleteEvent = (eventOrId) => {
     const eventId = typeof eventOrId === 'object' ? eventOrId.id : eventOrId;
     const eventName = typeof eventOrId === 'object' ? eventOrId.event_name : 'this event';
+    const targetEvent = events.find((e) => e.id === eventId);
+    const affectedMonths = targetEvent
+      ? getMonthsSpannedByDateRange(targetEvent.start_date, targetEvent.end_date)
+      : [];
+
     setConfirmConfig({
       title: 'Delete Calendar Event',
       message: `Are you sure you want to delete "${eventName}"?\nThis action cannot be undone.`,
@@ -600,6 +777,8 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
         } else {
           showToast('Calendar event deleted.', 'success');
           setEditingEvent(null);
+          const updatedEvents = events.filter((e) => e.id !== eventId);
+          await syncCalendarMonthSummaries(affectedMonths, updatedEvents, daySchedule);
           await loadEvents();
         }
         setSaving(false);
@@ -827,7 +1006,11 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {Array.from({ length: 12 }, (_, idx) => {
-          const { year: gYear, month: gMonth } = getGregorianFromAcademic(idx, year);
+          const { year: gYear, month: gMonth } = getGregorianFromAcademic(
+            idx,
+            year,
+            academicStartMonth
+          );
           const monthEvents = events.filter((event) => {
             const start = new Date(`${event.start_date}T00:00:00`);
             const end = new Date(`${event.end_date || event.start_date}T00:00:00`);
@@ -1214,13 +1397,29 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
                 <button
                   type="button"
                   onClick={() => setShowRulesModal(true)}
-                  title="Calendar Rules & Day Matrix"
+                  title="Calendar Settings & Day Matrix Rules"
                   className="w-full sm:w-auto h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
                 >
-                  <i className="fas fa-gear text-xs text-brand-primary" />
-                  <span className="hidden sm:inline">Rules</span>
+                  <i className="fas fa-sliders text-xs text-brand-primary" />
+                  <span className="hidden sm:inline">Settings & Rules</span>
                 </button>
               </ConditionalBlock>
+            )}
+
+            {/* Direct Sync Table from Events button */}
+            {effectiveCanEdit && (
+              <button
+                type="button"
+                onClick={syncAllCalendarMonths}
+                disabled={saving}
+                title="Recalculate and update academic_calendar table from events"
+                className="w-full sm:w-auto h-9 px-3 rounded-xl border border-light-border bg-white text-dark-soft hover:text-brand-primary hover:border-brand-primary/30 text-xs font-black inline-flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+              >
+                <i
+                  className={`fas fa-rotate text-xs text-brand-primary ${saving ? 'animate-spin' : ''}`}
+                />
+                <span className="hidden sm:inline">Sync Table</span>
+              </button>
             )}
 
             {/* Add Event Button */}
@@ -1471,11 +1670,10 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
             <div className="flex items-center justify-between px-6 py-4 border-b border-light-border">
               <div>
                 <h3 className="text-base font-black text-dark-primary flex items-center gap-2">
-                  <i className="fas fa-sliders text-brand-primary" /> Calendar Rules & Day Matrix
+                  <i className="fas fa-sliders text-brand-primary" /> Calendar Settings & Rules
                 </h3>
                 <p className="text-xs font-semibold text-gray-400 mt-0.5">
-                  Assign each weekday to a single classification (Teaching, Activity, or Weekly
-                  Off).
+                  Configure academic year start/end months and day classification matrix.
                 </p>
               </div>
               <button
@@ -1489,6 +1687,62 @@ const AcademicCalendarView = ({ canEdit = false, userRoles = [] }) => {
 
             {/* Modal Content */}
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {/* Academic Year Range Section */}
+              <div className="rounded-2xl border border-light-border p-4 bg-gray-50/70 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-black text-dark-primary flex items-center gap-2">
+                      <i className="fas fa-calendar-alt text-brand-primary" /> Academic Year Range
+                    </h4>
+                    <p className="text-[11px] font-bold text-gray-400 mt-0.5">
+                      Define the starting and ending months for your institution's academic cycle.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-gray-500">Start:</span>
+                      <select
+                        value={academicStartMonth}
+                        onChange={(e) => setAcademicStartMonth(Number(e.target.value))}
+                        disabled={!effectiveCanEdit || isSavingRange}
+                        className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-primary"
+                      >
+                        {ALL_MONTHS.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-gray-500">End:</span>
+                      <select
+                        value={academicEndMonth}
+                        onChange={(e) => setAcademicEndMonth(Number(e.target.value))}
+                        disabled={!effectiveCanEdit || isSavingRange}
+                        className="px-3 py-1.5 rounded-xl border border-light-border bg-white text-xs font-bold text-dark-primary outline-none focus:ring-1 focus:ring-brand-primary"
+                      >
+                        {ALL_MONTHS.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSaveAcademicRange}
+                      disabled={!effectiveCanEdit || isSavingRange}
+                      className="px-3.5 py-1.5 rounded-xl bg-brand-primary text-white text-xs font-black shadow-xs hover:bg-brand-primary/90 transition disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingRange ? 'Saving...' : 'Save Year Range'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Presets */}
               <div>
                 <span className="text-[11px] font-black uppercase tracking-wider text-gray-400 block mb-2">

@@ -243,7 +243,9 @@ const ExamResultsManager = ({
   const [bulkPassMarks, setBulkPassMarks] = useState('35');
   const [savingScheme, setSavingScheme] = useState(false);
 
-  // Progress Report Top Filter State
+  // Progress & Rank Holder Report Top Filter State
+  const [reportType, setReportType] = useState('progress'); // 'progress' | 'rank_holder' | 'excellence'
+  const [rankHolderClassIds, setRankHolderClassIds] = useState([]);
   const [reportSelectedStudentIds, setReportSelectedStudentIds] = useState([]);
   const [reportTemplates, setReportTemplates] = useState([DEFAULT_TEMPLATE]);
   const [reportTemplateId, setReportTemplateId] = useState(DEFAULT_TEMPLATE.id);
@@ -1818,6 +1820,22 @@ const ExamResultsManager = ({
                   <i className="fas fa-sync-alt text-xs" />
                 </button>
               </div>
+            ) : activeTab === 'report' && reportType === 'rank_holder' ? (
+              <div className="min-w-[170px] max-w-[260px]">
+                <MultiSelectDropdown
+                  label="Class"
+                  icon="fa-chalkboard-user"
+                  disabled={!selectedScheduleId}
+                  options={classes.map((c) => ({
+                    id: String(c.id),
+                    label: c.name,
+                  }))}
+                  selected={rankHolderClassIds}
+                  onChange={setRankHolderClassIds}
+                  placeholder="All Classes"
+                  fullWidth={false}
+                />
+              </div>
             ) : (
               <MultiSelectDropdown
                 label="Class"
@@ -2001,39 +2019,53 @@ const ExamResultsManager = ({
                 </button>
               )}
 
-            {/* Quick Fill Button - controlled by data-feature-filter */}
-            {activeTab === 'entry' &&
-              selectedScheduleId &&
-              selectedClassId &&
-              activeResults.length > 0 && (
-                <div data-feature-filter="exam-results-quick-fill">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickFillModal(true)}
-                    disabled={
-                      isTeacherLocked ||
-                      !activeResults.some(
-                        (r) => canEditMarksForSubject[r.id] ?? canEditMarksForSubject[String(r.id)]
-                      )
-                    }
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
-                    title={
-                      isTeacherLocked
-                        ? 'Progress report is published for this examination. Quick Fill is locked for teachers.'
-                        : 'Quick fill marks for unfilled students'
-                    }
-                  >
-                    <i className="fas fa-magic text-[10px]" />
-                    <span>Quick Fill</span>
-                  </button>
-                </div>
-              )}
-
-            {/* Progress Report Top Filters: Direct Students list, Template, Paper Size, Orientation, Designer, Print */}
+            {/* Report Top Filters: Progress Report | Rank Holder Report | Excellence Report */}
             {activeTab === 'report' && (
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Students MultiSelectDropdown displayed directly (All selected = Entire Class) */}
-                {selectedClassId && classStudents.length > 0 && (
+                {/* ── Report Type Switcher: Progress Report | Rank Holder Report | Excellence Report ── */}
+                <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setReportType('progress')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      reportType === 'progress'
+                        ? 'bg-white text-rose-700 shadow-2xs font-black'
+                        : 'text-dark-muted hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className="fas fa-file-invoice text-[10px]" />
+                    <span>Progress Report</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReportType('rank_holder')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      reportType === 'rank_holder'
+                        ? 'bg-white text-rose-700 shadow-2xs font-black'
+                        : 'text-dark-muted hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className="fas fa-trophy text-[10px]" />
+                    <span>Rank Holder Report</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReportType('excellence')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      reportType === 'excellence'
+                        ? 'bg-white text-rose-700 shadow-2xs font-black'
+                        : 'text-dark-muted hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className="fas fa-award text-[10px]" />
+                    <span>Excellence Report</span>
+                  </button>
+                </div>
+
+                {/* Progress Report Specific Student Filter */}
+                {reportType === 'progress' && selectedClassId && classStudents.length > 0 && (
                   <div className="min-w-[170px] max-w-[260px]">
                     <MultiSelectDropdown
                       label="Students"
@@ -2050,64 +2082,65 @@ const ExamResultsManager = ({
                   </div>
                 )}
 
-                {/* Active Template Selector */}
-                <MultiSelectDropdown
-                  label="Template"
-                  icon="fa-file-lines"
-                  singleSelect={true}
-                  options={reportTemplates.map((t) => ({
-                    id: String(t.id),
-                    label: t.name,
-                  }))}
-                  selected={reportTemplateId}
-                  onChange={setReportTemplateId}
-                  placeholder="Select Template..."
-                  fullWidth={false}
-                />
+                {/* Shared Template, Paper Size, and Orientation Selectors (for Progress & Rank Holder) */}
+                {reportType !== 'excellence' && (
+                  <>
+                    <MultiSelectDropdown
+                      label="Template"
+                      icon="fa-file-lines"
+                      singleSelect={true}
+                      options={reportTemplates.map((t) => ({
+                        id: String(t.id),
+                        label: t.name,
+                      }))}
+                      selected={reportTemplateId}
+                      onChange={setReportTemplateId}
+                      placeholder="Select Template..."
+                      fullWidth={false}
+                    />
 
-                {/* Paper Size Selector */}
-                <MultiSelectDropdown
-                  label="Size"
-                  icon="fa-file"
-                  singleSelect={true}
-                  options={[
-                    { id: 'a4', label: 'A4' },
-                    { id: 'letter', label: 'Letter' },
-                    { id: 'legal', label: 'Legal' },
-                    { id: 'a3', label: 'A3' },
-                  ]}
-                  selected={paperSize}
-                  onChange={setPaperSize}
-                  placeholder="Paper Size..."
-                  fullWidth={false}
-                />
+                    <MultiSelectDropdown
+                      label="Size"
+                      icon="fa-file"
+                      singleSelect={true}
+                      options={[
+                        { id: 'a4', label: 'A4' },
+                        { id: 'letter', label: 'Letter' },
+                        { id: 'legal', label: 'Legal' },
+                        { id: 'a3', label: 'A3' },
+                      ]}
+                      selected={paperSize}
+                      onChange={setPaperSize}
+                      placeholder="Paper Size..."
+                      fullWidth={false}
+                    />
 
-                {/* Orientation Selector */}
-                <MultiSelectDropdown
-                  label="Layout"
-                  icon="fa-repeat"
-                  singleSelect={true}
-                  options={[
-                    { id: 'portrait', label: 'Portrait' },
-                    { id: 'landscape', label: 'Landscape' },
-                  ]}
-                  selected={orientation}
-                  onChange={setOrientation}
-                  placeholder="Orientation..."
-                  fullWidth={false}
-                />
+                    <MultiSelectDropdown
+                      label="Layout"
+                      icon="fa-repeat"
+                      singleSelect={true}
+                      options={[
+                        { id: 'portrait', label: 'Portrait' },
+                        { id: 'landscape', label: 'Landscape' },
+                      ]}
+                      selected={orientation}
+                      onChange={setOrientation}
+                      placeholder="Orientation..."
+                      fullWidth={false}
+                    />
 
-                {/* Print button */}
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  disabled={classStudents.length === 0}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
-                  title="Print or Save as PDF"
-                >
-                  <i className="fas fa-print text-xs" />
-                  <span>Print / Export PDF</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      disabled={reportType === 'progress' && classStudents.length === 0}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                      title="Print or Save as PDF"
+                    >
+                      <i className="fas fa-print text-xs" />
+                      <span>Print / Export PDF</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -2330,6 +2363,14 @@ const ExamResultsManager = ({
               students={students}
               initialScheduleId={selectedScheduleId}
               initialClassId={selectedClassId}
+              selectedClassIds={
+                reportType === 'rank_holder'
+                  ? rankHolderClassIds
+                  : selectedClassId
+                    ? [selectedClassId]
+                    : []
+              }
+              reportMode={reportType}
               userRoles={userRoles}
               selectedStudentIds={reportSelectedStudentIds}
               onSelectedStudentIdsChange={setReportSelectedStudentIds}
