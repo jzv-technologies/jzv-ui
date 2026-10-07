@@ -25,7 +25,7 @@ import ViewControllerManager from '../admin-settings/ViewControllerManager';
 import ManagePortalUserRolesView from '../admin-settings/ManagePortalUserRolesView';
 import ExamScheduleManager from '../examinations/ExamScheduleManager';
 import ExamScheduleViewer from '../examinations/ExamScheduleViewer';
-import ExamResultsManager from '../examinations/ExamResultsManager';
+import ExamResultsManager from '../examinations/exam-results-manager';
 import ReportCardDesigner from '../examinations/ReportCardDesigner';
 import ExamAnalysisManager from '../examinations/ExamAnalysisManager';
 import ConditionalBlock from '../portal-shared/ConditionalBlock';
