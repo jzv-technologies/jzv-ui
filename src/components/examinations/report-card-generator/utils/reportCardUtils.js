@@ -12,6 +12,8 @@ export {
   rgbToHex,
   getColorName,
   mergeConfig,
+  shouldPrintBlockOnPage,
+  getDynamicClassesPerPage,
 } from '../../report-card-designer/utils';
 
 /**

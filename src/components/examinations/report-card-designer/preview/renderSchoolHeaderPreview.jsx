@@ -8,7 +8,12 @@ import { DEFAULT_BLOCK_STYLE } from '../constants';
  * PreviewPanel can skip the block wrapper, exactly like the original switch statement did.
  * Extracted from the original ReportCardDesigner.jsx — no behaviour change.
  */
-export const renderSchoolHeaderPreview = ({ bleed, blockSize, currentConfig }) => {
+export const renderSchoolHeaderPreview = ({
+  bleed,
+  blockSize,
+  currentConfig,
+  previewClassName = null,
+}) => {
   if (!currentConfig.showSchoolHeader) return null;
   const hdr = currentConfig.schoolHeader;
   const isCompact = blockSize === 'compact';
@@ -90,7 +95,9 @@ export const renderSchoolHeaderPreview = ({ bleed, blockSize, currentConfig }) =
               fontSize: `${hdrSt.labelFontSize ? Math.max(8, hdrSt.labelFontSize - 1) : 9.5}px`,
             }}
           >
-            {hdr?.examTitle || 'Official Progress Report'}
+            {previewClassName
+              ? `${hdr?.examTitle || 'Rank Holder Report'} · ${previewClassName}`
+              : (hdr?.examTitle || 'Official Progress Report')}
           </span>
         </div>
       )}

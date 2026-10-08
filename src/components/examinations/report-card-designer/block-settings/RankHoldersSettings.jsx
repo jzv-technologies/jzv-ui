@@ -1,20 +1,25 @@
-// src/components/examinations/report-card-designer/block-settings/RankHoldersSettings.jsx
 import React from 'react';
+import { ColorPicker } from '../ColorPicker';
+import { getDynamicClassesPerPage } from '../utils';
+import { RANK_BADGE_POSITIONS } from '../constants';
 
 /**
  * RankHoldersSettings
  * Block-specific settings for the Rank Holders component in Report Card Designer.
  * Configures:
- * - Display Size: Top X or Upto X
- * - Limit count X
- * - Number of items to display in a row
+ * - Display Filter Mode: Top X or Upto Rank X
+ * - Limit Count (X) via text box
+ * - Items Per Row via text box
  * - Repeat for Every Class Yes/No
- * - Class Name badge controls
- * - Podium stepped height toggle & bar base height
- * - Element toggles: photo, percentage, rank, student name
+ * - Stacked Classes Per Page via text box
+ * - Class Name badge toggle and 8-position selector
+ * - Podium stepped height toggle & bar base height slider
+ * - Element toggles and Photo Size control via text box
+ * - Student name font size (via text box) and color selection
  */
 const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
   const rkCfg = currentConfig.rankHoldersConfig || {};
+  const dynamicClassesPerPage = getDynamicClassesPerPage(rkCfg);
 
   const updateRk = (patch) => {
     setCurrentConfig((p) => ({
@@ -39,7 +44,7 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
             value={rkCfg.title ?? 'Class Rank Holders'}
             onChange={(e) => updateRk({ title: e.target.value })}
             placeholder="Class Rank Holders"
-            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold"
+            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
           />
         </div>
 
@@ -52,19 +57,17 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
             value={rkCfg.classNameText ?? ''}
             onChange={(e) => updateRk({ classNameText: e.target.value })}
             placeholder="Auto from student class (e.g. PLATINUM - 3)"
-            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold"
+            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
           />
         </div>
       </div>
 
-      {/* ── Row 2: Display Filter Mode (Top X vs Upto X) & Limit Count X ── */}
+      {/* ── Row 2: Display Filter Mode & Limit Count (X) Text Box ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Display Size / Mode */}
+        {/* Display Filter Mode */}
         <div className="p-2.5 bg-white border border-light-border rounded-xl space-y-1.5 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-dark-slate">
-              Display Filter Mode
-            </span>
+            <span className="text-[11px] font-bold text-dark-slate">Display Filter Mode</span>
             <span className="text-[10px] text-dark-muted font-mono font-bold">
               {rkCfg.displayFilterMode === 'upto_x' ? 'Upto Rank X' : 'Top X Students'}
             </span>
@@ -102,77 +105,62 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
           </p>
         </div>
 
-        {/* Count Limit X */}
+        {/* Limit Count (X) Text Box */}
         <div className="p-2.5 bg-white border border-light-border rounded-xl space-y-1.5 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-dark-slate">
-              Limit Count (X)
-            </span>
+            <span className="text-[11px] font-bold text-dark-slate">Limit Count (X)</span>
             <span className="text-xs font-mono font-black text-rose-600">
               {rkCfg.displayLimit ?? 3}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {[1, 2, 3, 5, 10].map((num) => (
-              <button
-                key={num}
-                type="button"
-                onClick={() => updateRk({ displayLimit: num })}
-                className={`flex-1 py-1 text-xs font-mono font-bold rounded-lg border transition-all cursor-pointer ${
-                  (rkCfg.displayLimit ?? 3) === num
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-2xs font-black'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {num}
-              </button>
-            ))}
-            <input
-              type="number"
-              min={1}
-              max={50}
-              value={rkCfg.displayLimit ?? 3}
-              onChange={(e) => updateRk({ displayLimit: Math.max(1, Number(e.target.value) || 1) })}
-              className="w-14 px-2 py-1 text-xs border border-light-border rounded-lg bg-white font-mono font-bold text-center"
-              title="Custom count"
-            />
-          </div>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            value={rkCfg.displayLimit ?? 3}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateRk({ displayLimit: val === '' ? '' : Math.max(1, Number(val)) });
+            }}
+            onBlur={(e) => {
+              if (!e.target.value || Number(e.target.value) < 1) updateRk({ displayLimit: 3 });
+            }}
+            placeholder="e.g. 3"
+            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-mono font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+          />
           <p className="text-[9.5px] text-dark-muted leading-tight">
             Number of rank holders to display (default 3 for Top 3 podium).
           </p>
         </div>
       </div>
 
-      {/* ── Row 3: Items per Row & Repeat for Every Class ── */}
+      {/* ── Row 3: Items Per Row Text Box & Repeat for Every Class ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Items per row */}
+        {/* Items Per Row Text Box */}
         <div className="p-2.5 bg-white border border-light-border rounded-xl space-y-1.5 min-w-0">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-dark-slate">
-              Items Per Row
-            </span>
+            <span className="text-[11px] font-bold text-dark-slate">Items Per Row</span>
             <span className="text-xs font-mono font-black text-rose-600">
               {rkCfg.itemsPerRow ?? 3} / row
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
-            {[1, 2, 3, 4, 5, 6].map((cols) => (
-              <button
-                key={cols}
-                type="button"
-                onClick={() => updateRk({ itemsPerRow: cols })}
-                className={`flex-1 py-1 text-xs font-mono font-bold rounded-lg border transition-all cursor-pointer ${
-                  (rkCfg.itemsPerRow ?? 3) === cols
-                    ? 'bg-rose-600 text-white border-rose-600 shadow-2xs font-black'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                }`}
-              >
-                {cols}
-              </button>
-            ))}
-          </div>
+          <input
+            type="number"
+            min={1}
+            max={12}
+            value={rkCfg.itemsPerRow ?? 3}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateRk({ itemsPerRow: val === '' ? '' : Math.max(1, Number(val)) });
+            }}
+            onBlur={(e) => {
+              if (!e.target.value || Number(e.target.value) < 1) updateRk({ itemsPerRow: 3 });
+            }}
+            placeholder="e.g. 3"
+            className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-mono font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+          />
           <p className="text-[9.5px] text-dark-muted leading-tight">
-            How many rank cards to render side-by-side per row.
+            Count of rank holder cards to display in each row for the class (default 3).
           </p>
         </div>
 
@@ -184,7 +172,7 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
                 Repeat for Every Class
               </span>
               <span className="text-[9.5px] text-dark-muted block">
-                Show rank holders for all classes in this exam session
+                Repeat this component for each class one after another
               </span>
             </div>
             <button
@@ -204,23 +192,53 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
             </button>
           </div>
           <div className="pt-2 text-[10px] font-bold flex items-center gap-1 text-dark-muted">
-            <i className={`fas ${rkCfg.repeatForEveryClass ? 'fa-check text-emerald-600' : 'fa-times text-slate-400'}`} />
+            <i
+              className={`fas ${
+                rkCfg.repeatForEveryClass ? 'fa-check text-emerald-600' : 'fa-times text-slate-400'
+              }`}
+            />
             <span>
               {rkCfg.repeatForEveryClass
-                ? 'Repeated across all examination classes'
-                : 'Rendered only for student’s class'}
+                ? 'Enabled: Repeats and stacks classes dynamically'
+                : 'Disabled: Renders only for the student/target class'}
             </span>
           </div>
         </div>
+
+        {/* Dynamic Stacked Classes Per Page Text Box When Repeat is Enabled */}
+        {rkCfg.repeatForEveryClass && (
+          <div className="col-span-1 sm:col-span-2 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <span className="text-[11px] font-bold text-dark-slate block">
+                  Stacked Classes Per Page
+                </span>
+              </div>
+            </div>
+            <input
+              type="text"
+              value={rkCfg.classesPerPage ?? 'auto'}
+              onChange={(e) => updateRk({ classesPerPage: e.target.value })}
+              placeholder="auto or 1, 2, 3..."
+              className="w-24 min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-mono font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            />
+            <p className="text-[9.5px] text-dark-muted leading-tight">
+              Enter &quot;auto&quot; for dynamic stacking or a fixed number of classes per page
+              (e.g. 1, 2, 3).
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* ── Row 4: Bar Base Height & Podium Stepped Height ── */}
+      {/* ── Row 4: Bar Base Height Slider & Class Name Badge Controls ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Bar Height */}
         <div className="p-2.5 bg-white border border-light-border rounded-xl">
           <div className="flex justify-between text-[10px] font-bold text-dark-slate mb-1">
             <span>Bar Base Height</span>
-            <span className="font-mono text-rose-600 font-black">{rkCfg.barBaseHeight ?? 220}px</span>
+            <span className="font-mono text-rose-600 font-black">
+              {rkCfg.barBaseHeight ?? 220}px
+            </span>
           </div>
           <input
             type="range"
@@ -238,8 +256,8 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
           </div>
         </div>
 
-        {/* Podium Heights & Class Badge */}
-        <div className="p-2.5 bg-white border border-light-border rounded-xl flex flex-col justify-center gap-2">
+        {/* Podium Heights & Class Name Badge Position */}
+        <div className="p-2.5 bg-white border border-light-border rounded-xl flex flex-col justify-between gap-2.5">
           <label className="flex items-center justify-between cursor-pointer">
             <span className="text-[10px] font-bold text-dark-primary">
               Podium Stepped Heights (Rank 1 Highest)
@@ -251,25 +269,86 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
               className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
             />
           </label>
-          <label className="flex items-center justify-between cursor-pointer">
-            <span className="text-[10px] font-bold text-dark-primary">
-              Show Left Class Name Badge
-            </span>
-            <input
-              type="checkbox"
-              checked={rkCfg.showClassName !== false}
-              onChange={(e) => updateRk({ showClassName: e.target.checked })}
-              className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
-            />
-          </label>
+
+          <div className="space-y-1.5 pt-1 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-dark-primary">
+                <input
+                  type="checkbox"
+                  checked={rkCfg.showClassName !== false}
+                  onChange={(e) => updateRk({ showClassName: e.target.checked })}
+                  className="rounded text-rose-600 focus:ring-rose-400 cursor-pointer"
+                />
+                <span>Show Class Name Badge</span>
+              </label>
+            </div>
+
+            {rkCfg.showClassName !== false && (
+              <div className="pt-1">
+                <label className="block text-[10px] font-bold text-dark-slate mb-1">
+                  Badge Position
+                </label>
+                <select
+                  value={rkCfg.classNameBadgePosition || 'left'}
+                  onChange={(e) => updateRk({ classNameBadgePosition: e.target.value })}
+                  className="w-full min-w-0 px-2 py-1 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-slate cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                >
+                  {(
+                    RANK_BADGE_POSITIONS || [
+                      { value: 'left', label: 'Left Side (Vertical)' },
+                      { value: 'right', label: 'Right Side (Vertical)' },
+                      { value: 'top-left', label: 'Top Left' },
+                      { value: 'top-center', label: 'Top Center' },
+                      { value: 'top-right', label: 'Top Right' },
+                      { value: 'bottom-left', label: 'Bottom Left' },
+                      { value: 'bottom-center', label: 'Bottom Center' },
+                      { value: 'bottom-right', label: 'Bottom Right' },
+                    ]
+                  ).map((pos) => (
+                    <option key={pos.value} value={pos.value}>
+                      {pos.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[9px] text-dark-muted mt-0.5">
+                  Choose vertical sidebar (Left/Right) or horizontal badge (Top/Bottom).
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── Row 5: Element Toggles (Photo, Percentage, Rank, Name) ── */}
-      <div className="p-2.5 bg-white border border-light-border rounded-xl">
-        <span className="text-[10.5px] font-black text-dark-primary uppercase tracking-wider block mb-2">
-          Displayed Elements
-        </span>
+      {/* ── Row 5: Element Toggles & Photo Size Text Box ── */}
+      <div className="p-2.5 bg-white border border-light-border rounded-xl space-y-2.5">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-[10.5px] font-black text-dark-primary uppercase tracking-wider block">
+            Displayed Elements
+          </span>
+
+          {/* Photo Size Text Box */}
+          {rkCfg.showPhoto !== false && (
+            <div className="flex items-center gap-1.5">
+              <label className="text-[10px] font-bold text-dark-slate whitespace-nowrap">
+                Photo Size (px):
+              </label>
+              <input
+                type="number"
+                min={32}
+                max={160}
+                value={rkCfg.photoSize ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateRk({ photoSize: val === '' ? '' : Number(val) });
+                }}
+                placeholder="Auto (e.g. 72)"
+                className="w-24 px-2 py-1 text-xs border border-light-border rounded-lg bg-white font-mono font-bold text-dark-slate text-center focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                title="Diameter in pixels (leave empty for automatic layout sizing)"
+              />
+            </div>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-dark-slate">
             <input
@@ -307,6 +386,64 @@ const RankHoldersSettings = ({ currentConfig, setCurrentConfig }) => {
             />
             <span>Student Name</span>
           </label>
+        </div>
+      </div>
+
+      {/* ── Row 6: Student Name Typography & Color Selection ── */}
+      <div className="p-3 bg-white border border-light-border rounded-xl space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-black text-dark-primary uppercase tracking-wider flex items-center gap-1.5">
+            <i className="fas fa-font text-rose-500 text-[10px]" />
+            <span>Student Name Typography &amp; Appearance</span>
+          </span>
+          <span className="text-[10px] text-dark-muted font-bold font-mono">
+            Longer names wrap into 2 lines
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+          {/* Name Font Size Text Box */}
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex items-center justify-between">
+              <label className="text-[10.5px] font-bold text-dark-slate">Name Font Size (px)</label>
+              <span className="text-xs font-mono font-black text-rose-600">
+                {rkCfg.nameFontSize ?? 13}px
+              </span>
+            </div>
+            <input
+              type="number"
+              min={8}
+              max={28}
+              value={rkCfg.nameFontSize ?? 13}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateRk({ nameFontSize: val === '' ? '' : Math.max(8, Number(val)) });
+              }}
+              onBlur={(e) => {
+                if (!e.target.value || Number(e.target.value) < 8) updateRk({ nameFontSize: 13 });
+              }}
+              placeholder="e.g. 13"
+              className="w-full min-w-0 px-2.5 py-1.5 text-xs border border-light-border rounded-xl bg-white font-mono font-bold text-dark-slate focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            />
+            <p className="text-[9.5px] text-dark-muted leading-tight">
+              Font size in px for student names under the cards (default 13px).
+            </p>
+          </div>
+
+          {/* Name Font Color */}
+          <div className="space-y-1.5 min-w-0">
+            <label className="block text-[10.5px] font-bold text-dark-slate">Name Font Color</label>
+            <ColorPicker
+              label=""
+              value={rkCfg.nameColor || ''}
+              placeholder="#0f172a"
+              allowClear={true}
+              onChange={(c) => updateRk({ nameColor: c })}
+            />
+            <p className="text-[9.5px] text-dark-muted leading-tight">
+              Custom color for student names under the rank cards.
+            </p>
+          </div>
         </div>
       </div>
     </div>

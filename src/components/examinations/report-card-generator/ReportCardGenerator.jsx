@@ -31,6 +31,7 @@ import {
   BLOCK_DEFAULT_BG,
   hexToRgba,
   formatDataLabel,
+  shouldPrintBlockOnPage,
 } from './report-card-designer';
 import {
   BarChart,
@@ -1289,7 +1290,7 @@ const ReportCardGenerator = ({
         ) : (
           <>
             <style dangerouslySetInnerHTML={{ __html: printStyles }} />
-            {displayedStudents.map((student) => {
+            {displayedStudents.map((student, studentIndex) => {
               const metrics = studentMetricsMap[String(student.id)] || {};
               const subjectScores = metrics.subjectScores || [];
 
@@ -1317,7 +1318,12 @@ const ReportCardGenerator = ({
                   className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
                 >
                   {/* ── ExtraComponent / Logo Layers: Background layers (z-0, behind content) ── */}
-                  <ExtraComponentLayers currentConfig={activeTemplate} position="background" />
+                  <ExtraComponentLayers
+                    currentConfig={activeTemplate}
+                    position="background"
+                    pageNumber={studentIndex + 1}
+                    totalPages={displayedStudents.length}
+                  />
 
                   <div
                     className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
@@ -1395,7 +1401,11 @@ const ReportCardGenerator = ({
                           }
 
                           case 'rankHolders': {
-                            return renderRankHolders({ activeTemplate, rankHolderClassesToRender });
+                            return renderRankHolders({
+                              activeTemplate,
+                              rankHolderClassesToRender,
+                              student,
+                            });
                           }
 
                           case 'subjectTable': {
@@ -1448,13 +1458,39 @@ const ReportCardGenerator = ({
                         }
                       })();
 
-                      if (!blockContent) return null;
+                      const pageNumber = studentIndex + 1;
+                      const totalPages = displayedStudents.length;
+
+                      // Evaluate page print filter and preserve block space
+                      let shouldPrint = true;
+                      let preserveSpace = false;
+
+                      if (blockKey === 'schoolHeader') {
+                        const printRule = activeTemplate.schoolHeader?.printPages || 'everyPage';
+                        shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                        preserveSpace = !!activeTemplate.schoolHeader?.preserveSpace;
+                      } else if (blockKey === 'signatures') {
+                        const printRule = activeTemplate.signaturesConfig?.printPages || 'everyPage';
+                        shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                        preserveSpace = !!activeTemplate.signaturesConfig?.preserveSpace;
+                      }
+
+                      // If not printing and space is NOT preserved, collapse completely
+                      if (!shouldPrint && !preserveSpace) {
+                        return null;
+                      }
+
+                      const isHiddenReserved = !shouldPrint && preserveSpace;
 
                       return (
                         <div
                           key={blockKey}
                           className={`relative transition-all ${!bleed.isPageWidth ? 'w-full' : ''} ${blockKey === 'signatures' ? 'mt-auto report-card-signatures-wrapper' : ''}`}
-                          style={bleed.wrapperStyle}
+                          style={{
+                            ...bleed.wrapperStyle,
+                            ...(isHiddenReserved ? { visibility: 'hidden', pointerEvents: 'none' } : {}),
+                          }}
+                          aria-hidden={isHiddenReserved ? 'true' : undefined}
                           {...bleed.wrapperAttrs}
                         >
                           {renderBlockTitle(blockSt, DEFAULT_BLOCK_TITLES[blockKey])}
@@ -1470,7 +1506,12 @@ const ReportCardGenerator = ({
                   </div>
 
                   {/* ── ExtraComponent / Logo Layers: Foreground layers (z-30, above content) ── */}
-                  <ExtraComponentLayers currentConfig={activeTemplate} position="foreground" />
+                  <ExtraComponentLayers
+                    currentConfig={activeTemplate}
+                    position="foreground"
+                    pageNumber={studentIndex + 1}
+                    totalPages={displayedStudents.length}
+                  />
                 </div>
               );
             })}

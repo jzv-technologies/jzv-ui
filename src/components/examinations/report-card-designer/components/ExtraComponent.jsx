@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ColorPicker } from '../ColorPicker';
+import { shouldPrintBlockOnPage } from '../utils';
 
 /**
  * Normalises the ExtraComponent layer list.
@@ -26,7 +27,12 @@ export const getExtraComponentLayers = (config = {}, legacyId = 'wm-0') => {
  *   position="foreground" → above the content blocks (z-30)
  * Renders nothing when `currentConfig.showExtraComponent` is off.
  */
-export const ExtraComponentLayers = ({ currentConfig, position = 'background' }) => {
+export const ExtraComponentLayers = ({
+  currentConfig,
+  position = 'background',
+  pageNumber = 1,
+  totalPages = 1,
+}) => {
   if (!currentConfig?.showExtraComponent && !currentConfig?.showWatermark) return null;
 
   const isBackground = position === 'background';
@@ -35,48 +41,64 @@ export const ExtraComponentLayers = ({ currentConfig, position = 'background' })
     isBackground ? (l.layer || 'background') === 'background' : l.layer === 'foreground'
   );
 
+  const blockPrintRule = currentConfig?.extraComponentConfig?.printPages || 'everyPage';
+  const blockPreserveSpace = !!currentConfig?.extraComponentConfig?.preserveSpace;
+
   return (
     <>
-      {visibleLayers.map((lyr, idx) => (
-        <div
-          key={lyr.id || `${isBackground ? 'bg' : 'fg'}-${idx}`}
-          className={`absolute pointer-events-none select-none ${
-            isBackground ? 'z-0' : 'z-30'
-          } flex items-center justify-center print:print-color-adjust-exact`}
-          style={{
-            left: `${lyr.xPos ?? 50}%`,
-            top: `${lyr.yPos ?? 50}%`,
-            transform: `translate(-50%, -50%) rotate(${lyr.rotate ?? 0}deg)`,
-            opacity: (lyr.opacity ?? 15) / 100,
-          }}
-        >
-          {lyr.type === 'image' && lyr.imageUrl ? (
-            <img
-              src={lyr.imageUrl}
-              alt="ExtraComponent"
-              style={{
-                width: `${lyr.size ?? 250}px`,
-                maxWidth: '90vw',
-                objectFit: 'contain',
-              }}
-            />
-          ) : (
-            <span
-              style={{
-                fontSize: `${lyr.size ?? 50}px`,
-                color: lyr.color || '#0f172a',
-                fontWeight: 900,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                whiteSpace: 'nowrap',
-                fontFamily: 'inherit',
-              }}
-            >
-              {lyr.text || 'WATERMARK'}
-            </span>
-          )}
-        </div>
-      ))}
+      {visibleLayers.map((lyr, idx) => {
+        const printRule =
+          lyr.printPages && lyr.printPages !== 'inherit' ? lyr.printPages : blockPrintRule;
+        const preserveSpace =
+          lyr.preserveSpace !== undefined ? !!lyr.preserveSpace : blockPreserveSpace;
+        const shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+
+        if (!shouldPrint && !preserveSpace) {
+          return null;
+        }
+
+        return (
+          <div
+            key={lyr.id || `${isBackground ? 'bg' : 'fg'}-${idx}`}
+            className={`absolute pointer-events-none select-none ${
+              isBackground ? 'z-0' : 'z-30'
+            } flex items-center justify-center print:print-color-adjust-exact`}
+            style={{
+              left: `${lyr.xPos ?? 50}%`,
+              top: `${lyr.yPos ?? 50}%`,
+              transform: `translate(-50%, -50%) rotate(${lyr.rotate ?? 0}deg)`,
+              opacity: (lyr.opacity ?? 15) / 100,
+              ...(!shouldPrint && preserveSpace ? { visibility: 'hidden', pointerEvents: 'none' } : {}),
+            }}
+          >
+            {lyr.type === 'image' && lyr.imageUrl ? (
+              <img
+                src={lyr.imageUrl}
+                alt="ExtraComponent"
+                style={{
+                  width: `${lyr.size ?? 250}px`,
+                  maxWidth: '90vw',
+                  objectFit: 'contain',
+                }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontSize: `${lyr.size ?? 50}px`,
+                  color: lyr.color || '#0f172a',
+                  fontWeight: 900,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'inherit',
+                }}
+              >
+                {lyr.text || 'WATERMARK'}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </>
   );
 };
@@ -208,6 +230,7 @@ const ExtraComponentConfig = ({
                 opacity: 8,
                 size: 60,
                 rotate: -30,
+                printPages: 'inherit',
               },
             ]);
 
@@ -230,6 +253,64 @@ const ExtraComponentConfig = ({
 
           return (
             <div className="border-t border-slate-100 bg-slate-50/70 p-2 sm:p-3 space-y-3 animate-in fade-in duration-150">
+              {/* Page Printing Rules & Preserve Block Space */}
+              <div className="bg-white border border-light-border rounded-xl p-3 shadow-2xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-bold text-dark-slate mb-1">
+                      Print on Pages
+                    </label>
+                    <select
+                      value={currentConfig.extraComponentConfig?.printPages || 'everyPage'}
+                      onChange={(e) =>
+                        setCurrentConfig((prev) => ({
+                          ...prev,
+                          extraComponentConfig: {
+                            ...prev.extraComponentConfig,
+                            printPages: e.target.value,
+                          },
+                        }))
+                      }
+                      className="w-full min-w-0 px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-slate cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                    >
+                      <option value="firstPage">First Page</option>
+                      <option value="everyPage">Every Page</option>
+                      <option value="oddPage">Odd Page</option>
+                      <option value="evenPage">Even Page</option>
+                      <option value="lastPage">Last Page</option>
+                    </select>
+                    <p className="text-[10px] text-dark-muted mt-1">
+                      Controls which pages or records will print extra components.
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 sm:pt-6">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={!!currentConfig.extraComponentConfig?.preserveSpace}
+                        onChange={(e) =>
+                          setCurrentConfig((prev) => ({
+                            ...prev,
+                            extraComponentConfig: {
+                              ...prev.extraComponentConfig,
+                              preserveSpace: e.target.checked,
+                            },
+                          }))
+                        }
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 accent-indigo-600 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-dark-slate">
+                        Preserve Block Space
+                      </span>
+                    </label>
+                    <p className="text-[10px] text-dark-muted mt-1 ml-6">
+                      When selected, block space is reserved. When unchecked, other components can use that space.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {layers.length === 0 && (
                 <p className="text-xs text-dark-muted text-center py-3">
                   No layers yet — click <strong>+ Add Layer</strong> below.
@@ -398,8 +479,8 @@ const ExtraComponentConfig = ({
                         </div>
                       )}
 
-                      {/* Numeric Controls Grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-x-3 gap-y-2">
+                      {/* Numeric & Layout Controls Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-x-3 gap-y-2">
                         {/* X Position */}
                         <div>
                           <label className="block text-[10px] font-bold text-dark-slate mb-1">
@@ -483,7 +564,7 @@ const ExtraComponentConfig = ({
                         </div>
 
                         {/* Rotation */}
-                        <div className="sm:col-span-2">
+                        <div>
                           <label className="block text-[10px] font-bold text-dark-slate mb-1">
                             Rotation
                           </label>
@@ -500,6 +581,26 @@ const ExtraComponentConfig = ({
                               °
                             </span>
                           </div>
+                        </div>
+
+                        {/* Layer Page Rule */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-dark-slate mb-1">
+                            Print on Pages
+                          </label>
+                          <select
+                            value={lyr.printPages || 'inherit'}
+                            onChange={(e) => updateLayer(idx, { printPages: e.target.value })}
+                            className="w-full px-2 py-1.5 text-xs border border-light-border rounded-lg bg-white font-bold text-dark-slate cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            title="Controls which pages this layer appears on"
+                          >
+                            <option value="inherit">Inherit Block</option>
+                            <option value="firstPage">First Page</option>
+                            <option value="everyPage">Every Page</option>
+                            <option value="oddPage">Odd Page</option>
+                            <option value="evenPage">Even Page</option>
+                            <option value="lastPage">Last Page</option>
+                          </select>
                         </div>
                       </div>
                     </div>

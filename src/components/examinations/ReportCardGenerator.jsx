@@ -33,6 +33,8 @@ import {
   BLOCK_DEFAULT_BG,
   hexToRgba,
   formatDataLabel,
+  shouldPrintBlockOnPage,
+  getDynamicClassesPerPage,
 } from './ReportCardDesigner';
 import {
   BarChart,
@@ -1783,127 +1785,211 @@ const ReportCardGenerator = ({
           <div className="space-y-8 print:space-y-0 print-cards-container">
             <style>{printStyles}</style>
 
-            {rankHolderClassesToRender.map((clsItem) => {
+            {(() => {
               const rkCfg = activeTemplate.rankHoldersConfig || {};
-              return (
-                <div
-                  key={`rank-holder-page-${clsItem.id}`}
-                  style={{
-                    '--page-pad-x': '24px',
-                    '--page-pad-y': '24px',
-                  }}
-                  className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
-                >
-                  {/* ── ExtraComponent / Logo Layers: Background ── */}
-                  <ExtraComponentLayers currentConfig={activeTemplate} position="background" />
+              const isRepeatOn = !!rkCfg.repeatForEveryClass;
+              const classesPerPage = isRepeatOn ? getDynamicClassesPerPage(rkCfg) : 1;
 
+              // Chunk rankHolderClassesToRender into pages
+              const rankHolderPages = [];
+              for (let i = 0; i < rankHolderClassesToRender.length; i += classesPerPage) {
+                rankHolderPages.push(rankHolderClassesToRender.slice(i, i + classesPerPage));
+              }
+
+              if (rankHolderPages.length === 0 && rankHolderClassesToRender.length > 0) {
+                rankHolderPages.push(rankHolderClassesToRender);
+              }
+
+              return rankHolderPages.map((pageClasses, pageIdx) => {
+                const isStacked = pageClasses.length > 1;
+                const pageNumber = pageIdx + 1;
+                const totalPages = rankHolderPages.length;
+                const headerClassName = pageClasses.map((c) => c.name).join(', ');
+
+                return (
                   <div
-                    className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
-                    style={{ gap: `${activeTemplate.blockSpacing ?? 16}px` }}
+                    key={`rank-holder-page-${pageIdx}`}
+                    style={{
+                      '--page-pad-x': '24px',
+                      '--page-pad-y': '24px',
+                    }}
+                    className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
                   >
-                    {/* 1. Header Component */}
-                    {renderRankHolderSchoolHeader(clsItem.name)}
+                    {/* ── ExtraComponent / Logo Layers: Background ── */}
+                    <ExtraComponentLayers
+                      currentConfig={activeTemplate}
+                      position="background"
+                      pageNumber={pageNumber}
+                      totalPages={totalPages}
+                    />
 
-                    {/* 2. Rank Holders Component (one per class) */}
-                    <div className="rank-holders-print-block my-auto py-2">
-                      <RankHolders
-                        students={clsItem.students}
-                        classNameText={rkCfg.classNameText || clsItem.name}
-                        config={rkCfg}
-                        isCompact={rkCfg.size === 'compact'}
-                      />
-                    </div>
+                    <div
+                      className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
+                      style={{
+                        gap: isStacked
+                          ? `${Math.min(activeTemplate.blockSpacing ?? 12, 12)}px`
+                          : `${activeTemplate.blockSpacing ?? 16}px`,
+                      }}
+                    >
+                      {/* 1. Header Component */}
+                      {(() => {
+                        if (!activeTemplate.showSchoolHeader) return null;
+                        const printRule = activeTemplate.schoolHeader?.printPages || 'everyPage';
+                        const shouldPrint = shouldPrintBlockOnPage(
+                          printRule,
+                          pageNumber,
+                          totalPages
+                        );
+                        const preserveSpace = !!activeTemplate.schoolHeader?.preserveSpace;
 
-                    {/* 3. Remarks Component */}
-                    {activeTemplate.showTeacherRemarks !== false && (
-                      <div
-                        className={`border border-amber-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5 relative ${
-                          activeTemplate.remarksConfig?.size === 'compact'
-                            ? 'p-2 print:p-1'
-                            : 'p-3.5 print:p-1.5'
-                        }`}
-                        style={{
-                          backgroundColor:
-                            activeTemplate.remarksConfig?.style?.backgroundColor ||
-                            'rgb(255 251 235 / 0.6)',
-                        }}
-                      >
-                        <span
-                          className="font-black uppercase tracking-wider block remarks-label text-amber-900"
-                          style={{
-                            fontSize: `${remarksPrint.labelFontSize}px`,
-                            color: activeTemplate.remarksConfig?.style?.labelColor || '#78350f',
-                          }}
-                        >
-                          {activeTemplate.remarksConfig?.title || 'Remarks'}:
-                        </span>
-                        <p
-                          className="italic font-medium remarks-content"
-                          style={{
-                            fontSize: `${remarksPrint.contentFontSize}px`,
-                            color: activeTemplate.remarksConfig?.style?.contentColor || '#0f172a',
-                          }}
-                        >
-                          &quot;
-                          {activeTemplate.remarksText ||
-                            activeTemplate.remarksConfig?.defaultRemarks ||
-                            'Congratulations to all the rank holders and high achievers for their outstanding academic performance and dedication!'}
-                          &quot;
-                        </p>
-                      </div>
-                    )}
+                        if (!shouldPrint && !preserveSpace) return null;
 
-                    {/* 4. Footer Signature components */}
-                    {activeTemplate.showSignatures !== false && rankHolderActiveSigs.length > 0 && (
-                      <div
-                        className={`report-card-signatures mt-auto ${
-                          activeTemplate.signaturesConfig?.size === 'compact'
-                            ? 'pt-3 print:pt-1.5'
-                            : activeTemplate.signaturesConfig?.size === 'tall'
-                              ? 'pt-8 print:pt-3'
-                              : 'pt-6 print:pt-2'
-                        } grid gap-4 print:gap-2 text-center ${
-                          rankHolderActiveSigs.length === 1 ? 'max-w-xs mx-auto' : ''
-                        }`}
-                        style={{
-                          gridTemplateColumns: `repeat(${rankHolderActiveSigs.length}, minmax(0, 1fr))`,
-                        }}
-                      >
-                        {rankHolderActiveSigs.map((sig) => (
-                          <div
-                            key={sig.id}
-                            className="border-t border-slate-900 pt-1.5 print:pt-0.5 space-y-0.5"
-                          >
-                            <span
-                              className="font-bold text-dark-slate block truncate signature-title"
-                              style={{
-                                fontSize: `${signaturesPrint.labelFontSize}px`,
-                                color: activeTemplate.signaturesConfig?.style?.labelColor || undefined,
-                              }}
-                            >
-                              {sig.title}
-                            </span>
-                            <span
-                              className="text-dark-muted block truncate signature-subtitle"
-                              style={{
-                                fontSize: `${signaturesPrint.contentFontSize}px`,
-                                color:
-                                  activeTemplate.signaturesConfig?.style?.contentColor || undefined,
-                              }}
-                            >
-                              {sig.subtitle}
-                            </span>
+                        const headerContent = renderRankHolderSchoolHeader(headerClassName);
+                        if (!headerContent) return null;
+
+                        if (!shouldPrint && preserveSpace) {
+                          return (
+                            <div style={{ visibility: 'hidden', pointerEvents: 'none' }} aria-hidden="true">
+                              {headerContent}
+                            </div>
+                          );
+                        }
+                        return headerContent;
+                      })()}
+
+                      {/* 2. Rank Holders Component (Stacked classes) */}
+                      <div className="rank-holders-print-block my-auto py-2 flex-1 flex flex-col justify-center gap-3">
+                        {pageClasses.map((clsItem, cIdx) => (
+                          <div key={clsItem.id || cIdx} className="w-full">
+                            {cIdx > 0 && (
+                              <div className="w-full border-t border-slate-200/80 my-2" />
+                            )}
+                            <RankHolders
+                              students={clsItem.students}
+                              classNameText={clsItem.name}
+                              config={rkCfg}
+                              size={isStacked ? 'compact' : rkCfg.size}
+                              isCompact={isStacked || rkCfg.size === 'compact'}
+                            />
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
 
-                  {/* ── ExtraComponent / Logo Layers: Foreground ── */}
-                  <ExtraComponentLayers currentConfig={activeTemplate} position="foreground" />
-                </div>
-              );
-            })}
+                      {/* 3. Remarks Component */}
+                      {activeTemplate.showTeacherRemarks !== false && (
+                        <div
+                          className={`border border-amber-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5 relative ${
+                            activeTemplate.remarksConfig?.size === 'compact'
+                              ? 'p-2 print:p-1'
+                              : 'p-3.5 print:p-1.5'
+                          }`}
+                          style={{
+                            backgroundColor:
+                              activeTemplate.remarksConfig?.style?.backgroundColor ||
+                              'rgb(255 251 235 / 0.6)',
+                          }}
+                        >
+                          <span
+                            className="font-black uppercase tracking-wider block remarks-label text-amber-900"
+                            style={{
+                              fontSize: `${remarksPrint.labelFontSize}px`,
+                              color: activeTemplate.remarksConfig?.style?.labelColor || '#78350f',
+                            }}
+                          >
+                            {activeTemplate.remarksConfig?.title || 'Remarks'}:
+                          </span>
+                          <p
+                            className="italic font-medium remarks-content"
+                            style={{
+                              fontSize: `${remarksPrint.contentFontSize}px`,
+                              color: activeTemplate.remarksConfig?.style?.contentColor || '#0f172a',
+                            }}
+                          >
+                            &quot;
+                            {activeTemplate.remarksText ||
+                              activeTemplate.remarksConfig?.defaultRemarks ||
+                              'Congratulations to all the rank holders and high achievers for their outstanding academic performance and dedication!'}
+                            &quot;
+                          </p>
+                        </div>
+                      )}
+
+                      {/* 4. Footer Signature components */}
+                      {(() => {
+                        if (activeTemplate.showSignatures === false || rankHolderActiveSigs.length === 0)
+                          return null;
+                        const printRule = activeTemplate.signaturesConfig?.printPages || 'everyPage';
+                        const shouldPrint = shouldPrintBlockOnPage(
+                          printRule,
+                          pageNumber,
+                          totalPages
+                        );
+                        const preserveSpace = !!activeTemplate.signaturesConfig?.preserveSpace;
+
+                        if (!shouldPrint && !preserveSpace) return null;
+
+                        return (
+                          <div
+                            className={`report-card-signatures mt-auto ${
+                              activeTemplate.signaturesConfig?.size === 'compact'
+                                ? 'pt-3 print:pt-1.5'
+                                : activeTemplate.signaturesConfig?.size === 'tall'
+                                  ? 'pt-8 print:pt-3'
+                                  : 'pt-6 print:pt-2'
+                            } grid gap-4 print:gap-2 text-center ${
+                              rankHolderActiveSigs.length === 1 ? 'max-w-xs mx-auto' : ''
+                            }`}
+                            style={{
+                              gridTemplateColumns: `repeat(${rankHolderActiveSigs.length}, minmax(0, 1fr))`,
+                              ...(!shouldPrint && preserveSpace
+                                ? { visibility: 'hidden', pointerEvents: 'none' }
+                                : {}),
+                            }}
+                            aria-hidden={!shouldPrint ? 'true' : undefined}
+                          >
+                            {rankHolderActiveSigs.map((sig) => (
+                              <div
+                                key={sig.id}
+                                className="border-t border-slate-900 pt-1.5 print:pt-0.5 space-y-0.5"
+                              >
+                                <span
+                                  className="font-bold text-dark-slate block truncate signature-title"
+                                  style={{
+                                    fontSize: `${signaturesPrint.labelFontSize}px`,
+                                    color: activeTemplate.signaturesConfig?.style?.labelColor || undefined,
+                                  }}
+                                >
+                                  {sig.title}
+                                </span>
+                                <span
+                                  className="text-dark-muted block truncate signature-subtitle"
+                                  style={{
+                                    fontSize: `${signaturesPrint.contentFontSize}px`,
+                                    color:
+                                      activeTemplate.signaturesConfig?.style?.contentColor ||
+                                      undefined,
+                                  }}
+                                >
+                                  {sig.subtitle}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* ── ExtraComponent / Logo Layers: Foreground ── */}
+                    <ExtraComponentLayers
+                      currentConfig={activeTemplate}
+                      position="foreground"
+                      pageNumber={pageNumber}
+                      totalPages={totalPages}
+                    />
+                  </div>
+                );
+              });
+            })()}
           </div>
         )
       ) : !selectedClassId ? (
@@ -2039,7 +2125,12 @@ const ReportCardGenerator = ({
                 className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
               >
                 {/* ── ExtraComponent / Logo Layers: Background layers (z-0, behind content) ── */}
-                <ExtraComponentLayers currentConfig={activeTemplate} position="background" />
+                <ExtraComponentLayers
+                  currentConfig={activeTemplate}
+                  position="background"
+                  pageNumber={studentIdx + 1}
+                  totalPages={displayedStudents.length}
+                />
 
                 <div
                   className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
@@ -2442,6 +2533,7 @@ const ReportCardGenerator = ({
                                 students={classStudents}
                                 classNameText={rkCfg.classNameText || currentClassName}
                                 config={rkCfg}
+                                size={rkCfg.size}
                                 isCompact={rkCfg.size === 'compact'}
                                 allClassRankHolders={rkCfg.repeatForEveryClass ? allClassHolders : null}
                               />
@@ -4345,13 +4437,39 @@ const ReportCardGenerator = ({
                       }
                     })();
 
-                    if (!blockContent) return null;
+                    const pageNumber = studentIdx + 1;
+                    const totalPages = displayedStudents.length;
+
+                    // Evaluate page print filter and preserve block space
+                    let shouldPrint = true;
+                    let preserveSpace = false;
+
+                    if (blockKey === 'schoolHeader') {
+                      const printRule = activeTemplate.schoolHeader?.printPages || 'everyPage';
+                      shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                      preserveSpace = !!activeTemplate.schoolHeader?.preserveSpace;
+                    } else if (blockKey === 'signatures') {
+                      const printRule = activeTemplate.signaturesConfig?.printPages || 'everyPage';
+                      shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                      preserveSpace = !!activeTemplate.signaturesConfig?.preserveSpace;
+                    }
+
+                    // If not printing and space is NOT preserved, collapse completely
+                    if (!shouldPrint && !preserveSpace) {
+                      return null;
+                    }
+
+                    const isHiddenReserved = !shouldPrint && preserveSpace;
 
                     return (
                       <div
                         key={blockKey}
                         className={`relative transition-all ${!bleed.isPageWidth ? 'w-full' : ''} ${blockKey === 'signatures' ? 'mt-auto report-card-signatures-wrapper' : ''}`}
-                        style={bleed.wrapperStyle}
+                        style={{
+                          ...bleed.wrapperStyle,
+                          ...(isHiddenReserved ? { visibility: 'hidden', pointerEvents: 'none' } : {}),
+                        }}
+                        aria-hidden={isHiddenReserved ? 'true' : undefined}
                         {...bleed.wrapperAttrs}
                       >
                         {renderBlockTitle(blockSt, DEFAULT_BLOCK_TITLES[blockKey])}
@@ -4389,7 +4507,12 @@ const ReportCardGenerator = ({
                 </div>
 
                 {/* ── ExtraComponent / Logo Layers: Foreground layers (z-30, above content) ── */}
-                <ExtraComponentLayers currentConfig={activeTemplate} position="foreground" />
+                <ExtraComponentLayers
+                  currentConfig={activeTemplate}
+                  position="foreground"
+                  pageNumber={studentIdx + 1}
+                  totalPages={displayedStudents.length}
+                />
               </div>
             );
           })}

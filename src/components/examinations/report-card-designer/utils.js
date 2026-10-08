@@ -339,6 +339,62 @@ export const getColorName = (color, defaultName = 'Default / None') => {
 };
 
 /**
+ * Determines whether a block (like Header or Signatures) should print on a given page
+ * @param {'everyPage' | 'firstPage' | 'lastPage' | 'oddPage' | 'evenPage'} printPages - Page filter rule
+ * @param {number} pageNumber - 1-based page / record index
+ * @param {number} totalPages - total number of pages / records
+ */
+export const shouldPrintBlockOnPage = (printPages = 'everyPage', pageNumber = 1, totalPages = 1) => {
+  const rule = printPages || 'everyPage';
+  switch (rule) {
+    case 'firstPage':
+      return pageNumber === 1;
+    case 'lastPage':
+      return pageNumber === totalPages;
+    case 'oddPage':
+      return pageNumber % 2 !== 0;
+    case 'evenPage':
+      return pageNumber % 2 === 0;
+    case 'everyPage':
+    default:
+      return true;
+  }
+};
+
+/**
+ * Dynamically computes how many Rank Holder class components fit stacked on a single page
+ * based on displayLimit (Limit count), itemsPerRow, barBaseHeight, and component size.
+ */
+export const getDynamicClassesPerPage = (rankHoldersConfig = {}) => {
+  if (rankHoldersConfig.classesPerPage && rankHoldersConfig.classesPerPage !== 'auto') {
+    return Math.max(1, Number(rankHoldersConfig.classesPerPage));
+  }
+
+  const limit = Math.max(1, Number(rankHoldersConfig.displayLimit) || 3);
+  const perRow = Math.max(1, Number(rankHoldersConfig.itemsPerRow) || 3);
+  const rowsPerClass = Math.ceil(limit / perRow);
+  const baseHeight = Number(rankHoldersConfig.barBaseHeight) || 220;
+  const isCompact = rankHoldersConfig.size === 'compact' || baseHeight <= 180;
+
+  // 1 row of cards per class (e.g. limit 3 / 3 per row, limit 4 / 4 per row)
+  if (rowsPerClass === 1) {
+    if (limit <= 3) {
+      return baseHeight > 260 ? 2 : 3;
+    }
+    // limit 4 or 5 in 1 row
+    return isCompact ? 3 : 2;
+  }
+
+  // 2 rows of cards per class (e.g. limit 5 / 3 per row)
+  if (rowsPerClass === 2) {
+    return isCompact || baseHeight <= 200 ? 2 : 1;
+  }
+
+  // 3 or more rows per class (e.g. limit 10 / 3 per row)
+  return 1;
+};
+
+/**
  * Deep-merges a saved template config over a base config, filling in defaults for
  * every nested block style. (Moved out of the component – it only depends on module constants.)
  */
@@ -350,6 +406,14 @@ export const mergeConfig = (base, override) => ({
   extraComponentConfig: {
     ...base.extraComponentConfig,
     ...(override?.extraComponentConfig || {}),
+    printPages:
+      override?.extraComponentConfig?.printPages ??
+      base.extraComponentConfig?.printPages ??
+      'everyPage',
+    preserveSpace:
+      override?.extraComponentConfig?.preserveSpace ??
+      base.extraComponentConfig?.preserveSpace ??
+      false,
   },
   extraComponentLayers:
     override?.extraComponentLayers ??
@@ -382,6 +446,14 @@ export const mergeConfig = (base, override) => ({
   schoolHeader: {
     ...base.schoolHeader,
     ...(override?.schoolHeader || {}),
+    printPages:
+      override?.schoolHeader?.printPages ??
+      base.schoolHeader?.printPages ??
+      'everyPage',
+    preserveSpace:
+      override?.schoolHeader?.preserveSpace ??
+      base.schoolHeader?.preserveSpace ??
+      false,
     style: {
       ...DEFAULT_BLOCK_STYLE,
       ...base.schoolHeader?.style,
@@ -454,6 +526,14 @@ export const mergeConfig = (base, override) => ({
   signaturesConfig: {
     ...base.signaturesConfig,
     ...(override?.signaturesConfig || {}),
+    printPages:
+      override?.signaturesConfig?.printPages ??
+      base.signaturesConfig?.printPages ??
+      'everyPage',
+    preserveSpace:
+      override?.signaturesConfig?.preserveSpace ??
+      base.signaturesConfig?.preserveSpace ??
+      false,
     style: {
       ...DEFAULT_BLOCK_STYLE,
       ...base.signaturesConfig?.style,

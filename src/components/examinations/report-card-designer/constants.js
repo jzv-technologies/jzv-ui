@@ -35,7 +35,7 @@ export const PREVIEW_STUDENT = {
 export const PREVIEW_RANK_HOLDERS = [
   {
     id: 'rank_1',
-    student_name: 'NAZEER M',
+    student_name: 'NAZEER MOHAMMED',
     photo_id: 'PH-101',
     percentage: 96,
     rank: 1,
@@ -44,7 +44,7 @@ export const PREVIEW_RANK_HOLDERS = [
   },
   {
     id: 'rank_2',
-    student_name: 'ADHIL R',
+    student_name: 'ADHIL RAHMAN',
     photo_id: 'PH-102',
     percentage: 93,
     rank: 2,
@@ -53,7 +53,7 @@ export const PREVIEW_RANK_HOLDERS = [
   },
   {
     id: 'rank_3',
-    student_name: 'MD ASHRAF',
+    student_name: 'MOHAMMED RAYAN SHAIKH',
     photo_id: 'PH-103',
     percentage: 89,
     rank: 3,
@@ -62,7 +62,7 @@ export const PREVIEW_RANK_HOLDERS = [
   },
   {
     id: 'rank_4',
-    student_name: 'FAHIM K',
+    student_name: 'FAHIM KHAN',
     photo_id: 'PH-104',
     percentage: 86,
     rank: 4,
@@ -71,7 +71,7 @@ export const PREVIEW_RANK_HOLDERS = [
   },
   {
     id: 'rank_5',
-    student_name: 'RAYAN S',
+    student_name: 'SYED ABDULLAH FAROOQI',
     photo_id: 'PH-105',
     percentage: 84,
     rank: 5,
@@ -79,6 +79,68 @@ export const PREVIEW_RANK_HOLDERS = [
     class_name: 'PLATINUM - 3',
   },
 ];
+
+export const PREVIEW_ALL_CLASS_RANK_HOLDERS = {
+  'PLATINUM - 3': PREVIEW_RANK_HOLDERS,
+  'DIAMOND - 4': [
+    {
+      id: 'd1',
+      student_name: 'ZAYN MALIK',
+      photo_id: 'PH-106',
+      percentage: 97,
+      rank: 1,
+      classRank: 1,
+      class_name: 'DIAMOND - 4',
+    },
+    {
+      id: 'd2',
+      student_name: 'HAMDAN KHAN',
+      photo_id: 'PH-107',
+      percentage: 94,
+      rank: 2,
+      classRank: 2,
+      class_name: 'DIAMOND - 4',
+    },
+    {
+      id: 'd3',
+      student_name: 'SARAH AHMED',
+      photo_id: 'PH-108',
+      percentage: 91,
+      rank: 3,
+      classRank: 3,
+      class_name: 'DIAMOND - 4',
+    },
+  ],
+  'GOLD - 2': [
+    {
+      id: 'g1',
+      student_name: 'AYESHA SIDDIQA',
+      photo_id: 'PH-109',
+      percentage: 95,
+      rank: 1,
+      classRank: 1,
+      class_name: 'GOLD - 2',
+    },
+    {
+      id: 'g2',
+      student_name: 'OMAR FAROOQ',
+      photo_id: 'PH-110',
+      percentage: 92,
+      rank: 2,
+      classRank: 2,
+      class_name: 'GOLD - 2',
+    },
+    {
+      id: 'g3',
+      student_name: 'FATIMA NOOR',
+      photo_id: 'PH-111',
+      percentage: 88,
+      rank: 3,
+      classRank: 3,
+      class_name: 'GOLD - 2',
+    },
+  ],
+};
 
 export const RAW_PREVIEW_SCORES = [
   {
@@ -461,6 +523,8 @@ export const DEFAULT_TEMPLATE = {
     showExamTitle: true,
     showHeaderImage: false,
     headerImageUrl: '',
+    printPages: 'everyPage', // 'firstPage' | 'everyPage' | 'oddPage' | 'evenPage' | 'lastPage'
+    preserveSpace: false, // when true, keeps block space reserved on skipped pages
     style: { ...DEFAULT_BLOCK_STYLE },
   },
   showStudentInfo: true,
@@ -546,6 +610,8 @@ export const DEFAULT_TEMPLATE = {
     xPos: 50, // horizontal position 0 to 100%
     yPos: 50, // vertical position 0 to 100%
     color: '#0f172a',
+    printPages: 'everyPage', // 'firstPage' | 'everyPage' | 'oddPage' | 'evenPage' | 'lastPage'
+    preserveSpace: false, // when true, keeps block space reserved on skipped pages
   },
   showAttendanceBar: true,
   attendanceBarConfig: {
@@ -570,10 +636,15 @@ export const DEFAULT_TEMPLATE = {
     displayLimit: 3, // Top X or Upto X (default 3)
     itemsPerRow: 3, // Number of items to display in a row (default 3)
     repeatForEveryClass: false, // Repeat for Every Class Yes/No (default No)
+    classesPerPage: 'auto', // 'auto' (dynamic based on Items Per Row & Limit) | '1' | '2' | '3' | '4'
     showClassName: true,
+    classNameBadgePosition: 'left', // 'left' | 'right' | 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
     classNameText: '',
     podiumHeights: true, // stepped height like podium (rank 1 tallest, rank 2 medium, rank 3 shorter)
     barBaseHeight: 220, // px height base
+    photoSize: '', // custom px diameter (empty for auto)
+    nameFontSize: 13, // student name font size in px
+    nameColor: '#0f172a', // student name font color
     showPercentage: true,
     showRank: true,
     showStudentName: true,
@@ -629,6 +700,8 @@ export const DEFAULT_TEMPLATE = {
     showSignature3: true,
     showSignature4: true,
     showDate: false,
+    printPages: 'everyPage', // 'firstPage' | 'everyPage' | 'oddPage' | 'evenPage' | 'lastPage'
+    preserveSpace: false, // when true, keeps block space reserved on skipped pages
     style: { ...DEFAULT_BLOCK_STYLE },
   },
   // Grading scale configuration & display legend
@@ -661,3 +734,22 @@ export const BLOCK_LABELS = {
   remarks: { name: 'Remarks Component', icon: 'fa-comment-dots' },
   signatures: { name: 'Footer Signatures', icon: 'fa-file-signature' },
 };
+
+export const PAGE_PRINT_OPTIONS = [
+  { value: 'firstPage', label: 'First Page' },
+  { value: 'everyPage', label: 'Every Page' },
+  { value: 'oddPage', label: 'Odd Page' },
+  { value: 'evenPage', label: 'Even Page' },
+  { value: 'lastPage', label: 'Last Page' },
+];
+
+export const RANK_BADGE_POSITIONS = [
+  { value: 'left', label: 'Left Side (Vertical)' },
+  { value: 'right', label: 'Right Side (Vertical)' },
+  { value: 'top-left', label: 'Top Left' },
+  { value: 'top-center', label: 'Top Center' },
+  { value: 'top-right', label: 'Top Right' },
+  { value: 'bottom-left', label: 'Bottom Left' },
+  { value: 'bottom-center', label: 'Bottom Center' },
+  { value: 'bottom-right', label: 'Bottom Right' },
+];

@@ -44,15 +44,6 @@ export const RANK_THEMES = [
     bottomBarColor: '#d946ef',
   },
   {
-    // Rank 4: Deep Amber / Golden
-    gradient: 'linear-gradient(180deg, #b45309 0%, #d97706 45%, #fbbf24 100%)',
-    ringColor: '#f59e0b',
-    rankTextColor: '#b45309',
-    shadowColor: 'rgba(245, 158, 11, 0.25)',
-    barShadow: '0 12px 28px -6px rgba(180, 83, 9, 0.35), 0 4px 10px -2px rgba(180, 83, 9, 0.2)',
-    bottomBarColor: '#f59e0b',
-  },
-  {
     // Rank 5: Indigo / Violet
     gradient: 'linear-gradient(180deg, #3730a3 0%, #4f46e5 45%, #818cf8 100%)',
     ringColor: '#6366f1',
@@ -60,6 +51,15 @@ export const RANK_THEMES = [
     shadowColor: 'rgba(99, 102, 241, 0.25)',
     barShadow: '0 12px 28px -6px rgba(55, 48, 163, 0.35), 0 4px 10px -2px rgba(55, 48, 163, 0.2)',
     bottomBarColor: '#6366f1',
+  },
+  {
+    // Rank 4: Deep Amber / Golden
+    gradient: 'linear-gradient(180deg, #b45309 0%, #d97706 45%, #fbbf24 100%)',
+    ringColor: '#f59e0b',
+    rankTextColor: '#b45309',
+    shadowColor: 'rgba(245, 158, 11, 0.25)',
+    barShadow: '0 12px 28px -6px rgba(180, 83, 9, 0.35), 0 4px 10px -2px rgba(180, 83, 9, 0.2)',
+    bottomBarColor: '#f59e0b',
   },
   {
     // Rank 6+: Teal / Cyan
@@ -75,7 +75,13 @@ export const RANK_THEMES = [
 /**
  * Individual Student Avatar Component with Image and Error Fallback
  */
-const StudentAvatar = ({ photoUrl, studentName, ringColor, sizeClass = 'w-24 h-24' }) => {
+const StudentAvatar = ({
+  photoUrl,
+  studentName,
+  ringColor,
+  sizeClass = 'w-24 h-24',
+  photoSize = null,
+}) => {
   const [imgError, setImgError] = useState(false);
 
   const getInitials = (name) => {
@@ -85,11 +91,14 @@ const StudentAvatar = ({ photoUrl, studentName, ringColor, sizeClass = 'w-24 h-2
     return parts[0].slice(0, 2).toUpperCase();
   };
 
+  const customPx = photoSize && Number(photoSize) > 0 ? Number(photoSize) : null;
+
   return (
     <div
-      className={`relative rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center ${sizeClass}`}
+      className={`relative rounded-full overflow-hidden shrink-0 bg-slate-100 flex items-center justify-center ${customPx ? '' : sizeClass}`}
       style={{
         boxShadow: `0 0 0 4px #ffffff, 0 0 0 7px ${ringColor}, 0 8px 16px -2px rgba(0, 0, 0, 0.18)`,
+        ...(customPx ? { width: `${customPx}px`, height: `${customPx}px` } : {}),
       }}
     >
       {photoUrl && !imgError ? (
@@ -107,10 +116,24 @@ const StudentAvatar = ({ photoUrl, studentName, ringColor, sizeClass = 'w-24 h-2
             background: `linear-gradient(135deg, ${ringColor} 0%, #0f172a 100%)`,
           }}
         >
-          <span className="text-base sm:text-lg tracking-wider font-extrabold select-none">
+          <span
+            className="tracking-wider font-extrabold select-none"
+            style={{
+              fontSize: customPx
+                ? `${Math.max(12, Math.round(customPx * 0.28))}px`
+                : undefined,
+            }}
+          >
             {getInitials(studentName)}
           </span>
-          <i className="fas fa-graduation-cap text-[10px] opacity-75 mt-0.5" />
+          <i
+            className="fas fa-graduation-cap opacity-75 mt-0.5"
+            style={{
+              fontSize: customPx
+                ? `${Math.max(8, Math.round(customPx * 0.15))}px`
+                : '10px',
+            }}
+          />
         </div>
       )}
     </div>
@@ -125,7 +148,9 @@ const RankHolderBar = ({
   rankNumber = 1,
   config = {},
   isCompact = false,
+  isLarge = false,
   baseHeight = 220,
+  perRow = 3,
 }) => {
   const {
     showPhoto = true,
@@ -133,6 +158,9 @@ const RankHolderBar = ({
     showRank = true,
     showStudentName = true,
     podiumHeights = true,
+    photoSize: cfgPhotoSize,
+    nameFontSize: cfgNameFontSize,
+    nameColor: cfgNameColor,
     style = {},
   } = config;
 
@@ -143,12 +171,16 @@ const RankHolderBar = ({
   let heightMultiplier = 1.0;
   if (podiumHeights) {
     if (rankNumber === 1) heightMultiplier = 1.0;
-    else if (rankNumber === 2) heightMultiplier = 0.90;
+    else if (rankNumber === 2) heightMultiplier = 0.9;
     else if (rankNumber === 3) heightMultiplier = 0.82;
-    else heightMultiplier = Math.max(0.70, 0.82 - (rankNumber - 3) * 0.04);
+    else heightMultiplier = Math.max(0.7, 0.82 - (rankNumber - 3) * 0.04);
   }
 
-  const effectiveBaseHeight = isCompact ? Math.round(baseHeight * 0.8) : baseHeight;
+  const effectiveBaseHeight = isCompact
+    ? Math.round(baseHeight * 0.78)
+    : isLarge
+      ? Math.round(baseHeight * 1.25)
+      : baseHeight;
   const calculatedHeight = Math.round(effectiveBaseHeight * heightMultiplier);
 
   // Student details
@@ -164,20 +196,77 @@ const RankHolderBar = ({
 
   const photoUrl = student.photo_url || getStudentPhotoUrl(student.photo_id);
 
-  // Size classes
-  const avatarSize = isCompact
-    ? 'w-16 h-16 sm:w-20 sm:h-20'
-    : 'w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28';
-  const pctFontSize = isCompact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl md:text-4xl';
-  const rankFontSize = isCompact ? 'text-xs sm:text-sm' : 'text-sm sm:text-base md:text-lg';
-  const nameFontSize = style?.labelFontSize
-    ? `${style.labelFontSize}px`
-    : isCompact
-      ? '10px'
-      : '12px';
+  // Size classes responsive to perRow count & compact / large mode
+  const avatarSize =
+    isCompact || perRow >= 5
+      ? 'w-14 h-14 sm:w-16 sm:h-16'
+      : isLarge
+        ? perRow <= 3
+          ? 'w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32'
+          : 'w-20 h-20 sm:w-24 sm:h-24'
+        : perRow === 4
+          ? 'w-16 h-16 sm:w-20 sm:h-20'
+          : 'w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28';
+
+  const pctFontSize =
+    isCompact || perRow >= 6
+      ? 'text-base sm:text-lg'
+      : isCompact
+        ? 'text-lg sm:text-xl'
+        : isLarge
+          ? perRow <= 3
+            ? 'text-3xl sm:text-4xl md:text-5xl'
+            : 'text-2xl sm:text-3xl'
+          : perRow >= 5
+            ? 'text-lg sm:text-xl'
+            : perRow === 4
+              ? 'text-xl sm:text-2xl'
+              : 'text-2xl sm:text-3xl md:text-4xl';
+
+  const rankFontSize = isCompact
+    ? 'text-[10px] sm:text-[11px]'
+    : isLarge
+      ? 'text-sm sm:text-base md:text-lg'
+      : perRow >= 5
+        ? 'text-[11px] sm:text-xs'
+        : 'text-xs sm:text-sm md:text-base';
+
+  // Configurable name typography with backwards-compatible fallbacks
+  const effectiveNameFontSize = cfgNameFontSize
+    ? `${cfgNameFontSize}px`
+    : style?.contentFontSize
+      ? `${style.contentFontSize}px`
+      : style?.labelFontSize
+        ? `${style.labelFontSize}px`
+        : isCompact
+          ? '11px'
+          : isLarge
+            ? '15px'
+            : '13px';
+
+  const effectiveNameColor =
+    cfgNameColor ||
+    style?.contentColor ||
+    style?.labelColor ||
+    '#0f172a';
+
+  // Dynamic width constraints matching items per row & size modes
+  const maxBarWidth = isCompact
+    ? perRow <= 2 ? 160 : perRow === 3 ? 150 : perRow === 4 ? 135 : 110
+    : isLarge
+      ? perRow <= 2 ? 240 : perRow === 3 ? 220 : perRow === 4 ? 195 : 155
+      : perRow <= 2 ? 190 : perRow === 3 ? 180 : perRow === 4 ? 165 : perRow === 5 ? 145 : 125;
+
+  const minBarWidth = isCompact ? 65 : isLarge ? 100 : (perRow >= 5 ? 75 : 85);
 
   return (
-    <div className="flex flex-col items-center flex-1 min-w-[90px] max-w-[190px] group">
+    <div
+      className="flex flex-col items-center flex-1 group transition-all"
+      style={{
+        maxWidth: `${maxBarWidth}px`,
+        minWidth: `${minBarWidth}px`,
+      }}
+    >
       {/* ── Main Bar Container (Aligns to bottom baseline) ── */}
       <div
         className="w-full flex flex-col items-center rounded-t-full overflow-hidden transition-all duration-300 relative"
@@ -188,7 +277,9 @@ const RankHolderBar = ({
       >
         {/* Top Dome & Photo Section */}
         <div
-          className="w-full pt-2.5 pb-2 px-1 flex flex-col items-center justify-center relative"
+          className={`w-full flex flex-col items-center justify-center relative ${
+            isCompact ? 'pt-2 pb-1.5 px-0.5' : isLarge ? 'pt-4 pb-3 px-2' : 'pt-2.5 pb-2 px-1'
+          }`}
           style={{ background: theme.gradient }}
         >
           {showPhoto && (
@@ -198,13 +289,18 @@ const RankHolderBar = ({
                 studentName={name}
                 ringColor={theme.ringColor}
                 sizeClass={avatarSize}
+                photoSize={cfgPhotoSize}
               />
             </div>
           )}
 
           {/* Percentage Value */}
           {showPercentage && (
-            <div className="py-2.5 sm:py-3 text-center z-10 w-full px-1">
+            <div
+              className={`text-center z-10 w-full px-1 ${
+                isCompact ? 'py-1.5' : isLarge ? 'py-3.5 sm:py-4' : 'py-2.5 sm:py-3'
+              }`}
+            >
               <span
                 className={`font-black text-white tracking-tight leading-none block drop-shadow-md select-none ${pctFontSize}`}
                 style={{
@@ -218,7 +314,11 @@ const RankHolderBar = ({
         </div>
 
         {/* Bottom White Card Section with Rank Position */}
-        <div className="w-full bg-white mt-auto pt-2 sm:pt-2.5 pb-2 px-1 text-center border-t border-slate-100 flex flex-col items-center justify-center relative shadow-xs">
+        <div
+          className={`w-full bg-white mt-auto text-center border-t border-slate-100 flex flex-col items-center justify-center relative shadow-xs ${
+            isCompact ? 'pt-1.5 pb-1 px-0.5' : isLarge ? 'pt-3 pb-3 px-2' : 'pt-2 sm:pt-2.5 pb-2 px-1'
+          }`}
+        >
           {showRank && (
             <span
               className={`font-black tracking-tight uppercase block leading-tight ${rankFontSize}`}
@@ -230,20 +330,29 @@ const RankHolderBar = ({
 
           {/* Colored Bottom Accent Bar */}
           <div
-            className="w-full h-1 sm:h-1.5 mt-1.5 rounded-full"
+            className={`w-full mt-1.5 rounded-full ${
+              isCompact ? 'h-1' : isLarge ? 'h-2' : 'h-1 sm:h-1.5'
+            }`}
             style={{ backgroundColor: theme.bottomBarColor }}
           />
         </div>
       </div>
 
-      {/* Student Name under the Bar */}
+      {/* Student Name under the Bar: wraps up to 2 lines, preserves aligned vertical baseline */}
       {showStudentName && (
-        <div className="w-full text-center mt-2 px-0.5">
+        <div className="w-full text-center mt-2 px-1 flex items-start justify-center">
           <span
-            className="font-extrabold uppercase tracking-wide text-dark-primary block truncate leading-tight select-none"
+            className="font-extrabold uppercase tracking-wide block select-none text-center"
             style={{
-              fontSize: nameFontSize,
-              color: style?.contentColor || '#0f172a',
+              fontSize: effectiveNameFontSize,
+              color: effectiveNameColor,
+              lineHeight: 1.25,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+              minHeight: '2.5em',
             }}
             title={name}
           >
@@ -256,22 +365,28 @@ const RankHolderBar = ({
 };
 
 /**
- * Class Vertical Badge Component (Left sidebar)
+ * Class Vertical Badge Component (Left / Right sidebar)
  */
-const ClassNameBadge = ({ classNameText = 'PLATINUM - 3', isCompact = false }) => {
+const ClassNameBadge = ({
+  classNameText = 'PLATINUM - 3',
+  isCompact = false,
+  isLarge = false,
+  position = 'left',
+}) => {
   return (
     <div
-      className="bg-zinc-900 rounded-xl sm:rounded-2xl px-2 sm:px-2.5 py-4 flex items-center justify-center shadow-md border border-zinc-800 shrink-0 select-none"
+      className="bg-zinc-900 rounded-xl sm:rounded-2xl px-2 sm:px-2.5 py-4 flex items-center justify-center shadow-md border border-zinc-800 shrink-0 select-none self-stretch"
       style={{
-        minWidth: isCompact ? '38px' : '48px',
+        minWidth: isCompact ? '36px' : isLarge ? '54px' : '46px',
       }}
     >
       <span
-        className="font-black text-amber-400 tracking-widest uppercase whitespace-nowrap text-xs sm:text-sm drop-shadow-xs"
+        className="font-black text-amber-400 tracking-widest uppercase whitespace-nowrap drop-shadow-xs"
         style={{
           writingMode: 'vertical-rl',
-          transform: 'rotate(180deg)',
+          transform: position === 'right' ? 'rotate(0deg)' : 'rotate(180deg)',
           letterSpacing: '0.15em',
+          fontSize: isCompact ? '11px' : isLarge ? '15px' : '13px',
         }}
       >
         {classNameText}
@@ -281,28 +396,58 @@ const ClassNameBadge = ({ classNameText = 'PLATINUM - 3', isCompact = false }) =
 };
 
 /**
+ * Class Horizontal Badge Component (Top / Bottom alignment)
+ */
+const ClassNameHorizontalBadge = ({
+  classNameText = 'PLATINUM - 3',
+  isCompact = false,
+  isLarge = false,
+}) => {
+  return (
+    <div
+      className={`bg-zinc-900 border border-zinc-800 rounded-xl shadow-md inline-flex items-center gap-2 select-none ${
+        isCompact
+          ? 'px-2.5 py-1 text-[11px]'
+          : isLarge
+            ? 'px-4 py-2 text-sm'
+            : 'px-3.5 py-1.5 text-xs'
+      }`}
+    >
+      <i className="fas fa-graduation-cap text-amber-400 text-xs" />
+      <span className="font-black text-amber-400 tracking-wider uppercase">
+        {classNameText}
+      </span>
+    </div>
+  );
+};
+
+/**
  * RankHolders Component
- * Renders high-fidelity vertical rank holder bars matching the reference design:
- * - Left vertical badge with Class Name
+ * Renders high-fidelity rank holder cards matching the reference design:
+ * - Positionable badge with Class Name (8 positions)
  * - Vertical bars with fully rounded shape at the top
- * - Circle with student photo
+ * - Circle with student photo (customizable photoSize)
  * - Overall percentage scored
  * - Rank position
- * - Student name
- * - Gradient colors, shades and shadows
+ * - Student name (custom font size, color, up to 2 lines)
+ * - Compact, Standard, and Large scaling
+ * - Strictly repeats for each class ONLY when repeatForEveryClass is ON
+ * - Arranges rank holder cards into rows based on itemsPerRow
  */
 export const RankHolders = ({
   students = [],
   className = '',
   classNameText = '',
   config = {},
-  isCompact = false,
+  isCompact: isCompactProp = false,
+  size: sizeProp = null,
   allClassRankHolders = null,
 }) => {
   const {
     title = 'Class Rank Holders',
     showTitle = false,
     showClassName = true,
+    classNameBadgePosition = 'left',
     displayFilterMode = 'top_x', // 'top_x' | 'upto_x'
     displayLimit = 3,
     itemsPerRow = 3,
@@ -310,6 +455,12 @@ export const RankHolders = ({
     barBaseHeight = 220,
     style = {},
   } = config;
+
+  const effectiveSize = sizeProp || config.size || (isCompactProp ? 'compact' : 'standard');
+  const isCompact = effectiveSize === 'compact';
+  const isLarge = effectiveSize === 'large';
+
+  const isRepeatOn = !!(repeatForEveryClass || config.repeatForEveryClass);
 
   // Filter rank holders based on displayFilterMode and displayLimit
   const filterList = (list) => {
@@ -328,17 +479,60 @@ export const RankHolders = ({
     return list.slice(0, limit);
   };
 
-  // If repeatForEveryClass is enabled and allClassRankHolders is provided
+  // Build class groups: ONLY repeat across classes when repeatForEveryClass is ON
   const classGroups = [];
-  if (repeatForEveryClass && allClassRankHolders && typeof allClassRankHolders === 'object') {
+  if (isRepeatOn && allClassRankHolders && typeof allClassRankHolders === 'object') {
     Object.entries(allClassRankHolders).forEach(([clsName, stuList]) => {
-      classGroups.push({
-        className: clsName,
-        items: filterList(stuList),
-      });
+      const filtered = filterList(stuList);
+      if (filtered.length > 0) {
+        classGroups.push({
+          className: clsName,
+          items: filtered,
+        });
+      }
     });
+
+    if (classGroups.length === 0) {
+      classGroups.push({
+        className: classNameText || config.classNameText || className || 'Class',
+        items: [],
+      });
+    }
+  } else if (isRepeatOn && Array.isArray(students) && students.length > 0) {
+    // If students array contains multiple classes and repeat is enabled
+    const grouped = {};
+    students.forEach((s) => {
+      const cName = s.class_name || s.className || classNameText || 'Class';
+      if (!grouped[cName]) grouped[cName] = [];
+      grouped[cName].push(s);
+    });
+
+    const entries = Object.entries(grouped);
+    if (entries.length > 1) {
+      entries.forEach(([clsName, stuList]) => {
+        const filtered = filterList(stuList);
+        if (filtered.length > 0) {
+          classGroups.push({
+            className: clsName,
+            items: filtered,
+          });
+        }
+      });
+    } else {
+      const displayClass =
+        classNameText ||
+        config.classNameText ||
+        className ||
+        students[0]?.class_name ||
+        'PLATINUM - 3';
+
+      classGroups.push({
+        className: displayClass,
+        items: filterList(students),
+      });
+    }
   } else {
-    // Single class view
+    // Single class view: strictly 1 class when repeatForEveryClass is off
     const displayClass =
       classNameText ||
       config.classNameText ||
@@ -353,10 +547,33 @@ export const RankHolders = ({
   }
 
   const labelFontSize = style?.labelFontSize ? `${style.labelFontSize}px` : '10px';
+  const perRow = Math.max(1, Math.min(12, Number(itemsPerRow) || 3));
+
+  const badgePos = classNameBadgePosition || 'left';
+  const isTopBadge = showClassName && badgePos.startsWith('top-');
+  const isBottomBadge = showClassName && badgePos.startsWith('bottom-');
+  const isLeftBadge = showClassName && badgePos === 'left';
+  const isRightBadge = showClassName && badgePos === 'right';
+
+  const topBadgeAlign =
+    badgePos === 'top-left'
+      ? 'justify-start'
+      : badgePos === 'top-right'
+        ? 'justify-end'
+        : 'justify-center';
+
+  const bottomBadgeAlign =
+    badgePos === 'bottom-left'
+      ? 'justify-start'
+      : badgePos === 'bottom-right'
+        ? 'justify-end'
+        : 'justify-center';
 
   return (
     <div
-      className={`rounded-2xl transition-all p-3 sm:p-4 space-y-4 ${config.className || ''}`}
+      className={`rounded-2xl transition-all ${
+        isCompact ? 'p-2 sm:p-2.5' : isLarge ? 'p-5 sm:p-6' : 'p-3 sm:p-4'
+      } ${config.className || ''}`}
       style={getBlockBackgroundStyle(style, 'transparent')}
       data-feature="rank-holders-component"
     >
@@ -379,56 +596,103 @@ export const RankHolders = ({
       {/* Render each class group */}
       {classGroups.map((group, groupIdx) => {
         const items = group.items;
-        const colClass =
-          itemsPerRow === 1
-            ? 'grid-cols-1'
-            : itemsPerRow === 2
-              ? 'grid-cols-2'
-              : itemsPerRow === 4
-                ? 'grid-cols-2 sm:grid-cols-4'
-                : itemsPerRow === 5
-                  ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5'
-                  : itemsPerRow === 6
-                    ? 'grid-cols-3 sm:grid-cols-6'
-                    : 'grid-cols-1 sm:grid-cols-3'; // default 3
+
+        // Chunk rank holders into rows matching itemsPerRow
+        const rows = [];
+        for (let i = 0; i < items.length; i += perRow) {
+          rows.push(items.slice(i, i + perRow));
+        }
 
         return (
-          <div
-            key={groupIdx}
-            className="flex items-stretch gap-3 sm:gap-4 w-full justify-center overflow-x-auto no-scrollbar py-2"
-          >
-            {/* Left Class Name Badge */}
-            {showClassName && (
-              <ClassNameBadge classNameText={group.className} isCompact={isCompact} />
+          <div key={groupIdx} className="w-full flex flex-col gap-2.5">
+            {groupIdx > 0 && (
+              <div className="w-full border-t border-slate-200/80 my-3 pt-1" />
             )}
 
-            {/* Rank Holder Bars Row (Bottom-aligned for podium step effect) */}
-            <div
-              className={`flex-1 flex items-end justify-center gap-3 sm:gap-6 max-w-4xl`}
-              style={{
-                gap: isCompact ? '12px' : undefined,
-              }}
-            >
-              {items.map((student, idx) => {
-                const rankNum = Number(student.classRank || student.rank || idx + 1);
-                return (
-                  <RankHolderBar
-                    key={student.id || student.student_id || idx}
-                    student={student}
-                    rankNumber={rankNum}
-                    config={config}
-                    isCompact={isCompact}
-                    baseHeight={barBaseHeight}
-                  />
-                );
-              })}
+            {/* Top Class Name Badge */}
+            {isTopBadge && (
+              <div className={`flex w-full ${topBadgeAlign} px-1`}>
+                <ClassNameHorizontalBadge
+                  classNameText={group.className}
+                  isCompact={isCompact}
+                  isLarge={isLarge}
+                />
+              </div>
+            )}
 
-              {items.length === 0 && (
-                <div className="py-8 text-center text-xs text-dark-muted font-bold italic w-full">
-                  No rank holders found to display
-                </div>
+            <div className="flex items-stretch gap-3 sm:gap-4 w-full justify-center overflow-x-auto no-scrollbar py-2">
+              {/* Left Class Name Badge */}
+              {isLeftBadge && (
+                <ClassNameBadge
+                  classNameText={group.className}
+                  isCompact={isCompact}
+                  isLarge={isLarge}
+                  position="left"
+                />
+              )}
+
+              {/* Rank Holder Rows (chunked by itemsPerRow) */}
+              <div
+                className={`flex-1 flex flex-col max-w-4xl justify-center ${
+                  isCompact ? 'gap-3 sm:gap-4' : isLarge ? 'gap-6 sm:gap-8' : 'gap-4 sm:gap-6'
+                }`}
+              >
+                {rows.map((rowItems, rIdx) => (
+                  <div
+                    key={rIdx}
+                    className="flex items-end justify-center w-full"
+                    style={{
+                      gap: isCompact ? '10px' : isLarge ? '22px' : '16px',
+                    }}
+                  >
+                    {rowItems.map((student, idx) => {
+                      const rankNum = Number(
+                        student.classRank || student.rank || (rIdx * perRow + idx + 1)
+                      );
+                      return (
+                        <RankHolderBar
+                          key={student.id || student.student_id || `${rIdx}-${idx}`}
+                          student={student}
+                          rankNumber={rankNum}
+                          config={config}
+                          isCompact={isCompact}
+                          isLarge={isLarge}
+                          baseHeight={barBaseHeight}
+                          perRow={perRow}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {items.length === 0 && (
+                  <div className="py-8 text-center text-xs text-dark-muted font-bold italic w-full">
+                    No rank holders found to display
+                  </div>
+                )}
+              </div>
+
+              {/* Right Class Name Badge */}
+              {isRightBadge && (
+                <ClassNameBadge
+                  classNameText={group.className}
+                  isCompact={isCompact}
+                  isLarge={isLarge}
+                  position="right"
+                />
               )}
             </div>
+
+            {/* Bottom Class Name Badge */}
+            {isBottomBadge && (
+              <div className={`flex w-full ${bottomBadgeAlign} px-1`}>
+                <ClassNameHorizontalBadge
+                  classNameText={group.className}
+                  isCompact={isCompact}
+                  isLarge={isLarge}
+                />
+              </div>
+            )}
           </div>
         );
       })}
@@ -437,3 +701,4 @@ export const RankHolders = ({
 };
 
 export default RankHolders;
+

@@ -147,6 +147,64 @@ const SignaturesSettings = ({ currentConfig, setCurrentConfig }) => {
           )}
         </div>
       )}
+
+      {/* Page Printing Rules & Preserve Block Space */}
+      <div className="pt-3 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+          <div className="min-w-0">
+            <label className="block text-[11px] font-bold text-dark-slate mb-1">
+              Print on Pages
+            </label>
+            <select
+              value={currentConfig.signaturesConfig?.printPages || 'everyPage'}
+              onChange={(e) =>
+                setCurrentConfig((prev) => ({
+                  ...prev,
+                  signaturesConfig: {
+                    ...prev.signaturesConfig,
+                    printPages: e.target.value,
+                  },
+                }))
+              }
+              className="w-full min-w-0 px-3 py-1.5 text-xs border border-light-border rounded-xl bg-white font-bold text-dark-slate cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            >
+              <option value="firstPage">First Page</option>
+              <option value="everyPage">Every Page</option>
+              <option value="oddPage">Odd Page</option>
+              <option value="evenPage">Even Page</option>
+              <option value="lastPage">Last Page</option>
+            </select>
+            <p className="text-[10px] text-dark-muted mt-1">
+              Controls which pages or records will print footer signatures.
+            </p>
+          </div>
+
+          <div className="min-w-0 sm:pt-6">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={!!currentConfig.signaturesConfig?.preserveSpace}
+                onChange={(e) =>
+                  setCurrentConfig((prev) => ({
+                    ...prev,
+                    signaturesConfig: {
+                      ...prev.signaturesConfig,
+                      preserveSpace: e.target.checked,
+                    },
+                  }))
+                }
+                className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300 accent-rose-600 cursor-pointer"
+              />
+              <span className="text-xs font-bold text-dark-slate">
+                Preserve Block Space
+              </span>
+            </label>
+            <p className="text-[10px] text-dark-muted mt-1 ml-6">
+              When selected, block space is reserved. When unchecked, other components can use that space.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
