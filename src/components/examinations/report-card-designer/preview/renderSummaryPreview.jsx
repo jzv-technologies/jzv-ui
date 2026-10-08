@@ -14,29 +14,41 @@ export const renderSummaryPreview = ({
   currentConfig,
   overallPreviewGrade,
   overallPreviewPct,
+  previewScoresWithGrades,
 }) => {
   if (!currentConfig.showSummaryCalculations) return null;
   const sum = currentConfig.summaryConfig || {};
   const isCompact = blockSize === 'compact';
   const sumStyle = { ...DEFAULT_BLOCK_STYLE, ...(sum.style || {}) };
   const itemOrder = sum.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
+
+  const hasFailed =
+    Boolean(sum.simulateFailPreview) ||
+    (Array.isArray(previewScoresWithGrades) &&
+      previewScoresWithGrades.some((s) => {
+        if (s.status === 'FAIL') return true;
+        const obt = Number(s.marksObtained ?? s.marks_obtained);
+        const pass = Number(s.passMarks ?? s.pass_marks ?? 35);
+        return !isNaN(obt) && obt < pass;
+      }));
+
   const SUMMARY_PREVIEW_VALUES = {
-    showGrandTotal: { label: 'Grand Total', value: '615 / 700', color: '' },
+    showGrandTotal: { label: 'Grand Total', value: hasFailed ? '540 / 700' : '615 / 700', color: '' },
     showPercentage: {
       label: 'Percentage',
-      value: `${overallPreviewPct}%`,
+      value: hasFailed ? '77.1%' : `${overallPreviewPct}%`,
       color: sumStyle.contentColor || '#34d399',
     },
     showGrade: {
       label: 'Overall Grade',
-      value: overallPreviewGrade,
-      color: sumStyle.contentColor || '#fbbf24',
+      value: hasFailed ? 'F' : overallPreviewGrade,
+      color: hasFailed ? '#dc2626' : (sumStyle.contentColor || '#fbbf24'),
     },
-    showClassRank: { label: 'Class Rank', value: '#3', color: '' },
+    showClassRank: { label: 'Class Rank', value: hasFailed ? '' : '#3', color: '' },
     showPassFail: {
       label: 'Result',
-      value: 'PASS',
-      color: sumStyle.contentColor || '#34d399',
+      value: hasFailed ? 'FAIL' : 'PASS',
+      color: hasFailed ? '#dc2626' : (sumStyle.contentColor || '#34d399'),
     },
     showTotalSubjects: { label: 'Total Subjects', value: '7', color: '' },
   };

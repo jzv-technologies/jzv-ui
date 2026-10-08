@@ -442,6 +442,7 @@ const ReportCardDesigner = ({
       maxPercentage: 100,
       description: '',
       gpa: 4.0,
+      color: '',
     });
     setEditingGradeIdx(null);
     setShowGradeModal(true);
@@ -456,6 +457,7 @@ const ReportCardDesigner = ({
       maxPercentage: item.maxPercentage,
       description: item.description || '',
       gpa: item.gpa != null ? item.gpa : 0.0,
+      color: item.color || '',
     });
     setEditingGradeIdx(idx);
     setShowGradeModal(true);
@@ -481,6 +483,7 @@ const ReportCardDesigner = ({
       maxPercentage: maxP,
       description: (gradeForm.description || '').trim(),
       gpa: Number(gradeForm.gpa || 0),
+      color: (gradeForm.color || '').trim(),
     };
 
     let updatedScale = [...currentConfig.gradingScale];
@@ -616,7 +619,10 @@ const ReportCardDesigner = ({
 
   // Compute preview scores with dynamically evaluated grades using currentConfig.gradingScale and classifications
   const previewScoresWithGrades = useMemo(() => {
-    const sampleScores = [88, 94, 82, 79, 91, 96, 85, 90];
+    const isSimulateFail = Boolean(currentConfig.summaryConfig?.simulateFailPreview);
+    const sampleScores = isSimulateFail
+      ? [88, 28, 82, 79, 91, 96, 85, 90]
+      : [88, 94, 82, 79, 91, 96, 85, 90];
     const sourceSubjects =
       Array.isArray(effectiveSubjects) && effectiveSubjects.length > 0
         ? effectiveSubjects.slice(0, 8).map((sub, idx) => {
@@ -652,7 +658,11 @@ const ReportCardDesigner = ({
               classificationSeq,
             };
           })
-        : RAW_PREVIEW_SCORES;
+        : isSimulateFail
+          ? RAW_PREVIEW_SCORES.map((s, idx) =>
+              idx === 1 ? { ...s, marksObtained: 28, status: 'FAIL' } : s
+            )
+          : RAW_PREVIEW_SCORES;
 
     const mapped = sourceSubjects.map((s) => {
       const dbSub = effectiveSubjects.find(
@@ -702,7 +712,7 @@ const ReportCardDesigner = ({
       if (seqA !== seqB) return seqA - seqB;
       return (a.subjectName || '').localeCompare(b.subjectName || '');
     });
-  }, [currentConfig.gradingScale, effectiveSubjects, classifications]);
+  }, [currentConfig.gradingScale, effectiveSubjects, classifications, currentConfig.summaryConfig?.simulateFailPreview]);
 
   const previewData = useMemo(() => {
     const groups = currentConfig.subjectGroups || [];
@@ -732,10 +742,12 @@ const ReportCardDesigner = ({
     return { sections, ungrouped };
   }, [currentConfig.subjectGroups, previewScoresWithGrades]);
 
-  const overallPreviewPct = 87.9;
+  const isSimulateFail = Boolean(currentConfig.summaryConfig?.simulateFailPreview);
+  const overallPreviewPct = isSimulateFail ? 77.1 : 87.9;
   const overallPreviewGrade = useMemo(() => {
+    if (isSimulateFail) return 'F';
     return calculateGrade(overallPreviewPct, currentConfig.gradingScale);
-  }, [currentConfig.gradingScale]);
+  }, [currentConfig.gradingScale, isSimulateFail, overallPreviewPct]);
 
   const previewChartData = useMemo(() => {
     return previewScoresWithGrades.map((s) => ({

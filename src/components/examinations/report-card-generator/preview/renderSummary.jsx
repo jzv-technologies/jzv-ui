@@ -13,6 +13,17 @@ export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, s
   const sumStyle = { ...DEFAULT_BLOCK_STYLE, ...(sum.style || {}) };
   const itemOrder = sum.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
 
+  const hasFailed = Boolean(
+    metrics.hasFailed ||
+    metrics.status === 'FAIL' ||
+    (Array.isArray(subjectScores) &&
+      subjectScores.some(
+        (s) =>
+          s.status === 'FAIL' ||
+          Number(s.marksObtained ?? s.marks_obtained) < Number(s.passMarks ?? s.pass_marks ?? 35)
+      ))
+  );
+
   const SUMMARY_VALUES = {
     showGrandTotal: {
       label: 'Grand Total',
@@ -26,20 +37,22 @@ export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, s
     },
     showGrade: {
       label: 'Overall Grade',
-      value: metrics.overallGrade || '—',
-      color: sumStyle.contentColor || '#fbbf24',
+      value: hasFailed ? 'F' : metrics.overallGrade || '—',
+      color: hasFailed ? '#dc2626' : sumStyle.contentColor || '#fbbf24',
     },
     showClassRank: {
       label: 'Class Rank',
-      value: metrics.classRank
-        ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
-        : '—',
+      value: hasFailed
+        ? ''
+        : metrics.classRank
+          ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
+          : '—',
       color: '',
     },
     showPassFail: {
       label: 'Result',
-      value: metrics.status || '—',
-      color: metrics.status === 'PASS' ? sumStyle.contentColor || '#34d399' : '#f87171',
+      value: hasFailed ? 'FAIL' : metrics.status || 'PASS',
+      color: hasFailed ? '#dc2626' : sumStyle.contentColor || '#34d399',
     },
     showTotalSubjects: {
       label: 'Total Subjects',

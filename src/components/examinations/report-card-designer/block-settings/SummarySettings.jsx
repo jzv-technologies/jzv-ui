@@ -129,6 +129,35 @@ const SummarySettings = ({ currentConfig, setCurrentConfig }) => {
           ))}
         </div>
       </div>
+
+      {/* Simulation / Testing Toggle */}
+      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+        <div>
+          <span className="text-[11px] font-black text-dark-primary block">
+            Simulate Subject Failure in Preview
+          </span>
+          <span className="text-[10px] text-dark-muted block">
+            Test how Summary Table displays when a student fails a subject (Grade F in Red &amp; blank Class Rank)
+          </span>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={!!currentConfig.summaryConfig?.simulateFailPreview}
+            onChange={(e) =>
+              setCurrentConfig((p) => ({
+                ...p,
+                summaryConfig: {
+                  ...p.summaryConfig,
+                  simulateFailPreview: e.target.checked,
+                },
+              }))
+            }
+            className="sr-only peer"
+          />
+          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-rose-600" />
+        </label>
+      </div>
     </div>
   );
 };

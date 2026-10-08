@@ -24,6 +24,37 @@ export const calculateGrade = (pct, scale = DEFAULT_GRADING_SCALE) => {
   return sorted[sorted.length - 1]?.grade || 'F';
 };
 
+/**
+ * Helper to compute display color based on grade code and optional scale
+ */
+export const getGradeColor = (grade, scale = null) => {
+  if (!grade || grade === '—' || grade === '-') return undefined;
+  const normalized = String(grade).trim().toUpperCase();
+
+  // If a scale tier explicitly defines a color, respect it
+  if (Array.isArray(scale)) {
+    const tier = scale.find((t) => String(t.grade).trim().toUpperCase() === normalized);
+    if (tier?.color) return tier.color;
+  }
+
+  // Standard grade color mapping
+  if (['A+', 'A*', 'O', 'OUTSTANDING'].includes(normalized)) return '#059669'; // Emerald-600
+  if (['A', 'EXCELLENT'].includes(normalized)) return '#10b981'; // Emerald-500
+  if (['B+', 'B', 'VERY GOOD'].includes(normalized)) return '#0284c7'; // Sky-600
+  if (['C+', 'C', 'GOOD'].includes(normalized)) return '#d97706'; // Amber-600
+  if (['D+', 'D', 'SATISFACTORY', 'PASS'].includes(normalized)) return '#ea580c'; // Orange-600
+  if (['E', 'F', 'U', 'FAIL', 'NEEDS IMPROVEMENT'].includes(normalized)) return '#dc2626'; // Red-600
+
+  // Prefix matching fallback (e.g. "A (Distinction)", "F (Fail)")
+  if (normalized.startsWith('A')) return '#059669';
+  if (normalized.startsWith('B')) return '#0284c7';
+  if (normalized.startsWith('C')) return '#d97706';
+  if (normalized.startsWith('D')) return '#ea580c';
+  if (normalized.startsWith('F') || normalized.startsWith('E') || normalized.startsWith('U')) return '#dc2626';
+
+  return undefined;
+};
+
 export const getActiveTableColumns = (tblConfig = {}) => {
   const configuredOrder =
     Array.isArray(tblConfig.columnOrder) && tblConfig.columnOrder.length > 0

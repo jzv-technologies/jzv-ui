@@ -342,6 +342,7 @@ const PreviewPanel = ({
                             currentConfig,
                             overallPreviewGrade,
                             overallPreviewPct,
+                            previewScoresWithGrades,
                           });
                         }
 

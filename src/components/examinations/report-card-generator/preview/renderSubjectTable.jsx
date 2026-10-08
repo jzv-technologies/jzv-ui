@@ -4,7 +4,7 @@ import {
   DEFAULT_TABLE_COLUMN_HEADERS,
   TABLE_COLUMN_LABELS,
 } from '../../report-card-designer/constants';
-import { getActiveTableColumns, hexToRgba } from '../utils';
+import { getActiveTableColumns, getGradeColor, hexToRgba } from '../utils';
 
 /**
  * renderSubjectTable
@@ -80,7 +80,7 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                 }
                 if (colId === 'arabicName') {
                   return (
-                    <th key={colId} className={`${cellPad} text-center font-arabic`} dir="rtl" style={{ ...tblLabelStyle, ...thBorder }}>
+                    <th key={colId} className={`${cellPad} text-right font-arabic pr-3`} dir="rtl" style={{ ...tblLabelStyle, ...thBorder }}>
                       {headerText}
                     </th>
                   );
@@ -165,7 +165,7 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                       }
                       if (colId === 'arabicName') {
                         return (
-                          <td key={colId} className={`${cellPad} text-center font-arabic font-semibold text-slate-700`} dir="rtl" style={{ ...tblValueStyle, ...tdBorder }}>
+                          <td key={colId} className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`} dir="rtl" style={{ ...tblValueStyle, ...tdBorder }}>
                             {s.arabicName || s.arabic_name || '—'}
                           </td>
                         );
@@ -238,8 +238,9 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                         );
                       }
                       if (colId === 'grade') {
+                        const gradeColor = getGradeColor(s.grade, activeTemplate?.gradingScale);
                         return (
-                          <td key={colId} className={`${cellPad} text-center font-bold`} style={{ ...tblValueStyle, color: tblSt.contentColor || '#047857', ...tdBorder }}>
+                          <td key={colId} className={`${cellPad} text-center font-bold`} style={{ ...tblValueStyle, color: gradeColor || tblSt.contentColor || '#047857', ...tdBorder }}>
                             {s.grade}
                           </td>
                         );
@@ -275,7 +276,7 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                     }
                     if (colId === 'arabicName') {
                       return (
-                        <td key={colId} className={`${cellPad} text-center font-arabic font-semibold text-slate-700`} dir="rtl" style={{ ...tblValueStyle, ...tdBorder }}>
+                        <td key={colId} className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`} dir="rtl" style={{ ...tblValueStyle, ...tdBorder }}>
                           {s.arabicName || s.arabic_name || '—'}
                         </td>
                       );
@@ -348,8 +349,9 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                       );
                     }
                     if (colId === 'grade') {
+                      const gradeColor = getGradeColor(s.grade, activeTemplate?.gradingScale);
                       return (
-                        <td key={colId} className={`${cellPad} text-center font-bold`} style={{ ...tblValueStyle, color: tblSt.contentColor || '#047857', ...tdBorder }}>
+                        <td key={colId} className={`${cellPad} text-center font-bold`} style={{ ...tblValueStyle, color: gradeColor || tblSt.contentColor || '#047857', ...tdBorder }}>
                           {s.grade}
                         </td>
                       );

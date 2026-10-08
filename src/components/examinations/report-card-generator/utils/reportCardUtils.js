@@ -1,6 +1,7 @@
 // Re-export shared utilities from report-card-designer
 export {
   calculateGrade,
+  getGradeColor,
   getActiveTableColumns,
   hexToRgba,
   getBlockBackgroundStyle,
@@ -108,7 +109,7 @@ export const buildStudentMetricsMap = (students, results, internalSubjects, acti
     });
 
     const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
-    const overallGrade = calculateGrade(percentage, scale);
+    const overallGrade = hasFailed ? 'F' : calculateGrade(percentage, scale);
     const status = hasFailed ? 'FAIL' : 'PASS';
 
     return {

@@ -25,6 +25,7 @@ import {
   DEFAULT_BLOCK_TITLES,
   renderBlockTitle,
   calculateGrade,
+  getGradeColor,
   getActiveTableColumns,
   getLabelPlacement,
   getLegendProps,
@@ -909,7 +910,7 @@ const ReportCardGenerator = ({
       });
 
       const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
-      const overallGrade = calculateGrade(overallPct, scale);
+      const overallGrade = hasFailed ? 'F' : calculateGrade(overallPct, scale);
 
       return {
         studentId: student.id,
@@ -2641,7 +2642,7 @@ const ReportCardGenerator = ({
                                           return (
                                             <th
                                               key={colId}
-                                              className={`${cellPad} text-center font-arabic`}
+                                              className={`${cellPad} text-right font-arabic pr-3`}
                                               dir="rtl"
                                               style={{ ...tblLabelStyle, ...thBorder }}
                                             >
@@ -2771,7 +2772,7 @@ const ReportCardGenerator = ({
                                                 return (
                                                   <td
                                                     key={colId}
-                                                    className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                                                    className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`}
                                                     dir="rtl"
                                                     style={{ ...tblValueStyle, ...tdBorder }}
                                                   >
@@ -2873,11 +2874,16 @@ const ReportCardGenerator = ({
                                                 );
                                               }
                                               if (colId === 'grade') {
+                                                const gradeColor = getGradeColor(s.grade, activeTemplate?.gradingScale);
                                                 return (
                                                   <td
                                                     key={colId}
-                                                    className={`${cellPad} text-center font-bold text-emerald-700`}
-                                                    style={{ ...tblValueStyle, ...tdBorder }}
+                                                    className={`${cellPad} text-center font-bold`}
+                                                    style={{
+                                                      ...tblValueStyle,
+                                                      color: gradeColor || '#047857',
+                                                      ...tdBorder,
+                                                    }}
                                                   >
                                                     {s.grade}
                                                   </td>
@@ -2942,7 +2948,7 @@ const ReportCardGenerator = ({
                                               return (
                                                 <td
                                                   key={colId}
-                                                  className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                                                  className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`}
                                                   dir="rtl"
                                                   style={{ ...tblValueStyle, ...tdBorder }}
                                                 >
@@ -3043,11 +3049,16 @@ const ReportCardGenerator = ({
                                               );
                                             }
                                             if (colId === 'grade') {
+                                              const gradeColor = getGradeColor(s.grade, activeTemplate?.gradingScale);
                                               return (
                                                 <td
                                                   key={colId}
-                                                  className={`${cellPad} text-center font-bold text-emerald-700`}
-                                                  style={{ ...tblValueStyle, ...tdBorder }}
+                                                  className={`${cellPad} text-center font-bold`}
+                                                  style={{
+                                                    ...tblValueStyle,
+                                                    color: gradeColor || '#047857',
+                                                    ...tdBorder,
+                                                  }}
                                                 >
                                                   {s.grade}
                                                 </td>
@@ -3092,6 +3103,17 @@ const ReportCardGenerator = ({
                           const itemOrder =
                             sum.itemOrder || DEFAULT_TEMPLATE.summaryConfig.itemOrder;
 
+                          const hasFailed = Boolean(
+                            metrics.hasFailed ||
+                            metrics.status === 'FAIL' ||
+                            (Array.isArray(subjectScores) &&
+                              subjectScores.some(
+                                (s) =>
+                                  s.status === 'FAIL' ||
+                                  Number(s.marksObtained ?? s.marks_obtained) < Number(s.passMarks ?? s.pass_marks ?? 35)
+                              ))
+                          );
+
                           const SUMMARY_VALUES = {
                             showGrandTotal: {
                               label: 'Grand Total',
@@ -3108,23 +3130,27 @@ const ReportCardGenerator = ({
                             },
                             showGrade: {
                               label: 'Overall Grade',
-                              value: metrics.overallGrade || '—',
-                              color: sumStyle.contentColor || '#fbbf24',
+                              value: hasFailed ? 'F' : metrics.overallGrade || '—',
+                              color: hasFailed ? '#dc2626' : sumStyle.contentColor || '#fbbf24',
                             },
                             showClassRank: {
                               label: 'Class Rank',
-                              value: metrics.classRank
-                                ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
-                                : '—',
+                              value: hasFailed
+                                ? ''
+                                : metrics.classRank
+                                  ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
+                                  : '—',
                               color: '',
                             },
                             showPassFail: {
                               label: 'Result',
-                              value: metrics.status || '—',
+                              value: hasFailed ? 'FAIL' : metrics.status || 'PASS',
                               color:
-                                metrics.status === 'PASS'
-                                  ? sumStyle.contentColor || '#34d399'
-                                  : '#f87171',
+                                hasFailed
+                                  ? '#dc2626'
+                                  : metrics.status === 'PASS'
+                                    ? sumStyle.contentColor || '#34d399'
+                                    : '#f87171',
                             },
                             showTotalSubjects: {
                               label: 'Total Subjects',

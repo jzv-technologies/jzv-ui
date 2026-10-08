@@ -4,7 +4,7 @@ import {
   DEFAULT_TABLE_COLUMN_HEADERS,
   TABLE_COLUMN_LABELS,
 } from '../constants';
-import { getActiveTableColumns, hexToRgba } from '../utils';
+import { getActiveTableColumns, getGradeColor, hexToRgba } from '../utils';
 
 /**
  * renderSubjectTablePreview
@@ -85,7 +85,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                   return (
                     <th
                       key={colId}
-                      className={`${cellPad} text-center font-arabic`}
+                      className={`${cellPad} text-right font-arabic pr-3`}
                       dir="rtl"
                       style={{ ...tblLabelStyle, ...thBorder }}
                     >
@@ -184,7 +184,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         return (
                           <td
                             key={colId}
-                            className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                            className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`}
                             dir="rtl"
                             style={{ ...tblValueStyle, ...tdBorder }}
                           >
@@ -272,13 +272,14 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                         );
                       }
                       if (colId === 'grade') {
+                        const gradeColor = getGradeColor(s.grade, currentConfig.gradingScale);
                         return (
                           <td
                             key={colId}
                             className={`${cellPad} text-center font-bold`}
                             style={{
                               ...tblValueStyle,
-                              color: tblSt.contentColor || '#047857',
+                              color: gradeColor || tblSt.contentColor || '#047857',
                               ...tdBorder,
                             }}
                           >
@@ -337,7 +338,7 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                       return (
                         <td
                           key={colId}
-                          className={`${cellPad} text-center font-arabic font-semibold text-slate-700`}
+                          className={`${cellPad} text-right font-arabic font-semibold text-slate-700 pr-3`}
                           dir="rtl"
                           style={{ ...tblValueStyle, ...tdBorder }}
                         >
@@ -425,13 +426,14 @@ export const renderSubjectTablePreview = ({ bleed, blockSize, currentConfig, pre
                       );
                     }
                     if (colId === 'grade') {
+                      const gradeColor = getGradeColor(s.grade, currentConfig.gradingScale);
                       return (
                         <td
                           key={colId}
                           className={`${cellPad} text-center font-bold`}
                           style={{
                             ...tblValueStyle,
-                            color: tblSt.contentColor || '#047857',
+                            color: gradeColor || tblSt.contentColor || '#047857',
                             ...tdBorder,
                           }}
                         >

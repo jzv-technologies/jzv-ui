@@ -1,4 +1,5 @@
 import React from 'react';
+import { getGradeColor } from '../utils';
 
 /**
  * GradingTab
@@ -86,13 +87,22 @@ const GradingTab = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-light-border font-medium">
-            {currentConfig.gradingScale.map((tier, idx) => (
-              <tr key={tier.grade + idx} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-3 px-4">
-                  <span className="inline-flex items-center justify-center min-w-[32px] px-2.5 py-0.5 rounded-lg text-xs font-black bg-rose-50 text-rose-700 border border-rose-200">
-                    {tier.grade}
-                  </span>
-                </td>
+            {currentConfig.gradingScale.map((tier, idx) => {
+              const tierColor = tier.color || getGradeColor(tier.grade, currentConfig.gradingScale) || '#059669';
+              return (
+                <tr key={tier.grade + idx} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3 px-4">
+                    <span
+                      className="inline-flex items-center justify-center min-w-[32px] px-2.5 py-0.5 rounded-lg text-xs font-black shadow-2xs border"
+                      style={{
+                        color: tierColor,
+                        backgroundColor: `${tierColor}15`,
+                        borderColor: `${tierColor}40`,
+                      }}
+                    >
+                      {tier.grade}
+                    </span>
+                  </td>
                 <td className="py-3 px-4 font-mono font-bold text-dark-primary">
                   {tier.minPercentage}% - {tier.maxPercentage}%
                 </td>
@@ -121,7 +131,8 @@ const GradingTab = ({
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>

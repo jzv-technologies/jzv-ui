@@ -10,7 +10,7 @@ export const getStudentPhotoUrl = (photoId) => {
   if (!photoId) return null;
   const trimmed = String(photoId).trim();
   if (!trimmed) return null;
-  const filename = /\.(jpe?g|png|webp)$/i.test(trimmed) ? trimmed : `${trimmed}.JPG`;
+  const filename = /\.(jpe?g|png|webp)$/i.test(trimmed) ? trimmed : `${trimmed}.jpg`;
   return `https://yefnykdexpnttwhxoibl.supabase.co/storage/v1/object/public/students_photo/2026-27/${filename}`;
 };
 
@@ -119,9 +119,7 @@ const StudentAvatar = ({
           <span
             className="tracking-wider font-extrabold select-none"
             style={{
-              fontSize: customPx
-                ? `${Math.max(12, Math.round(customPx * 0.28))}px`
-                : undefined,
+              fontSize: customPx ? `${Math.max(12, Math.round(customPx * 0.28))}px` : undefined,
             }}
           >
             {getInitials(studentName)}
@@ -129,9 +127,7 @@ const StudentAvatar = ({
           <i
             className="fas fa-graduation-cap opacity-75 mt-0.5"
             style={{
-              fontSize: customPx
-                ? `${Math.max(8, Math.round(customPx * 0.15))}px`
-                : '10px',
+              fontSize: customPx ? `${Math.max(8, Math.round(customPx * 0.15))}px` : '10px',
             }}
           />
         </div>
@@ -244,20 +240,36 @@ const RankHolderBar = ({
             ? '15px'
             : '13px';
 
-  const effectiveNameColor =
-    cfgNameColor ||
-    style?.contentColor ||
-    style?.labelColor ||
-    '#0f172a';
+  const effectiveNameColor = cfgNameColor || style?.contentColor || style?.labelColor || '#0f172a';
 
   // Dynamic width constraints matching items per row & size modes
   const maxBarWidth = isCompact
-    ? perRow <= 2 ? 160 : perRow === 3 ? 150 : perRow === 4 ? 135 : 110
+    ? perRow <= 2
+      ? 160
+      : perRow === 3
+        ? 150
+        : perRow === 4
+          ? 135
+          : 110
     : isLarge
-      ? perRow <= 2 ? 240 : perRow === 3 ? 220 : perRow === 4 ? 195 : 155
-      : perRow <= 2 ? 190 : perRow === 3 ? 180 : perRow === 4 ? 165 : perRow === 5 ? 145 : 125;
+      ? perRow <= 2
+        ? 240
+        : perRow === 3
+          ? 220
+          : perRow === 4
+            ? 195
+            : 155
+      : perRow <= 2
+        ? 190
+        : perRow === 3
+          ? 180
+          : perRow === 4
+            ? 165
+            : perRow === 5
+              ? 145
+              : 125;
 
-  const minBarWidth = isCompact ? 65 : isLarge ? 100 : (perRow >= 5 ? 75 : 85);
+  const minBarWidth = isCompact ? 65 : isLarge ? 100 : perRow >= 5 ? 75 : 85;
 
   return (
     <div
@@ -316,7 +328,11 @@ const RankHolderBar = ({
         {/* Bottom White Card Section with Rank Position */}
         <div
           className={`w-full bg-white mt-auto text-center border-t border-slate-100 flex flex-col items-center justify-center relative shadow-xs ${
-            isCompact ? 'pt-1.5 pb-1 px-0.5' : isLarge ? 'pt-3 pb-3 px-2' : 'pt-2 sm:pt-2.5 pb-2 px-1'
+            isCompact
+              ? 'pt-1.5 pb-1 px-0.5'
+              : isLarge
+                ? 'pt-3 pb-3 px-2'
+                : 'pt-2 sm:pt-2.5 pb-2 px-1'
           }`}
         >
           {showRank && (
@@ -414,9 +430,7 @@ const ClassNameHorizontalBadge = ({
       }`}
     >
       <i className="fas fa-graduation-cap text-amber-400 text-xs" />
-      <span className="font-black text-amber-400 tracking-wider uppercase">
-        {classNameText}
-      </span>
+      <span className="font-black text-amber-400 tracking-wider uppercase">{classNameText}</span>
     </div>
   );
 };
@@ -605,9 +619,7 @@ export const RankHolders = ({
 
         return (
           <div key={groupIdx} className="w-full flex flex-col gap-2.5">
-            {groupIdx > 0 && (
-              <div className="w-full border-t border-slate-200/80 my-3 pt-1" />
-            )}
+            {groupIdx > 0 && <div className="w-full border-t border-slate-200/80 my-3 pt-1" />}
 
             {/* Top Class Name Badge */}
             {isTopBadge && (
@@ -647,7 +659,7 @@ export const RankHolders = ({
                   >
                     {rowItems.map((student, idx) => {
                       const rankNum = Number(
-                        student.classRank || student.rank || (rIdx * perRow + idx + 1)
+                        student.classRank || student.rank || rIdx * perRow + idx + 1
                       );
                       return (
                         <RankHolderBar
@@ -701,4 +713,3 @@ export const RankHolders = ({
 };
 
 export default RankHolders;
-
