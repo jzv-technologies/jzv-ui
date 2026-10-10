@@ -1,12 +1,27 @@
 import React from 'react';
 import { DEFAULT_BLOCK_STYLE, DEFAULT_TEMPLATE } from '../../report-card-designer/constants';
+import { hasStudentFailed, getClassRankDisplay, calculateClassRanks, filterPassedStudents } from '../../../../utils/ranking';
+
+/**
+ * Calculate class ranks from metrics objects (excludes failed students)
+ * @param {Object} allStudentsMetrics - Map of studentId to metrics
+ * @returns {Object} - Rank map
+ */
+const calculateClassRanksFromMetrics = (allStudentsMetrics) => {
+  if (!allStudentsMetrics || typeof allStudentsMetrics !== 'object') return {};
+  
+  const studentsArray = Object.values(allStudentsMetrics);
+  // Filter out failed students before calculating ranks
+  const passedStudents = filterPassedStudents(studentsArray);
+  return calculateClassRanks(passedStudents);
+};
 
 /**
  * renderSummary
  * Print renderer for the summary calculations block.
  * Extracted from the original ReportCardGenerator.jsx
  */
-export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, summaryPrint }) => {
+export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, summaryPrint, student, allStudentsMetrics }) => {
   if (!activeTemplate.showSummaryCalculations) return null;
   const sum = activeTemplate.summaryConfig || {};
   const isCompact = sum.size === 'compact';
@@ -23,6 +38,23 @@ export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, s
           Number(s.marksObtained ?? s.marks_obtained) < Number(s.passMarks ?? s.pass_marks ?? 35)
       ))
   );
+
+  // Calculate class rank display using new utility (excludes failed students). When no cohort
+  // map is supplied (the usual case) fall back to the rank already computed on the metrics,
+  // otherwise every passing student would print '—'.
+  const cohortRankMap = allStudentsMetrics
+    ? calculateClassRanksFromMetrics(allStudentsMetrics)
+    : null;
+  const classRankDisplay = hasFailed
+    ? ''
+    : (cohortRankMap &&
+        getClassRankDisplay(
+          { ...metrics, studentId: metrics.studentId, hasFailed },
+          cohortRankMap
+        )) ||
+      (metrics.classRank
+        ? `#${metrics.classRank}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
+        : '');
 
   const SUMMARY_VALUES = {
     showGrandTotal: {
@@ -42,11 +74,7 @@ export const renderSummary = ({ bleed, activeTemplate, metrics, subjectScores, s
     },
     showClassRank: {
       label: 'Class Rank',
-      value: hasFailed
-        ? ''
-        : metrics.classRank
-          ? `${metrics.classRank ? `#${metrics.classRank}` : ''}${metrics.totalStudents ? ` / ${metrics.totalStudents}` : ''}`
-          : '—',
+      value: classRankDisplay || '—',
       color: '',
     },
     showPassFail: {

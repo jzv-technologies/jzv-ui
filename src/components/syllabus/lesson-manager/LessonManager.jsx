@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase, fetchAllPages } from '../../../utils/supabase';
 import { showToast } from '../../../utils/toast';
 import { getNonTeachingEventForDate } from '../../../utils/academicEventsUtils';
+import { registerModuleCache } from '../../../utils/moduleCacheRegistry';
 
 import SyllabusTreePanel from './SyllabusTreePanel';
 import TimelinePanel from './TimelinePanel';
@@ -34,7 +35,25 @@ let lessonManagerCache = {
   selectedBookId: '',
   selectedLessonIds: new Set(),
   showAllClasses: false, // New toggle state
+
+  // When the cached data above was captured, so a long-lived session cannot serve it forever
+  cachedAt: 0,
 };
+
+// How long the cached data may be reused before the next mount re-reads it. Timetable changes
+// also invalidate the cache explicitly (see invalidateLessonManagerCache below).
+const CACHE_TTL_MS = 60 * 1000;
+
+// The teacher -> class filter is built from class_assignments, which the timetable rewrites.
+// Drop the cached copy (and trip the fetchAll cache guard) so the next mount re-reads it.
+// Selections are deliberately kept so the user's dropdowns are preserved.
+const invalidateLessonManagerCache = () => {
+  lessonManagerCache.classes = [];
+  lessonManagerCache.bookClasses = [];
+  lessonManagerCache.assignments = [];
+};
+
+registerModuleCache('lesson-manager', invalidateLessonManagerCache);
 
 const LessonManager = ({
   user,
@@ -268,7 +287,8 @@ const LessonManager = ({
       if (
         lessonManagerCache.userId === user.id &&
         lessonManagerCache.classes.length > 0 &&
-        lessonManagerCache.bookClasses.length > 0
+        lessonManagerCache.bookClasses.length > 0 &&
+        Date.now() - lessonManagerCache.cachedAt < CACHE_TTL_MS
       ) {
         setClasses(lessonManagerCache.classes);
         setSubjects(lessonManagerCache.subjects);
@@ -396,6 +416,7 @@ const LessonManager = ({
         lessonManagerCache = {
           ...lessonManagerCache,
           userId: user.id,
+          cachedAt: Date.now(),
           classes: dbClasses || [],
           subjects: dbSubjects || [],
           assignments: dbAssignments || [],

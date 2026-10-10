@@ -1390,6 +1390,7 @@ const TimetableAdminView = ({
   seasonsConfig = null, // seasons configuration
   user = null,
   showMyTimetable = false,
+  onActiveViewChange = null, // reports the active subview (used to scope print output)
 }) => {
   const filteredViews = allowedViews;
   const defaultView = filteredViews[0] || 'scheduler';
@@ -1534,6 +1535,32 @@ const TimetableAdminView = ({
     }
   }, [viewType, classes, teachers, lockedClassId, selectedClassId, selectedTeacherId, myTeacher]);
 
+  // Report the active subview so printing follows whatever the user is looking at.
+  React.useEffect(() => {
+    if (!onActiveViewChange) return;
+    const viewLabel = (viewOptionsMap[viewType] || viewOptionsMap.scheduler).label;
+    let entityName = null;
+    if (viewType === 'teacher') {
+      entityName = teachers.find((t) => String(t.id) === String(selectedTeacherId))?.name || null;
+    } else if (viewType === 'scheduler' || viewType === 'class') {
+      entityName = classes.find((c) => String(c.id) === String(selectedClassId))?.name || null;
+    }
+    onActiveViewChange({
+      viewType,
+      classId: selectedClassId ? String(selectedClassId) : null,
+      teacherId: selectedTeacherId ? String(selectedTeacherId) : null,
+      viewLabel,
+      entityName,
+    });
+  }, [
+    onActiveViewChange,
+    viewType,
+    selectedClassId,
+    selectedTeacherId,
+    classes,
+    teachers,
+  ]);
+
   const isSchedulerView = viewType === 'scheduler';
   const isGridView = viewType === 'class' || viewType === 'teacher';
   const isOverviewView = !isGridView && !isSchedulerView;
@@ -1596,6 +1623,12 @@ const TimetableAdminView = ({
     viewType === 'class' || viewType === 'scheduler'
       ? getClassName(selectedId)
       : getTeacherName(selectedId);
+
+  // Only class/teacher subviews are scoped to one entity; the pending/free views are not.
+  const printEntityName =
+    viewType === 'scheduler' || viewType === 'class' || viewType === 'teacher'
+      ? selectedEntityName
+      : null;
 
   const handleExportCSV = () => {
     let headers = [];
@@ -1974,7 +2007,10 @@ const TimetableAdminView = ({
     selAssignedClasses.length > 0;
 
   return (
-    <div className="w-full bg-light-lbg/50 border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none">
+    <div
+      className="w-full bg-light-lbg/50 border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none"
+      data-print-target="active"
+    >
       {/* ── Header ── */}
       <div className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5">
         {/* MOBILE / TABLET VIEW (< lg): 2-Column equal 50/50 split row for View Dropdown + Filter */}
@@ -2428,7 +2464,7 @@ const TimetableAdminView = ({
         <h3 className="text-lg font-bold text-gray-800">
           {myTab === 'my'
             ? `My Timetable — ${myTeacher?.name || ''}`
-            : `Weekly Timetable — ${viewType === 'class' ? 'Class' : 'Teacher'}: ${selectedEntityName}`}
+            : `Weekly Timetable — ${viewObj.label}${printEntityName ? `: ${printEntityName}` : ''}`}
         </h3>
         <p className="text-xs text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
       </div>

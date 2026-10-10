@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
+import { useTimetableDraftMode } from './timetableDraftContext';
 
 const STATUS_CONFIG = {
   active: {
@@ -32,6 +33,16 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
   const [classSubjects, setClassSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Draft mode must never mutate live class_subjects rows.
+  const isDraftMode = useTimetableDraftMode();
+
+  const blockIfDraft = () => {
+    if (isDraftMode) {
+      showToast('Class subjects cannot be changed while a draft is loaded', 'info');
+      return true;
+    }
+    return false;
+  };
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Add subject form
@@ -94,6 +105,7 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
 
   const handleAddSubject = async (e) => {
     e.preventDefault();
+    if (blockIfDraft()) return;
     if (!addSubjectId) return;
     setSaving(true);
     try {
@@ -118,6 +130,7 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
   };
 
   const handleStatusChange = async (id, newStatus) => {
+    if (blockIfDraft()) return;
     setStatusChangingId(id);
     try {
       const { error } = await supabase
@@ -137,6 +150,7 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
   };
 
   const handleRemove = async (cs) => {
+    if (blockIfDraft()) return;
     const subName = subjects.find((s) => String(s.id) === String(cs.subject_id))?.name || 'Subject';
     if (!window.confirm(`Remove "${subName}" from ${className}? This won't affect the timetable.`))
       return;
@@ -152,6 +166,7 @@ const ClassSubjectsManager = ({ classId, className, subjects = [], classificatio
 
   // Auto-populate from class_assignments
   const handleAutoPopulate = async () => {
+    if (blockIfDraft()) return;
     setSaving(true);
     try {
       const { data: assignments, error } = await supabase

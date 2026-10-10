@@ -4,11 +4,27 @@ import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
 import TimetableAdminView from './TimetableAdminView';
+import PrintWorkspace from './PrintWorkspace';
+import NewDraftNameModal from './NewDraftNameModal';
+import { TimetableDraftModeContext } from './timetableDraftContext';
+import { usePrintSettings } from '../../hooks/usePrintSettings';
 import ConfirmModal from '../ConfirmModal';
 import TimetableCompareModal from './TimetableCompareModal';
 import { TimetableTools } from './TimetableTools';
+import DraftManager from './DraftManager';
 
 import { TeachersSetup, ClassesSetup, PeriodsSetup, generateLocalId } from './TimetableSetupTabs';
+import { createDraft, updateDraft, getFilteredDrafts } from '../../services/timetableDraftService';
+import { invalidateModuleCaches } from '../../utils/moduleCacheRegistry';
+import {
+  isRealId,
+  dedupeSlots,
+  findMissingReferences,
+  describeMissingReferences,
+  replaceLiveSlots,
+  replaceTeacherSubjects,
+  reconcileClassAssignments,
+} from '../../utils/timetablePublishSafety';
 import {
   TIMETABLE_STORAGE_KEY,
   MOCK_SUBJECTS as DEFAULT_MOCK_SUBJECTS,
@@ -128,7 +144,13 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         label: 'Switch Teacher',
         icon: 'fa-exchange-alt',
       },
-    ],
+            {
+              id: 'drafts',
+              componentName: 'timetable-drafts',
+              label: 'Draft Versions',
+              icon: 'fa-file-alt',
+            },
+          ],
     []
   );
 
@@ -172,6 +194,72 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const [error, setError] = useState('');
   const [dbSetupInstructionOpen, setDbSetupInstructionOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
+
+  // Live / Draft mode
+  const [dataMode, setDataMode] = useState('live');
+  const [activeDraft, setActiveDraft] = useState(null);
+  const [draftList, setDraftList] = useState([]);
+  const [isDraftListLoading, setIsDraftListLoading] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  // Snapshot of live data taken when a draft is opened, so leaving draft mode restores live.
+  const liveSnapshotRef = React.useRef(null);
+
+  const isDraftMode = dataMode === 'draft' && !!activeDraft;
+  // Draft view protects live data even before a specific draft is picked, so live writes are
+  // only ever enabled in Live mode.
+  const canWriteLive = isSupabaseMode && dataMode === 'live';
+
+  const {
+    settings: printSettings,
+    updateSettings: updatePrintSettings,
+    resetSettings: resetPrintSettings,
+    isPrintOpen,
+    openPrint,
+    closePrint,
+    triggerPrint,
+  } = usePrintSettings();
+
+  // Active subview in the timetable views; print output follows it.
+  const [activeView, setActiveView] = useState({
+    viewType: 'scheduler',
+    classId: null,
+    teacherId: null,
+    viewLabel: 'Class View',
+    entityName: null,
+  });
+  const [draftHighlightId, setDraftHighlightId] = useState(null);
+  // Naming prompt used when a draft is created from live data.
+  const [newDraftRequest, setNewDraftRequest] = useState(null);
+
+  // Stable so TimetableAdminView's reporting effect does not loop.
+  const handleActiveViewChange = React.useCallback((ctx) => {
+    setActiveView((prev) =>
+      prev.viewType === ctx.viewType &&
+      prev.classId === ctx.classId &&
+      prev.teacherId === ctx.teacherId &&
+      prev.entityName === ctx.entityName
+        ? prev
+        : ctx
+    );
+  }, []);
+
+  const refreshDraftList = React.useCallback(async () => {
+    setIsDraftListLoading(true);
+    try {
+      const loaded = await getFilteredDrafts({ status: [], search: '', sortBy: 'updatedAt', sortOrder: 'desc' });
+      setDraftList(loaded);
+      return loaded;
+    } catch (err) {
+      console.error('Failed to load drafts:', err);
+      return [];
+    } finally {
+      setIsDraftListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'drafts') refreshDraftList();
+  }, [activeTab, refreshDraftList]);
 
   // JSON Import trigger
   const fileInputRef = React.useRef(null);
@@ -414,7 +502,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     loadData();
   }, []);
 
-  // Sync state helper
+  // Sync state helper. In draft mode writes land on the draft only; live data is reached
+  // exclusively through publishDraftToLive().
   const saveState = async (updates) => {
     const nextClassifications =
       updates.classifications !== undefined ? updates.classifications : classifications;
@@ -424,6 +513,71 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     const nextPeriods = updates.periods !== undefined ? updates.periods : periods;
     const nextAssignments = updates.assignments !== undefined ? updates.assignments : assignments;
     const nextSlots = updates.slots !== undefined ? updates.slots : slots;
+
+    // Draft mode: update only the draft (state + stored draft JSON). Live storage and the
+    // live Supabase tables are deliberately left untouched.
+    if (isDraftMode) {
+      if (updates.classifications !== undefined) setClassifications(updates.classifications);
+      if (updates.subjects !== undefined) setSubjects(updates.subjects);
+      if (updates.teachers !== undefined) setTeachers(updates.teachers);
+      if (updates.classes !== undefined) setClasses(updates.classes);
+      if (updates.periods !== undefined) setPeriods(updates.periods);
+      if (updates.assignments !== undefined) setAssignments(updates.assignments);
+      if (updates.slots !== undefined) setSlots(updates.slots);
+
+      let nextSeasonsConfig = seasonsConfig;
+      const baseSeasonsConfig =
+        updates.seasonsConfig !== undefined ? updates.seasonsConfig : seasonsConfig;
+      if (baseSeasonsConfig) {
+        const activeId = baseSeasonsConfig.active_season_id || 'summer';
+        nextSeasonsConfig = {
+          ...baseSeasonsConfig,
+          seasons: {
+            ...baseSeasonsConfig.seasons,
+            [activeId]: {
+              ...baseSeasonsConfig.seasons[activeId],
+              periods: nextPeriods,
+              slots: nextSlots,
+            },
+          },
+        };
+        setSeasonsConfig(nextSeasonsConfig);
+      }
+
+      const nextDraftData = {
+        classifications: nextClassifications,
+        subjects: nextSubjects,
+        teachers: nextTeachers,
+        classes: nextClasses,
+        periods: nextPeriods,
+        assignments: nextAssignments,
+        slots: nextSlots,
+        seasonsConfig: nextSeasonsConfig,
+      };
+      setActiveDraft((prev) => (prev ? { ...prev, data: nextDraftData } : prev));
+      setIsSavingDraft(true);
+      try {
+        await updateDraft(activeDraft.id, { data: nextDraftData });
+      } catch (err) {
+        console.error('Failed to save draft:', err);
+        showToast('Failed to save draft: ' + err.message, 'error');
+      } finally {
+        setIsSavingDraft(false);
+      }
+      return;
+    }
+
+    // Live mode only beyond this point: draft view must never write live storage or tables.
+    if (dataMode !== 'live') {
+      if (updates.classifications !== undefined) setClassifications(updates.classifications);
+      if (updates.subjects !== undefined) setSubjects(updates.subjects);
+      if (updates.teachers !== undefined) setTeachers(updates.teachers);
+      if (updates.classes !== undefined) setClasses(updates.classes);
+      if (updates.periods !== undefined) setPeriods(updates.periods);
+      if (updates.assignments !== undefined) setAssignments(updates.assignments);
+      if (updates.slots !== undefined) setSlots(updates.slots);
+      return;
+    }
 
     // Local Storage sync (always update local storage as redundant copy)
     const localState = {
@@ -455,7 +609,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(updatedConfig));
 
       // Sync seasonsConfig with DB in background/async
-      if (isSupabaseMode) {
+      if (canWriteLive) {
         supabase
           .from('admin_configruation')
           .upsert(
@@ -479,7 +633,278 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     if (updates.periods !== undefined) setPeriods(updates.periods);
     if (updates.assignments !== undefined) setAssignments(updates.assignments);
     if (updates.slots !== undefined) setSlots(updates.slots);
+
+    // Slots and assignments feed class_assignments, which other screens cache outside React.
+    // Drop those caches so they re-read on their next mount instead of showing the old mapping.
+    if (updates.slots !== undefined || updates.assignments !== undefined) {
+      invalidateModuleCaches();
+    }
   };
+
+  // ── LIVE / DRAFT MODE ACTIONS ───────────────────────────────────────────────
+
+  const takeLiveSnapshot = () => ({
+    classifications,
+    subjects,
+    teachers,
+    classes,
+    periods,
+    assignments,
+    slots,
+    seasonsConfig,
+  });
+
+  const applyDataToState = (data) => {
+    setClassifications(data.classifications || []);
+    setSubjects(data.subjects || []);
+    setTeachers(data.teachers || []);
+    setClasses(data.classes || []);
+    setPeriods(data.periods || []);
+    setAssignments(data.assignments || []);
+    setSlots(data.slots || []);
+    setSeasonsConfig(data.seasonsConfig || seasonsConfig);
+  };
+
+  // Load a draft's JSON into every Scheduler Setup tab without touching live data.
+  const handleLoadDraft = async (draftId) => {
+    if (!draftId) return;
+    // Always refetch so the latest saved draft JSON is loaded, not a stale list entry.
+    const available = await refreshDraftList();
+    const draft = available.find((d) => d.id === draftId) || draftList.find((d) => d.id === draftId);
+    if (!draft || !draft.data) {
+      showToast('Draft has no saved data to load', 'error');
+      return;
+    }
+    if (dataMode !== 'draft') liveSnapshotRef.current = takeLiveSnapshot();
+    setDataMode('draft');
+    setActiveDraft(draft);
+    applyDataToState(draft.data);
+    showToast(`Loaded draft "${draft.name}"`, 'success');
+  };
+
+  // Return to live data, discarding any draft-only edits.
+  const handleSwitchToLive = () => {
+    if (liveSnapshotRef.current) {
+      applyDataToState(liveSnapshotRef.current);
+      liveSnapshotRef.current = null;
+    }
+    setActiveDraft(null);
+    setDataMode('live');
+    showToast('Switched back to live timetable', 'info');
+  };
+
+  // Open a saved draft directly in Scheduler Setup for editing.
+  const handleEditDraft = (draft) => {
+    if (!draft?.data) {
+      showToast('Draft has no saved data to load', 'error');
+      return;
+    }
+    if (dataMode !== 'draft') liveSnapshotRef.current = takeLiveSnapshot();
+    setDataMode('draft');
+    setActiveDraft(draft);
+    applyDataToState(draft.data);
+    setActiveTab('scheduler');
+    setDraftHighlightId(null);
+    showToast(`Loaded draft "${draft.name}" — live data untouched`, 'success');
+  };
+
+  const handleOpenDraftMode = async () => {
+    if (dataMode === 'draft') return;
+    liveSnapshotRef.current = takeLiveSnapshot();
+    setDataMode('draft');
+    await refreshDraftList();
+  };
+
+  // Reload whatever dataset the user is currently working on (draft mode reloads the draft).
+  const reloadActiveData = async () => {
+    if (isDraftMode && activeDraft) {
+      const fresh = await refreshDraftList();
+      const match = fresh.find((d) => d.id === activeDraft.id);
+      if (match?.data) {
+        setActiveDraft(match);
+        applyDataToState(match.data);
+      }
+      return;
+    }
+    await loadData();
+  };
+
+  // Push a draft's timetable data into the live Supabase tables. Only slot/assignment/season
+  // data is replaced: master data (classes, employees, subjects) is shared with live and is
+  // never deleted, so student records and foreign keys stay intact.
+  const publishDraftToLive = async (data) => {
+    if (!data) throw new Error('No draft data to publish');
+
+    if (!isSupabaseMode) {
+      localStorage.setItem(
+        TIMETABLE_STORAGE_KEY,
+        JSON.stringify({
+          classifications: data.classifications || [],
+          subjects: data.subjects || [],
+          teachers: data.teachers || [],
+          classes: data.classes || [],
+          periods: data.periods || [],
+          assignments: data.assignments || [],
+          slots: data.slots || [],
+        })
+      );
+      if (data.seasonsConfig) {
+        localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(data.seasonsConfig));
+      }
+      return;
+    }
+
+    // Pre-flight. Every condition that could make the write below fail is checked first, because
+    // the slot replace is delete-then-insert: a failure after the delete would leave the live
+    // timetable empty. Nothing has been written yet at this point.
+    const slotsToInsert = dedupeSlots(
+      (data.slots || [])
+        .filter((s) => isRealId(s.class_id) && isRealId(s.period_id) && s.day)
+        .map((s) => ({
+          class_id: s.class_id,
+          day: s.day,
+          period_id: s.period_id,
+          subject_id: isRealId(s.subject_id) ? s.subject_id : null,
+          teacher_id: isRealId(s.teacher_id) ? s.teacher_id : null,
+        }))
+    );
+
+    if (slotsToInsert.length === 0) {
+      throw new Error(
+        'this draft contains no slots, so publishing it would empty the live timetable. Nothing was changed.'
+      );
+    }
+
+    const [classRes, subjectRes, periodRes, employeeRes, liveSlotRes, liveAssignRes] =
+      await Promise.all([
+        supabase.from('classes').select('id'),
+        supabase.from('syl_subjects').select('id'),
+        supabase.from('periods').select('id'),
+        supabase.from('employees').select('id'),
+        supabase.from('timetable_slots').select('*'),
+        supabase.from('class_assignments').select('id, class_id, teacher_id, subject_id'),
+      ]);
+    const readError = [classRes, subjectRes, periodRes, employeeRes, liveSlotRes, liveAssignRes].find(
+      (r) => r.error
+    );
+    if (readError) throw new Error(`could not read current data - ${readError.error.message}`);
+
+    const missingSummary = describeMissingReferences(
+      findMissingReferences({
+        existing: {
+          class: (classRes.data || []).map((r) => r.id),
+          subject: (subjectRes.data || []).map((r) => r.id),
+          period: (periodRes.data || []).map((r) => r.id),
+          teacher: (employeeRes.data || []).map((r) => r.id),
+        },
+        slots: slotsToInsert,
+        assignments: data.assignments || [],
+      })
+    );
+    if (missingSummary) {
+      throw new Error(
+        `the draft references records that no longer exist - ${missingSummary}. Nothing was changed.`
+      );
+    }
+
+    // 1. Replace timetable slots. The previous rows were read above so a failed insert can be
+    //    rolled back instead of leaving an empty timetable.
+    await replaceLiveSlots({ client: supabase, slotRows: slotsToInsert, previousRows: liveSlotRes.data });
+
+    // 2. Reconcile class_assignments. The trigger derives a row for every triple the new slots
+    //    imply but cannot create the mappings declared without slots, so the intended set is
+    //    ensured additively. Only rows the superseded timetable implied and the draft no longer
+    //    does are deleted, so a stale draft can never drop a hand-declared mapping.
+    const { idsToDelete, rowsToEnsure } = reconcileClassAssignments({
+      liveAssignments: liveAssignRes.data || [],
+      slots: slotsToInsert,
+      declaredAssignments: data.assignments || [],
+      previousSlots: liveSlotRes.data || [],
+    });
+
+    if (idsToDelete.length > 0) {
+      const { error } = await supabase.from('class_assignments').delete().in('id', idsToDelete);
+      if (error) throw new Error(`class_assignments - ${error.message}`);
+    }
+
+    // Mostly a no-op because the trigger just derived these, but this also adds mappings declared
+    // without slots and keeps publish correct on a database where the trigger is absent.
+    if (rowsToEnsure.length > 0) {
+      const { error } = await supabase
+        .from('class_assignments')
+        .upsert(rowsToEnsure, {
+          onConflict: 'class_id,teacher_id,subject_id',
+          ignoreDuplicates: true,
+        });
+      if (error) throw new Error(`class_assignments - ${error.message}`);
+    }
+
+    // 3. Persist the season configuration
+    if (data.seasonsConfig) {
+      const { error } = await supabase
+        .from('admin_configruation')
+        .upsert(
+          { key: 'timetable_seasons_config', val: data.seasonsConfig },
+          { onConflict: 'key' }
+        );
+      if (error) throw error;
+      setSeasonsConfig(data.seasonsConfig);
+    }
+
+    // The live tables just changed wholesale, so screens holding a cached copy of the
+    // teacher/class mapping must re-read it.
+    invalidateModuleCaches();
+  };
+
+  const handlePublishDraftToLive = async (liveData, { isRollback = false } = {}) => {
+    try {
+      await publishDraftToLive(liveData);
+      setActiveDraft(null);
+      setDataMode('live');
+      liveSnapshotRef.current = null;
+      setDraftHighlightId(null);
+      await loadData();
+      showToast(
+        isRollback ? 'Live timetable rolled back' : 'Draft published to live timetable',
+        'success'
+      );
+    } catch (err) {
+      // Rethrown, not swallowed: the caller only marks the draft published once this resolves, so a
+      // refused write must not be recorded as a live version. The caller reports it to the user.
+      throw new Error(`${isRollback ? 'Rollback' : 'Publish'} failed: ${err.message}`);
+    }
+  };
+
+  // Create a new draft from the current live data.
+  // Ask for a version name before snapshotting live data into a new draft.
+  const handleCreateDraftFromLive = () => {
+    setNewDraftRequest({
+      name: `Draft ${new Date().toLocaleString()}`,
+      description: '',
+    });
+  };
+
+  const confirmCreateDraftFromLive = async (name, description) => {
+    try {
+      const snapshot = liveSnapshotRef.current || takeLiveSnapshot();
+      const created = await createDraft({
+        name: name?.trim() || `Draft ${new Date().toLocaleString()}`,
+        description: (description || '').trim(),
+        data: snapshot,
+      });
+      await refreshDraftList();
+      setActiveDraft(created);
+      setDataMode('draft');
+      applyDataToState(created.data || snapshot);
+      setNewDraftRequest(null);
+      showToast(`Draft "${created.name}" created from live data`, 'success');
+      return created;
+    } catch (err) {
+      showToast('Failed to create draft: ' + err.message, 'error');
+      return null;
+    }
+  };
+
 
   // TEACHER ACTION HANDLERS
   const handleAddTeacher = async (name, qualifiedSubjects, isMale = true) => {
@@ -492,7 +917,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     };
     let updatedTeachers = [...teachers, newTeacher];
 
-    if (isSupabaseMode) {
+    if (canWriteLive) {
       try {
         // 1. Insert into teachers
         const { data: teacherData, error: teacherErr } = await supabase
@@ -552,7 +977,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       return s;
     });
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         // 1. Update teachers table
         const { error: teacherErr } = await supabase
@@ -623,7 +1048,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     let dbDeleted = true;
     let dbErrDetail = null;
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         await supabase.from('class_assignments').delete().eq('teacher_id', id);
         await supabase.from('timetable_slots').update({ teacher_id: null }).eq('teacher_id', id);
@@ -675,7 +1100,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       String(t.id) === String(id) ? { ...t, is_active: nextActive } : t
     );
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         const { error } = await supabase
           .from('employees')
@@ -699,7 +1124,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     const newClass = { id: generateLocalId(), name };
     let updatedClasses = [...classes, newClass];
 
-    if (isSupabaseMode) {
+    if (canWriteLive) {
       try {
         const { data, error } = await supabase.from('classes').insert([{ name }]).select();
         if (error) throw error;
@@ -715,7 +1140,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const handleUpdateClass = async (id, name) => {
     const updatedClasses = classes.map((c) => (String(c.id) === String(id) ? { ...c, name } : c));
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         const { error } = await supabase.from('classes').update({ name }).eq('id', id);
         if (error) throw error;
@@ -732,7 +1157,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     const updatedAssignments = assignments.filter((a) => String(a.class_id) !== String(id));
     const updatedSlots = slots.filter((s) => String(s.class_id) !== String(id));
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         await supabase.from('classes').delete().eq('id', id);
       } catch (err) {
@@ -766,7 +1191,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     let updatedAssignments = [...assignments, newAss];
 
     if (
-      isSupabaseMode &&
+      canWriteLive &&
       !classId.toString().startsWith('local-') &&
       !teacherId.toString().startsWith('local-') &&
       !subjectId.toString().startsWith('local-')
@@ -803,7 +1228,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       return s;
     });
 
-    if (isSupabaseMode && !id.toString().startsWith('local-')) {
+    if (canWriteLive && !id.toString().startsWith('local-')) {
       try {
         await supabase.from('class_assignments').delete().eq('id', id);
       } catch (err) {
@@ -834,7 +1259,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       return s;
     });
 
-    if (isSupabaseMode) {
+    if (canWriteLive) {
       const dbIds = idsToRemove.filter((id) => !id.toString().startsWith('local-'));
       if (dbIds.length > 0) {
         try {
@@ -904,7 +1329,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       });
 
       // Database sync for qualifications
-      if (isSupabaseMode) {
+      if (canWriteLive) {
         if (newQualificationsA.size > 0) {
           const relationPayload = Array.from(newQualificationsA).map((subId) => ({
             teacher_id: teacherAId,
@@ -945,7 +1370,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       });
 
       // Database sync for slots
-      if (isSupabaseMode && slotsToUpsert.length > 0) {
+      if (canWriteLive && slotsToUpsert.length > 0) {
         const upsertPayload = slotsToUpsert.map((s) => ({
           class_id: s.class_id,
           day: s.day,
@@ -991,7 +1416,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         }
       });
 
-      if (isSupabaseMode) {
+      if (canWriteLive) {
         const { error: delErr } = await supabase
           .from('class_assignments')
           .delete()
@@ -1030,7 +1455,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       });
 
       showToast('Teachers swapped successfully!', 'success');
-      await loadData();
+      await reloadActiveData();
     } catch (err) {
       showToast('Error during swap: ' + err.message, 'error');
     } finally {
@@ -1074,7 +1499,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         return s;
       });
 
-      if (isSupabaseMode && newQualificationsNew.size > 0) {
+      if (canWriteLive && newQualificationsNew.size > 0) {
         const relationPayload = Array.from(newQualificationsNew).map((subId) => ({
           teacher_id: newTeacherId,
           subject_id: subId,
@@ -1095,7 +1520,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         return t;
       });
 
-      if (isSupabaseMode && slotsToUpsert.length > 0) {
+      if (canWriteLive && slotsToUpsert.length > 0) {
         const upsertPayload = slotsToUpsert.map((s) => ({
           class_id: s.class_id,
           day: s.day,
@@ -1140,7 +1565,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         }
       });
 
-      if (isSupabaseMode) {
+      if (canWriteLive) {
         const { error: delErr } = await supabase
           .from('class_assignments')
           .delete()
@@ -1179,7 +1604,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       });
 
       showToast('Teacher reassigned successfully!', 'success');
-      await loadData();
+      await reloadActiveData();
     } catch (err) {
       showToast('Error during reassign: ' + err.message, 'error');
     } finally {
@@ -1193,7 +1618,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     let updatedSlots = [...slots];
     const maxPeriod = finalPeriods.length;
 
-    if (isSupabaseMode) {
+    if (canWriteLive) {
       try {
         // 1. Fetch current database periods
         const { data: existingPeriods } = await supabase.from('periods').select('*');
@@ -1278,7 +1703,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         const targetPeriods = targetSeason.periods || [];
         const targetSlots = targetSeason.slots || [];
 
-        if (isSupabaseMode) {
+        if (canWriteLive) {
           // Clear all periods (which cascades and deletes all timetable_slots)
           const { error: delError } = await supabase.from('periods').delete().neq('id', -1);
           if (delError) throw delError;
@@ -1340,7 +1765,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             { onConflict: 'key' }
           );
           if (settingsError) throw settingsError;
-        } else {
+        } else if (dataMode === 'live') {
           // Local offline mode
           localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
 
@@ -1356,8 +1781,16 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           localStorage.setItem(TIMETABLE_STORAGE_KEY, JSON.stringify(localState));
         }
 
-        // Reload data to refresh UI state
-        await loadData();
+        // Reload data to refresh UI state (draft mode reloads and updates the draft)
+        if (isDraftMode) {
+          await saveState({
+            seasonsConfig: finalConfig,
+            periods: targetPeriods,
+            slots: targetSlots,
+          });
+        } else {
+          await loadData();
+        }
         showToast(
           `Successfully switched to active season: ${targetSeason.name || targetActiveSeasonId}`,
           'success'
@@ -1365,9 +1798,14 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       } else {
         // Just save config in state and storage
         setSeasonsConfig(finalConfig);
+        if (isDraftMode) {
+          await saveState({ seasonsConfig: finalConfig });
+          showToast('Seasons configuration saved to draft', 'success');
+          return;
+        }
         localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
 
-        if (isSupabaseMode) {
+        if (canWriteLive) {
           const { error: settingsError } = await supabase.from('admin_configruation').upsert(
             {
               key: 'timetable_seasons_config',
@@ -1492,7 +1930,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
 
     // Supabase DB Sync
-    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+    if (canWriteLive && !String(classId).startsWith('local-')) {
       try {
         if (subjectId === null && teacherId === null) {
           // Batch delete from db
@@ -1565,7 +2003,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
 
     // DB Sync
-    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+    if (canWriteLive && !String(classId).startsWith('local-')) {
       try {
         const { error } = await supabase
           .from('timetable_slots')
@@ -1630,7 +2068,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       updatedSlots.push({ id: generateLocalId(), ...newSlotVal });
     }
 
-    if (isSupabaseMode && !String(classId).startsWith('local-')) {
+    if (canWriteLive && !String(classId).startsWith('local-')) {
       try {
         // Delete source
         await supabase
@@ -1660,7 +2098,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         }
       } catch (err) {
         showToast('DB Error: ' + err.message, 'error');
-        await loadData();
+        await reloadActiveData();
         return;
       }
     }
@@ -1717,7 +2155,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         updatedSlots.push({ id: generateLocalId(), ...ns });
       });
 
-      if (isSupabaseMode && !String(classId).startsWith('local-')) {
+      if (canWriteLive && !String(classId).startsWith('local-')) {
         try {
           await supabase
             .from('timetable_slots')
@@ -1745,7 +2183,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           }
         } catch (err) {
           showToast('DB Error: ' + err.message, 'error');
-          await loadData();
+          await reloadActiveData();
           return;
         }
       }
@@ -1798,6 +2236,173 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     URL.revokeObjectURL(url);
   };
 
+  // Writes an imported JSON backup back to the live tables, in FK order.
+  //
+  // Deliberate safety narrowing versus the old behaviour, which deleted every row of
+  // employees/classes/syl_subjects/periods and then never re-inserted them:
+  //   * Master data is UPDATED in place, never deleted. Those rows are referenced by other
+  //     modules (staff records, exams, fees, syllabus) and employees.auth_id carries logins.
+  //   * Rows are not inserted with explicit ids either, because that would not advance the
+  //     identity sequences. A file that references records which no longer exist is rejected
+  //     up front instead.
+  //   * class_assignments is never replaced: the trigger derives it from the slots and the
+  //     file's own mappings are only added if they are absent, so a derived row is never lost.
+  const applyImportedTimetable = async (parsed) => {
+    // 1. Validate every reference first, so a bad file cannot leave a half-imported timetable.
+    const [classesRes, subjectsRes, periodsRes, employeesRes, liveSlotRes, mapRes] = await Promise.all([
+      supabase.from('classes').select('id'),
+      supabase.from('syl_subjects').select('id'),
+      supabase.from('periods').select('id'),
+      supabase.from('employees').select('id'),
+      supabase.from('timetable_slots').select('*'),
+      supabase.from('map_teacher_subject').select('*'),
+    ]);
+    const readError = [classesRes, subjectsRes, periodsRes, employeesRes, liveSlotRes, mapRes].find(
+      (r) => r.error
+    );
+    if (readError) throw new Error(`could not read current data - ${readError.error.message}`);
+
+    const knownSubjects = new Set((subjectsRes.data || []).map((r) => String(r.id)));
+
+    // Kept so each teacher's capability replace can be undone if its insert fails.
+    const subjectsByTeacher = new Map();
+    (mapRes.data || []).forEach((row) => {
+      const key = String(row.teacher_id);
+      if (!subjectsByTeacher.has(key)) subjectsByTeacher.set(key, []);
+      subjectsByTeacher.get(key).push(row);
+    });
+
+    const missingSummary = describeMissingReferences(
+      findMissingReferences({
+        existing: {
+          class: (classesRes.data || []).map((r) => r.id),
+          subject: (subjectsRes.data || []).map((r) => r.id),
+          period: (periodsRes.data || []).map((r) => r.id),
+          teacher: (employeesRes.data || []).map((r) => r.id),
+        },
+        slots: parsed.slots || [],
+        assignments: parsed.assignments || [],
+        // The file's own entity lists are checked too: importing a class the database has never
+        // seen would create rows the timetable cannot reference.
+        declarations: [
+          ...(parsed.classes || []).map((c) => ({ class_id: c.id })),
+          ...(parsed.subjects || []).map((s) => ({ subject_id: s.id })),
+          ...(parsed.periods || []).map((p) => ({ period_id: p.id })),
+          ...(parsed.teachers || []).map((t) => ({ teacher_id: t.id ?? t.teacher_id })),
+        ],
+      })
+    );
+    if (missingSummary) {
+      throw new Error(
+        `the file references records that no longer exist - ${missingSummary}. Nothing was changed.`
+      );
+    }
+
+    // 2. Update the reference rows that already exist.
+    const classRows = (parsed.classes || [])
+      .filter((c) => isRealId(c.id) && c.name)
+      .map((c) => ({ id: c.id, name: c.name }));
+    if (classRows.length > 0) {
+      const { error } = await supabase.from('classes').upsert(classRows, { onConflict: 'id' });
+      if (error) throw new Error(`classes - ${error.message}`);
+    }
+
+    const subjectRows = (parsed.subjects || [])
+      .filter((s) => isRealId(s.id) && s.name)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        classification_id: s.classification_id ?? null,
+        requires_teacher: s.requires_teacher ?? true,
+        track_progress: s.track_progress ?? true,
+        arabic_name: s.arabic_name ?? null,
+      }));
+    if (subjectRows.length > 0) {
+      const { error } = await supabase.from('syl_subjects').upsert(subjectRows, { onConflict: 'id' });
+      if (error) throw new Error(`syl_subjects - ${error.message}`);
+    }
+
+    const periodRows = (parsed.periods || [])
+      .filter((p) => isRealId(p.id) && p.period_number !== null && p.period_number !== undefined)
+      .map((p) => ({
+        id: p.id,
+        period_number: p.period_number,
+        name: p.name || `Period ${p.period_number}`,
+        start_time: p.start_time || null,
+        end_time: p.end_time || null,
+        is_break: !!p.is_break,
+      }));
+    if (periodRows.length > 0) {
+      const { error } = await supabase.from('periods').upsert(periodRows, { onConflict: 'id' });
+      if (error) throw new Error(`periods - ${error.message}`);
+    }
+
+    // 3. The timetable itself. Done before the teacher/subject mapping so a failure here leaves
+    //    the capability table untouched, and the previous rows are restored if the insert fails.
+    const slotRows = dedupeSlots(
+      (parsed.slots || [])
+        .filter((s) => isRealId(s.class_id) && isRealId(s.period_id) && s.day)
+        .map((s) => ({
+          class_id: s.class_id,
+          day: s.day,
+          period_id: s.period_id,
+          subject_id: isRealId(s.subject_id) ? s.subject_id : null,
+          teacher_id: isRealId(s.teacher_id) ? s.teacher_id : null,
+        }))
+    );
+
+    if (slotRows.length === 0) {
+      throw new Error(
+        'the file contains no usable slots, so importing it would empty the live timetable. Nothing was changed.'
+      );
+    }
+
+    await replaceLiveSlots({ client: supabase, slotRows, previousRows: liveSlotRes.data });
+
+    // 4. Teacher -> subject capability, replaced per teacher from the file. Only subjects that
+    //    exist are written, so a file naming a deleted subject cannot break the import, and each
+    //    teacher's previous rows are put back if their insert fails.
+    const teacherRows = (parsed.teachers || []).filter((t) => isRealId(t.id ?? t.teacher_id));
+    for (const teacher of teacherRows) {
+      if (!Array.isArray(teacher.subjects)) continue;
+      const teacherId = teacher.id ?? teacher.teacher_id;
+      const subjectIds = [...new Set(teacher.subjects)].filter((subjectId) =>
+        knownSubjects.has(String(subjectId))
+      );
+
+      await replaceTeacherSubjects({
+        client: supabase,
+        teacherId,
+        subjectIds,
+        previousRows: subjectsByTeacher.get(String(teacherId)) || [],
+      });
+    }
+
+    // 5. The file's own mappings, added only if absent. Mappings the trigger derived from the
+    //    slots are already present, so this restores the ones declared without slots while
+    //    never removing a derived row.
+    const assignmentRows = (parsed.assignments || [])
+      .filter((a) => isRealId(a.class_id) && isRealId(a.teacher_id) && isRealId(a.subject_id))
+      .map((a) => ({ class_id: a.class_id, teacher_id: a.teacher_id, subject_id: a.subject_id }));
+    if (assignmentRows.length > 0) {
+      const { error } = await supabase
+        .from('class_assignments')
+        .upsert(assignmentRows, {
+          onConflict: 'class_id,teacher_id,subject_id',
+          ignoreDuplicates: true,
+        });
+      if (error) throw new Error(`class_assignments - ${error.message}`);
+    }
+
+    return {
+      classes: classRows.length,
+      subjects: subjectRows.length,
+      periods: periodRows.length,
+      slots: slotRows.length,
+      assignments: assignmentRows.length,
+    };
+  };
+
   // JSON IMPORT HANDLER
   const handleImportJson = (e) => {
     const file = e.target.files?.[0];
@@ -1828,22 +2433,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           type: 'danger',
           onConfirm: async () => {
             setConfirmConfig(null);
-            if (isSupabaseMode) {
-              // Overwrite database
+            let written = null;
+
+            if (canWriteLive) {
               setLoading(true);
               try {
-                // Delete everything
-                await Promise.all([
-                  supabase.from('timetable_slots').delete().gt('id', 0),
-                  supabase.from('class_assignments').delete().gt('id', 0),
-                  supabase.from('map_teacher_subject').delete().gt('id', 0),
-                  supabase.from('employees').delete().gt('id', 0),
-                  supabase.from('classes').delete().gt('id', 0),
-                  supabase.from('syl_subjects').delete().gt('id', 0),
-                  supabase.from('periods').delete().gt('id', 0),
-                ]);
+                written = await applyImportedTimetable(parsed);
               } catch (err) {
-                console.warn('DB reset failed during import: ', err.message);
+                showToast('Import failed - ' + err.message, 'error');
+                return;
               } finally {
                 setLoading(false);
               }
@@ -1858,7 +2456,17 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
               slots: parsed.slots,
             });
 
-            showToast('Timetable imported successfully!', 'success');
+            // Re-read so state comes from the database, including the trigger-derived
+            // class_assignments, and drop caches that hold the previous mapping.
+            await loadData();
+            invalidateModuleCaches();
+
+            showToast(
+              written
+                ? `Timetable imported: ${written.slots} slots, ${written.periods} periods, ${written.classes} classes, ${written.subjects} subjects`
+                : 'Timetable imported successfully!',
+              'success'
+            );
           },
         });
       } catch (err) {
@@ -1903,7 +2511,77 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     e.target.value = '';
   };
 
+  // Data + shape for print, following whatever subview is active.
+  const printConfig = useMemo(() => {
+    const { viewType, classId, teacherId, viewLabel, entityName } = activeView;
+
+    // Grid subviews print the generated sheet; the list subviews print as displayed.
+    const variant = viewType === 'teacher' ? 'teacher' : 'class';
+    const mode = viewType === 'teacher' || viewType === 'class' || viewType === 'scheduler'
+      ? 'sheet'
+      : 'dom';
+
+    const subjectNameById = new Map(subjects.map((s) => [String(s.id), s.name]));
+    const teacherNameById = new Map(teachers.map((t) => [String(t.id), t.name]));
+    const classNameById = new Map(classes.map((c) => [String(c.id), c.name]));
+
+    let scopedSlots = slots;
+    if (variant === 'teacher' && teacherId) {
+      scopedSlots = slots.filter((s) => String(s.teacher_id) === String(teacherId));
+    } else if (classId) {
+      scopedSlots = slots.filter((s) => String(s.class_id) === String(classId));
+    }
+
+    const dayOrder = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    const presentDays = new Set(scopedSlots.map((s) => s.day));
+    const days = dayOrder.filter((d) => presentDays.has(d));
+
+    return {
+      mode,
+      variant,
+      viewLabel,
+      entityName,
+      domViewLabel: entityName ? `${viewLabel} - ${entityName}` : viewLabel,
+      title:
+        variant === 'teacher'
+          ? entityName
+            ? `Teacher Timetable - ${entityName}`
+            : 'Teacher Timetable'
+          : entityName
+          ? `Timetable - ${entityName}`
+          : 'Timetable',
+      data: {
+        days: days.length > 0 ? days : dayOrder.slice(0, 6),
+        periods,
+        classes: classes.map((c) => ({ id: c.id, name: c.name })),
+        slots: scopedSlots.map((s) => ({
+          ...s,
+          subject_name: subjectNameById.get(String(s.subject_id)) || '',
+          teacher_name: teacherNameById.get(String(s.teacher_id)) || '',
+          class_name: classNameById.get(String(s.class_id)) || '',
+        })),
+      },
+    };
+  }, [activeView, classes, periods, slots, subjects, teachers]);
+
+  const handleRefreshData = () => {
+    if (isDraftMode) {
+      reloadActiveData();
+      return;
+    }
+    loadData();
+  };
+
   return (
+    <TimetableDraftModeContext.Provider value={dataMode === 'draft'}>
     <div className="flex flex-col min-h-[500px]" data-feature="timetable-planner">
       {/* Top Banner Control Panel */}
       <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2 print:hidden">
@@ -1961,6 +2639,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
               </button>
             ))}
           </div>
+          {/* Print — available to anyone who can open the timetable itself */}
+          <button
+            onClick={openPrint}
+            className="flex-1 md:flex-none bg-slate-700 hover:bg-slate-900 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+            title="Print timetable"
+          >
+            <i className="fas fa-print"></i>
+          </button>
+
           {/* Export / Import backup */}
           <ConditionalBlock name="timetable-json-config" roles={userRoles}>
             <div className="flex items-center gap-2 w-full md:w-auto">
@@ -2004,10 +2691,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                 <i className="fas fa-wave-square"></i>
               </button>
               <button
-                onClick={loadData}
+                onClick={handleRefreshData}
                 disabled={loading}
                 className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Refresh Timetable Data"
+                title={isDraftMode ? 'Reload Draft Data' : 'Refresh Timetable Data'}
               >
                 <i
                   className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
@@ -2036,33 +2723,146 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                 slots={slots}
                 assignments={assignments}
                 seasonsConfig={seasonsConfig}
-                onRefresh={loadData}
+                onRefresh={handleRefreshData}
                 refreshing={loading}
                 user={user}
                 showMyTimetable={true}
+                onActiveViewChange={handleActiveViewChange}
               />
             </ConditionalBlock>
           )}
 
           {activeTab === 'scheduler' && (
             <ConditionalBlock name="scheduler-setup" roles={userRoles}>
-              <TimetableAdminView
-                classes={classes}
-                teachers={teachers}
-                subjects={subjects}
-                classifications={classifications}
-                periods={periods}
-                slots={slots}
-                assignments={assignments}
-                seasonsConfig={seasonsConfig}
-                onRefresh={loadData}
-                refreshing={loading}
-                user={user}
-                onUpdateSlot={handleUpdateSlot}
-                onMoveSlot={handleMoveSlot}
-                onClearSlots={handleClearSlots}
-                onMoveColumn={handleMoveColumn}
-              />
+              {/* Live / Draft mode belongs to Scheduler Setup only */}
+              <div
+                className={`mb-3 rounded-2xl border px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2 ${
+                  isDraftMode ? 'border-amber-300 bg-amber-50' : 'border-light-border bg-white'
+                }`}
+                data-feature="scheduler-data-mode"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div
+                    className="flex items-center gap-1 bg-light-bg/60 p-1 rounded-xl border border-light-border"
+                    data-feature-tab="scheduler-data-mode"
+                  >
+                    <button
+                      onClick={handleSwitchToLive}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        dataMode === 'live'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-dark-soft hover:text-dark-primary'
+                      }`}
+                      title="Work on the live timetable"
+                    >
+                      <i className="fas fa-circle-check text-[10px]" />
+                      Live
+                    </button>
+                    <button
+                      onClick={handleOpenDraftMode}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        dataMode === 'draft'
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'text-dark-soft hover:text-dark-primary'
+                      }`}
+                      title="Work on a draft without touching live data"
+                    >
+                      <i className="fas fa-file-pen text-[10px]" />
+                      Draft
+                    </button>
+                  </div>
+
+                  {dataMode === 'draft' && (
+                    <select
+                      value={activeDraft?.id || ''}
+                      onChange={(e) => handleLoadDraft(e.target.value)}
+                      disabled={isDraftListLoading}
+                      className="w-full sm:w-64 appearance-none bg-white border border-amber-300 rounded-xl px-3 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-amber-400 shadow-sm disabled:opacity-60"
+                      title="Select a draft version to load"
+                    >
+                      <option value="">
+                        {isDraftListLoading
+                          ? 'Loading drafts…'
+                          : `Select a draft (${draftList.length})`}
+                      </option>
+                      {draftList.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {isDraftMode && (
+                    <>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold uppercase tracking-wide">
+                        <i className="fas fa-file-pen" />
+                        Draft: {activeDraft.name} · live untouched
+                      </span>
+                      <button
+                        onClick={() => {
+                          setDraftHighlightId(activeDraft?.id || null);
+                          setActiveTab('drafts');
+                        }}
+                        className="px-3 py-2 bg-slate-700 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Open this draft in Draft Versions"
+                      >
+                        <i className="fas fa-gear" />
+                        <span className="hidden sm:inline">Draft Settings</span>
+                      </button>
+                      <button
+                        onClick={handleSwitchToLive}
+                        className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Exit draft mode"
+                      >
+                        <i className="fas fa-arrow-left" />
+                        Exit
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {dataMode === 'draft' && !activeDraft ? (
+                <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-6 sm:p-10 text-center">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl mb-3">
+                    <i className="fas fa-file-pen" />
+                  </div>
+                  <h4 className="text-base font-black text-amber-900">No draft loaded</h4>
+                  <p className="text-xs font-semibold text-amber-800 mt-1 max-w-lg mx-auto">
+                    Pick an existing draft above, or create a new one from the current live
+                    timetable. Live data stays untouched until a draft is published.
+                  </p>
+                  <button
+                    onClick={handleCreateDraftFromLive}
+                    className="mt-4 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <i className="fas fa-plus" />
+                    Create draft from live data
+                  </button>
+                </div>
+              ) : (
+                <TimetableAdminView
+                  classes={classes}
+                  teachers={teachers}
+                  subjects={subjects}
+                  classifications={classifications}
+                  periods={periods}
+                  slots={slots}
+                  assignments={assignments}
+                  seasonsConfig={seasonsConfig}
+                  onRefresh={handleRefreshData}
+                  refreshing={loading}
+                  user={user}
+                  onActiveViewChange={handleActiveViewChange}
+                  onUpdateSlot={handleUpdateSlot}
+                  onMoveSlot={handleMoveSlot}
+                  onClearSlots={handleClearSlots}
+                  onMoveColumn={handleMoveColumn}
+                />
+              )}
             </ConditionalBlock>
           )}
 
@@ -2127,6 +2927,32 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
               />
             </ConditionalBlock>
           )}
+
+          {activeTab === 'drafts' && (
+            <ConditionalBlock name="timetable-drafts" roles={userRoles}>
+              <DraftManager
+                liveData={
+                  liveSnapshotRef.current || {
+                    classifications,
+                    subjects,
+                    teachers,
+                    classes,
+                    periods,
+                    assignments,
+                    slots,
+                    seasonsConfig,
+                  }
+                }
+                onPublish={(liveData) => handlePublishDraftToLive(liveData)}
+                onRollback={(liveData) =>
+                  handlePublishDraftToLive(liveData, { isRollback: true })
+                }
+                onEditDraft={handleEditDraft}
+                classId={classes[0]?.id}
+                highlightDraftId={draftHighlightId}
+              />
+            </ConditionalBlock>
+          )}
         </div>
       )}
       <ConfirmModal
@@ -2144,7 +2970,33 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         currentData={{ classes, teachers, subjects, periods, slots }}
         importedData={compareData}
       />
+
+      {/* Print - settings beside a live preview, opened from the header Print button */}
+      <PrintWorkspace
+        isOpen={isPrintOpen}
+        onClose={closePrint}
+        onPrint={triggerPrint}
+        settings={printSettings}
+        onSettingsChange={updatePrintSettings}
+        onReset={resetPrintSettings}
+        timetableData={printConfig.data}
+        mode={printConfig.mode}
+        variant={printConfig.variant}
+        domViewLabel={printConfig.domViewLabel}
+        title={printConfig.title}
+        subtitle={isDraftMode ? `${activeDraft.name} (Draft)` : 'Live'}
+      />
+
+      {/* Name prompt for creating a new draft version from live data */}
+      {newDraftRequest && (
+        <NewDraftNameModal
+          initialName={newDraftRequest.name}
+          onCancel={() => setNewDraftRequest(null)}
+          onConfirm={confirmCreateDraftFromLive}
+        />
+      )}
     </div>
+    </TimetableDraftModeContext.Provider>
   );
 };
 

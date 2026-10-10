@@ -1,6 +1,7 @@
 // src/components/examinations/RankHolders.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { getBlockBackgroundStyle } from './report-card-designer/utils';
+import { filterPassedStudents, getRankHolders } from '../../utils/ranking';
 
 /**
  * Constructs the public Supabase storage photo URL for a student photo_id.
@@ -477,21 +478,35 @@ export const RankHolders = ({
   const isRepeatOn = !!(repeatForEveryClass || config.repeatForEveryClass);
 
   // Filter rank holders based on displayFilterMode and displayLimit
-  const filterList = (list) => {
-    if (!Array.isArray(list) || list.length === 0) return [];
-    const limit = Number(displayLimit) || 3;
-
-    if (displayFilterMode === 'upto_x') {
-      // Show students with rank <= limit
-      return list.filter((s, idx) => {
-        const r = Number(s.classRank || s.rank || idx + 1);
-        return r <= limit;
+  // First filter out failed students, then apply display filter
+  const filterList = useMemo(() => {
+    return (list) => {
+      if (!Array.isArray(list) || list.length === 0) return [];
+      
+      // Filter out students who failed any subject
+      const passedStudents = filterPassedStudents(list);
+      
+      // Sort by percentage descending (highest first)
+      const sorted = [...passedStudents].sort((a, b) => {
+        const pctA = Number(a.percentage ?? a.metrics?.percentage ?? 0);
+        const pctB = Number(b.percentage ?? b.metrics?.percentage ?? 0);
+        return pctB - pctA;
       });
-    }
+      
+      const limit = Number(displayLimit) || 3;
 
-    // Default 'top_x': slice top X items
-    return list.slice(0, limit);
-  };
+      if (displayFilterMode === 'upto_x') {
+        // Show students with rank <= limit
+        return sorted.filter((s, idx) => {
+          const r = idx + 1;
+          return r <= limit;
+        });
+      }
+
+      // Default 'top_x': slice top X items
+      return sorted.slice(0, limit);
+    };
+  }, [displayFilterMode, displayLimit]);
 
   // Build class groups: ONLY repeat across classes when repeatForEveryClass is ON
   const classGroups = [];

@@ -9,6 +9,8 @@ import {
   MOCK_TEACHERS,
   MOCK_SLOTS,
 } from '../../data/mockTimetable';
+import PrintWorkspace from '../timetable/PrintWorkspace';
+import { usePrintSettings } from '../../hooks/usePrintSettings';
 
 // ─── Inline Timetable Grid for Parent View ───────────────────────────────────
 
@@ -174,6 +176,16 @@ const ParentTimetableViewer = ({ student }) => {
 
   const [viewMode, setViewMode] = useState('week'); // 'today' | 'day' | 'week'
   const [selectedDay, setSelectedDay] = useState('Monday');
+
+  const {
+    settings: printSettings,
+    updateSettings: updatePrintSettings,
+    resetSettings: resetPrintSettings,
+    isPrintOpen,
+    openPrint,
+    closePrint,
+    triggerPrint,
+  } = usePrintSettings();
 
   const classId = student?.class_id ?? 1;
 
@@ -501,8 +513,21 @@ const ParentTimetableViewer = ({ student }) => {
   const dayCellWidth = 110;
   const tableMinWidth = Math.max(320, periodColumnWidth + displayDays.length * dayCellWidth);
 
-  return (
-    <div className="w-full bg-white border border-light-border rounded-3xl shadow-sm p-4 sm:p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    // Prepare timetable data for print (names resolved the same way the on-screen grid does)
+    const printTimetableData = {
+      days: displayDays,
+      periods: visiblePeriods,
+      classes: [{ id: classId, name: class_name }],
+      slots: (slots || []).map((s) => ({
+        ...s,
+        subject_name: s.subject_name || resolveSubjectName(s.subject_id, null, MOCK_SUBJECTS),
+        teacher_name: s.teacher_name || resolveTeacherName(s.teacher_id, null, MOCK_TEACHERS),
+      })),
+    };
+
+    return (
+      <div className="w-full">
+        <div className="w-full bg-white border border-light-border rounded-3xl shadow-sm p-4 sm:p-6 md:p-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
       <div className="flex flex-col gap-4 pb-4 border-b border-light-border mb-4 md:mb-6">
         <div>
@@ -519,6 +544,14 @@ const ParentTimetableViewer = ({ student }) => {
 
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <button
+            onClick={openPrint}
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Print timetable"
+          >
+            <i className="fas fa-print" />
+            Print
+          </button>
           <div className="flex rounded-xl border border-light-border overflow-hidden bg-light-lbg text-xs font-semibold">
             <button
               onClick={() => setViewMode('today')}
@@ -702,8 +735,19 @@ const ParentTimetableViewer = ({ student }) => {
         <i className="fas fa-info-circle mr-1" />
         Schedule is subject to change. Contact school for updates.
       </p>
-    </div>
-  );
-};
+        </div>
 
-export default ParentTimetableViewer;
+        <PrintWorkspace
+          isOpen={isPrintOpen}
+          onClose={closePrint}
+          onPrint={triggerPrint}
+          settings={printSettings}
+          onSettingsChange={updatePrintSettings}
+          onReset={resetPrintSettings}
+          timetableData={printTimetableData}
+          title={class_name ? `Class Schedule - ${class_name}` : 'Class Schedule'}
+        />
+      </div>
+            );
+            }
+            export default ParentTimetableViewer;

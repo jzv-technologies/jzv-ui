@@ -923,12 +923,18 @@ const ReportCardGenerator = ({
       };
     });
 
-    // Rank students by totalObtained descending
-    const sortedByTotal = [...studentCalculations].sort(
-      (a, b) => b.totalObtained - a.totalObtained
+    // Rank only the students who passed, sorted by percentage (then total marks), which is
+    // exactly how the Rank Holder report ranks. Failed/absent students must not consume a
+    // rank slot, otherwise every student below them shows a rank one higher than the
+    // Rank Holder report (e.g. Rank 2 missing, Rank 3 shown instead).
+    const rankedCalculations = studentCalculations.filter(
+      (s) => s.status !== 'FAIL' && s.overallGrade !== 'F'
+    );
+    const sortedByRank = [...rankedCalculations].sort(
+      (a, b) => (b.percentage || 0) - (a.percentage || 0) || b.totalObtained - a.totalObtained
     );
     const metricsMap = {};
-    sortedByTotal.forEach((item, idx) => {
+    studentCalculations.forEach((item) => {
       const stuObj = students.find((s) => String(s.id) === String(item.studentId));
       const admKey = stuObj?.admission_no ? String(stuObj.admission_no).trim().toLowerCase() : '';
       const serverRank =
@@ -937,24 +943,33 @@ const ReportCardGenerator = ({
         serverRanksMap[String(item.studentId)] ||
         (admKey && serverRanksMap[admKey]);
 
-      const computedRank = sortedByTotal.length > 1 ? idx + 1 : null;
-      const classRank =
-        serverRank?.classRank ||
-        computedRank ||
-        (userRoles.includes('parent') ? null : idx + 1);
+      const hasFailed = item.status === 'FAIL' || item.overallGrade === 'F';
+      const rankIdx = sortedByRank.findIndex(
+        (s) => String(s.studentId) === String(item.studentId)
+      );
+      const computedRank = rankIdx >= 0 ? rankIdx + 1 : null;
+      // In the parent view only the ward's rows are loaded, so the local cohort is not the
+      // whole class and the class-wide server rank stays authoritative. In class-wide views
+      // the locally computed rank wins so it always matches the Rank Holder report.
+      const classRank = hasFailed
+        ? null
+        : isParentView
+        ? serverRank?.classRank || computedRank
+        : computedRank || serverRank?.classRank || null;
       const totalStudents =
         serverRank?.totalStudents ||
-        (sortedByTotal.length > 1 ? sortedByTotal.length : null);
+        (studentCalculations.length > 1 ? studentCalculations.length : null);
 
       metricsMap[String(item.studentId)] = {
         ...item,
+        hasFailed,
         classRank,
         totalStudents,
       };
     });
 
     return metricsMap;
-  }, [students, results, entries, internalSubjects, internalClassifications, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, userRoles]);
+  }, [students, results, entries, internalSubjects, internalClassifications, activeTemplate?.gradingScale, studentRanksMap, serverRanksMap, isParentView]);
 
   // Compute rank holders grouped by class for the RankHolders component
   const classRankHoldersMap = useMemo(() => {
@@ -964,6 +979,10 @@ const ReportCardGenerator = ({
     students.forEach((stu) => {
       const clsId = String(stu.class_id || selectedClassId || 'default');
       const metrics = studentMetricsMap[String(stu.id)] || {};
+      
+      // Check if student has failed any subject
+      const hasFailed = metrics.hasFailed === true || metrics.status === 'FAIL' || metrics.overallGrade === 'F';
+      
       if (!byClass[clsId]) byClass[clsId] = [];
       byClass[clsId].push({
         id: stu.id,
@@ -981,12 +1000,16 @@ const ReportCardGenerator = ({
         totalObtained: metrics.totalObtained ?? 0,
         classRank: metrics.classRank,
         rank: metrics.classRank,
+        hasFailed,
+        subjectScores: metrics.subjectScores,
       });
     });
 
     const result = {};
     Object.entries(byClass).forEach(([clsId, list]) => {
-      const sorted = [...list].sort((a, b) => {
+      // Filter out failed students before ranking
+      const passedStudents = list.filter((s) => !s.hasFailed);
+      const sorted = [...passedStudents].sort((a, b) => {
         return (b.percentage || 0) - (a.percentage || 0) || (b.totalObtained || 0) - (a.totalObtained || 0);
       });
       sorted.forEach((item, idx) => {

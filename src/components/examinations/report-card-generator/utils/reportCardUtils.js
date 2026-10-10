@@ -17,6 +17,8 @@ export {
   getDynamicClassesPerPage,
 } from '../../report-card-designer/utils';
 
+import { calculateClassRanks } from '../../../../utils/ranking';
+
 /**
  * Generator-specific utility functions
  */
@@ -113,37 +115,38 @@ export const buildStudentMetricsMap = (students, results, internalSubjects, acti
     const status = hasFailed ? 'FAIL' : 'PASS';
 
     return {
-      studentId: String(student.id),
-      totalObtained,
-      totalMax,
-      percentage,
-      overallGrade,
-      status,
-      subjectScores,
-      hasFailed,
+          studentId: String(student.id),
+          totalObtained,
+          totalMax,
+          percentage,
+          overallGrade,
+          status,
+          subjectScores,
+          hasFailed,
+        };
+      });
+
+      // Calculate class ranks using new utility (excludes failed students)
+      const rankMap = calculateClassRanks(studentCalculations);
+
+      // Merge with server ranks
+      const finalMetrics = {};
+      studentCalculations.forEach((calc) => {
+        const serverRank = serverRanksMap?.[calc.studentId];
+        const serverClassRank =
+          serverRank && typeof serverRank === 'object' ? serverRank.classRank : serverRank;
+        const calculatedRank = rankMap[calc.studentId]?.rank || null;
+        finalMetrics[calc.studentId] = {
+          ...calc,
+          // The locally calculated rank excludes failed students and is the single source of
+          // truth so this report agrees with the Rank Holder report.
+          classRank: calculatedRank || serverClassRank || null,
+          totalStudents: rankMap[calc.studentId]?.totalStudents || students.length,
+        };
+      });
+
+      return finalMetrics;
     };
-  });
-
-  // Calculate class ranks
-  const sortedByPct = [...studentCalculations].sort((a, b) => b.percentage - a.percentage);
-  const rankMap = {};
-  sortedByPct.forEach((calc, idx) => {
-    rankMap[calc.studentId] = idx + 1;
-  });
-
-  // Merge with server ranks
-  const finalMetrics = {};
-  studentCalculations.forEach((calc) => {
-    const serverRank = serverRanksMap?.[calc.studentId];
-    finalMetrics[calc.studentId] = {
-      ...calc,
-      classRank: serverRank || rankMap[calc.studentId] || null,
-      totalStudents: students.length,
-    };
-  });
-
-  return finalMetrics;
-};
 
 // Build chart data for a student
 export const buildChartData = (subjectScores, chartConfig, overallPreviewPct, previewScoresWithGrades) => {

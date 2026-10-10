@@ -477,6 +477,7 @@ const TimetableOverview = ({
                   {visiblePeriods.map((period) => (
                     <th
                       key={period.id}
+                      data-print-period-id={String(period.id)}
                       className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 ${period.is_break ? 'bg-light-bg/30' : ''}`}
                       style={{ minWidth: 130 }}
                     >
@@ -496,6 +497,7 @@ const TimetableOverview = ({
                 {DAYS.map((day) => (
                   <tr
                     key={day}
+                    data-print-day={day}
                     className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors bg-white"
                   >
                     <td
@@ -505,7 +507,12 @@ const TimetableOverview = ({
                       <span className="hidden sm:inline">{day}</span>
                       <span className="sm:hidden">{DAY_SHORT[day]}</span>
                     </td>
-                    {visiblePeriods.map((period) => renderCell(day, period))}
+                    {/* Tag each cell with its period so print filters can drop whole columns */}
+                    {visiblePeriods.map((period) =>
+                      React.cloneElement(renderCell(day, period), {
+                        'data-print-period-id': String(period.id),
+                      })
+                    )}
                   </tr>
                 ))}
               </tbody>
