@@ -6,8 +6,15 @@ import { DEFAULT_BLOCK_STYLE } from '../../report-card-designer/constants';
  * Print renderer for the student info block.
  * Extracted from the original ReportCardGenerator.jsx
  */
-export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) => {
-  if (!activeTemplate.showStudentInfo) return null;
+export const renderStudentInfo = ({
+  bleed,
+  activeTemplate,
+  studentInfoPrint,
+  student = null,
+  studentIdx = 0,
+  selectedClass = null,
+}) => {
+  if (!activeTemplate.showStudentInfo || !student) return null;
   const flds = activeTemplate.studentFields || {};
   const stuCfg = activeTemplate.studentInfoConfig || {};
   const cols = stuCfg.columns || 4;
@@ -34,43 +41,46 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
       }`}
       style={bleed.innerBgStyle('#f8fafc')}
     >
-      {flds.name && (
+      {flds.name !== false && (
         <div>
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Student Name
           </span>
           <span className="font-black student-info-value" style={siValueStyle}>
-            {''}
+            {student.student_name}
           </span>
         </div>
       )}
-      {flds.admissionNo && (
+      {flds.admissionNo !== false && (
         <div>
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Admission No
           </span>
-          <span className="font-bold font-mono student-info-value" style={siValueStyle}>
-            {''}
+          <span className="font-mono font-bold student-info-value" style={siValueStyle}>
+            {student.admission_no}
           </span>
         </div>
       )}
-      {flds.className && (
+      {flds.className !== false && (
         <div>
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
-            Class / Grade
+            Class &amp; Section
           </span>
-          <span className="font-bold student-info-value" style={siValueStyle}>
-            {''}
+          <span
+            className="font-bold student-info-value"
+            style={{ ...siValueStyle, color: siSt.contentColor || '#be123c' }}
+          >
+            {selectedClass?.name || `Class ${student.class_id}`}
           </span>
         </div>
       )}
-      {flds.rollNo && (
+      {flds.rollNo !== false && (
         <div>
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Roll No
           </span>
-          <span className="font-bold font-mono student-info-value" style={siValueStyle}>
-            {''}
+          <span className="font-mono font-bold student-info-value" style={siValueStyle}>
+            #{student.roll_no || studentIdx + 1}
           </span>
         </div>
       )}
@@ -80,7 +90,7 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
             Father / Guardian
           </span>
           <span className="font-bold student-info-value" style={siValueStyle}>
-            {''}
+            {student.father_name || '—'}
           </span>
         </div>
       )}
@@ -89,8 +99,8 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Date of Birth
           </span>
-          <span className="font-bold font-mono student-info-value" style={siValueStyle}>
-            {''}
+          <span className="font-mono font-bold student-info-value" style={siValueStyle}>
+            {student.dob || '—'}
           </span>
         </div>
       )}
@@ -100,7 +110,7 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
             Gender
           </span>
           <span className="font-bold student-info-value" style={siValueStyle}>
-            {''}
+            {student.gender || '—'}
           </span>
         </div>
       )}
@@ -109,8 +119,8 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Blood Group
           </span>
-          <span className="font-bold font-mono student-info-value" style={siValueStyle}>
-            {''}
+          <span className="font-mono font-bold student-info-value" style={siValueStyle}>
+            {student.blood_group || '—'}
           </span>
         </div>
       )}
@@ -119,8 +129,11 @@ export const renderStudentInfo = ({ bleed, activeTemplate, studentInfoPrint }) =
           <span className="font-bold uppercase block student-info-label" style={siLabelStyle}>
             Attendance
           </span>
-          <span className="font-bold font-mono student-info-value" style={{ ...siValueStyle, color: siSt.contentColor || '#047857' }}>
-            {''}
+          <span
+            className="font-mono font-bold student-info-value"
+            style={{ ...siValueStyle, color: siSt.contentColor || '#047857' }}
+          >
+            {student.attendance || '—'}
           </span>
         </div>
       )}

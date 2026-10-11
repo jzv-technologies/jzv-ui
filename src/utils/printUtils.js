@@ -114,6 +114,17 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
         border: none !important;
       }
 
+      /* When several sheets are printed at once (one per class) each starts on a new page */
+      .timetable-print-area .print-sheet {
+        break-after: page;
+        page-break-after: always;
+      }
+
+      .timetable-print-area .print-sheet:last-child {
+        break-after: auto;
+        page-break-after: auto;
+      }
+
       /* ---- DOM mode: print the active subview as displayed ---- */
       body.jzv-print-dom #root {
         display: block !important;
@@ -292,6 +303,32 @@ export const formatFooter = (template, page = 1, totalPages = 1) =>
     .replaceAll('{time}', formatPrintTime())
     .replaceAll('{page}', String(page))
     .replaceAll('{totalPages}', String(totalPages));
+
+/**
+ * Resolve the placeholders in a header/footer template against the sheet being printed.
+ * Placeholders with no value resolve to nothing, so a line like "{className}{teacherName}"
+ * prints only the name that applies to the sheet being printed.
+ *
+ * @param {string} template - Text containing {placeholders}
+ * @param {Object} context - Values keyed by placeholder name, e.g. { className: 'GCC-2' }
+ * @param {Object} [options] - { page, totalPages }
+ * @returns {string} Resolved text, trimmed
+ */
+export const resolvePrintText = (template, context = {}, { page = 1, totalPages = 1 } = {}) => {
+  if (template === undefined || template === null) return '';
+  const values = {
+    date: formatPrintDate(),
+    time: formatPrintTime(),
+    page,
+    totalPages,
+    ...context,
+  };
+  return String(template)
+    .replace(/\{(\w+)\}/g, (match, key) =>
+      values[key] === undefined || values[key] === null ? '' : String(values[key])
+    )
+    .trim();
+};
 
 export default {
   generatePrintCSS,

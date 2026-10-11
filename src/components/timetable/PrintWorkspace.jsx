@@ -21,6 +21,7 @@ const PrintWorkspace = ({
   mode = 'sheet',
   variant = 'class',
   timetableData,
+  allClassesData = null,
   title = 'Print Timetable',
   subtitle = null,
   domViewLabel = null,
@@ -28,6 +29,12 @@ const PrintWorkspace = ({
   if (!isOpen) return null;
 
   const isDomMode = mode === 'dom';
+  // One page per class when that scope is chosen; the active view alone otherwise.
+  const classDatasets =
+    !isDomMode && settings?.printScope === 'all-classes' && allClassesData?.length
+      ? allClassesData
+      : null;
+  const sheetCount = classDatasets?.length || 1;
 
   return (
     <div className="print-workspace-overlay fixed inset-0 bg-dark-almostblack/50 backdrop-blur-sm z-[80] flex items-center justify-center p-2 sm:p-4">
@@ -42,6 +49,11 @@ const PrintWorkspace = ({
               {title}
               {subtitle ? <span className="opacity-80 font-semibold"> - {subtitle}</span> : null}
             </h3>
+            {classDatasets && (
+              <span className="text-[11px] font-semibold opacity-85 block">
+                {sheetCount} classes · one page each
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -73,6 +85,8 @@ const PrintWorkspace = ({
               onReset={onReset}
               timetableData={timetableData}
               isDomMode={isDomMode}
+              variant={variant}
+              classCount={allClassesData?.length || 0}
             />
           </div>
 
@@ -101,6 +115,7 @@ const PrintWorkspace = ({
             ) : (
               <PrintPreview
                 timetableData={timetableData}
+                datasets={classDatasets}
                 settings={settings}
                 variant={variant}
               />
@@ -113,6 +128,7 @@ const PrintWorkspace = ({
       {isOpen && !isDomMode && (
         <PrintDocument
           timetableData={timetableData}
+          datasets={classDatasets}
           settings={settings}
           variant={variant}
         />

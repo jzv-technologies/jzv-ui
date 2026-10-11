@@ -7,6 +7,15 @@ import {
 import { getActiveTableColumns, getGradeColor, hexToRgba } from '../utils';
 
 /**
+ * Absent and not-entered subjects store a string ('Absent' / '—') in marksObtained, so the
+ * percentage column must not divide by it.
+ */
+const formatSubjectPercentage = (s) =>
+  typeof s.marksObtained === 'number' && s.maxMarks > 0
+    ? `${Math.round((s.marksObtained / s.maxMarks) * 100)}%`
+    : '—';
+
+/**
  * renderSubjectTable
  * Print renderer for the subject marks table block.
  * Extracted from the original ReportCardGenerator.jsx
@@ -233,7 +242,7 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                       if (colId === 'percentage') {
                         return (
                           <td key={colId} className={`${cellPad} text-center font-mono font-bold text-dark-slate`} style={{ ...tblValueStyle, ...tdBorder }}>
-                            {Math.round((s.marksObtained / s.maxMarks) * 100)}%
+                            {formatSubjectPercentage(s)}
                           </td>
                         );
                       }
@@ -344,7 +353,7 @@ export const renderSubjectTable = ({ bleed, activeTemplate, groupedSections, ung
                     if (colId === 'percentage') {
                       return (
                         <td key={colId} className={`${cellPad} text-center font-mono font-bold text-dark-slate`} style={{ ...tblValueStyle, ...tdBorder }}>
-                          {Math.round((s.marksObtained / s.maxMarks) * 100)}%
+                          {formatSubjectPercentage(s)}
                         </td>
                       );
                     }

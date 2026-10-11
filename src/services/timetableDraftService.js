@@ -525,12 +525,15 @@ export const getDueScheduledDrafts = async () => {
  * Create a backup of current live data as a draft
  * @param {Object} liveData - Current live timetable data
  * @param {string} reason - Reason for backup
+ * @param {string} [name] - Optional user-supplied backup name; kept prefixed with "Backup" so
+ *                          existing backups stay recognisable
  * @returns {Promise<Object>} Created backup draft
  */
-export const createBackupDraft = async (liveData, reason = 'Auto-backup before changes') => {
+export const createBackupDraft = async (liveData, reason = 'Auto-backup before changes', name = null) => {
   const timestamp = new Date().toLocaleString();
+  const label = String(name || '').trim();
   return createDraft({
-    name: `Backup ${timestamp}`,
+    name: label ? `Backup — ${label}` : `Backup ${timestamp}`,
     description: reason,
     data: liveData,
   });

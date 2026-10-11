@@ -7,9 +7,19 @@
 
 import React, { useState } from 'react';
 
-const NewDraftNameModal = ({ initialName = '', onCancel, onConfirm }) => {
+const NewDraftNameModal = ({
+  initialName = '',
+  initialDescription = '',
+  eyebrow = 'New Draft Version',
+  heading = 'Create draft from live data',
+  hint = 'The draft starts as a copy of the live timetable. Live data stays untouched until you publish it.',
+  confirmLabel = 'Create Draft',
+  confirmIcon = 'fa-plus',
+  onCancel,
+  onConfirm,
+}) => {
   const [name, setName] = useState(initialName);
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState(initialDescription);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -25,9 +35,9 @@ const NewDraftNameModal = ({ initialName = '', onCancel, onConfirm }) => {
       >
         <div className="bg-amber-500 px-5 py-3 text-white">
           <span className="text-[10px] uppercase tracking-wider font-extrabold opacity-90 block">
-            New Draft Version
+            {eyebrow}
           </span>
-          <h3 className="text-base font-bold">Create draft from live data</h3>
+          <h3 className="text-base font-bold">{heading}</h3>
         </div>
 
         <div className="p-5 space-y-4">
@@ -59,8 +69,7 @@ const NewDraftNameModal = ({ initialName = '', onCancel, onConfirm }) => {
           </div>
 
           <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            The draft starts as a copy of the live timetable. Live data stays untouched until you
-            publish it.
+            {hint}
           </p>
         </div>
 
@@ -77,8 +86,8 @@ const NewDraftNameModal = ({ initialName = '', onCancel, onConfirm }) => {
             disabled={!name.trim()}
             className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-2"
           >
-            <i className="fas fa-plus" />
-            Create Draft
+            <i className={`fas ${confirmIcon}`} />
+            {confirmLabel}
           </button>
         </div>
       </form>

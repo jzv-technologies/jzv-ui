@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import { formatDateDisplay } from '../../utils/dateUtils';
-import ReportCardGenerator from './ReportCardGenerator';
+import { ReportCardGenerator } from './report-card-generator';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { useCanAccess } from '../portal-shared/ConditionalBlock';
 

@@ -1390,6 +1390,12 @@ const TimetableAdminView = ({
   seasonsConfig = null, // seasons configuration
   user = null,
   showMyTimetable = false,
+  /** Optional control rendered with the sub-tab pills (e.g. Scheduler Setup's Live / Draft switch). */
+  modeSwitcher = null,
+  /** Optional panel rendered under the sub-tab row (e.g. Scheduler Setup's draft version controls). */
+  draftPanel = null,
+  /** Optional icon rendered with the Scheduler Setup action icons (e.g. the Print button). */
+  printButton = null,
   onActiveViewChange = null, // reports the active subview (used to scope print output)
 }) => {
   const filteredViews = allowedViews;
@@ -1552,14 +1558,7 @@ const TimetableAdminView = ({
       viewLabel,
       entityName,
     });
-  }, [
-    onActiveViewChange,
-    viewType,
-    selectedClassId,
-    selectedTeacherId,
-    classes,
-    teachers,
-  ]);
+  }, [onActiveViewChange, viewType, selectedClassId, selectedTeacherId, classes, teachers]);
 
   const isSchedulerView = viewType === 'scheduler';
   const isGridView = viewType === 'class' || viewType === 'teacher';
@@ -2012,9 +2011,15 @@ const TimetableAdminView = ({
       data-print-target="active"
     >
       {/* ── Header ── */}
-      <div className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5">
+      <div
+        className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5"
+        data-feature-sub-tab-for="scheduler-setup"
+      >
         {/* MOBILE / TABLET VIEW (< lg): 2-Column equal 50/50 split row for View Dropdown + Filter */}
         <div className="lg:hidden flex flex-col gap-2.5 w-full">
+          {/* Caller-supplied control, e.g. Scheduler Setup's Live / Draft switch */}
+          {modeSwitcher && <div className="flex items-center gap-2 w-full">{modeSwitcher}</div>}
+
           {/* First row on mobile: View Switcher (Col 1) + Active View Filter (Col 2) */}
           <div className="grid grid-cols-2 gap-2 w-full items-center">
             {/* Col 1: Main View Switcher Dropdown */}
@@ -2157,244 +2162,7 @@ const TimetableAdminView = ({
               <div />
             )}
 
-              {/* Action Icons */}
-              <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                {!(myTab === 'my' && !myTeacher) &&
-                  (myTab === 'my'
-                    ? myView === 'weekly'
-                    : viewType === 'class' ||
-                      viewType === 'teacher' ||
-                      viewType === 'scheduler') && (
-                    <button
-                      onClick={() => setIsTransposed((v) => !v)}
-                      title={isTransposed ? 'Original View' : 'Transpose View'}
-                      className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                        isTransposed
-                          ? 'bg-brand-primary border-brand-primary text-white shadow-sm'
-                          : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
-                      }`}
-                    >
-                      <i className="fa-solid fa-retweet text-xs" />
-                    </button>
-                  )}
-
-                {!(myTab === 'my' && !myTeacher) && (
-                  <button
-                    onClick={() => setShowBreaks((v) => !v)}
-                    title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
-                    className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                      showBreaks
-                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                        : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
-                    }`}
-                  >
-                    <i className="fas fa-mug-hot text-xs" />
-                  </button>
-                )}
-
-                {!(myTab === 'my' && !myTeacher) && (
-                  <button
-                    onClick={handleExportCSV}
-                    disabled={
-                      myTab === 'class' &&
-                      (viewType === 'scheduler' ||
-                        viewType === 'teacher' ||
-                        viewType === 'class') &&
-                      !selectedId
-                    }
-                    title="Export to CSV / Excel"
-                    className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <i className="fas fa-file-excel text-sm" />
-                  </button>
-                )}
-
-                {myTab === 'class' &&
-                  (viewType === 'class' || viewType === 'scheduler') &&
-                  selectedId &&
-                  typeof onClearSlots === 'function' && (
-                    <button
-                      onClick={() => setIsClearModalOpen(true)}
-                      title="Clear Multiple Slots"
-                      className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
-                    >
-                      <i className="fas fa-eraser text-sm" />
-                    </button>
-                  )}
-              </div>
-            </div>
-          </div>
-
-          {/* DESKTOP VIEW (>= lg): Single combined row layout */}
-          <div className="hidden lg:flex flex-wrap items-center justify-between gap-2.5 w-full">
-            {/* Left section: Top Tabs + Sub-views & Entity Selectors */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Top Navigation Pill Tabs (My Timetable + Subviews directly) */}
-              {showTabSwitcher &&
-                (() => {
-                  const navOptions = [
-                    ...(showMyTimetable
-                      ? [{ id: 'my', label: 'My Timetable', icon: 'fa-user-clock' }]
-                      : []),
-                    ...[
-                      { id: 'scheduler', label: 'Class View', icon: 'fa-th-large' },
-                      { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
-                      { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
-                      { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
-                      { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
-                      {
-                        id: 'assigned_teachers',
-                        label: 'Assigned Teachers',
-                        icon: 'fa-chalkboard-teacher',
-                      },
-                    ].filter((v) => filteredViews.includes(v.id)),
-                  ];
-
-                  const activeNavId = myTab === 'my' ? 'my' : viewType;
-
-                  return (
-                    <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
-                      {navOptions.map((tab) => (
-                        <button
-                          key={tab.id}
-                          onClick={() => {
-                            if (tab.id === 'my') {
-                              setMyTab('my');
-                            } else {
-                              setMyTab('class');
-                              setViewType(tab.id);
-                            }
-                          }}
-                          title={tab.label}
-                          className={`flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                            activeNavId === tab.id
-                              ? 'text-white bg-brand-primary shadow-sm'
-                              : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                          }`}
-                        >
-                          <i className={`fas ${tab.icon} text-[10px]`} />
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-              {/* Today / Weekly toggle (My Timetable) */}
-              {myTab === 'my' &&
-                myTeacher &&
-                (() => {
-                  const myViewOptions = [
-                    { id: 'today', label: 'Today', icon: 'fa-sun' },
-                    { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
-                  ];
-                  return (
-                    <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
-                      {myViewOptions.map((v) => (
-                        <button
-                          key={v.id}
-                          onClick={() => setMyView(v.id)}
-                          className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                            myView === v.id
-                              ? 'bg-brand-primary text-white shadow-sm'
-                              : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                          }`}
-                        >
-                          <i className={`fas ${v.icon} text-[10px]`} />
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                  );
-                })()}
-
-              {/* Entity Selectors (Class / Teacher) */}
-              {!lockedClassId && myTab === 'class' && (
-                <>
-                  {(viewType === 'class' || viewType === 'scheduler') && (
-                    <SingleSelectDropdown
-                      label="Select Class"
-                      selected={selectedId}
-                      onChange={setSelectedId}
-                      options={[...classes]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((cls) => {
-                          const pct = getCompletionPercentage(cls.id);
-                          const assigned = slots.filter(
-                            (s) =>
-                              String(s.class_id) === String(cls.id) &&
-                              s.subject_id &&
-                              !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
-                          ).length;
-                          const total = days.length * periods.filter((p) => !p.is_break).length;
-                          return {
-                            value: String(cls.id),
-                            label: cls.name,
-                            subLabel:
-                              viewType === 'scheduler'
-                                ? `${pct}% completed - ${assigned} of ${total}`
-                                : null,
-                          };
-                        })}
-                    />
-                  )}
-                  {viewType === 'teacher' && (
-                    <SingleSelectDropdown
-                      label="Select Teacher"
-                      selected={selectedId}
-                      onChange={setSelectedId}
-                      options={[...teachers]
-                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                        .map((t) => ({ value: String(t.id), label: t.name }))}
-                    />
-                  )}
-                </>
-              )}
-
-              {/* Desktop-only inline filters for overview views */}
-              {myTab === 'class' && isOverviewView && (
-                <div className="flex items-center gap-2">
-                  {(viewType === 'teacher_unassigned' || viewType === 'subject_unassigned') && (
-                    <MultiSelectDropdown
-                      label="Classes"
-                      options={classOptions}
-                      selected={selClasses}
-                      onChange={setSelClasses}
-                    />
-                  )}
-                  {viewType === 'free_teachers' && (
-                    <MultiSelectDropdown
-                      label="Teachers"
-                      options={teacherOptions}
-                      selected={selTeachers}
-                      onChange={setSelTeachers}
-                      genderFilter={freeTeachersGender}
-                      onGenderChange={setFreeTeachersGender}
-                    />
-                  )}
-                  {viewType === 'assigned_teachers' && (
-                    <>
-                      <MultiSelectDropdown
-                        label="Teachers"
-                        options={teacherOptions}
-                        selected={selAssignedTeachers}
-                        onChange={setSelAssignedTeachers}
-                        genderFilter={assignedTeachersGender}
-                        onGenderChange={setAssignedTeachersGender}
-                      />
-                      <MultiSelectDropdown
-                        label="Classes"
-                        options={classOptions}
-                        selected={selAssignedClasses}
-                        onChange={setSelAssignedClasses}
-                      />
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Right Side: Action Icons */}
+            {/* Action Icons */}
             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
               {!(myTab === 'my' && !myTeacher) &&
                 (myTab === 'my'
@@ -2423,7 +2191,7 @@ const TimetableAdminView = ({
                       : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
                   }`}
                 >
-                  <i className={`fas fa-mug-hot text-xs`} />
+                  <i className="fas fa-mug-hot text-xs" />
                 </button>
               )}
 
@@ -2458,6 +2226,250 @@ const TimetableAdminView = ({
           </div>
         </div>
 
+        {/* DESKTOP VIEW (>= lg): Single combined row layout */}
+        <div className="hidden lg:flex flex-wrap items-center justify-between gap-2.5 w-full">
+          {/* Left section: Top Tabs + Sub-views & Entity Selectors */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Top Navigation Pill Tabs (My Timetable + Subviews directly) */}
+            {showTabSwitcher &&
+              (() => {
+                const navOptions = [
+                  ...(showMyTimetable
+                    ? [{ id: 'my', label: 'My Timetable', icon: 'fa-user-clock' }]
+                    : []),
+                  ...[
+                    { id: 'scheduler', label: 'Class View', icon: 'fa-th-large' },
+                    { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+                    { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
+                    { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
+                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+                    {
+                      id: 'assigned_teachers',
+                      label: 'Assigned Teachers',
+                      icon: 'fa-chalkboard-teacher',
+                    },
+                  ].filter((v) => filteredViews.includes(v.id)),
+                ];
+
+                const activeNavId = myTab === 'my' ? 'my' : viewType;
+
+                return (
+                  <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
+                    {navOptions.map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          if (tab.id === 'my') {
+                            setMyTab('my');
+                          } else {
+                            setMyTab('class');
+                            setViewType(tab.id);
+                          }
+                        }}
+                        title={tab.label}
+                        className={`flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                          activeNavId === tab.id
+                            ? 'text-white bg-brand-primary shadow-sm'
+                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                        }`}
+                      >
+                        <i className={`fas ${tab.icon} text-[10px]`} />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
+            {/* Caller-supplied control, e.g. Scheduler Setup's Live / Draft switch */}
+            {modeSwitcher}
+
+            {/* Today / Weekly toggle (My Timetable) */}
+            {myTab === 'my' &&
+              myTeacher &&
+              (() => {
+                const myViewOptions = [
+                  { id: 'today', label: 'Today', icon: 'fa-sun' },
+                  { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
+                ];
+                return (
+                  <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
+                    {myViewOptions.map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => setMyView(v.id)}
+                        className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                          myView === v.id
+                            ? 'bg-brand-primary text-white shadow-sm'
+                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
+                        }`}
+                      >
+                        <i className={`fas ${v.icon} text-[10px]`} />
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
+            {/* Entity Selectors (Class / Teacher) */}
+            {!lockedClassId && myTab === 'class' && (
+              <>
+                {(viewType === 'class' || viewType === 'scheduler') && (
+                  <SingleSelectDropdown
+                    label="Select Class"
+                    selected={selectedId}
+                    onChange={setSelectedId}
+                    options={[...classes]
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((cls) => {
+                        const pct = getCompletionPercentage(cls.id);
+                        const assigned = slots.filter(
+                          (s) =>
+                            String(s.class_id) === String(cls.id) &&
+                            s.subject_id &&
+                            !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+                        ).length;
+                        const total = days.length * periods.filter((p) => !p.is_break).length;
+                        return {
+                          value: String(cls.id),
+                          label: cls.name,
+                          subLabel:
+                            viewType === 'scheduler'
+                              ? `${pct}% completed - ${assigned} of ${total}`
+                              : null,
+                        };
+                      })}
+                  />
+                )}
+                {viewType === 'teacher' && (
+                  <SingleSelectDropdown
+                    label="Select Teacher"
+                    selected={selectedId}
+                    onChange={setSelectedId}
+                    options={[...teachers]
+                      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                      .map((t) => ({ value: String(t.id), label: t.name }))}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Desktop-only inline filters for overview views */}
+            {myTab === 'class' && isOverviewView && (
+              <div className="flex items-center gap-2">
+                {(viewType === 'teacher_unassigned' || viewType === 'subject_unassigned') && (
+                  <MultiSelectDropdown
+                    label="Classes"
+                    options={classOptions}
+                    selected={selClasses}
+                    onChange={setSelClasses}
+                  />
+                )}
+                {viewType === 'free_teachers' && (
+                  <MultiSelectDropdown
+                    label="Teachers"
+                    options={teacherOptions}
+                    selected={selTeachers}
+                    onChange={setSelTeachers}
+                    genderFilter={freeTeachersGender}
+                    onGenderChange={setFreeTeachersGender}
+                  />
+                )}
+                {viewType === 'assigned_teachers' && (
+                  <>
+                    <MultiSelectDropdown
+                      label="Teachers"
+                      options={teacherOptions}
+                      selected={selAssignedTeachers}
+                      onChange={setSelAssignedTeachers}
+                      genderFilter={assignedTeachersGender}
+                      onGenderChange={setAssignedTeachersGender}
+                    />
+                    <MultiSelectDropdown
+                      label="Classes"
+                      options={classOptions}
+                      selected={selAssignedClasses}
+                      onChange={setSelAssignedClasses}
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right Side: Action Icons */}
+          <div
+            className="flex items-center gap-1.5 shrink-0 ml-auto"
+            feature-icons="Scheduler Setup Icons"
+          >
+            {printButton}
+            {!(myTab === 'my' && !myTeacher) &&
+              (myTab === 'my'
+                ? myView === 'weekly'
+                : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
+                <button
+                  onClick={() => setIsTransposed((v) => !v)}
+                  title={isTransposed ? 'Original View' : 'Transpose View'}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                    isTransposed
+                      ? 'bg-brand-primary border-brand-primary text-white shadow-sm'
+                      : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
+                  }`}
+                >
+                  <i className="fa-solid fa-retweet text-xs" />
+                </button>
+              )}
+
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={() => setShowBreaks((v) => !v)}
+                title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
+                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                  showBreaks
+                    ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                    : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
+                }`}
+              >
+                <i className={`fas fa-mug-hot text-xs`} />
+              </button>
+            )}
+
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={handleExportCSV}
+                disabled={
+                  myTab === 'class' &&
+                  (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                  !selectedId
+                }
+                title="Export to CSV / Excel"
+                className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-file-excel text-sm" />
+              </button>
+            )}
+
+            {myTab === 'class' &&
+              (viewType === 'class' || viewType === 'scheduler') &&
+              selectedId &&
+              typeof onClearSlots === 'function' && (
+                <button
+                  onClick={() => setIsClearModalOpen(true)}
+                  title="Clear Multiple Slots"
+                  className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
+                >
+                  <i className="fas fa-eraser text-sm" />
+                </button>
+              )}
+          </div>
+        </div>
+
+        {/* Sub-tab row extras: the Scheduler Setup draft version controls sit here, directly under
+            the sub-tab row, so the Live / Draft switch and the version it governs stay together. */}
+        {draftPanel && <div className="w-full">{draftPanel}</div>}
+      </div>
+
       {/* Print-only Header */}
       <div className="hidden print:block mb-6 text-center">
         <h2 className="text-2xl font-bold text-black mb-1">JAMIA ZAYTOONAH VELLORE</h2>
@@ -2477,7 +2489,8 @@ const TimetableAdminView = ({
               No individual teacher profile linked to your account.
             </p>
             <p className="text-dark-muted text-xs mb-2 max-w-md">
-              You can still browse all class and teacher timetables across the school using the views below:
+              You can still browse all class and teacher timetables across the school using the
+              views below:
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2">
               <button
@@ -2602,9 +2615,7 @@ const TimetableAdminView = ({
                   const subjectObj = isAssigned
                     ? subjects.find((s) => String(s.id) === String(slot.subject_id))
                     : null;
-                  const requiresTeacher = subjectObj
-                    ? subjectObj.requires_teacher !== false
-                    : true;
+                  const requiresTeacher = subjectObj ? subjectObj.requires_teacher !== false : true;
                   const clsObj =
                     subjectObj && subjectObj.classification_id
                       ? classifications.find(
@@ -2624,8 +2635,7 @@ const TimetableAdminView = ({
                     } else if (isFemale) {
                       colorClass = 'bg-pink-100 text-pink-primary border-pink-200';
                     } else {
-                      colorClass =
-                        'bg-light-lbg text-dark-charcoal border-light-border';
+                      colorClass = 'bg-light-lbg text-dark-charcoal border-light-border';
                     }
                   }
 
@@ -2664,12 +2674,8 @@ const TimetableAdminView = ({
                         className="p-2 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-light-bg/5"
                       >
                         <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
-                          <i
-                            className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}
-                          ></i>
-                          <span className="uppercase tracking-wider">
-                            {period.name || 'Break'}
-                          </span>
+                          <i className={`fas ${breakIcon} mb-1 text-xs text-brand-soft`}></i>
+                          <span className="uppercase tracking-wider">{period.name || 'Break'}</span>
                         </div>
                       </td>
                     );
@@ -2686,18 +2692,12 @@ const TimetableAdminView = ({
                       {isAssigned ? (
                         <div
                           className={`w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
-                            themeStyles
-                              ? `border-l-[6px] border-l-${themeStyles.color}`
-                              : 'border'
+                            themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'
                           } ${
                             isClickable
                               ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md'
                               : ''
-                          } ${
-                            isPopoverOpen
-                              ? 'ring-2 ring-brand-primary ring-offset-1'
-                              : ''
-                          }`}
+                          } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
                         >
                           <div className="flex items-center justify-between min-w-0">
                             <h5 className="font-extrabold text-[10px] truncate leading-tight flex-1">
@@ -2712,9 +2712,7 @@ const TimetableAdminView = ({
                           {viewType === 'class' || viewType === 'scheduler' ? (
                             requiresTeacher ? (
                               <p className="text-[10px] opacity-90 font-bold truncate mt-0.5">
-                                {isFemale && (
-                                  <i className="fas fa-female mr-1 text-[9px]"></i>
-                                )}
+                                {isFemale && <i className="fas fa-female mr-1 text-[9px]"></i>}
                                 {getTeacherName(slot.teacher_id)}
                               </p>
                             ) : (
@@ -2819,7 +2817,11 @@ const TimetableAdminView = ({
 
                                 {isBreak ? (
                                   <td
-                                    colSpan={days.filter((d) => (weekdayConfig[d] || 'Weekday') !== 'Holiday Weekend').length}
+                                    colSpan={
+                                      days.filter(
+                                        (d) => (weekdayConfig[d] || 'Weekday') !== 'Holiday Weekend'
+                                      ).length
+                                    }
                                     className="p-2 border-r border-light-border text-center min-w-[120px] h-[80px] bg-light-bg/5"
                                   >
                                     <div className="w-full h-full rounded-xl border border-light-border bg-light-bg/15 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">

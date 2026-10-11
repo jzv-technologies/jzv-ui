@@ -17,7 +17,14 @@ export {
   getDynamicClassesPerPage,
 } from '../../report-card-designer/utils';
 
-import { calculateClassRanks } from '../../../../utils/ranking';
+import {
+  DEFAULT_GRADING_SCALE,
+  DEFAULT_MOCK_CLASSIFICATIONS,
+  CLASSIFICATION_SEQ_FALLBACK,
+  CLASSIFICATION_NAME_SEQ_FALLBACK,
+  KNOWN_SUBJECT_CLASSIFICATIONS,
+} from '../../report-card-designer/constants';
+import { calculateGrade } from '../../report-card-designer/utils';
 
 /**
  * Generator-specific utility functions
@@ -73,8 +80,33 @@ export const applyAttendance = (list, selectedScheduleId, propAttendanceMap) => 
   return map;
 };
 
-// Build student metrics map
-export const buildStudentMetricsMap = (students, results, internalSubjects, activeTemplate, selectedClassId, serverRanksMap) => {
+/**
+ * Build the per-student metrics map used by every preview renderer.
+ *
+ * Marks live on exam_result_entries (marks_obtained), not on exam_results, so results and entries
+ * are joined here: by admission_no when the entry carries one, otherwise by student_id for legacy
+ * rows. max_marks/pass_marks are read from the exam result, which is the per-exam authority.
+ *
+ * @param {Array} students - Students to report on
+ * @param {Array} results - exam_results rows for the selected exam
+ * @param {Array} entries - exam_result_entries rows holding the marks
+ * @param {Array} internalSubjects - Subject master rows (name, arabic name, classification)
+ * @param {Array} internalClassifications - Classification rows for seq/name resolution
+ * @param {Object} activeTemplate - Report template (gradingScale)
+ * @param {string|number} selectedClassId - Fallback class id when a student has none
+ * @param {Object} ranks - { studentRanksMap, serverRanksMap, isParentView }
+ * @returns {Object} metrics keyed by String(student.id)
+ */
+export const buildStudentMetricsMap = (
+  students,
+  results,
+  entries = [],
+  internalSubjects = [],
+  internalClassifications = [],
+  activeTemplate = null,
+  selectedClassId = null,
+  { studentRanksMap = null, serverRanksMap = {}, isParentView = false } = {}
+) => {
   if (students.length === 0 || results.length === 0) return {};
   const scale = activeTemplate?.gradingScale || DEFAULT_GRADING_SCALE;
 
@@ -90,165 +122,139 @@ export const buildStudentMetricsMap = (students, results, internalSubjects, acti
 
     relevantResults.forEach((result) => {
       const sub = internalSubjects.find((s) => String(s.id) === String(result.subject_id));
-      if (!sub) return;
-      const obtained = Number(result.marks_obtained) || 0;
-      const max = Number(sub.max_marks || result.max_marks || 100);
-      const pass = Number(sub.pass_marks || 35);
-      totalObtained += obtained;
-      totalMax += max;
-      if (obtained < pass) hasFailed = true;
+      const entry = entries.find(
+        (e) =>
+          String(e.result_id) === String(result.id) &&
+          (e.admission_no
+            ? String(e.admission_no) === String(student.admission_no)
+            : String(e.student_id) === String(student.id))
+      );
+
+      const isAbsent = Boolean(entry?.is_absent);
+      const marks = entry && entry.marks_obtained !== null ? Number(entry.marks_obtained) : null;
+      const maxMarks = Number(result.max_marks || 100);
+      const passMarks = result.pass_marks ? Number(result.pass_marks) : null;
+
+      let status = 'PASS';
+      if (isAbsent) {
+        status = 'ABSENT';
+        hasFailed = true;
+      } else if (passMarks !== null && marks !== null && marks < passMarks) {
+        status = 'FAIL';
+        hasFailed = true;
+      }
+
+      let grade = '—';
+      if (marks !== null && maxMarks > 0) {
+        grade = calculateGrade((marks / maxMarks) * 100, scale);
+      }
+
+      if (!isAbsent && marks !== null) totalObtained += marks;
+      totalMax += maxMarks;
+
+      const subName = (sub?.name || `Subject #${result.subject_id}`).trim();
+      const subNameNorm = subName.toLowerCase();
+      const knownSub =
+        KNOWN_SUBJECT_CLASSIFICATIONS[subNameNorm] ||
+        Object.values(KNOWN_SUBJECT_CLASSIFICATIONS).find(
+          (k) => String(k.subjectId) === String(result.subject_id)
+        );
+
+      const classificationId = sub?.classification_id ?? knownSub?.classificationId ?? null;
+      const clsObj =
+        internalClassifications.find((c) => String(c.id) === String(classificationId)) ||
+        DEFAULT_MOCK_CLASSIFICATIONS.find((c) => String(c.id) === String(classificationId));
+
+      const classificationName = clsObj?.name || knownSub?.classificationName || 'General';
+      const classificationSeq =
+        clsObj?.seq !== undefined && clsObj?.seq !== null
+          ? Number(clsObj.seq)
+          : knownSub?.seq !== undefined && knownSub?.seq !== null
+            ? Number(knownSub.seq)
+            : CLASSIFICATION_SEQ_FALLBACK[String(classificationId)] !== undefined
+              ? CLASSIFICATION_SEQ_FALLBACK[String(classificationId)]
+              : CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()] !== undefined
+                ? CLASSIFICATION_NAME_SEQ_FALLBACK[classificationName.toLowerCase()]
+                : 999999;
+
       subjectScores.push({
-        subjectId: String(sub.id),
-        subjectName: sub.name,
-        arabicName: sub.arabic_name || '',
-        maxMarks: max,
-        passMarks: pass,
-        marksObtained: obtained,
-        percentage: max > 0 ? Math.round((obtained / max) * 100) : 0,
-        status: obtained >= pass ? 'PASS' : 'FAIL',
-        classificationId: sub.classification_id,
+        subjectId: result.subject_id,
+        subjectName: subName,
+        arabicName: sub?.arabic_name || knownSub?.arabicName || '',
+        classificationId,
+        classificationName,
+        classificationSeq,
+        maxMarks,
+        passMarks,
+        marksObtained: isAbsent ? 'Absent' : marks !== null ? marks : '—',
+        rawMarks: marks || 0,
+        isAbsent,
+        grade,
+        status,
       });
     });
 
-    const percentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : 0;
-    const overallGrade = hasFailed ? 'F' : calculateGrade(percentage, scale);
-    const status = hasFailed ? 'FAIL' : 'PASS';
+    // Sort subjects by classification seq, then name, so every report lists subjects the same way.
+    subjectScores.sort((a, b) => {
+      const seqA = a.classificationSeq ?? 999999;
+      const seqB = b.classificationSeq ?? 999999;
+      if (seqA !== seqB) return seqA - seqB;
+      return (a.subjectName || '').localeCompare(b.subjectName || '');
+    });
+
+    const overallPct = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+    const overallGrade = hasFailed ? 'F' : calculateGrade(overallPct, scale);
 
     return {
-          studentId: String(student.id),
-          totalObtained,
-          totalMax,
-          percentage,
-          overallGrade,
-          status,
-          subjectScores,
-          hasFailed,
-        };
-      });
-
-      // Calculate class ranks using new utility (excludes failed students)
-      const rankMap = calculateClassRanks(studentCalculations);
-
-      // Merge with server ranks
-      const finalMetrics = {};
-      studentCalculations.forEach((calc) => {
-        const serverRank = serverRanksMap?.[calc.studentId];
-        const serverClassRank =
-          serverRank && typeof serverRank === 'object' ? serverRank.classRank : serverRank;
-        const calculatedRank = rankMap[calc.studentId]?.rank || null;
-        finalMetrics[calc.studentId] = {
-          ...calc,
-          // The locally calculated rank excludes failed students and is the single source of
-          // truth so this report agrees with the Rank Holder report.
-          classRank: calculatedRank || serverClassRank || null,
-          totalStudents: rankMap[calc.studentId]?.totalStudents || students.length,
-        };
-      });
-
-      return finalMetrics;
+      studentId: student.id,
+      totalObtained,
+      totalMax,
+      percentage: Number(overallPct.toFixed(1)),
+      overallGrade,
+      status: hasFailed ? 'FAIL' : 'PASS',
+      subjectScores,
+      hasFailed,
     };
+  });
 
-// Build chart data for a student
-export const buildChartData = (subjectScores, chartConfig, overallPreviewPct, previewScoresWithGrades) => {
-  const ch = chartConfig || {};
-  const chartCols = ch.columns && ch.columns.length > 0 ? ch.columns : [{ ...DEFAULT_CHART_COLUMN }];
-  const chartH = ch.height || 180;
-  const accentColor = '#e11d48';
-  const PALETTE = ['#e11d48', '#059669', '#7c3aed', '#0284c7', '#d97706', '#db2777', '#0891b2'];
+  // Only students who passed take a rank slot, sorted by percentage then total marks. Letting
+  // failed students consume slots is what made a class show Rank 3 while Rank 2 was missing.
+  const rankedCalculations = studentCalculations.filter(
+    (s) => s.status !== 'FAIL' && s.overallGrade !== 'F'
+  );
+  const sortedByRank = [...rankedCalculations].sort(
+    (a, b) => (b.percentage || 0) - (a.percentage || 0) || b.totalObtained - a.totalObtained
+  );
 
-  const isPercentage = (colCfg) => {
-    const d = colCfg.chartData === 'classification' ? 'grade_classification' : colCfg.chartData || 'subject_marks';
-    const agg = colCfg.aggregation || 'none';
-    if (d === 'subject_pct' || d === 'overall_pct') return true;
-    if (d === 'subject_classification' && agg !== 'sum' && agg !== 'max') return true;
-    return false;
-  };
+  const metricsMap = {};
+  studentCalculations.forEach((item) => {
+    const stuObj = students.find((s) => String(s.id) === String(item.studentId));
+    const admKey = stuObj?.admission_no ? String(stuObj.admission_no).trim().toLowerCase() : '';
+    const serverRank =
+      studentRanksMap?.[String(item.studentId)] ||
+      (admKey && studentRanksMap?.[admKey]) ||
+      serverRanksMap[String(item.studentId)] ||
+      (admKey && serverRanksMap[admKey]);
 
-  const buildColData = (colCfg) => {
-    const d = colCfg.chartData === 'classification' ? 'grade_classification' : colCfg.chartData || 'subject_marks';
-    const agg = colCfg.aggregation || 'none';
+    const failed = item.status === 'FAIL' || item.overallGrade === 'F';
+    const rankIdx = sortedByRank.findIndex((s) => String(s.studentId) === String(item.studentId));
+    const computedRank = rankIdx >= 0 ? rankIdx + 1 : null;
+    // The parent view only loads the ward's rows, so its local cohort is not the whole class and
+    // the class-wide server rank stays authoritative. Class-wide views use the local rank so the
+    // progress report always agrees with the Rank Holder report.
+    const classRank = failed
+      ? null
+      : isParentView
+        ? serverRank?.classRank || computedRank
+        : computedRank || serverRank?.classRank || null;
+    const totalStudents =
+      serverRank?.totalStudents ||
+      (studentCalculations.length > 1 ? studentCalculations.length : null);
 
-    if (d === 'subject_marks') {
-      return subjectScores.map((s) => ({
-        name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
-        fullName: s.subjectName,
-        value: typeof s.marksObtained === 'number' ? s.marksObtained : 0,
-        Max: s.maxMarks,
-      }));
-    }
+    metricsMap[String(item.studentId)] = { ...item, hasFailed: failed, classRank, totalStudents };
+  });
 
-    if (d === 'subject_pct') {
-      return subjectScores.map((s) => ({
-        name: s.subjectName.length > 8 ? s.subjectName.slice(0, 7) + '…' : s.subjectName,
-        fullName: s.subjectName,
-        value: Math.round((s.marksObtained / s.maxMarks) * 100),
-        Max: 100,
-      }));
-    }
-
-    if (d === 'subject_classification') {
-      const groupsMap = new Map();
-      subjectScores.forEach((s) => {
-        const key = s.classificationName || 'General';
-        if (!groupsMap.has(key)) groupsMap.set(key, []);
-        groupsMap.get(key).push(s);
-      });
-      const result = [];
-      groupsMap.forEach((subList, groupName) => {
-        const totalObt = subList.reduce((acc, curr) => acc + (Number(curr.marksObtained) || 0), 0);
-        const totalMax = subList.reduce((acc, curr) => acc + (Number(curr.maxMarks) || 0), 0);
-        const count = subList.length;
-        let val = 0;
-        if (agg === 'sum') val = Math.round(totalObt);
-        else if (agg === 'max') val = Math.max(...subList.map((s) => Number(s.marksObtained) || 0));
-        else val = totalMax > 0 ? Math.round((totalObt / totalMax) * 100) : count > 0 ? Math.round(totalObt / count) : 0;
-        result.push({
-          name: groupName.length > 12 ? groupName.slice(0, 10) + '…' : groupName,
-          fullName: `${groupName} (${count} subject${count === 1 ? '' : 's'})`,
-          value: val,
-          count,
-          Max: agg === 'sum' ? totalMax : 100,
-        });
-      });
-      return result;
-    }
-
-    if (d === 'grade_classification') {
-      const scale = DEFAULT_GRADING_SCALE;
-      const counts = {};
-      scale.forEach((g) => { counts[g.grade] = 0; });
-      subjectScores.forEach((s) => { if (s.grade) counts[s.grade] = (counts[s.grade] || 0) + 1; });
-      return scale.map((g) => ({
-        name: g.grade,
-        fullName: `Grade ${g.grade}${g.description ? ` (${g.description})` : ''}`,
-        value: counts[g.grade] || 0,
-        count: counts[g.grade] || 0,
-      })).filter((g) => g.value > 0);
-    }
-
-    if (d === 'attendance') {
-      return [
-        { name: 'Present', fullName: 'Present Days', value: 96, Max: 100 },
-        { name: 'Absent', fullName: 'Absent Days', value: 4, Max: 100 },
-      ];
-    }
-
-    if (d === 'overall_pct') {
-      return [
-        { name: 'Score', fullName: 'Overall Score', value: Math.round(overallPreviewPct), Max: 100 },
-        { name: 'Remaining', fullName: 'Remaining', value: Math.round(100 - overallPreviewPct), Max: 100 },
-      ];
-    }
-
-    return subjectScores.map((s) => ({
-      name: s.subjectName.slice(0, 6),
-      fullName: s.subjectName,
-      value: s.marksObtained,
-      Max: s.maxMarks,
-    }));
-  };
-
-  return { chartCols, chartH, accentColor, PALETTE, isPercentage, buildColData };
+  return metricsMap;
 };
 
 // Build grouped sections for subject table

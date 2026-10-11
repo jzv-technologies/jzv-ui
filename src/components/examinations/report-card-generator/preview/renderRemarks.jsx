@@ -6,7 +6,7 @@ import { DEFAULT_BLOCK_STYLE } from '../../report-card-designer/constants';
  * Print renderer for the teacher remarks block.
  * Extracted from the original ReportCardGenerator.jsx
  */
-export const renderRemarks = ({ bleed, activeTemplate, studentRemarksMap, student, remarksPrint }) => {
+export const renderRemarks = ({ bleed, activeTemplate, studentRemarksMap, student, remarksPrint, onEditRemarks = null }) => {
   if (!activeTemplate.showTeacherRemarks) return null;
   const rmk = activeTemplate.remarksConfig || {};
   const isCompact = rmk.size === 'compact';
@@ -26,6 +26,17 @@ export const renderRemarks = ({ bleed, activeTemplate, studentRemarksMap, studen
         <span className="font-black uppercase tracking-wider block remarks-label" style={{ color: rmkSt.labelColor || '#78350f', fontSize: `${remarksPrint.labelFontSize}px` }}>
           {rmk.title || "Teacher's Remarks"}:
         </span>
+        {onEditRemarks && (
+          <button
+            type="button"
+            onClick={() => onEditRemarks(student.id)}
+            className="print:hidden text-[9px] font-bold text-amber-800 hover:text-amber-950 bg-amber-100/80 hover:bg-amber-200 px-2 py-0.5 rounded cursor-pointer transition-colors flex items-center gap-1 opacity-80 group-hover:opacity-100"
+            title="Edit remarks for this student"
+          >
+            <i className="fas fa-edit text-[8px]" />
+            <span>Edit Remarks</span>
+          </button>
+        )}
       </div>
       <p className="italic font-medium remarks-content" style={{ color: rmkSt.contentColor || '#0f172a', fontSize: `${remarksPrint.contentFontSize}px` }}>
         "{effectiveRemarks}"

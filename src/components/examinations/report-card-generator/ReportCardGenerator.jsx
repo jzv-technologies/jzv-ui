@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { supabase } from '../../utils/supabase';
-import { showToast } from '../../utils/toast';
-import { getAdminConfig, saveAdminConfig } from '../../utils/adminConfigUtils';
-import MultiSelectDropdown from '../MultiSelectDropdown';
-import AttendanceHorizontalStackBar from './AttendanceHorizontalStackBar';
-import RankHolders from './RankHolders';
-import ConfirmModal from '../ConfirmModal';
-import { useCanAccess } from '../portal-shared/ConditionalBlock';
-import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../utils/examScheduleUtils';
-import { ExtraComponentLayers } from './report-card-generator/components/ExtraComponentLayers';
-import GradingScaleLegend from './report-card-generator/components/GradingScaleLegend';
+import { supabase } from '../../../utils/supabase';
+import { showToast } from '../../../utils/toast';
+import { getAdminConfig, saveAdminConfig } from '../../../utils/adminConfigUtils';
+import MultiSelectDropdown from '../../MultiSelectDropdown';
+import AttendanceHorizontalStackBar from '../AttendanceHorizontalStackBar';
+import RankHolders from '../RankHolders';
+import ConfirmModal from '../../ConfirmModal';
+import { useCanAccess } from '../../portal-shared/ConditionalBlock';
+import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../../utils/examScheduleUtils';
+import { ExtraComponentLayers } from './components/ExtraComponentLayers';
+import GradingScaleLegend from './components/GradingScaleLegend';
 import {
   DEFAULT_TEMPLATE,
   DEFAULT_GRADING_SCALE,
@@ -32,7 +32,7 @@ import {
   hexToRgba,
   formatDataLabel,
   shouldPrintBlockOnPage,
-} from './report-card-designer';
+} from '../report-card-designer';
 import {
   BarChart,
   Bar,
@@ -60,10 +60,9 @@ import {
   mergeById,
   applyAttendance,
   buildStudentMetricsMap,
-  buildChartData,
   buildGroupedSections,
   getPrintFontSizes,
-} from './report-card-generator/utils';
+} from './utils';
 import {
   renderSchoolHeader,
   renderStudentInfo,
@@ -74,8 +73,8 @@ import {
   renderSignatures,
   renderAttendanceBar,
   renderRankHolders,
-} from './report-card-generator/preview';
-import { ExamRemarksModal, ExamAttendanceUploadModal } from './report-card-generator/modals';
+} from './preview';
+import { ExamRemarksModal, ExamAttendanceUploadModal } from './modals';
 
 const TEMPLATES_CONFIG_KEY = 'exam_progress_report_templates';
 
@@ -707,37 +706,80 @@ const ReportCardGenerator = ({
 
   // Compute calculated metrics & ranks across all students in class
   const studentMetricsMap = useMemo(() => {
-    return buildStudentMetricsMap(students, results, internalSubjects, activeTemplate, selectedClassId, serverRanksMap);
-  }, [students, results, internalSubjects, activeTemplate, selectedClassId, serverRanksMap]);
+    return buildStudentMetricsMap(
+      students,
+      results,
+      entries,
+      internalSubjects,
+      internalClassifications,
+      activeTemplate,
+      selectedClassId,
+      { studentRanksMap, serverRanksMap, isParentView }
+    );
+  }, [
+    students,
+    results,
+    entries,
+    internalSubjects,
+    internalClassifications,
+    activeTemplate,
+    selectedClassId,
+    studentRanksMap,
+    serverRanksMap,
+    isParentView,
+  ]);
 
   // Class rank holders for rank_holder mode
+  // Rank holders per class. Built from the same metrics map the class progress report uses, and
+  // failed students are dropped before ranking, so a class shows Rank 1, 2, 3 ... with no gaps.
   const classRankHoldersMap = useMemo(() => {
-    if (reportMode !== 'rank_holder') return {};
-    const rankMap = {};
-    const scale = activeTemplate?.gradingScale || DEFAULT_GRADING_SCALE;
+    if (!students || students.length === 0 || !studentMetricsMap) return {};
 
-    const classGroups = {};
-    students.forEach((student) => {
-      const cId = String(student.class_id || selectedClassId);
-      if (!classGroups[cId]) classGroups[cId] = [];
-      classGroups[cId].push(student);
+    const byClass = {};
+    students.forEach((stu) => {
+      const clsId = String(stu.class_id || selectedClassId || 'default');
+      const metrics = studentMetricsMap[String(stu.id)] || {};
+      const hasFailed =
+        metrics.hasFailed === true || metrics.status === 'FAIL' || metrics.overallGrade === 'F';
+
+      if (!byClass[clsId]) byClass[clsId] = [];
+      byClass[clsId].push({
+        id: stu.id,
+        student_id: stu.id,
+        student_name: stu.student_name,
+        admission_no: stu.admission_no,
+        photo_id: stu.photo_id,
+        photo_url: stu.photo_url,
+        class_id: stu.class_id,
+        class_name:
+          internalClasses.find((c) => String(c.id) === String(stu.class_id))?.name ||
+          classes.find((c) => String(c.id) === String(stu.class_id))?.name ||
+          selectedClass?.name ||
+          `Class ${stu.class_id}`,
+        percentage: metrics.percentage ?? 0,
+        totalObtained: metrics.totalObtained ?? 0,
+        classRank: metrics.classRank,
+        rank: metrics.classRank,
+        hasFailed,
+        subjectScores: metrics.subjectScores,
+      });
     });
 
-    Object.entries(classGroups).forEach(([cId, classStudents]) => {
-      const classResults = results.filter((r) => String(r.class_id) === cId);
-      const classMetrics = buildStudentMetricsMap(classStudents, classResults, internalSubjects, activeTemplate, cId, {});
-      const sorted = Object.values(classMetrics).sort((a, b) => b.percentage - a.percentage);
-      rankMap[cId] = sorted.map((m, idx) => ({
-        ...m,
-        rank: idx + 1,
-        studentName: classStudents.find((s) => String(s.id) === m.studentId)?.student_name || '',
-        photo_id: classStudents.find((s) => String(s.id) === m.studentId)?.photo_id || '',
-        class_name: classStudents.find((s) => String(s.id) === m.studentId)?.class_name || '',
-      }));
+    const result = {};
+    Object.entries(byClass).forEach(([clsId, list]) => {
+      const passedStudents = list.filter((s) => !s.hasFailed);
+      const sorted = [...passedStudents].sort(
+        (a, b) => (b.percentage || 0) - (a.percentage || 0) || (b.totalObtained || 0) - (a.totalObtained || 0)
+      );
+      sorted.forEach((item, idx) => {
+        item.classRank = idx + 1;
+        item.rank = idx + 1;
+      });
+      result[clsId] = sorted;
     });
 
-    return rankMap;
-  }, [reportMode, students, results, internalSubjects, activeTemplate, selectedClassId]);
+    return result;
+  }, [students, studentMetricsMap, selectedClassId, internalClasses, classes, selectedClass]);
 
   // Rank holder classes to render
   const rankHolderClassesToRender = useMemo(() => {
@@ -880,6 +922,12 @@ const ReportCardGenerator = ({
   // Per-student Teacher Remarks & Recommendations Map
   const [studentRemarksMap, setStudentRemarksMap] = useState({});
   const [internalRemarksModalOpen, setInternalRemarksModalOpen] = useState(false);
+  // Student the remarks modal should open on when it is launched from a card.
+  const [remarksStudentId, setRemarksStudentId] = useState(null);
+  const handleEditRemarks = (studentId) => {
+    setRemarksStudentId(studentId);
+    setIsRemarksModalOpen(true);
+  };
   const isRemarksModalOpen =
     propIsRemarksModalOpen !== undefined ? propIsRemarksModalOpen : internalRemarksModalOpen;
   const setIsRemarksModalOpen = (val) => {
@@ -1393,7 +1441,14 @@ const ReportCardGenerator = ({
                           }
 
                           case 'studentInfo': {
-                            return renderStudentInfo({ bleed, activeTemplate, studentInfoPrint });
+                            return renderStudentInfo({
+                              bleed,
+                              activeTemplate,
+                              studentInfoPrint,
+                              student,
+                              studentIdx: studentIndex,
+                              selectedClass,
+                            });
                           }
 
                           case 'attendanceBar': {
@@ -1436,6 +1491,8 @@ const ReportCardGenerator = ({
                               chartData,
                               subjectScores,
                               chartPrint,
+                              metrics,
+                              student,
                             });
                           }
 
@@ -1446,6 +1503,7 @@ const ReportCardGenerator = ({
                               studentRemarksMap,
                               student,
                               remarksPrint,
+                              onEditRemarks: handleEditRemarks,
                             });
                           }
 
@@ -1527,6 +1585,7 @@ const ReportCardGenerator = ({
         students={students}
         displayedStudents={displayedStudents}
         studentRemarksMap={studentRemarksMap}
+        initialStudentId={remarksStudentId}
         onSaveSuccess={(updatedMap) => {
           setStudentRemarksMap(updatedMap);
           loadReportData();

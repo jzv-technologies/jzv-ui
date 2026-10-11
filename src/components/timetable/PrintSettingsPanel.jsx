@@ -14,6 +14,9 @@ import {
   CELL_DATA_OPTIONS,
   ROW_HEADER_OPTIONS,
   CELL_MODES,
+  PRINT_VARIABLES,
+  HEADER_LINE_LIMIT,
+  DEFAULT_HEADER_LINES,
   DEFAULT_PRINT_SETTINGS,
 } from '../../types/print-settings';
 
@@ -38,12 +41,60 @@ const OptionButton = ({ active, onClick, children, className = '' }) => (
   </button>
 );
 
-const PrintSettingsPanel = ({ settings, onChange, onReset, timetableData, className = '', isDomMode = false }) => {
+const PrintSettingsPanel = ({
+  settings,
+  onChange,
+  onReset,
+  timetableData,
+  className = '',
+  isDomMode = false,
+  variant = 'class',
+  classCount = 0,
+}) => {
   const [activeTab, setActiveTab] = useState('layout');
+  // Header line the variable chips insert into (the last one the user typed in).
+  const [activeLineId, setActiveLineId] = useState(null);
 
   // Always read from the shared settings object so the preview can never drift out of sync.
   const s = { ...DEFAULT_PRINT_SETTINGS, ...settings };
   const update = (key, value) => onChange({ ...s, [key]: value });
+
+  const headerLines = s.headerLines?.length ? s.headerLines : DEFAULT_HEADER_LINES;
+  const setHeaderLines = (lines) => update('headerLines', lines);
+  const patchHeaderLine = (id, patch) =>
+    setHeaderLines(headerLines.map((line) => (line.id === id ? { ...line, ...patch } : line)));
+
+  const insertHeaderVariable = (token) => {
+    const target = headerLines.find((line) => line.id === activeLineId) || headerLines[0];
+    if (!target) return;
+    patchHeaderLine(target.id, { text: `${target.text || ''}${token}` });
+    setActiveLineId(target.id);
+  };
+
+  const addHeaderLine = () => {
+    if (headerLines.length >= HEADER_LINE_LIMIT) return;
+    const id = `line-${Date.now()}`;
+    setHeaderLines([
+      ...headerLines,
+      {
+        id,
+        label: `Extra line ${headerLines.length + 1}`,
+        text: '',
+        fontSize: 12,
+        color: '#0f172a',
+        bold: false,
+        visible: true,
+      },
+    ]);
+    setActiveLineId(id);
+  };
+
+  const removeHeaderLine = (id) => {
+    const next = headerLines.filter((line) => line.id !== id);
+    if (next.length === 0) return;
+    setHeaderLines(next);
+    if (activeLineId === id) setActiveLineId(next[0].id);
+  };
 
   const dayOptions = (timetableData?.days || []).map((day) => ({ id: day, label: day }));
   const periodOptions = (timetableData?.periods || []).map((p) => ({
@@ -187,6 +238,67 @@ const PrintSettingsPanel = ({ settings, onChange, onReset, timetableData, classN
                 ))}
               </div>
             </div>
+
+            {!isDomMode && variant === 'class' && (
+              <div data-feature-filter="print-scope">
+                <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2">
+                  What to Print
+                </label>
+                <div className="space-y-2">
+                  <label
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      s.printScope !== 'all-classes'
+                        ? 'border-brand-primary bg-brand-primary/5'
+                        : 'border-light-border hover:border-brand-soft hover:bg-brand-primary/5'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="printScope"
+                      value="current"
+                      checked={s.printScope !== 'all-classes'}
+                      onChange={() => update('printScope', 'current')}
+                      className="w-4 h-4 text-brand-primary border-light-border focus:ring-brand-primary"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-dark-primary text-sm">Current view</div>
+                      <div className="text-[11px] text-dark-soft">
+                        The class currently selected in Class View
+                      </div>
+                    </div>
+                  </label>
+                  <label
+                    className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                      classCount === 0
+                        ? 'border-light-border opacity-60 cursor-not-allowed'
+                        : s.printScope === 'all-classes'
+                          ? 'border-brand-primary bg-brand-primary/5 cursor-pointer'
+                          : 'border-light-border hover:border-brand-soft hover:bg-brand-primary/5 cursor-pointer'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="printScope"
+                      value="all-classes"
+                      checked={s.printScope === 'all-classes'}
+                      disabled={classCount === 0}
+                      onChange={() => update('printScope', 'all-classes')}
+                      className="w-4 h-4 text-brand-primary border-light-border focus:ring-brand-primary"
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium text-dark-primary text-sm">
+                        All classes in one go
+                      </div>
+                      <div className="text-[11px] text-dark-soft">
+                        {classCount > 0
+                          ? `${classCount} classes, one page each — each page shows its own class name`
+                          : 'No classes available'}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -290,17 +402,114 @@ const PrintSettingsPanel = ({ settings, onChange, onReset, timetableData, classN
               </label>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2">
-                Header Text
-              </label>
-              <input
-                type="text"
-                value={s.headerText}
-                onChange={(e) => update('headerText', e.target.value)}
-                placeholder="e.g., Weekly Timetable - Summer 2024"
-                className="w-full bg-white border border-light-border rounded-xl px-4 py-2.5 text-sm font-medium text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary"
-              />
+            <div data-feature="print-header-lines">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide">
+                  Header Lines
+                </label>
+                <button
+                  type="button"
+                  onClick={addHeaderLine}
+                  disabled={headerLines.length >= HEADER_LINE_LIMIT}
+                  className="px-2.5 py-1.5 bg-brand-primary hover:bg-brand-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                  title={`Add another header line (max ${HEADER_LINE_LIMIT})`}
+                >
+                  <i className="fas fa-plus" />
+                  Add line
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {headerLines.map((line, idx) => (
+                  <div
+                    key={line.id}
+                    className={`rounded-xl border-2 p-2.5 space-y-2 bg-white transition-all ${
+                      activeLineId === line.id ? 'border-brand-soft' : 'border-light-border'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => patchHeaderLine(line.id, { visible: line.visible === false })}
+                        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-[11px] transition-all cursor-pointer ${
+                          line.visible === false
+                            ? 'border-light-border bg-light-bg text-dark-muted'
+                            : 'border-brand-primary bg-brand-primary/5 text-brand-primary'
+                        }`}
+                        title={line.visible === false ? 'Hidden — click to show' : 'Visible — click to hide'}
+                      >
+                        <i className={`fas ${line.visible === false ? 'fa-eye-slash' : 'fa-eye'}`} />
+                      </button>
+
+                      <span className="flex-1 text-[11px] font-bold text-dark-soft truncate">
+                        {line.label || `Line ${idx + 1}`}
+                      </span>
+
+                      <input
+                        type="color"
+                        value={line.color || '#0f172a'}
+                        onChange={(e) => patchHeaderLine(line.id, { color: e.target.value })}
+                        className="w-7 h-7 rounded-lg border border-light-border cursor-pointer bg-white p-0.5"
+                        title="Font colour"
+                      />
+
+                      <input
+                        type="number"
+                        min="6"
+                        max="40"
+                        value={line.fontSize || 12}
+                        onChange={(e) =>
+                          patchHeaderLine(line.id, { fontSize: Number(e.target.value) || 12 })
+                        }
+                        className="w-14 bg-white border border-light-border rounded-lg px-1.5 py-1 text-xs font-bold text-dark-primary text-center outline-none focus:ring-2 focus:ring-brand-primary"
+                        title="Font size in pixels"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => removeHeaderLine(line.id)}
+                        disabled={headerLines.length <= 1}
+                        className="w-7 h-7 rounded-lg border border-light-border text-dark-muted hover:text-red-600 hover:border-red-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center text-[11px] transition-all cursor-pointer"
+                        title="Remove this line"
+                      >
+                        <i className="fas fa-trash" />
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={line.text || ''}
+                      onFocus={() => setActiveLineId(line.id)}
+                      onChange={(e) => patchHeaderLine(line.id, { text: e.target.value })}
+                      placeholder="e.g., {className} timetable"
+                      className="w-full bg-white border border-light-border rounded-lg px-3 py-2 text-sm font-medium text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-2.5">
+                <div className="text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                  Insert into the line you last edited
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {PRINT_VARIABLES.map((variable) => (
+                    <button
+                      key={variable.token}
+                      type="button"
+                      onClick={() => insertHeaderVariable(variable.token)}
+                      className="px-2 py-1 rounded-lg bg-light-bg border border-light-border text-[10px] font-bold text-dark-soft hover:text-brand-primary hover:bg-white transition-all cursor-pointer"
+                      title={variable.label}
+                    >
+                      {variable.token}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-dark-soft mt-1">
+                  A line is skipped automatically when its text resolves to nothing, so one line can
+                  cover both class and teacher names.
+                </p>
+              </div>
             </div>
 
             <div>

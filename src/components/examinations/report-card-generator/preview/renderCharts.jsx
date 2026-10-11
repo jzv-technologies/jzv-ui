@@ -31,7 +31,7 @@ import { formatDataLabel, getLabelPlacement, getLegendProps } from '../utils';
  * Print renderer for the charts block.
  * Extracted from the original ReportCardGenerator.jsx
  */
-export const renderCharts = ({ bleed, activeTemplate, chartData, subjectScores, chartPrint }) => {
+export const renderCharts = ({ bleed, activeTemplate, chartData, subjectScores, chartPrint, metrics = {}, student = null }) => {
   if (!activeTemplate.showCharts || chartData.length === 0) return null;
   const ch = activeTemplate.chartConfig || {};
 
@@ -132,16 +132,23 @@ export const renderCharts = ({ bleed, activeTemplate, chartData, subjectScores, 
       }
 
       if (d === 'attendance') {
+        const attVal = Number(String(student?.attendance || '').replace(/[^0-9.]/g, '')) || 95;
         return [
-          { name: 'Present', fullName: 'Present Days', value: 96, Max: 100 },
-          { name: 'Absent', fullName: 'Absent Days', value: 4, Max: 100 },
+          { name: 'Present', fullName: 'Present Days', value: attVal, Max: 100 },
+          { name: 'Absent', fullName: 'Absent Days', value: Math.max(0, 100 - attVal), Max: 100 },
         ];
       }
 
       if (d === 'overall_pct') {
+        const pct = Number(metrics.percentage) || 0;
         return [
-          { name: 'Score', fullName: 'Overall Score', value: Math.round(87.9), Max: 100 },
-          { name: 'Remaining', fullName: 'Remaining', value: Math.round(100 - 87.9), Max: 100 },
+          { name: 'Score', fullName: 'Overall Score', value: Math.round(pct), Max: 100 },
+          {
+            name: 'Remaining',
+            fullName: 'Remaining',
+            value: Math.max(0, 100 - Math.round(pct)),
+            Max: 100,
+          },
         ];
       }
 

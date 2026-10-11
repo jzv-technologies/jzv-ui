@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { supabase } from '../../utils/supabase';
-import { showToast } from '../../utils/toast';
+import { supabase } from '../../../../utils/supabase';
+import { showToast } from '../../../../utils/toast';
 
 /**
  * ExamAttendanceUploadModal

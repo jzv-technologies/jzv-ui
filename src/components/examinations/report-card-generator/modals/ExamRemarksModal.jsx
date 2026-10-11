@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../utils/supabase';
-import { showToast } from '../../utils/toast';
+import { supabase } from '../../../../utils/supabase';
+import { showToast } from '../../../../utils/toast';
 
 /**
  * ExamRemarksModal
@@ -16,12 +16,20 @@ const ExamRemarksModal = ({
   studentRemarksMap,
   onSaveSuccess,
   activeTemplate,
+  initialStudentId = null,
 }) => {
   const [selectedStudentIdx, setSelectedStudentIdx] = useState(0);
   const [remarksForm, setRemarksForm] = useState({ remarks: '', recommendations: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [bulkFile, setBulkFile] = useState(null);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+
+  // Opened from a student's card, the modal should start on that student.
+  useEffect(() => {
+    if (!isOpen || !initialStudentId) return;
+    const idx = displayedStudents.findIndex((s) => String(s.id) === String(initialStudentId));
+    if (idx >= 0) setSelectedStudentIdx(idx);
+  }, [isOpen, initialStudentId, displayedStudents]);
 
   const currentStudent = displayedStudents[selectedStudentIdx];
   const totalStudents = displayedStudents.length;

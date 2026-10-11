@@ -112,7 +112,7 @@ export const STATIC_MANAGED_COMPONENTS = new Set([
   'take-test-management',
   'teacher-activity',
   'teachers-mapping',
-  'timetable-drafts',
+  'timetable-draft-mode',
   'timetable-json-config',
   'timetable-planner',
   'timetable-sync',

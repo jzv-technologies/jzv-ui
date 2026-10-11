@@ -61,11 +61,63 @@ export const CELL_MODES = [
  * @property {string[]} selectedColumns - Array of column keys to include
  * @property {string[]} selectedRows - Array of row keys to include
  * @property {boolean} showGridLines - Whether to show grid lines
- * @property {boolean} showHeaders - Whether to show headers
- * @property {string} headerText - Custom header text
+ * @property {boolean} showHeaders - Whether to show the day/period header row
+ * @property {Array} headerLines - Configurable header lines (text, size, colour, visibility)
  * @property {string} footerText - Custom footer text
  * @property {number} margin - Page margin in mm
+ * @property {'current'|'all-classes'} printScope - Print the active view, or one page per class
  */
+
+/**
+ * Placeholders that can be used in header and footer text. They are resolved per printed sheet,
+ * so a batch print of every class shows each class's own name.
+ */
+export const PRINT_VARIABLES = [
+  { token: '{className}', label: 'Class name' },
+  { token: '{teacherName}', label: 'Teacher name' },
+  { token: '{viewLabel}', label: 'Active view' },
+  { token: '{timetableName}', label: 'Timetable name' },
+  { token: '{date}', label: 'Date' },
+  { token: '{time}', label: 'Time' },
+  { token: '{page}', label: 'Page' },
+  { token: '{totalPages}', label: 'Total pages' },
+];
+
+export const HEADER_LINE_LIMIT = 6;
+
+/**
+ * Header lines printed above every sheet. Each line is independent: its own text, font size,
+ * colour and visibility, so institute / timetable / class can be styled separately.
+ */
+export const DEFAULT_HEADER_LINES = [
+  {
+    id: 'institute',
+    label: 'Institute name',
+    text: 'JAMIA ZAYTOONAH VELLORE',
+    fontSize: 16,
+    color: '#0f172a',
+    bold: true,
+    visible: true,
+  },
+  {
+    id: 'timetable',
+    label: 'Timetable name',
+    text: '{timetableName}',
+    fontSize: 13,
+    color: '#334155',
+    bold: false,
+    visible: true,
+  },
+  {
+    id: 'entity',
+    label: 'Class / teacher name',
+    text: '{className}{teacherName}',
+    fontSize: 12,
+    color: '#64748b',
+    bold: false,
+    visible: true,
+  },
+];
 
 /**
  * Default print settings
@@ -82,9 +134,10 @@ export const DEFAULT_PRINT_SETTINGS = {
   rowHeaderData: ['period', 'timestamp'],
   showGridLines: true,
   showHeaders: true,
-  headerText: 'Timetable',
+  headerLines: DEFAULT_HEADER_LINES,
   footerText: 'Generated on {date}',
   margin: 15,
+  printScope: 'current',
 };
 
 /**
@@ -103,5 +156,8 @@ export default {
   PAGE_BREAK_OPTIONS,
   CELL_DATA_OPTIONS,
   CELL_MODES,
+  PRINT_VARIABLES,
+  HEADER_LINE_LIMIT,
+  DEFAULT_HEADER_LINES,
   DEFAULT_PRINT_SETTINGS,
 };

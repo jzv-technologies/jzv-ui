@@ -1,6 +1,6 @@
 import React from 'react';
 import { ConditionalBlock } from '../../../portal-shared/ConditionalBlock';
-import ReportCardGenerator from '../../ReportCardGenerator';
+import { ReportCardGenerator } from '../../report-card-generator';
 
 /**
  * ReportTab
