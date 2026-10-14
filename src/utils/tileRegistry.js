@@ -86,6 +86,16 @@ export const TILE_METADATA_REGISTRY = {
     group: 'Staff & Students',
     action: 'subview',
   },
+  'student-discipline': {
+    title: 'Student Discipline',
+    description:
+      'Weekly class discipline scorecard: coins per discipline, teacher and management coins, shields, cups and the best class of the year.',
+    icon: 'fa-coins',
+    buttonColor: 'bg-amber-500 text-white',
+    shadow: 'shadow-amber-200',
+    group: 'Staff & Students',
+    action: 'subview',
+  },
   'tv-display': {
     title: 'TV Display Board',
     description: 'Open the full-screen auto-navigating TV display dashboard.',

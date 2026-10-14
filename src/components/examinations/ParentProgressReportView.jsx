@@ -106,8 +106,12 @@ const ParentProgressReportView = ({
   const activeStudent = dbStudent || rawActiveStudent;
   const targetClassId = activeStudent?.class_id ? String(activeStudent.class_id) : null;
 
-  // Load published schedules only. Class / subjects / marks / rank / attendance / remarks all
-  // arrive in ONE call (get_progress_report_data) made by ReportCardGenerator.
+  // Load published schedules only, then keep the ones actually released to this ward. The
+  // schedule-level flag says the reports are final; exam_report_releases says which wards may see
+  // them, so a parent only gets a schedule that appears in both.
+  const wardAdmissionNo = rawActiveStudent?.admission_no || dbStudent?.admission_no || null;
+  const wardStudentId = dbStudent?.id ?? (rawActiveStudent?.id ?? null);
+
   useEffect(() => {
     let isMounted = true;
     (async () => {
@@ -120,11 +124,49 @@ const ParentProgressReportView = ({
           .order('start_date', { ascending: false });
         if (!isMounted) return;
         const published = data || [];
-        setPublishedSchedules(published);
+
+        let visible = [];
+        if (published.length > 0) {
+          // Match on the admission number when we have it (a session object may not carry the
+          // database id), otherwise fall back to the student id.
+          // The students resource has to be embedded for the dotted filter to be accepted:
+          // PostgREST answers a dotted filter on a resource that is not in the select with
+          // PGRST108 ("not an embedded resource in this request"), not with an empty result.
+          let releaseQuery = supabase
+            .from('exam_report_releases')
+            .select('schedule_id, students!inner(admission_no)');
+          if (wardAdmissionNo) {
+            releaseQuery = releaseQuery.eq('students.admission_no', wardAdmissionNo);
+          } else if (wardStudentId != null && /^\d+$/.test(String(wardStudentId))) {
+            releaseQuery = releaseQuery.eq('student_id', Number(wardStudentId));
+          } else {
+            visible = [];
+            setPublishedSchedules([]);
+            setSelectedScheduleId(null);
+            return;
+          }
+
+          const { data: releases, error: releaseError } = await releaseQuery;
+          if (releaseError) {
+            // A rejection here is not proof that the ward has nothing released - a malformed request
+            // (e.g. PGRST108) lands in the same place. Report the code so a query bug is visible
+            // instead of looking like "no reports".
+            console.warn(
+              `[ParentProgressReportView] Release lookup failed (${releaseError.code || 'no code'}): ${releaseError.message}`
+            );
+            visible = [];
+          } else {
+            const releasedSchedules = new Set((releases || []).map((r) => String(r.schedule_id)));
+            visible = published.filter((s) => releasedSchedules.has(String(s.id)));
+          }
+        }
+
+        if (!isMounted) return;
+        setPublishedSchedules(visible);
         setSelectedScheduleId((prev) => {
-          if (published.length === 0) return null;
-          if (prev && published.some((p) => String(p.id) === String(prev))) return prev;
-          return String(published[0].id);
+          if (visible.length === 0) return null;
+          if (prev && visible.some((p) => String(p.id) === String(prev))) return prev;
+          return String(visible[0].id);
         });
       } catch (err) {
         console.error('[ParentProgressReportView] Error loading data:', err);
@@ -135,7 +177,7 @@ const ParentProgressReportView = ({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [wardAdmissionNo, wardStudentId]);
 
   const selectedSchedule = useMemo(() => {
     return publishedSchedules.find((s) => String(s.id) === String(selectedScheduleId)) || null;

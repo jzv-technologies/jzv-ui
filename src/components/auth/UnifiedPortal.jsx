@@ -13,6 +13,7 @@ import TeacherTimetableViewer from '../timetable/TeacherTimetableViewer';
 import ParentTimetableViewer from '../timetable/ParentTimetableViewer';
 import ParentExamTimetableView from '../examinations/ParentExamTimetableView';
 import ParentProgressReportView from '../examinations/ParentProgressReportView';
+import StudentDisciplineManager from '../discipline/StudentDisciplineManager';
 import SyllabusManager from '../syllabus/SyllabusManager';
 import SyllabusTrackerPortal from '../syllabus/SyllabusTrackerPortal';
 import AcademicCalendarView from '../academic-calendar/AcademicCalendarView';
@@ -298,6 +299,18 @@ export const UnifiedPortal = ({
         return (
           <div data-feature="timetable-viewer">
             <TeacherTimetableViewer user={user} />
+          </div>
+        );
+
+      case 'student-discipline':
+        return (
+          <div data-feature="student-discipline">
+            <StudentDisciplineManager
+            userRoles={userRoles}
+            user={user}
+            teacherRecord={teacherRecord}
+            fullName={fullName}
+          />
           </div>
         );
 

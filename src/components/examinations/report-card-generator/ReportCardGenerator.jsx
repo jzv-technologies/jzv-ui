@@ -8,6 +8,7 @@ import RankHolders from '../RankHolders';
 import ConfirmModal from '../../ConfirmModal';
 import { useCanAccess } from '../../portal-shared/ConditionalBlock';
 import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../../utils/examScheduleUtils';
+import ReleaseToParentsPanel from './ReleaseToParentsPanel';
 import { ExtraComponentLayers } from './components/ExtraComponentLayers';
 import GradingScaleLegend from './components/GradingScaleLegend';
 import {
@@ -1314,8 +1315,21 @@ const ReportCardGenerator = ({
               </div>
             )}
           </div>
+
+          {/* Per-student release: the publish switch above says the reports are final, this decides
+              which wards may actually see them. */}
+          {canPublishReport && selectedSchedule && !hideControlBar && (
+            <div className="mt-4">
+              <ReleaseToParentsPanel
+                schedule={selectedSchedule}
+                classId={selectedClassId}
+                students={students.length > 0 ? students : propStudents || []}
+                canRelease={canPublishReport}
+              />
+            </div>
+          )}
         </div>
-      )}
+        )}
 
       {/* ── Report Cards ── */}
       <div className="space-y-6">
