@@ -14,7 +14,16 @@ import {
 import CoinArt, { CoinStack } from '../CoinArt';
 import { splitCategories } from '../../../utils/disciplineScoring';
 
-const LINE_COLOURS = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b'];
+const LINE_COLOURS = [
+  '#f59e0b',
+  '#10b981',
+  '#3b82f6',
+  '#ef4444',
+  '#8b5cf6',
+  '#14b8a6',
+  '#f97316',
+  '#64748b',
+];
 
 /**
  * The sheet layout: one row per discipline (with its coin art), then the two appreciation rows and
@@ -33,13 +42,17 @@ const ScorecardTab = ({
   selectedWeek,
   shields,
   winnersByCategory,
+  recommendations = [],
+  recommendationPicks = {},
+  onRecommendationSelection,
+  weekLocked = false,
+  showRecommendation = false,
   settings,
+  view = 'table',
   metric,
-  onMetricChange,
   onOpenClass,
   canTakeCoins = false,
 }) => {
-  const [view, setView] = useState('table');
   const [hiddenClassIds, setHiddenClassIds] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'desc' });
   const [showColumns, setShowColumns] = useState(false);
@@ -60,7 +73,9 @@ const ScorecardTab = ({
       );
     } else if (sortConfig.key === 'totalPoints') {
       sorted.sort((a, b) =>
-        sortConfig.direction === 'asc' ? a.totalPoints - b.totalPoints : b.totalPoints - a.totalPoints
+        sortConfig.direction === 'asc'
+          ? a.totalPoints - b.totalPoints
+          : b.totalPoints - a.totalPoints
       );
     }
     return sorted.filter((row) => !hiddenClassIds.includes(String(row.classId)));
@@ -81,7 +96,7 @@ const ScorecardTab = ({
     const map = {};
     Object.entries(winnersByCategory || {}).forEach(([categoryId, winners]) => {
       map[categoryId] = new Set(
-        (winners || []).filter((w) => w._provisional).map((w) => String(w.classId))
+        (winners || []).filter((w) => w._rule5 || w._provisional).map((w) => String(w.classId))
       );
     });
     return map;
@@ -103,7 +118,9 @@ const ScorecardTab = ({
 
   const toggleSort = (key) =>
     setSortConfig((prev) =>
-      prev.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'desc' }
+      prev.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'desc' }
     );
 
   const chartData = useMemo(() => {
@@ -145,86 +162,82 @@ const ScorecardTab = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div
-            className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl"
-            data-feature-tab="discipline-scorecard-view"
-          >
-            {[
-              { id: 'table', label: 'Table', icon: 'fa-table' },
-              { id: 'graph', label: 'Graph', icon: 'fa-chart-column' },
-            ].map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setView(option.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  view === option.id ? 'bg-white text-amber-700 shadow-xs' : 'text-dark-muted hover:text-dark-primary'
-                }`}
+      {weekLocked && (
+        <div
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+          data-feature-status="discipline-week-locked"
+        >
+          <i className="fas fa-lock" />
+          Coin edits are locked for this week.
+        </div>
+      )}
+      {showRecommendation && recommendations.length > 0 && (
+        <section
+          className="grid gap-3 md:grid-cols-2"
+          data-feature="discipline-recommendation-editor"
+        >
+          {recommendations.map((entry) => {
+            const key = String(entry.categoryId);
+            const selected = (recommendationPicks[key] || entry.recommendedIds).map(String);
+            const direct = (winnersByCategory?.[key] || []).filter((winner) => !winner._rule5);
+            return (
+              <div
+                key={key}
+                className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
               >
-                <i className={`fas ${option.icon} text-[10px]`} />
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          {view === 'graph' && (
-            <select
-              value={metric}
-              onChange={(e) => onMetricChange(e.target.value)}
-              className="border border-light-border rounded-xl px-3 py-2 text-xs font-bold text-dark-primary bg-white outline-none focus:ring-2 focus:ring-brand-primary"
-            >
-              <option value="coins">Coins left by discipline</option>
-              <option value="points">Points make-up</option>
-              <option value="trend">Weekly points trend</option>
-            </select>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-wide bg-slate-100 text-dark-muted border-light-border">
-            Week of {weekLabel || '—'}
-          </span>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowColumns((prev) => !prev)}
-              className="p-2 rounded-xl border border-light-border bg-white text-dark-soft hover:bg-light-lbg transition-all cursor-pointer"
-              title="Choose which classes are shown"
-            >
-              <i className="fas fa-table-columns text-sm" />
-            </button>
-            {showColumns && (
-              <div className="absolute right-0 mt-2 z-20 w-56 bg-white border border-light-border rounded-xl shadow-lg p-2 max-h-72 overflow-y-auto">
-                <p className="px-2 py-1 text-[10px] font-black uppercase tracking-wide text-dark-soft">
-                  Classes shown
-                </p>
-                {(allRows || []).map((row) => (
-                  <label
-                    key={row.classId}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-light-lbg cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!hiddenClassIds.includes(String(row.classId))}
-                      onChange={(e) =>
-                        setHiddenClassIds((prev) =>
-                          e.target.checked
-                            ? prev.filter((id) => id !== String(row.classId))
-                            : [...prev, String(row.classId)]
-                        )
-                      }
-                      className="accent-amber-500"
-                    />
-                    <span className="text-xs font-semibold text-dark-primary">{row.className}</span>
-                  </label>
-                ))}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-black text-dark-primary">{entry.categoryName}</h3>
+                    <p className="mt-0.5 text-[10px] font-semibold text-dark-muted">
+                      Rule 5 tie · select up to {entry.placesToConfirm} of the tied classes
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-900">
+                    Yellow recommendation
+                  </span>
+                </div>
+                {direct.length > 0 && (
+                  <p className="mt-2 text-[10px] font-bold text-emerald-800">
+                    Already recommended: {direct.map((winner) => winner.className).join(', ')}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {entry.candidates.map((candidate) => {
+                    const classId = String(candidate.classId);
+                    const isSelected = selected.includes(classId);
+                    return (
+                      <button
+                        key={classId}
+                        type="button"
+                        onClick={() => {
+                          let next;
+                          if (isSelected) {
+                            next = selected.filter((id) => id !== classId);
+                          } else if (selected.length >= entry.placesToConfirm) {
+                            next = [...selected.slice(1), classId];
+                          } else {
+                            next = [...selected, classId];
+                          }
+                          onRecommendationSelection?.(entry.categoryId, next);
+                        }}
+                        className={`rounded-full border px-2 py-1 text-[10px] font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-amber-500 bg-amber-200 text-amber-950'
+                            : 'border-light-border bg-white text-dark-primary hover:bg-light-lbg'
+                        }`}
+                        title={`${isSelected ? 'Click to remove' : selected.length >= entry.placesToConfirm ? 'Click to replace the oldest selected class' : 'Click to select'} · ${candidate.coins} coins; tie frequency ${candidate.tieFrequency}; shields held ${candidate.shieldsHeld}`}
+                      >
+                        {isSelected && <i className="fas fa-check mr-1" />}
+                        {candidate.className}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
+            );
+          })}
+        </section>
+      )}
       {columns.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-light-border p-10 text-center">
           <i className="fas fa-coins text-2xl text-dark-soft" />
@@ -236,7 +249,10 @@ const ScorecardTab = ({
       ) : view === 'table' ? (
         <>
           <div className="overflow-x-auto rounded-2xl border border-light-border bg-white">
-            <table className="w-full border-collapse text-xs" data-print-target="discipline-scorecard">
+            <table
+              className="w-full border-collapse text-xs"
+              data-print-target="discipline-scorecard"
+            >
               <thead>
                 <tr className="bg-slate-50">
                   <th
@@ -272,7 +288,14 @@ const ScorecardTab = ({
                         </span>
                         {classesHoldingAShield.has(String(row.classId)) && (
                           <i
-                            className="fas fa-shield-halved text-[9px] text-emerald-600"
+                            className={`fas fa-shield-halved text-[9px] ${
+                              shields.some(
+                                (shield) =>
+                                  String(shield.classId) === String(row.classId) && shield.rule5
+                              )
+                                ? 'text-yellow-600'
+                                : 'text-emerald-600'
+                            }`}
                             title="Holds a shield this week"
                           />
                         )}
@@ -317,7 +340,9 @@ const ScorecardTab = ({
                         const winnerIds = winnerIdsByCategory[String(category.id)];
                         // Green only for the classes that were actually awarded this discipline's
                         // shield, even when other classes hold the same number of coins.
-                        const holdsShield = Boolean(winnerIds && winnerIds.has(String(row.classId)));
+                        const holdsShield = Boolean(
+                          winnerIds && winnerIds.has(String(row.classId))
+                        );
                         const provisional = Boolean(
                           provisionalIdsByCategory[String(category.id)]?.has(String(row.classId))
                         );
@@ -327,12 +352,12 @@ const ScorecardTab = ({
                           <td
                             key={row.classId}
                             className={`border border-light-border px-2 py-2 text-center font-black tabular-nums ${
-                              isRed
-                                ? 'bg-red-500 text-white'
-                                : holdsShield
-                                  ? provisional
-                                    ? 'bg-amber-200/90 text-amber-950 ring-2 ring-inset ring-amber-500/70'
-                                    : 'bg-emerald-400/90 text-emerald-950'
+                              holdsShield
+                                ? provisional
+                                  ? 'bg-yellow-200/90 text-yellow-950 ring-2 ring-inset ring-yellow-500/70'
+                                  : 'bg-emerald-400/90 text-emerald-950'
+                                : isRed
+                                  ? 'bg-red-500 text-white'
                                   : 'text-dark-primary'
                             }`}
                             title={
@@ -341,8 +366,8 @@ const ScorecardTab = ({
                                 : `${value} of ${category.weekly_coins} coins left` +
                                   (holdsShield
                                     ? provisional
-                                      ? ` · recommended shield (${reason}) - awaiting confirmation`
-                                      : ` · shield winner (${reason})`
+                                      ? ' · Rule 5 recommendation'
+                                      : ` · saved shield recommendation (${reason})`
                                     : '')
                             }
                           >
@@ -351,14 +376,20 @@ const ScorecardTab = ({
                               {holdsShield && (
                                 <i
                                   className={`${
-                                    provisional ? 'fas fa-hourglass-half' : 'fas fa-shield-halved'
+                                    provisional
+                                      ? 'fas fa-wand-magic-sparkles'
+                                      : 'fas fa-shield-halved'
                                   } text-[9px] ${
-                                    isRed ? 'text-white' : provisional ? 'text-amber-700' : 'opacity-80'
+                                    isRed
+                                      ? 'text-white'
+                                      : provisional
+                                        ? 'text-yellow-700'
+                                        : 'opacity-80'
                                   }`}
                                   title={
                                     provisional
-                                      ? `Recommended shield (${reason}) - awaiting confirmation`
-                                      : `Shield: ${reason}`
+                                      ? 'Rule 5 recommendation'
+                                      : `Saved shield recommendation: ${reason}`
                                   }
                                 />
                               )}
@@ -370,7 +401,12 @@ const ScorecardTab = ({
                   );
                 })}
 
-                <TotalRow label="Total coins" columns={columns} pick={(row) => row.totalCoins} strong />
+                <TotalRow
+                  label="Total coins"
+                  columns={columns}
+                  pick={(row) => row.totalCoins}
+                  strong
+                />
 
                 <AppreciationRow
                   label="Teacher's Appreciation"
@@ -399,11 +435,18 @@ const ScorecardTab = ({
                   hint={`${settings?.red_zone_penalty ?? 5} points off per red zone`}
                   strong
                 />
-                <TotalRow label="Previous total" columns={columns} pick={(row) => row.previousTotal} muted />
+                <TotalRow
+                  label="Previous total"
+                  columns={columns}
+                  pick={(row) => row.previousTotal}
+                  muted
+                />
                 <TotalRow
                   label="Total points"
                   columns={columns}
-                  pick={(row) => `${row.totalPoints}${row.redZones > 0 ? ` · ${row.redZones} RZ` : ''}`}
+                  pick={(row) =>
+                    `${row.totalPoints}${row.redZones > 0 ? ` · ${row.redZones} RZ` : ''}`
+                  }
                   onSort={() => toggleSort('totalPoints')}
                   sorted={sortConfig.key === 'totalPoints' ? sortConfig.direction : null}
                   strong
@@ -411,7 +454,6 @@ const ScorecardTab = ({
               </tbody>
             </table>
           </div>
-
         </>
       ) : (
         <div className="rounded-2xl border border-light-border bg-white p-4">
@@ -453,10 +495,34 @@ const ScorecardTab = ({
                         />
                       ))
                     : [
-                        <Bar key="coins" dataKey="totalCoins" name="Coins left" fill="#10b981" stackId="p" />,
-                        <Bar key="silver" dataKey="silver" name="Silver points" fill="#94a3b8" stackId="p" />,
-                        <Bar key="golden" dataKey="golden" name="Gold points" fill="#eab308" stackId="p" />,
-                        <Bar key="rz" dataKey="redZones" name="Red-zone penalty" fill="#ef4444" stackId="p" />,
+                        <Bar
+                          key="coins"
+                          dataKey="totalCoins"
+                          name="Coins left"
+                          fill="#10b981"
+                          stackId="p"
+                        />,
+                        <Bar
+                          key="silver"
+                          dataKey="silver"
+                          name="Silver points"
+                          fill="#94a3b8"
+                          stackId="p"
+                        />,
+                        <Bar
+                          key="golden"
+                          dataKey="golden"
+                          name="Gold points"
+                          fill="#eab308"
+                          stackId="p"
+                        />,
+                        <Bar
+                          key="rz"
+                          dataKey="redZones"
+                          name="Red-zone penalty"
+                          fill="#ef4444"
+                          stackId="p"
+                        />,
                       ]}
                 </BarChart>
               )}
@@ -469,7 +535,10 @@ const ScorecardTab = ({
             </p>
             <div className="flex flex-wrap gap-3">
               {columns.map((row) => (
-                <div key={row.classId} className="flex-1 min-w-[130px] rounded-xl border border-light-border p-2">
+                <div
+                  key={row.classId}
+                  className="flex-1 min-w-[130px] rounded-xl border border-light-border p-2"
+                >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <p className="text-[11px] font-black text-dark-primary">{row.className}</p>
                     {canTakeCoins && (
@@ -505,6 +574,7 @@ const ScorecardTab = ({
           </div>
         </div>
       )}
+
     </div>
   );
 };
@@ -521,7 +591,11 @@ const TotalRow = ({ label, columns, pick, hint, strong, muted, onSort, sorted })
         {onSort && (
           <i
             className={`fas ml-1 text-[9px] ${
-              sorted === 'asc' ? 'fa-sort-up' : sorted === 'desc' ? 'fa-sort-down' : 'fa-sort text-dark-soft/50'
+              sorted === 'asc'
+                ? 'fa-sort-up'
+                : sorted === 'desc'
+                  ? 'fa-sort-down'
+                  : 'fa-sort text-dark-soft/50'
             }`}
           />
         )}

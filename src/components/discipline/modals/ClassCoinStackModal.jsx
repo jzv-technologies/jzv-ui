@@ -285,7 +285,7 @@ const ClassCoinStackModal = ({
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
           <div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
             data-feature="discipline-coin-stacks"
           >
             {disciplines.map((category) => {
@@ -325,15 +325,6 @@ const ClassCoinStackModal = ({
                   data-discipline={category.code}
                 >
                   <div className="flex items-start gap-2">
-                    <CoinArt
-                      image={category.coin_image}
-                      variant="small"
-                      accent={category.coin_accent}
-                      shape={category.coin_shape}
-                      face={category.coin_face}
-                      size={28}
-                      alt={category.name}
-                    />
                     <div className="min-w-0">
                       <p className="text-xs font-black text-dark-primary leading-tight">
                         {category.name}

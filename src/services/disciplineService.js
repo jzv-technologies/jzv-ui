@@ -15,6 +15,10 @@
  */
 
 import { supabase } from '../utils/supabase';
+import {
+  academicYearSpan,
+  isAcademicMonth,
+} from '../utils/disciplineScoring';
 
 const fail = (error, context) => {
   throw new Error(error?.message ? `${context}: ${error.message}` : context);
@@ -24,7 +28,57 @@ const fail = (error, context) => {
 export const fetchDisciplineYear = async (ay = null) => {
   const { data, error } = await supabase.rpc('get_discipline_year_data', { p_ay: ay });
   if (error) fail(error, 'Could not load the discipline scorecard');
+  if (!data) return null;
+
+  const { data: weekController, error: controllerError } = await supabase
+    .from('discipline_week_controller')
+    .select('week_start, week_num, month, year, allow_edits, ignore_week, shield_decision');
+  if (controllerError) fail(controllerError, 'Could not load discipline week settings');
+
+  const span = academicYearSpan(data.ay);
+  const controllerRows = (weekController || []).filter(
+    (row) =>
+      !span ||
+      isAcademicMonth(span, Number(row.year), Number(row.month))
+  );
+  const controllerWeeks = controllerRows.map((row) => String(row.week_start).slice(0, 10));
+  return {
+    ...data,
+    weeks: [...new Set([...(data.weeks || []), ...controllerWeeks])].sort(),
+    coin_weeks: [...new Set([...(data.coin_weeks || []), ...controllerWeeks])],
+    week_controller: controllerRows,
+  };
+};
+
+/**
+ * Open a week for scoring. The server creates its controller row; no zero-valued coin rows are
+ * inserted, so the scoring rules supply each class's full weekly entitlement by default.
+ *
+ * @param {string} weekStart - 'YYYY-MM-DD' Monday of the week to load
+ */
+export const refillWeek = async (weekStart) => {
+  const { data, error } = await supabase.rpc('refill_discipline_week', { p_week_start: weekStart });
+  if (error) fail(error, 'Could not open the discipline week');
   return data || null;
+};
+
+/**
+ * The academic months of an academic year, read from academic_calendar. This is the fallback for a
+ * get_discipline_year_data that does not carry the months yet: the picker then still lists the
+ * year's own months rather than whatever weeks happen to exist. A failure here is not fatal - the
+ * caller falls back further - so it returns an empty list instead of throwing.
+ */
+export const fetchAcademicMonths = async (ay) => {
+  const span = academicYearSpan(ay);
+  if (!span) return [];
+
+  const { data, error } = await supabase
+    .from('academic_calendar')
+    .select('year,month')
+    .in('year', [span.startYear, span.endYear]);
+  if (error) return [];
+
+  return (data || []).filter((row) => isAcademicMonth(span, row.year, row.month));
 };
 
 /**
@@ -62,57 +116,14 @@ export const adjustCoins = async ({ classId, categoryId, delta, teacherId = null
   return data || null;
 };
 
-/**
- * Finalise a discipline's shields for a week.
- *
- * A discipline can hand out more than one shield, so the management's choice is stored as a set: the
- * chosen classes replace whatever was stored for that discipline before (an empty list clears it and
- * hands the decision back to the criteria).
- */
-export const replaceShieldDecisions = async ({ weekStart, categoryId, classIds = [], note = null }) => {
-  const chosen = [...new Set((classIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id)))];
-
-  const { error: deleteError } = await supabase
-    .from('discipline_shield_decisions')
-    .delete()
-    .eq('week_start', weekStart)
-    .eq('category_id', categoryId);
-  if (deleteError) fail(deleteError, 'Could not update the shield decision');
-
-  if (chosen.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from('discipline_shield_decisions')
-    .insert(chosen.map((classId) => ({ week_start: weekStart, category_id: categoryId, class_id: classId, note })))
-    .select();
-  if (error) fail(error, 'Could not save the shield decision');
-  return data || [];
-};
-
-/** A management decision for a shield the filter criteria could not settle. */
-export const setShieldDecision = async ({ weekStart, categoryId, classId, note = null }) => {
-  const { data, error } = await supabase
-    .from('discipline_shield_decisions')
-    .upsert(
-      { week_start: weekStart, category_id: categoryId, class_id: classId, note },
-      { onConflict: 'week_start,category_id,class_id' }
-    )
-    .select();
-  if (error) fail(error, 'Could not save the shield decision');
-  return data?.[0] || null;
-};
-
-/** Undo a management decision so the criteria decide again. */
-export const clearShieldDecision = async ({ weekStart, categoryId, classId = null }) => {
-  let query = supabase
-    .from('discipline_shield_decisions')
-    .delete()
-    .eq('week_start', weekStart)
-    .eq('category_id', categoryId);
-  if (classId != null) query = query.eq('class_id', classId);
-  const { error } = await query;
-  if (error) fail(error, 'Could not clear the shield decision');
-  return true;
+/** Persist the accepted recommendation by discipline and class names. */
+export const saveDisciplineRecommendation = async ({ weekStart, shieldDecision }) => {
+  const { data, error } = await supabase.rpc('save_discipline_week_recommendation', {
+    p_week_start: weekStart,
+    p_shield_decision: shieldDecision,
+  });
+  if (error) fail(error, 'Could not save the discipline recommendation');
+  return data || null;
 };
 
 /** Discipline configuration (entitlement, shields per week, red-zone threshold, coin art). */
@@ -139,11 +150,11 @@ export const updateSettings = async (patch) => {
 
 export default {
   fetchDisciplineYear,
+  fetchAcademicMonths,
+  refillWeek,
   logCoins,
   adjustCoins,
-  setShieldDecision,
-  replaceShieldDecisions,
-  clearShieldDecision,
+  saveDisciplineRecommendation,
   updateCategory,
   updateSettings,
 };

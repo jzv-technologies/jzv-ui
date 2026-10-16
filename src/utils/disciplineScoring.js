@@ -6,8 +6,8 @@
  * sheet; see scripts/test-discipline-scoring.mjs.
  *
  * What the database stores: a running total of coins taken per class x discipline x week
- * (discipline_weekly_coins) and per teacher x week (discipline_teacher_coins), plus any shield the
- * management had to decide by hand (discipline_shield_decisions). Everything below is derived -
+ *   (discipline_weekly_coins) and per teacher x week (discipline_teacher_coins), plus accepted shield
+ *   recommendations from discipline_week_controller. Everything below is derived -
  * no balances, points, red zones or shields are stored.
  *
  * The two appreciation coins are rows in the category list with coin_kind 'silver' / 'golden', so
@@ -22,8 +22,8 @@
  *     shown red and costs `red_zone_penalty` (5) points.
  *   - Points: coins left x coin_points, plus silver coins x silver_coin_points, plus golden coins x
  *     golden_coin_points, minus the red-zone penalty.
- *   - `previousTotal` is the sum of this academic year's earlier weeks, so `totalPoints`
- *     accumulates across the year.
+ *   - `previousTotal` includes only earlier, non-ignored weeks in the same month. Academic-year
+ *     totals are accumulated separately for year awards.
  *   - A week is identified by its Monday, `week_start` (a plain date - there is no weeks table).
  *   - Shields: each discipline awards `shields_count` shields (2, or 3 for Language Excellence).
  */
@@ -52,6 +52,76 @@ export const weekStartOf = (date = new Date()) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
     d.getDate()
   ).padStart(2, '0')}`;
+};
+
+/**
+ * The month a week belongs to, as 'YYYY-MM', taken from the week's Monday - which is what decides
+ * both the month a scorecard is shown under and the month's week list.
+ */
+export const monthKeyOf = (weekStart) => {
+  const iso = String(weekStart ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(0, 7) : null;
+};
+
+/**
+ * Which week of its own month a week is: the Monday on the 1st-7th is W1, the 8th-14th W2, and so
+ * on. Weeks are counted from the month the Monday falls in, never from a week that straddles two.
+ */
+export const weekOfMonth = (weekStart) => {
+  const day = Number(String(weekStart ?? '').slice(8, 10));
+  if (!Number.isFinite(day) || day < 1 || day > 31) return 1;
+  return Math.floor((day - 1) / 7) + 1;
+};
+
+/** The month an academic year opens in: the same June rule the academic year label is built on. */
+export const ACADEMIC_START_MONTH = 6;
+
+/**
+ * The two calendar years an academic year label covers: '2026-27' -> start 2026, end 2027. Both
+ * '2026-27' and a bare '2026' are accepted (the year falls back to a June-to-May span); anything
+ * that is not an academic year label has no derivable span.
+ */
+export const academicYearSpan = (ay) => {
+  const match = String(ay ?? '')
+    .trim()
+    .match(/^(\d{4})(?:-(\d{2}|\d{4}))?$/);
+  if (!match) return null;
+
+  const startYear = Number(match[1]);
+  if (!match[2]) return { startYear, endYear: startYear + 1 };
+
+  const endYear =
+    match[2].length === 4
+      ? Number(match[2])
+      : Math.floor((startYear + 1) / 100) * 100 + Number(match[2]);
+  return endYear > startYear ? { startYear, endYear } : { startYear, endYear: startYear + 1 };
+};
+
+/** Does a calendar month fall inside that academic year (June..December, then January..May)? */
+export const isAcademicMonth = (span, year, month) => {
+  if (!span) return false;
+  const y = Number(year);
+  const m = Number(month);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return false;
+  return (
+    (y === span.startYear && m >= ACADEMIC_START_MONTH) ||
+    (y === span.endYear && m < ACADEMIC_START_MONTH)
+  );
+};
+
+/** Every month of an academic year, in sequence: '2026-27' -> June 2026 through May 2027. */
+export const academicMonthsForAy = (ay) => {
+  const span = academicYearSpan(ay);
+  if (!span) return [];
+
+  const months = [];
+  for (let month = ACADEMIC_START_MONTH; month <= 12; month += 1) {
+    months.push({ year: span.startYear, month });
+  }
+  for (let month = 1; month < ACADEMIC_START_MONTH; month += 1) {
+    months.push({ year: span.endYear, month });
+  }
+  return months;
 };
 
 /** Split the category list into disciplines and the two appreciation coins. */
@@ -688,6 +758,284 @@ export const computeWeeklyShields = (rows, categories, options = {}) => {
 };
 
 /**
+ * Build recommendations using the rank-count rules first, then apply the cross-discipline filters
+ * only to rank groups that contain more classes than open shield places.
+ */
+export const computeShieldRecommendations = (rows, categories) => {
+  const disciplines = splitCategories(categories).disciplines
+    .slice()
+    .sort(
+      (a, b) =>
+        Number(a.display_order || 0) - Number(b.display_order || 0) ||
+        Number(a.id) - Number(b.id)
+    );
+  const disciplineCodes = disciplines.map((category) => category.code);
+  const shieldCounts = {};
+  const winnersByCategory = {};
+  const tieTasks = [];
+
+  disciplines.forEach((category) => {
+    const ranked = rankCandidates(rows, category);
+    const places = Math.max(0, Number(category.shields_count ?? 2));
+    const winners = [];
+    winnersByCategory[String(category.id)] = winners;
+    let cursor = 0;
+    let remaining = places;
+
+    while (remaining > 0 && cursor < ranked.length) {
+      const coins = ranked[cursor].coins;
+      const group = [];
+      while (cursor < ranked.length && ranked[cursor].coins === coins) {
+        group.push(ranked[cursor]);
+        cursor += 1;
+      }
+
+      if (group.length > remaining) {
+        tieTasks.push({ category, group, coins, remaining });
+        break;
+      }
+
+      group.forEach(({ row }) => {
+        winners.push({ ...row, _coins: coins, _rule5: false });
+        const classKey = String(row.classId);
+        shieldCounts[classKey] = (shieldCounts[classKey] || 0) + 1;
+      });
+      remaining -= group.length;
+    }
+  });
+
+  const tieFrequency = {};
+  tieTasks.forEach(({ group }) => {
+    group.forEach(({ row }) => {
+      const key = String(row.classId);
+      tieFrequency[key] = (tieFrequency[key] || 0) + 1;
+    });
+  });
+
+  tieTasks.sort(
+    (a, b) =>
+      a.group.length - b.group.length ||
+      a.remaining - b.remaining ||
+      Number(a.category.display_order || 0) - Number(b.category.display_order || 0) ||
+      Number(a.category.id) - Number(b.category.id)
+  );
+
+  const pending = [];
+  const notes = [];
+  tieTasks.forEach(({ category, group, coins, remaining }) => {
+    const candidates = group.map(({ row }) => ({
+      ...row,
+      shieldsHeld: Number(shieldCounts[String(row.classId)] || 0),
+    }));
+    const applied = new Set();
+    const relaxed = new Set();
+    const tieContext = { disciplineCodes };
+    const criterionSteps = [
+      {
+        label: FILTER_LABELS.FILTER_I,
+        filter: (candidate) => candidate.shieldsHeld <= 2,
+      },
+      {
+        label: FILTER_LABELS.FILTER_II,
+        filter: (candidate, current) => {
+          const fewestRedZones = Math.min(...current.map((row) => Number(row.redZones || 0)));
+          return Number(candidate.redZones || 0) === fewestRedZones;
+        },
+      },
+      {
+        label: FILTER_LABELS.FILTER_III,
+        filter: (candidate, _current, context) =>
+          context.disciplineCodes.every((code) => Number(candidate.balances?.[code] || 0) > 0),
+      },
+      {
+        label: FILTER_LABELS.FILTER_IV,
+        filter: (candidate, current) => {
+          const highest = Math.max(...current.map((row) => Number(row.silverCoins || 0)));
+          return Number(candidate.silverCoins || 0) === highest;
+        },
+      },
+      {
+        label: FILTER_LABELS.FILTER_V,
+        filter: (candidate, current) => {
+          const highest = Math.max(...current.map((row) => Number(row.totalCoins || 0)));
+          return Number(candidate.totalCoins || 0) === highest;
+        },
+      },
+      {
+        label: FILTER_LABELS.FILTER_VI,
+        filter: (candidate, current) => {
+          const highest = Math.max(...current.map((row) => Number(row.strength || 0)));
+          return Number(candidate.strength || 0) === highest;
+        },
+      },
+    ];
+    const chosen = [];
+    const unselected = new Map(candidates.map((candidate) => [String(candidate.classId), candidate]));
+
+    // The discipline order is by tie-group size; within it, visit live shield-count tiers low-to-high.
+    while (chosen.length < remaining && unselected.size > 0) {
+      const currentCandidates = [...unselected.values()].map((candidate) => ({
+        ...candidate,
+        shieldsHeld: Number(shieldCounts[String(candidate.classId)] || 0),
+      }));
+      const shieldCountLevels = [
+        ...new Set(currentCandidates.map((candidate) => candidate.shieldsHeld)),
+      ].sort((a, b) => a - b);
+      let selected = null;
+
+      while (!selected) {
+        for (const shieldCount of shieldCountLevels) {
+          let survivors = currentCandidates
+            .filter((candidate) => candidate.shieldsHeld === shieldCount)
+            .sort(
+              (a, b) =>
+                Number(tieFrequency[String(a.classId)] || 0) -
+                  Number(tieFrequency[String(b.classId)] || 0) ||
+                Number(a.classId) - Number(b.classId)
+            );
+
+          for (const step of criterionSteps) {
+            if (relaxed.has(step.label) || survivors.length <= 1) continue;
+            const filtered = survivors.filter((candidate) =>
+              step.filter(candidate, survivors, tieContext)
+            );
+            if (filtered.length === 0) {
+              survivors = [];
+              break;
+            }
+            if (filtered.length < survivors.length) {
+              survivors = filtered;
+              applied.add(step.label);
+            }
+          }
+
+          if (survivors.length > 0) {
+            selected = survivors[0];
+            break;
+          }
+        }
+
+        if (selected) break;
+        const nextToRelax = criterionSteps.find((step) => !relaxed.has(step.label));
+        if (!nextToRelax) break;
+        relaxed.add(nextToRelax.label);
+      }
+
+      if (!selected) {
+        break;
+      }
+
+      chosen.push(selected);
+      unselected.delete(String(selected.classId));
+      const classKey = String(selected.classId);
+      shieldCounts[classKey] = (shieldCounts[classKey] || 0) + 1;
+    }
+
+    const winners = winnersByCategory[String(category.id)];
+    chosen.forEach((row) => {
+      winners.push({ ...row, _coins: coins, _rule5: true });
+    });
+
+    pending.push({
+      categoryId: category.id,
+      categoryName: category.name,
+      coins,
+      placesToConfirm: remaining,
+      rule5: true,
+      applied: [...applied],
+      relaxed: [...relaxed],
+      recommendedIds: chosen.map((row) => String(row.classId)),
+      tieCandidateIds: candidates.map((row) => String(row.classId)),
+      candidates: candidates
+        .slice()
+        .sort(
+          (a, b) =>
+            Number(a.shieldsHeld || 0) - Number(b.shieldsHeld || 0) ||
+            Number(tieFrequency[String(a.classId)] || 0) -
+              Number(tieFrequency[String(b.classId)] || 0) ||
+            Number(a.classId) - Number(b.classId)
+        )
+        .map((row) => ({
+          classId: row.classId,
+          className: row.className,
+          coins,
+          silverCoins: Number(row.silverCoins || 0),
+          totalCoins: Number(row.totalCoins || 0),
+          redZones: Number(row.redZones || 0),
+          strength: Number(row.strength || 0),
+          shieldsHeld: Number(row.shieldsHeld || 0),
+          tieFrequency: Number(tieFrequency[String(row.classId)] || 0),
+        })),
+    });
+    notes.push({
+      type: 'recommendation',
+      text: `${category.name}: Rule 5 evaluated a tie for ${remaining} shield${remaining === 1 ? '' : 's'}`,
+    });
+  });
+
+  const shields = disciplines.flatMap((category) =>
+    (winnersByCategory[String(category.id)] || []).map((winner) => ({
+      categoryId: category.id,
+      categoryCode: category.code,
+      categoryName: category.name,
+      classId: winner.classId,
+      className: winner.className,
+      value: winner._coins,
+      rule5: Boolean(winner._rule5),
+    }))
+  );
+
+  return { shields, pending, shieldCounts, winnersByCategory, notes };
+};
+
+/** Convert name-based decisions stored on a controller row into displayed shield winners. */
+export const getStoredShieldDecisions = (rows, categories, controller, recommendations = []) => {
+  const decisions = controller?.shield_decision || {};
+  const byClassName = new Map((rows || []).map((row) => [String(row.className), row]));
+  const winnersByCategory = {};
+  const shields = [];
+  const shieldCounts = {};
+
+  (categories || [])
+    .filter((category) => (category.coin_kind || 'discipline') === 'discipline')
+    .forEach((category) => {
+      const selected = decisions[category.name] || decisions[String(category.id)] || [];
+      const rule5CandidateIds = new Set(
+        (
+          recommendations.find(
+            (entry) => String(entry.categoryId) === String(category.id)
+          )?.tieCandidateIds || []
+        ).map(String)
+      );
+      const winners = (Array.isArray(selected) ? selected : [])
+        .map((className) => byClassName.get(String(className)))
+        .filter(Boolean)
+        .map((row) => ({
+          ...row,
+          _coins: Number(row.balances?.[category.code] || 0),
+          _rule5: rule5CandidateIds.has(String(row.classId)),
+          _saved: true,
+        }));
+      winnersByCategory[String(category.id)] = winners;
+      winners.forEach((winner) => {
+        const classKey = String(winner.classId);
+        shieldCounts[classKey] = (shieldCounts[classKey] || 0) + 1;
+        shields.push({
+          categoryId: category.id,
+          categoryCode: category.code,
+          categoryName: category.name,
+          classId: winner.classId,
+          className: winner.className,
+          value: winner._coins,
+          rule5: winner._rule5,
+          saved: true,
+        });
+      });
+    });
+  return { shields, winnersByCategory, shieldCounts };
+};
+
+/**
  * The classes that hold a shield in a given discipline, as a Set of class ids. Used to paint the
  * green cells: only the class that actually received the shield is green.
  */
@@ -752,23 +1100,37 @@ export const computeBestClassOfYear = (rows, metric = 'totalPoints') => {
 };
 
 /**
- * Walk a year's weeks in order, accumulating each class's total so later weeks know their
- * `previousTotal`. Because the coin counters are the storage, every week - past or present - is
- * read the same way; nothing is frozen and nothing needs locking.
+ * Walk the loaded weeks in order. A scorecard's previous total includes only non-ignored weeks in
+ * the same month; the academic-year total remains an independent sum for year awards.
  *
  * @param {Object} args
  * @param {Array} args.classes
  * @param {Array} args.categories
  * @param {Array} args.weeks - week_start dates ('YYYY-MM-DD'), any order
  * @param {Array} args.coins - all coin rows for the year: { week_start, class_id, category_id, coins }
+ * @param {Array} [args.weekControllers] - controller rows with week_start and ignore_week
  * @param {Object} args.settings
  * @returns {{yearRows: Array, weeks: Object}} per-class year totals and per-week scoreboards
  */
-export const computeYearProgression = ({ classes, categories, weeks = [], coins = [], settings }) => {
-  const running = {};
+export const computeYearProgression = ({
+  classes,
+  categories,
+  weeks = [],
+  coins = [],
+  weekControllers = [],
+  settings,
+}) => {
+  const yearRunning = {};
   (classes || []).forEach((c) => {
-    running[String(c.id)] = 0;
+    yearRunning[String(c.id)] = 0;
   });
+  const controllerByWeek = new Map(
+    (weekControllers || []).map((controller) => [
+      String(controller.week_start).slice(0, 10),
+      controller,
+    ])
+  );
+  const monthRunning = {};
 
   const orderedWeeks = [
     ...new Set((weeks || []).filter(Boolean).map((w) => String(w).slice(0, 10))),
@@ -776,17 +1138,30 @@ export const computeYearProgression = ({ classes, categories, weeks = [], coins 
 
   const weekResults = {};
   orderedWeeks.forEach((weekStart) => {
+    const monthKey = monthKeyOf(weekStart);
+    if (!monthRunning[monthKey]) {
+      monthRunning[monthKey] = {};
+      (classes || []).forEach((c) => {
+        monthRunning[monthKey][String(c.id)] = 0;
+      });
+    }
+
     const weekCoins = (coins || []).filter((c) => String(c.week_start).slice(0, 10) === weekStart);
     const scored = scoreWeek({
       classes,
       categories,
       coins: weekCoins,
-      previousTotals: running,
+      previousTotals: monthRunning[monthKey],
       settings,
     });
-    scored.rows.forEach((row) => {
-      running[String(row.classId)] = row.totalPoints;
-    });
+    const ignored = Boolean(controllerByWeek.get(weekStart)?.ignore_week);
+    if (!ignored) {
+      scored.rows.forEach((row) => {
+        const classKey = String(row.classId);
+        monthRunning[monthKey][classKey] = row.totalPoints;
+        yearRunning[classKey] = (yearRunning[classKey] || 0) + row.weekPoints;
+      });
+    }
     weekResults[weekStart] = scored;
   });
 
@@ -795,7 +1170,7 @@ export const computeYearProgression = ({ classes, categories, weeks = [], coins 
     className: c.name,
     programme: c.programme || null,
     strength: Number(c.strength || 0),
-    totalPoints: running[String(c.id)] || 0,
+    totalPoints: yearRunning[String(c.id)] || 0,
   }));
 
   return { yearRows, weeks: weekResults };

@@ -3,7 +3,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import MultiSelectRolesDropdown from '../employees/employee-records/MultiSelectRolesDropdown';
+import ConfirmModal from '../ConfirmModal';
 import { normalizeRoles } from '../../utils/roleUtils';
+
+const userRolesDataCache = new Map();
 
 const formatPortalRoles = (userOrRoles) => {
   let roles = [];
@@ -33,11 +36,18 @@ const formatPortalRoles = (userOrRoles) => {
   );
 };
 
-export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
-  const [authUsers, setAuthUsers] = useState([]);
-  const [employees, setEmployees] = useState([]);
-  const [loading, setLoading] = useState(true);
+export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUsers = false }) => {
+  const currentUserId = currentUser?.id || null;
+  const [authUsers, setAuthUsers] = useState(
+    () => userRolesDataCache.get(currentUserId)?.authUsers || []
+  );
+  const [employees, setEmployees] = useState(
+    () => userRolesDataCache.get(currentUserId)?.employees || []
+  );
+  const [loading, setLoading] = useState(() => !userRolesDataCache.has(currentUserId));
   const [saving, setSaving] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [userPendingDelete, setUserPendingDelete] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Editing row state
@@ -108,7 +118,7 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
       } else {
         const { data: authData, error: authErr } = await supabase.rpc(
           'get_auth_users_with_roles_secure',
-          { p_auth_id: currentUser?.id || null }
+          { p_auth_id: currentUserId }
         );
         if (!authErr && Array.isArray(authData) && authData.length > 0) {
           usersList = authData;
@@ -124,17 +134,32 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
       }));
 
       setAuthUsers(usersList);
+      if (currentUserId) {
+        userRolesDataCache.set(currentUserId, {
+          authUsers: usersList,
+          employees: empList,
+        });
+      }
     } catch (err) {
       console.error('Failed to load user roles data:', err);
       showToast('Failed to load user roles: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [currentUserId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const cachedData = userRolesDataCache.get(currentUserId);
+    if (cachedData) {
+      setAuthUsers(cachedData.authUsers);
+      setEmployees(cachedData.employees);
+      setLoading(false);
+    } else {
+      setAuthUsers([]);
+      setEmployees([]);
+      fetchData();
+    }
+  }, [currentUserId, fetchData]);
 
   // Map employee auth_id to employee info
   const mappedAuthUserMap = useMemo(() => {
@@ -240,6 +265,34 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
     }
   };
 
+  const handleDeleteExternalUser = async () => {
+    if (!userPendingDelete || deletingUser) return;
+
+    setDeletingUser(true);
+    try {
+      const { data, error } = await supabase.rpc('delete_external_auth_user_secure', {
+        p_user_id: userPendingDelete.user_id,
+      });
+      if (error) throw error;
+      if (data !== true) {
+        throw new Error('The server did not confirm that the account was deleted.');
+      }
+
+      const nextUsers = authUsers.filter((user) => user.user_id !== userPendingDelete.user_id);
+      setAuthUsers(nextUsers);
+      if (currentUserId) {
+        userRolesDataCache.set(currentUserId, { authUsers: nextUsers, employees });
+      }
+      showToast('External authentication account deleted successfully.', 'success');
+    } catch (err) {
+      console.error('Error deleting external authentication user:', err);
+      showToast(`Failed to delete authentication account: ${err.message}`, 'error');
+    } finally {
+      setDeletingUser(false);
+      setUserPendingDelete(null);
+    }
+  };
+
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: 'user', direction: 'asc' });
 
@@ -270,8 +323,8 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
       } else if (sortConfig.key === 'emp') {
         const empA = mappedAuthUserMap.get(String(a.user_id));
         const empB = mappedAuthUserMap.get(String(b.user_id));
-        valA = (empA ? empA.name : '').toLowerCase();
-        valB = (empB ? empB.name : '').toLowerCase();
+        valA = (empA?.emp_name || '').toLowerCase();
+        valB = (empB?.emp_name || '').toLowerCase();
       } else if (sortConfig.key === 'roles') {
         valA = (a.roles || []).join(',').toLowerCase();
         valB = (b.roles || []).join(',').toLowerCase();
@@ -549,22 +602,37 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingAuthUser(u.user_id);
-                              const initialRoles = Array.isArray(u.roles)
-                                ? u.roles
-                                : normalizeRoles(u.roles);
-                              setEditingRoles(initialRoles);
-                              setEditingEmpId(mappedEmp ? String(mappedEmp.emp_id) : '');
-                            }}
-                            className="px-3 py-1.5 bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ml-auto cursor-pointer"
-                            title="Edit roles and employee mapping"
-                          >
-                            <i className="fas fa-pen text-[10px]"></i>
-                            <span>Edit</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingAuthUser(u.user_id);
+                                const initialRoles = Array.isArray(u.roles)
+                                  ? u.roles
+                                  : normalizeRoles(u.roles);
+                                setEditingRoles(initialRoles);
+                                setEditingEmpId(mappedEmp ? String(mappedEmp.emp_id) : '');
+                              }}
+                              className="px-3 py-1.5 bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              title="Edit roles and employee mapping"
+                            >
+                              <i className="fas fa-pen text-[10px]"></i>
+                              <span>Edit</span>
+                            </button>
+                            {canDeleteAuthUsers &&
+                              !mappedEmp &&
+                              String(u.user_id) !== String(currentUser?.id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setUserPendingDelete(u)}
+                                  className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                  title="Delete external authentication account"
+                                >
+                                  <i className="fas fa-trash-alt text-[10px]"></i>
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -575,6 +643,16 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack }) => {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={Boolean(userPendingDelete)}
+        title="Delete external account?"
+        message={`Permanently delete ${userPendingDelete?.email || 'this external authentication account'}? This action cannot be undone. Employee-linked accounts cannot be deleted.`}
+        confirmText={deletingUser ? 'Deleting...' : 'Delete account'}
+        onConfirm={handleDeleteExternalUser}
+        onCancel={() => {
+          if (!deletingUser) setUserPendingDelete(null);
+        }}
+      />
     </div>
   );
 };

@@ -87,12 +87,12 @@ export const STATIC_MANAGED_COMPONENTS = new Set([
   'discipline-gold-coin',
   'discipline-log-coins',
   'discipline-restore-coin',
-  'discipline-shield-decide',
+  'discipline-show-recommendation',
   'discipline-tab-awards',
   'discipline-tab-config',
   'discipline-tab-scorecard',
   'discipline-tab-teachers',
-  'student-discipline',
+  'class-discipline-board',
   'student-add-record',
   'student-delete-record',
   'student-edit-record',
@@ -509,7 +509,8 @@ export const useViewConfig = (userRoles = []) => {
       // 2. If the component is registered in the database table:
       // The database RPC is the authoritative source of truth.
       // Its absence from viewConfigs means access was intentionally denied by DB permissions.
-      const isPresentInDb = Array.isArray(registeredNames) && registeredNames.includes(componentName);
+      const isPresentInDb =
+        Array.isArray(registeredNames) && registeredNames.includes(componentName);
       if (isPresentInDb) {
         return false;
       }
@@ -525,9 +526,7 @@ export const useViewConfig = (userRoles = []) => {
       ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
-          ['admin', 'management', 'coordinator', 'teacher'].includes(
-            String(r).toLowerCase().trim()
-          )
+          ['admin', 'management', 'coordinator', 'teacher'].includes(String(r).toLowerCase().trim())
         );
       }
 
@@ -549,9 +548,7 @@ export const useViewConfig = (userRoles = []) => {
       ) {
         if (!userRoles || userRoles.length === 0) return true;
         return userRoles.some((r) =>
-          ['admin', 'management', 'coordinator', 'teacher'].includes(
-            String(r).toLowerCase().trim()
-          )
+          ['admin', 'management', 'coordinator', 'teacher'].includes(String(r).toLowerCase().trim())
         );
       }
 
@@ -623,14 +620,9 @@ export const useViewConfig = (userRoles = []) => {
       }
 
       // Builtin fallback for parent exam timetable and progress report (unmanaged)
-      if (
-        componentName === 'ward-exam-timetable' ||
-        componentName === 'ward-progress-report'
-      ) {
+      if (componentName === 'ward-exam-timetable' || componentName === 'ward-progress-report') {
         if (!userRoles || userRoles.length === 0) return true;
-        return userRoles.some((r) =>
-          ['parent'].includes(String(r).toLowerCase().trim())
-        );
+        return userRoles.some((r) => ['parent'].includes(String(r).toLowerCase().trim()));
       }
 
       if (componentName === 'exam-sched-tab-parent') {

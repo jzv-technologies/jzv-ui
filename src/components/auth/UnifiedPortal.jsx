@@ -1,5 +1,5 @@
 // src/components/auth/UnifiedPortal.jsx
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import useViewConfig from '../../hooks/useViewConfig';
 import PortalLayout from '../layout/PortalLayout';
 import Translate from '../Translate';
@@ -43,6 +43,8 @@ import TileButton from '../portal-shared/TileButton';
 import GroupCard from '../portal-shared/GroupCard';
 import DirectTile from '../portal-shared/DirectTile';
 
+const MANAGE_USER_ROLES_SUBVIEWS = ['manage-user-roles', 'portal-user-roles'];
+
 export const UnifiedPortal = ({
   user,
   userRoles = [],
@@ -52,7 +54,15 @@ export const UnifiedPortal = ({
   initialSubView = null,
 }) => {
   const [subView, setSubView] = useState(initialSubView);
+  const [hasVisitedManageUserRoles, setHasVisitedManageUserRoles] = useState(() =>
+    MANAGE_USER_ROLES_SUBVIEWS.includes(initialSubView)
+  );
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
+  const isManageUserRolesSubview = MANAGE_USER_ROLES_SUBVIEWS.includes(subView);
+
+  useEffect(() => {
+    if (isManageUserRolesSubview) setHasVisitedManageUserRoles(true);
+  }, [isManageUserRolesSubview]);
 
   const { viewConfigs, loading, error, refreshConfigs, getVisibleTiles } = useViewConfig(userRoles);
 
@@ -196,6 +206,9 @@ export const UnifiedPortal = ({
       ) {
         setActiveGroup(groupInfo.key);
       }
+      if (MANAGE_USER_ROLES_SUBVIEWS.includes(tile.id)) {
+        setHasVisitedManageUserRoles(true);
+      }
       setSubView(tile.id);
     },
     [isCategoryView, multiTileGroups, openModal]
@@ -302,15 +315,15 @@ export const UnifiedPortal = ({
           </div>
         );
 
-      case 'student-discipline':
+      case 'class-discipline-board':
         return (
-          <div data-feature="student-discipline">
+          <div data-feature="class-discipline-board">
             <StudentDisciplineManager
-            userRoles={userRoles}
-            user={user}
-            teacherRecord={teacherRecord}
-            fullName={fullName}
-          />
+              userRoles={userRoles}
+              user={user}
+              teacherRecord={teacherRecord}
+              fullName={fullName}
+            />
           </div>
         );
 
@@ -528,14 +541,6 @@ export const UnifiedPortal = ({
           </div>
         );
 
-      case 'manage-user-roles':
-      case 'portal-user-roles':
-        return (
-          <div data-feature="manage-user-roles">
-            <ManagePortalUserRolesView currentUser={user} onBack={() => setSubView(null)} />
-          </div>
-        );
-
       case 'exam-schedule':
         return (
           <div data-feature="exam-schedule">
@@ -670,8 +675,20 @@ export const UnifiedPortal = ({
       onCategoryViewChange={handleCategoryViewChange}
     >
       <div className="w-full">
+        {hasVisitedManageUserRoles && (
+          <div
+            className={isManageUserRolesSubview ? 'w-full' : 'hidden'}
+            aria-hidden={!isManageUserRolesSubview}
+          >
+            <ManagePortalUserRolesView
+              currentUser={user}
+              canDeleteAuthUsers={isAdmin}
+              onBack={() => setSubView(null)}
+            />
+          </div>
+        )}
         {/* Active SubView Content */}
-        {subView ? (
+        {isManageUserRolesSubview ? null : subView ? (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 w-full">
             {renderSubViewContent()}
           </div>

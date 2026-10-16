@@ -86,10 +86,9 @@ export const TILE_METADATA_REGISTRY = {
     group: 'Staff & Students',
     action: 'subview',
   },
-  'student-discipline': {
-    title: 'Student Discipline',
-    description:
-      'Weekly class discipline scorecard: coins per discipline, teacher and management coins, shields, cups and the best class of the year.',
+  'class-discipline-board': {
+    title: 'Class Discipline Board',
+    description: 'Weekly class discipline scorecard',
     icon: 'fa-coins',
     buttonColor: 'bg-amber-500 text-white',
     shadow: 'shadow-amber-200',
@@ -259,8 +258,7 @@ export const TILE_METADATA_REGISTRY = {
   },
   'exam-schedule-viewer': {
     title: 'Exam Schedule Viewer',
-    description:
-      'View exam timetables, invigilator assignments, and notice board printouts.',
+    description: 'View exam timetables, invigilator assignments, and notice board printouts.',
     icon: 'fa-calendar-check',
     buttonColor: 'bg-rose-600 text-white',
     shadow: 'shadow-rose-200',
@@ -298,7 +296,8 @@ export const TILE_METADATA_REGISTRY = {
   },
   'exam-analysis': {
     title: 'Exam Analysis',
-    description: 'In-depth marks percentage distribution and standard deviation heatmap analytics across classes.',
+    description:
+      'In-depth marks percentage distribution and standard deviation heatmap analytics across classes.',
     icon: 'fa-chart-pie',
     buttonColor: 'bg-violet-600 text-white',
     shadow: 'shadow-violet-200',
