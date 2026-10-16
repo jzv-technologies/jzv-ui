@@ -188,6 +188,121 @@ html[lang="ar"] textarea {
     color: #000000 !important;
   }
 
+  .discipline-scorecard-print .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .discipline-scorecard-print .print-config-header,
+  .discipline-scorecard-print .print-config-footer {
+    display: block !important;
+  }
+
+  .discipline-scorecard-print .print-config-footer {
+    display: flex !important;
+  }
+
+  .discipline-scorecard-print .screen-only {
+    display: none !important;
+  }
+
+  .discipline-scorecard-print,
+  .discipline-scorecard-print .rounded-2xl {
+    border-radius: 0 !important;
+  }
+
+  .discipline-scorecard-table {
+    table-layout: fixed !important;
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .discipline-scorecard-table th:first-child,
+  .discipline-scorecard-table td:first-child {
+    width: 24% !important;
+  }
+
+  .discipline-scorecard-table thead button {
+    text-decoration: none !important;
+  }
+
+  .discipline-scorecard-table thead {
+    display: table-header-group;
+  }
+
+  .discipline-scorecard-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .discipline-scorecard-table [data-print-row="total-coins"] th,
+  .discipline-scorecard-table [data-print-row="total-coins"] td {
+    background-color: #d9e2f3 !important;
+  }
+
+  .discipline-scorecard-table [data-print-row="total-points"] th,
+  .discipline-scorecard-table [data-print-row="total-points"] td {
+    font-weight: 900 !important;
+  }
+
+  .print-config-preview table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+    page-break-inside: auto !important;
+  }
+
+  .print-config-preview .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .print-config-preview table thead button {
+    pointer-events: none;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .print-config-preview th,
+  .print-config-preview td {
+    color: var(--pc-cell-color) !important;
+    font-size: var(--pc-cell-size) !important;
+    text-align: var(--pc-cell-align) !important;
+    margin: var(--pc-cell-margin) !important;
+    padding: var(--pc-cell-padding) !important;
+    border: var(--pc-border-width) solid color-mix(in srgb, var(--pc-border-color) var(--pc-border-opacity), transparent) !important;
+  }
+
+  .print-config-preview th:first-child,
+  .print-config-preview td:first-child {
+    color: var(--pc-first-color) !important;
+    font-size: var(--pc-first-size) !important;
+    text-align: var(--pc-first-align) !important;
+  }
+
+  .print-config-preview thead {
+    display: var(--pc-header-visible) !important;
+  }
+
+  .print-config-preview thead th {
+    background: var(--pc-header-bg) !important;
+    color: var(--pc-header-color) !important;
+    font-size: var(--pc-header-size) !important;
+    text-align: var(--pc-header-align) !important;
+  }
+
+  .print-config-preview .print-config-header,
+  .print-config-preview .print-config-footer,
+  .print-config-preview .hidden {
+    display: none !important;
+  }
+
+  .print-config-preview table tbody tr:nth-child(even) td:not([style*="background-color"]) {
+    background-color: var(--pc-row-band);
+  }
+
+  .print-config-preview table tbody td:nth-child(even):not([style*="background-color"]) {
+    background-color: var(--pc-column-band);
+  }
+
   /* Make table, cells, and inner wrappers compact */
   table {
     width: 100% !important;
@@ -245,6 +360,109 @@ html[lang="ar"] textarea {
   }
 }
 
+.print-config-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.print-config-preview .discipline-scorecard-print,
+.print-config-preview .discipline-scorecard-print .rounded-2xl {
+  border-radius: 0 !important;
+}
+
+.print-config-preview.has-fixed-column-width table th,
+.print-config-preview.has-fixed-column-width table td {
+  width: var(--pc-column-width) !important;
+}
+
+.print-config-preview.has-fixed-first-column-width table th:first-child,
+.print-config-preview.has-fixed-first-column-width table td:first-child {
+  width: var(--pc-first-column-width) !important;
+}
+
+.print-config-preview.has-auto-first-column-width table th:first-child,
+.print-config-preview.has-auto-first-column-width table td:first-child {
+  width: auto !important;
+}
+
+.print-config-preview.has-fixed-row-height table tbody th,
+.print-config-preview.has-fixed-row-height table tbody td {
+  height: var(--pc-row-height) !important;
+}
+
+.print-config-preview.has-fixed-table-header-height table thead th {
+  height: var(--pc-table-header-height) !important;
+}
+
+.print-config-preview th,
+.print-config-preview td {
+  color: var(--pc-cell-color) !important;
+  font-size: var(--pc-cell-size) !important;
+  text-align: var(--pc-cell-align) !important;
+  margin: var(--pc-cell-margin) !important;
+  padding: var(--pc-cell-padding) !important;
+  border: var(--pc-border-width) solid
+    color-mix(in srgb, var(--pc-border-color) var(--pc-border-opacity), transparent) !important;
+}
+
+.print-config-preview th *,
+.print-config-preview td * {
+  color: inherit !important;
+  font-size: inherit !important;
+  text-align: inherit !important;
+}
+
+.print-config-preview th > div,
+.print-config-preview td > div {
+  margin: var(--pc-cell-margin);
+}
+
+.print-config-preview th:first-child,
+.print-config-preview td:first-child {
+  color: var(--pc-first-color) !important;
+  font-size: var(--pc-first-size) !important;
+  text-align: var(--pc-first-align) !important;
+}
+
+.print-config-preview thead {
+  display: var(--pc-header-visible) !important;
+}
+
+.print-config-preview thead th {
+  background-color: var(--pc-header-bg) !important;
+  color: var(--pc-header-color) !important;
+  font-size: var(--pc-header-size) !important;
+  text-align: var(--pc-header-align) !important;
+}
+
+.print-config-preview .print-config-header,
+.print-config-preview .print-config-footer,
+.print-config-preview .hidden {
+  display: none;
+}
+
+.print-config-preview [class~="print:hidden"],
+.print-config-preview .screen-only {
+  display: none !important;
+}
+
+.print-config-preview [class~="hidden"][class~="print:inline"] {
+  display: inline !important;
+}
+
+.print-config-preview [class~="hidden"][class~="print:table-row"] {
+  display: table-row !important;
+}
+
+.print-config-preview table tbody tr:nth-child(even) td:not([style*="background-color"]) {
+  background-color: var(--pc-row-band) !important;
+}
+
+.print-config-preview table tbody td:nth-child(even):not([style*="background-color"]) {
+  background-color: var(--pc-column-band) !important;
+}
+
 /* Animation utilities for Syllabus Progress Split View */
 @keyframes slideInLeft {
   from {
@@ -299,6 +517,3 @@ html[lang="ar"] textarea {
 .animate-fade-in {
   animation: fadeIn 0.5s ease-out forwards;
 }
-
-
-

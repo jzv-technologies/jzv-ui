@@ -10,6 +10,7 @@ const ConfirmModal = ({
   type = 'danger', // danger, warning, info
   onConfirm,
   onCancel,
+  children,
 }) => {
   if (!isOpen) return null;
 
@@ -49,6 +50,7 @@ const ConfirmModal = ({
           <p className="text-xs text-dark-soft font-semibold leading-relaxed whitespace-pre-line">
             {message}
           </p>
+          {children}
         </div>
 
         <div className="flex gap-3 w-full pt-2">

@@ -12,6 +12,7 @@ import {
   Line,
 } from 'recharts';
 import CoinArt, { CoinStack } from '../CoinArt';
+import PrintPageDecorations from '../../PrintPageDecorations';
 import { splitCategories } from '../../../utils/disciplineScoring';
 
 const LINE_COLOURS = [
@@ -24,6 +25,25 @@ const LINE_COLOURS = [
   '#f97316',
   '#64748b',
 ];
+
+const splitLabelIntoLines = (label) => {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [words[0] || '', ''];
+
+  let splitIndex = 1;
+  let smallestDifference = Infinity;
+  for (let index = 1; index < words.length; index += 1) {
+    const firstLineLength = words.slice(0, index).join(' ').length;
+    const secondLineLength = words.slice(index).join(' ').length;
+    const difference = Math.abs(firstLineLength - secondLineLength);
+    if (difference < smallestDifference) {
+      splitIndex = index;
+      smallestDifference = difference;
+    }
+  }
+
+  return [words.slice(0, splitIndex).join(' '), words.slice(splitIndex).join(' ')];
+};
 
 /**
  * The sheet layout: one row per discipline (with its coin art), then the two appreciation rows and
@@ -48,6 +68,7 @@ const ScorecardTab = ({
   weekLocked = false,
   showRecommendation = false,
   settings,
+  printSettings,
   view = 'table',
   metric,
   onOpenClass,
@@ -61,23 +82,31 @@ const ScorecardTab = ({
 
   const columns = useMemo(() => {
     const sorted = [...(rows || [])];
-    if (sortConfig.key === 'name') {
-      sorted.sort((a, b) =>
-        sortConfig.direction === 'asc'
-          ? String(a.className).localeCompare(String(b.className))
-          : String(b.className).localeCompare(String(a.className))
-      );
-    } else if (sortConfig.key === 'totalCoins') {
-      sorted.sort((a, b) =>
-        sortConfig.direction === 'asc' ? a.totalCoins - b.totalCoins : b.totalCoins - a.totalCoins
-      );
-    } else if (sortConfig.key === 'totalPoints') {
-      sorted.sort((a, b) =>
-        sortConfig.direction === 'asc'
-          ? a.totalPoints - b.totalPoints
-          : b.totalPoints - a.totalPoints
-      );
-    }
+    const programmeOrder = (programme) => {
+      const normalized = String(programme || '').trim().toUpperCase();
+      if (normalized === 'PCC') return 0;
+      if (normalized === 'GCC') return 1;
+      return 2;
+    };
+    const compareClassName = (a, b) =>
+      String(a.className).localeCompare(String(b.className), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    sorted.sort((a, b) => {
+      const programmeDifference = programmeOrder(a.programme) - programmeOrder(b.programme);
+      if (programmeDifference) return programmeDifference;
+
+      if (sortConfig.key === 'name') {
+        const comparison = compareClassName(a, b);
+        return sortConfig.direction === 'asc' ? comparison : -comparison;
+      }
+      if (sortConfig.key === 'totalCoins' || sortConfig.key === 'totalPoints') {
+        const comparison = Number(a[sortConfig.key] || 0) - Number(b[sortConfig.key] || 0);
+        if (comparison) return sortConfig.direction === 'asc' ? comparison : -comparison;
+      }
+      return compareClassName(a, b);
+    });
     return sorted.filter((row) => !hiddenClassIds.includes(String(row.classId)));
   }, [rows, sortConfig, hiddenClassIds]);
 
@@ -96,7 +125,9 @@ const ScorecardTab = ({
     const map = {};
     Object.entries(winnersByCategory || {}).forEach(([categoryId, winners]) => {
       map[categoryId] = new Set(
-        (winners || []).filter((w) => w._rule5 || w._provisional).map((w) => String(w.classId))
+        (winners || [])
+          .filter((w) => !w._saved && (w._rule5 || w._provisional))
+          .map((w) => String(w.classId))
       );
     });
     return map;
@@ -158,13 +189,31 @@ const ScorecardTab = ({
 
   const trendClasses = useMemo(() => columns.map((c) => c.className), [columns]);
 
-  const weekLabel = selectedWeek ? String(selectedWeek).slice(0, 10) : '';
+  const weekEndingLabel = useMemo(() => {
+    if (!selectedWeek) return '';
+    const ending = new Date(`${String(selectedWeek).slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(ending.getTime())) return '';
+    ending.setDate(ending.getDate() + 6);
+    const day = ending.getDate();
+    const ordinal =
+      day % 100 >= 11 && day % 100 <= 13
+        ? 'th'
+        : ['th', 'st', 'nd', 'rd'][day % 10] || 'th';
+    return `${day}${ordinal} ${ending.toLocaleDateString('en-US', { month: 'long' })}`;
+  }, [selectedWeek]);
 
   return (
-    <div className="space-y-4">
+    <div
+      className="discipline-scorecard-print space-y-4"
+      data-print-target="active"
+    >
+      <PrintPageDecorations
+        settings={printSettings}
+        context={{ weekEnding: weekEndingLabel }}
+      />
       {weekLocked && (
         <div
-          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 print:hidden"
           data-feature-status="discipline-week-locked"
         >
           <i className="fas fa-lock" />
@@ -173,7 +222,7 @@ const ScorecardTab = ({
       )}
       {showRecommendation && recommendations.length > 0 && (
         <section
-          className="grid gap-3 md:grid-cols-2"
+          className="grid gap-3 md:grid-cols-2 print:hidden"
           data-feature="discipline-recommendation-editor"
         >
           {recommendations.map((entry) => {
@@ -246,11 +295,15 @@ const ScorecardTab = ({
             Adjust the programme or class filter.
           </p>
         </div>
-      ) : view === 'table' ? (
+      ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-light-border bg-white">
+          <div
+            className={`overflow-x-auto rounded-2xl print:rounded-none border border-light-border bg-white ${
+              view === 'table' ? '' : 'hidden print:block'
+            }`}
+          >
             <table
-              className="w-full border-collapse text-xs"
+              className="w-full border-collapse text-xs discipline-scorecard-table"
               data-print-target="discipline-scorecard"
             >
               <thead>
@@ -283,12 +336,12 @@ const ScorecardTab = ({
                         >
                           {row.className}
                         </button>
-                        <span className="text-[9px] font-bold text-dark-soft">
+                        <span className="text-[9px] font-bold text-dark-soft print:hidden">
                           {row.programme || '—'}
                         </span>
                         {classesHoldingAShield.has(String(row.classId)) && (
                           <i
-                            className={`fas fa-shield-halved text-[9px] ${
+                            className={`fas fa-shield-halved text-[9px] print:hidden ${
                               shields.some(
                                 (shield) =>
                                   String(shield.classId) === String(row.classId) && shield.rule5
@@ -302,7 +355,7 @@ const ScorecardTab = ({
                         {canTakeCoins && (
                           <button
                             onClick={() => onOpenClass?.(row.classId)}
-                            className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-800 hover:bg-amber-100 transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-800 hover:bg-amber-100 transition-all cursor-pointer print:hidden"
                             title={`Take a coin from ${row.className}`}
                             data-feature-action="discipline-take-coins-class"
                           >
@@ -319,8 +372,14 @@ const ScorecardTab = ({
                 {disciplines.map((category) => {
                   return (
                     <tr key={category.id}>
-                      <th className="sticky left-0 z-10 bg-white border border-light-border px-3 py-2 text-left">
-                        <div className="flex items-center gap-2">
+                      <th
+                        scope="row"
+                        className="sticky left-0 z-10 bg-white border border-light-border px-3 py-2 text-left"
+                      >
+                        <div
+                          className="grid items-center gap-2"
+                          style={{ gridTemplateColumns: '26px minmax(0, 1fr)' }}
+                        >
                           <CoinArt
                             image={category.coin_image}
                             accent={category.coin_accent}
@@ -329,8 +388,12 @@ const ScorecardTab = ({
                             size={26}
                             alt={category.name}
                           />
-                          <span className="font-bold text-dark-primary leading-tight">
-                            {category.name}
+                          <span className="font-bold text-dark-primary leading-tight uppercase">
+                            {splitLabelIntoLines(category.name).map((line, index) => (
+                              <span key={`${category.id}-line-${index}`} className="block">
+                                {line || '\u00a0'}
+                              </span>
+                            ))}
                           </span>
                         </div>
                       </th>
@@ -343,9 +406,11 @@ const ScorecardTab = ({
                         const holdsShield = Boolean(
                           winnerIds && winnerIds.has(String(row.classId))
                         );
-                        const provisional = Boolean(
-                          provisionalIdsByCategory[String(category.id)]?.has(String(row.classId))
-                        );
+                        const provisional =
+                          showRecommendation ||
+                          Boolean(
+                            provisionalIdsByCategory[String(category.id)]?.has(String(row.classId))
+                          );
                         const reason =
                           shieldReasonByCategory[String(category.id)]?.filter || 'highest coins';
                         return (
@@ -355,11 +420,14 @@ const ScorecardTab = ({
                               holdsShield
                                 ? provisional
                                   ? 'bg-yellow-200/90 text-yellow-950 ring-2 ring-inset ring-yellow-500/70'
-                                  : 'bg-emerald-400/90 text-emerald-950'
+                                  : 'text-green-950'
                                 : isRed
                                   ? 'bg-red-500 text-white'
                                   : 'text-dark-primary'
                             }`}
+                            style={
+                              holdsShield && !provisional ? { backgroundColor: '#92D050' } : undefined
+                            }
                             title={
                               isRed
                                 ? `Red zone: ${value} of ${category.weekly_coins} coins left`
@@ -379,7 +447,7 @@ const ScorecardTab = ({
                                     provisional
                                       ? 'fas fa-wand-magic-sparkles'
                                       : 'fas fa-shield-halved'
-                                  } text-[9px] ${
+                                  } text-[9px] print:hidden ${
                                     isRed
                                       ? 'text-white'
                                       : provisional
@@ -406,6 +474,7 @@ const ScorecardTab = ({
                   columns={columns}
                   pick={(row) => row.totalCoins}
                   strong
+                  printRow="total-coins"
                 />
 
                 <AppreciationRow
@@ -434,12 +503,23 @@ const ScorecardTab = ({
                   pick={(row) => row.weekPoints}
                   hint={`${settings?.red_zone_penalty ?? 5} points off per red zone`}
                   strong
+                  printRow="this-week-points"
                 />
                 <TotalRow
                   label="Previous total"
+                  printLabel="Previous week total"
                   columns={columns}
                   pick={(row) => row.previousTotal}
                   muted
+                  printRow="previous-total"
+                />
+                <TotalRow
+                  label="Red zone count"
+                  columns={columns}
+                  pick={(row) => row.redZones}
+                  muted
+                  printRow="red-zones"
+                  printOnly
                 />
                 <TotalRow
                   label="Total points"
@@ -447,16 +527,20 @@ const ScorecardTab = ({
                   pick={(row) =>
                     `${row.totalPoints}${row.redZones > 0 ? ` · ${row.redZones} RZ` : ''}`
                   }
+                  printPick={(row) => row.totalPoints}
                   onSort={() => toggleSort('totalPoints')}
                   sorted={sortConfig.key === 'totalPoints' ? sortConfig.direction : null}
                   strong
+                  printRow="total-points"
                 />
               </tbody>
             </table>
           </div>
-        </>
-      ) : (
-        <div className="rounded-2xl border border-light-border bg-white p-4">
+          <div
+            className={`rounded-2xl border border-light-border bg-white p-4 print:hidden ${
+              view === 'graph' ? '' : 'hidden'
+            }`}
+          >
           <div className="h-[380px]">
             <ResponsiveContainer width="100%" height="100%">
               {metric === 'trend' ? (
@@ -572,25 +656,51 @@ const ScorecardTab = ({
               ))}
             </div>
           </div>
-        </div>
+          </div>
+        </>
       )}
 
     </div>
   );
 };
 
-const TotalRow = ({ label, columns, pick, hint, strong, muted, onSort, sorted }) => (
-  <tr className={strong ? 'bg-slate-50' : muted ? 'bg-white' : ''}>
+const TotalRow = ({
+  label,
+  columns,
+  pick,
+  printPick,
+  printLabel,
+  printOnly,
+  hint,
+  strong,
+  muted,
+  onSort,
+  sorted,
+  printRow,
+}) => (
+  <tr
+    className={`${strong ? 'bg-slate-50' : muted ? 'bg-white' : ''} ${
+      printOnly ? 'hidden print:table-row' : ''
+    }`}
+    data-print-row={printRow}
+  >
     <th className="sticky left-0 z-10 bg-inherit border border-light-border px-3 py-2 text-left">
       <button
         onClick={onSort}
         disabled={!onSort}
         className={`font-black text-dark-primary ${onSort ? 'cursor-pointer' : 'cursor-default'}`}
       >
-        {label}
+        {printLabel ? (
+          <>
+            <span className="print:hidden">{label}</span>
+            <span className="hidden print:inline">{printLabel}</span>
+          </>
+        ) : (
+          label
+        )}
         {onSort && (
           <i
-            className={`fas ml-1 text-[9px] ${
+            className={`fas ml-1 text-[9px] print:hidden ${
               sorted === 'asc'
                 ? 'fa-sort-up'
                 : sorted === 'desc'
@@ -600,7 +710,7 @@ const TotalRow = ({ label, columns, pick, hint, strong, muted, onSort, sorted })
           />
         )}
       </button>
-      {hint && <div className="text-[9px] font-semibold text-dark-soft">{hint}</div>}
+      {hint && <div className="text-[9px] font-semibold text-dark-soft print:hidden">{hint}</div>}
     </th>
     {columns.map((row) => (
       <td
@@ -609,20 +719,27 @@ const TotalRow = ({ label, columns, pick, hint, strong, muted, onSort, sorted })
           strong ? 'text-dark-primary' : 'text-dark-muted'
         }`}
       >
-        {pick(row)}
+        {printPick ? (
+          <>
+            <span className="screen-only">{pick(row)}</span>
+            <span className="hidden print:inline">{printPick(row)}</span>
+          </>
+        ) : (
+          pick(row)
+        )}
       </td>
     ))}
   </tr>
 );
 
 const AppreciationRow = ({ label, hint, columns, pick, accent, image, face }) => (
-  <tr>
+  <tr data-print-row="appreciation">
     <th className="sticky left-0 z-10 bg-white border border-light-border px-3 py-2 text-left">
       <div className="flex items-center gap-2">
         <CoinArt accent={accent} image={image} size={24} alt={label} face={face} />
         <span className="font-bold text-dark-primary leading-tight">{label}</span>
       </div>
-      <div className="text-[9px] font-semibold text-dark-soft">{hint}</div>
+      <div className="text-[9px] font-semibold text-dark-soft print:hidden">{hint}</div>
     </th>
     {columns.map((row) => {
       const value = pick(row);
@@ -633,11 +750,16 @@ const AppreciationRow = ({ label, hint, columns, pick, accent, image, face }) =>
         >
           {value > 0 ? (
             <div className="flex items-center justify-center gap-1">
-              <CoinArt accent={accent} image={image} size={18} alt={label} face={face} />
+              <span className="print:hidden">
+                <CoinArt accent={accent} image={image} size={18} alt={label} face={face} />
+              </span>
               <span>{value}</span>
             </div>
           ) : (
-            <span className="text-dark-soft">-</span>
+            <>
+              <span className="screen-only">-</span>
+              <span className="hidden print:inline">0</span>
+            </>
           )}
         </td>
       );

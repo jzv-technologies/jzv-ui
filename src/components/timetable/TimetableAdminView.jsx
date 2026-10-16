@@ -8,6 +8,9 @@ import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTab
 import { CARD_THEMES } from '../../utils/cardTheme';
 import { showToast } from '../../utils/toast';
 import MultiSelectDropdown from '../MultiSelectDropdown';
+import PrintConfigurationModal from '../PrintConfigurationModal';
+import PrintPageDecorations from '../PrintPageDecorations';
+import { usePrintSettings } from '../../hooks/usePrintSettings';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -1469,6 +1472,15 @@ const TimetableAdminView = ({
   const [showBreaks, setShowBreaks] = useState(false);
   const [popover, setPopover] = useState(null);
   const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+  const {
+    settings: printSettings,
+    updateSettings: updatePrintSettings,
+    resetSettings: resetPrintSettings,
+    isPrintOpen,
+    openPrint,
+    closePrint,
+    triggerPrint,
+  } = usePrintSettings('jzv_timetable_viewer_print_settings');
 
   // ── Filter states (lifted from TimetableOverview) ──
   const [selClasses, setSelClasses] = useState([]);
@@ -1573,7 +1585,7 @@ const TimetableAdminView = ({
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => triggerPrint('dom');
 
   const getSubjectName = (subId) =>
     subjects.find((s) => String(s.id) === String(subId))?.name || 'Unknown';
@@ -2010,6 +2022,15 @@ const TimetableAdminView = ({
       className="w-full bg-light-lbg/50 border border-light-border rounded-3xl shadow-sm p-4 sm:p-4 animate-in fade-in slide-in-from-bottom-4 duration-500 print:p-0 print:border-none print:shadow-none"
       data-print-target="active"
     >
+      <PrintPageDecorations
+        settings={printSettings}
+        context={{
+          className: myTab === 'my' ? '' : printEntityName || '',
+          teacherName: myTab === 'my' ? myTeacher?.name || '' : '',
+          viewLabel: myTab === 'my' ? 'My Timetable' : viewObj.label,
+          timetableName: myTab === 'my' ? 'My Timetable' : `Weekly Timetable — ${viewObj.label}`,
+        }}
+      />
       {/* ── Header ── */}
       <div
         className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5"
@@ -2403,7 +2424,17 @@ const TimetableAdminView = ({
             className="flex items-center gap-1.5 shrink-0 ml-auto"
             feature-icons="Scheduler Setup Icons"
           >
-            {printButton}
+            {printButton || (
+              <button
+                type="button"
+                onClick={openPrint}
+                title="Configure and print this timetable view"
+                className="rounded-lg border border-light-border bg-white p-2 text-dark-soft transition-all hover:bg-light-lbg hover:text-dark-primary"
+                data-feature-action="timetable-print-configure"
+              >
+                <i className="fas fa-print text-sm" />
+              </button>
+            )}
             {!(myTab === 'my' && !myTeacher) &&
               (myTab === 'my'
                 ? myView === 'weekly'
@@ -2468,17 +2499,6 @@ const TimetableAdminView = ({
         {/* Sub-tab row extras: the Scheduler Setup draft version controls sit here, directly under
             the sub-tab row, so the Live / Draft switch and the version it governs stay together. */}
         {draftPanel && <div className="w-full">{draftPanel}</div>}
-      </div>
-
-      {/* Print-only Header */}
-      <div className="hidden print:block mb-6 text-center">
-        <h2 className="text-2xl font-bold text-black mb-1">JAMIA ZAYTOONAH VELLORE</h2>
-        <h3 className="text-lg font-bold text-gray-800">
-          {myTab === 'my'
-            ? `My Timetable — ${myTeacher?.name || ''}`
-            : `Weekly Timetable — ${viewObj.label}${printEntityName ? `: ${printEntityName}` : ''}`}
-        </h3>
-        <p className="text-xs text-gray-500">Generated on {new Date().toLocaleDateString()}</p>
       </div>
 
       {myTab === 'my' ? (
@@ -3455,6 +3475,22 @@ const ClearSlotsModal = ({ isOpen, onClose, days, periods, className, onClear })
         confirmText={confirmConfig?.confirmText}
         onConfirm={confirmConfig?.onConfirm}
         onCancel={() => setConfirmConfig(null)}
+      />
+      <PrintConfigurationModal
+        isOpen={isPrintOpen}
+        onClose={closePrint}
+        settings={printSettings}
+        onSettingsChange={updatePrintSettings}
+        onReset={resetPrintSettings}
+        onPrint={handlePrint}
+        title="Timetable Viewer"
+        previewSelector='[data-print-target="active"]'
+        previewContext={{
+          className: myTab === 'my' ? '' : printEntityName || '',
+          teacherName: myTab === 'my' ? myTeacher?.name || '' : '',
+          viewLabel: myTab === 'my' ? 'My Timetable' : viewObj.label,
+          timetableName: myTab === 'my' ? 'My Timetable' : `Weekly Timetable — ${viewObj.label}`,
+        }}
       />
     </>
   );

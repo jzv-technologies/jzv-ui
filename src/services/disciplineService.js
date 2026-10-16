@@ -126,6 +126,32 @@ export const saveDisciplineRecommendation = async ({ weekStart, shieldDecision }
   return data || null;
 };
 
+/** Change the edit lock and monthly-scoring exclusion for an opened week. */
+export const updateWeekControllerSettings = async ({ weekStart, allowEdits, ignoreWeek }) => {
+  const { data, error } = await supabase.rpc('update_discipline_week_controller_settings', {
+    p_week_start: weekStart,
+    p_allow_edits: allowEdits,
+    p_ignore_week: ignoreWeek,
+  });
+  if (error) fail(error, 'Could not update the discipline week settings');
+  return data || null;
+};
+
+/** Delete a controller row and, optionally, its class and teacher coin counters atomically. */
+export const deleteWeekController = async ({
+  weekStart,
+  deleteWeeklyCoins,
+  deleteTeacherCoins,
+}) => {
+  const { data, error } = await supabase.rpc('delete_discipline_week_controller', {
+    p_week_start: weekStart,
+    p_delete_weekly_coins: deleteWeeklyCoins,
+    p_delete_teacher_coins: deleteTeacherCoins,
+  });
+  if (error) fail(error, 'Could not delete the discipline week');
+  return data || null;
+};
+
 /** Discipline configuration (entitlement, shields per week, red-zone threshold, coin art). */
 export const updateCategory = async (id, patch) => {
   const { data, error } = await supabase
@@ -155,6 +181,8 @@ export default {
   logCoins,
   adjustCoins,
   saveDisciplineRecommendation,
+  updateWeekControllerSettings,
+  deleteWeekController,
   updateCategory,
   updateSettings,
 };

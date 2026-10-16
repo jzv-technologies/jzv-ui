@@ -13,17 +13,25 @@ const STORAGE_KEY = 'jzv_timetable_print_settings';
  * Custom hook for managing print settings
  * @returns {Object} Print settings state and actions
  */
-export const usePrintSettings = () => {
+export const usePrintSettings = (storageKey = STORAGE_KEY, defaults = DEFAULT_PRINT_SETTINGS) => {
   const [settings, setSettings] = useState(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(storageKey);
       if (stored) {
-        return { ...DEFAULT_PRINT_SETTINGS, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored);
+        return {
+          ...defaults,
+          ...parsed,
+          tableHeader: { ...defaults.tableHeader, ...parsed.tableHeader },
+          tableStyle: { ...defaults.tableStyle, ...parsed.tableStyle },
+          pageHeaders: parsed.pageHeaders || defaults.pageHeaders,
+          pageFooter: { ...defaults.pageFooter, ...parsed.pageFooter },
+        };
       }
     } catch (err) {
       console.warn('Failed to load print settings:', err);
     }
-    return DEFAULT_PRINT_SETTINGS;
+    return defaults;
   });
 
   const [isPrintOpen, setIsPrintOpen] = useState(false);
@@ -31,19 +39,19 @@ export const usePrintSettings = () => {
   // Persist settings to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      localStorage.setItem(storageKey, JSON.stringify(settings));
     } catch (err) {
       console.warn('Failed to save print settings:', err);
     }
-  }, [settings]);
+  }, [settings, storageKey]);
 
   const updateSettings = useCallback((updates) => {
     setSettings((prev) => ({ ...prev, ...(updates || {}) }));
   }, []);
 
   const resetSettings = useCallback(() => {
-    setSettings(DEFAULT_PRINT_SETTINGS);
-  }, []);
+    setSettings(defaults);
+  }, [defaults]);
 
   const openPrint = useCallback(() => setIsPrintOpen(true), []);
   const closePrint = useCallback(() => setIsPrintOpen(false), []);

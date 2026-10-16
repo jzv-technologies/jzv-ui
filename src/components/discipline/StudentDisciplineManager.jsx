@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
+import ConfirmModal from '../ConfirmModal';
 import MultiSelectDropdown from '../MultiSelectDropdown';
 import { showToast } from '../../utils/toast';
 import disciplineService from '../../services/disciplineService';
@@ -21,6 +22,9 @@ import TeacherCoinsTab from './tabs/TeacherCoinsTab';
 import AwardsTab from './tabs/AwardsTab';
 import ConfigTab from './tabs/ConfigTab';
 import ClassCoinStackModal from './modals/ClassCoinStackModal';
+import PrintConfigurationModal from '../PrintConfigurationModal';
+import { usePrintSettings } from '../../hooks/usePrintSettings';
+import { DEFAULT_DISCIPLINE_PRINT_SETTINGS } from '../../types/print-settings';
 
 /**
  * Student Discipline - weekly class discipline scorecard.
@@ -83,6 +87,11 @@ const StudentDisciplineManager = ({
   const [saving, setSaving] = useState(false);
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [recommendationPicks, setRecommendationPicks] = useState({});
+  const [deleteWeekConfirmation, setDeleteWeekConfirmation] = useState(false);
+  const [deleteWeekContents, setDeleteWeekContents] = useState({
+    weeklyCoins: true,
+    teacherCoins: true,
+  });
 
   const canLog = canAccess('discipline-log-coins');
   // Loading a week's coins is its own capability: it is what starts the week.
@@ -92,6 +101,15 @@ const StudentDisciplineManager = ({
   const canShowRecommendation = canAccess('discipline-show-recommendation');
   const canGold = canAccess('discipline-gold-coin');
   const canConfigure = canAccess('discipline-config');
+  const {
+    settings: printSettings,
+    updateSettings: updatePrintSettings,
+    resetSettings: resetPrintSettings,
+    isPrintOpen,
+    openPrint,
+    closePrint,
+    triggerPrint,
+  } = usePrintSettings('jzv_discipline_print_settings', DEFAULT_DISCIPLINE_PRINT_SETTINGS);
 
   useEffect(() => {
     if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
@@ -507,6 +525,8 @@ const StudentDisciplineManager = ({
         weekStart: selectedWeek,
         shieldDecision,
       });
+      setShowRecommendation(false);
+      setRecommendationPicks({});
       showToast('Recommendation saved', 'success');
       await loadYear();
       return true;
@@ -558,6 +578,47 @@ const StudentDisciplineManager = ({
     try {
       await disciplineService.refillWeek(selectedWeek);
       showToast(`Coins loaded for ${formatWeekOptionLabel(selectedWeek)}`, 'success');
+      await loadYear();
+      return true;
+    } catch (err) {
+      showToast(err.message, 'error');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateWeekSettings = async (patch) => {
+    if (!selectedWeekController || !selectedWeek) return false;
+    setSaving(true);
+    try {
+      await disciplineService.updateWeekControllerSettings({
+        weekStart: selectedWeek,
+        allowEdits: patch.allowEdits ?? selectedWeekController.allow_edits,
+        ignoreWeek: patch.ignoreWeek ?? selectedWeekController.ignore_week,
+      });
+      showToast('Week settings updated', 'success');
+      await loadYear();
+      return true;
+    } catch (err) {
+      showToast(err.message, 'error');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteWeekController = async () => {
+    if (!selectedWeekController || !selectedWeek) return false;
+    setSaving(true);
+    try {
+      await disciplineService.deleteWeekController({
+        weekStart: selectedWeek,
+        deleteWeeklyCoins: deleteWeekContents.weeklyCoins,
+        deleteTeacherCoins: deleteWeekContents.teacherCoins,
+      });
+      setDeleteWeekConfirmation(false);
+      showToast('Discipline week deleted', 'success');
       await loadYear();
       return true;
     } catch (err) {
@@ -701,6 +762,47 @@ const StudentDisciplineManager = ({
                 ))}
               </select>
             </label>
+            {canConfigure && selectedWeekController && (
+              <div
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-light-border bg-slate-50 px-2.5 py-1.5"
+                data-feature-control="discipline-week-settings"
+              >
+                <label className="inline-flex items-center gap-1 text-[10px] font-bold text-dark-primary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedWeekController.allow_edits)}
+                    disabled={saving}
+                    onChange={(event) =>
+                      handleUpdateWeekSettings({ allowEdits: event.target.checked })
+                    }
+                    data-feature-action="discipline-week-allow-edits"
+                  />
+                  Allow edits
+                </label>
+                <label className="inline-flex items-center gap-1 text-[10px] font-bold text-dark-primary">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(selectedWeekController.ignore_week)}
+                    disabled={saving}
+                    onChange={(event) =>
+                      handleUpdateWeekSettings({ ignoreWeek: event.target.checked })
+                    }
+                    data-feature-action="discipline-week-ignore"
+                  />
+                  Ignore week
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setDeleteWeekConfirmation(true)}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-[10px] font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  data-feature-action="discipline-week-delete"
+                >
+                  <i className="fas fa-trash-can" />
+                  Delete week
+                </button>
+              </div>
+            )}
             <button
               onClick={loadYear}
               disabled={loading}
@@ -709,13 +811,17 @@ const StudentDisciplineManager = ({
             >
               <i className={`fas fa-rotate ${loading ? 'fa-spin' : ''} text-sm`} />
             </button>
-            <button
-              onClick={() => window.print()}
-              className="p-2 rounded-xl border border-light-border bg-white text-dark-soft hover:bg-light-lbg hover:text-dark-primary transition-all cursor-pointer"
-              title="Print the scorecard"
-            >
-              <i className="fas fa-print text-sm" />
-            </button>
+            {activeTab === 'scorecard' && (
+              <button
+                onClick={openPrint}
+                disabled={loading || !weekLoaded || showWeekGate}
+                className="p-2 rounded-xl border border-light-border bg-white text-dark-soft hover:bg-light-lbg hover:text-dark-primary transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                title="Configure and print the scorecard"
+                data-feature-action="discipline-print-configure"
+              >
+                <i className="fas fa-print text-sm" />
+              </button>
+            )}
             {canLog && weekLoaded && canEditSelectedWeek && (
               <button
                 onClick={openCoinStacks}
@@ -959,6 +1065,7 @@ const StudentDisciplineManager = ({
                   recommendationPicks={recommendationPicks}
                   onRecommendationSelection={handleRecommendationSelection}
                   settings={settings}
+                  printSettings={printSettings}
                   view={scorecardView}
                   metric={chartMetric}
                   onOpenClass={setStackClassId}
@@ -1029,6 +1136,65 @@ const StudentDisciplineManager = ({
           onSubmit={handleStackAction}
         />
       )}
+      <ConfirmModal
+        isOpen={deleteWeekConfirmation}
+        title="Delete discipline week?"
+        message={`Delete the controller for ${formatWeekOptionLabel(selectedWeek)}?${
+          deleteWeekContents.weeklyCoins || deleteWeekContents.teacherCoins
+            ? `\nAlso delete${deleteWeekContents.weeklyCoins ? ' class coin counters' : ''}${
+                deleteWeekContents.weeklyCoins && deleteWeekContents.teacherCoins ? ' and' : ''
+              }${deleteWeekContents.teacherCoins ? ' teacher coin counters' : ''}.`
+            : '\nKeep all class and teacher coin counters.'
+        }`}
+        confirmText={saving ? 'Deleting…' : 'Delete week'}
+        onConfirm={handleDeleteWeekController}
+        onCancel={() => setDeleteWeekConfirmation(false)}
+      >
+        <div className="mt-3 rounded-xl border border-light-border bg-slate-50 p-3 text-left">
+          <p className="mb-2 text-xs font-black text-dark-primary">Choose coin data to delete</p>
+          <label className="flex items-center gap-2 py-1 text-xs font-semibold text-dark-primary">
+            <input
+              type="checkbox"
+              checked={deleteWeekContents.weeklyCoins}
+              disabled={saving}
+              onChange={(event) =>
+                setDeleteWeekContents((current) => ({
+                  ...current,
+                  weeklyCoins: event.target.checked,
+                }))
+              }
+            />
+            Class coin counters (discipline_weekly_coins)
+          </label>
+          <label className="flex items-center gap-2 py-1 text-xs font-semibold text-dark-primary">
+            <input
+              type="checkbox"
+              checked={deleteWeekContents.teacherCoins}
+              disabled={saving}
+              onChange={(event) =>
+                setDeleteWeekContents((current) => ({
+                  ...current,
+                  teacherCoins: event.target.checked,
+                }))
+              }
+            />
+            Teacher coin counters (discipline_teacher_coins)
+          </label>
+        </div>
+      </ConfirmModal>
+      <PrintConfigurationModal
+        isOpen={isPrintOpen}
+        onClose={closePrint}
+        settings={printSettings}
+        onSettingsChange={updatePrintSettings}
+        onReset={resetPrintSettings}
+        onPrint={() => triggerPrint('dom')}
+        title="Student Discipline Board"
+        previewSelector=".discipline-scorecard-print"
+        previewContext={{
+          weekEnding: formatWeekLabel(selectedWeek).split('–').pop()?.trim() || '',
+        }}
+      />
     </div>
   );
 };

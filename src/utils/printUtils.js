@@ -70,11 +70,16 @@ const SHELL_RESET = `
 export const generatePrintCSS = (settings, mode = 'sheet') => {
   const s = { ...DEFAULT_PRINT_SETTINGS, ...settings };
   const { pageSize, orientation, fontSize, margin, pageBreak, showGridLines } = s;
+  const tableHeader = { ...DEFAULT_PRINT_SETTINGS.tableHeader, ...s.tableHeader };
+  const tableStyle = { ...DEFAULT_PRINT_SETTINGS.tableStyle, ...s.tableStyle };
 
   const page = PAGE_SIZES[pageSize] || PAGE_SIZES.a4;
   const isLandscape = orientation === 'landscape';
   const pageWidth = isLandscape ? page.height : page.width;
   const pageHeight = isLandscape ? page.width : page.height;
+  const borderColor = /^#[0-9a-f]{6}$/i.test(tableStyle.borderColor || '')
+    ? `${parseInt(tableStyle.borderColor.slice(1, 3), 16)}, ${parseInt(tableStyle.borderColor.slice(3, 5), 16)}, ${parseInt(tableStyle.borderColor.slice(5, 7), 16)}`
+    : '203, 213, 225';
 
   let css = `
     /* Screen: the print document is never shown */
@@ -93,6 +98,65 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
       body {
         font-size: ${fontSize}pt;
       }
+
+      .print-config-header {
+        margin-bottom: ${s.headerMargin ?? 5}mm !important;
+      }
+
+      .print-config-footer {
+        margin-top: ${s.footerMargin ?? 5}mm !important;
+      }
+
+      .print-config-header img,
+      .print-config-footer img {
+        max-height: 35mm !important;
+      }
+
+      table th,
+      table td {
+        color: ${tableStyle.cellColor} !important;
+        font-size: ${tableStyle.cellFontSize}pt !important;
+        text-align: ${tableStyle.cellAlignment} !important;
+        margin: ${tableStyle.cellMargin}px !important;
+        padding: ${tableStyle.cellPadding}px !important;
+        border: ${tableStyle.showBorders ? tableStyle.borderThickness : 0}px solid rgba(${borderColor}, ${tableStyle.borderOpacity / 100}) !important;
+        ${tableStyle.columnWidthMode === 'fixed' ? `width: ${tableStyle.columnWidth}px !important;` : ''}
+      }
+
+      ${tableStyle.rowHeightMode === 'fixed' ? `table tbody td, table tbody th { height: ${tableStyle.rowHeight}px !important; }` : ''}
+      ${tableStyle.firstColumnWidthMode === 'fixed' ? `table th:first-child, table td:first-child { width: ${tableStyle.firstColumnWidth}px !important; }` : tableStyle.columnWidthMode === 'fixed' ? 'table th:first-child, table td:first-child { width: auto !important; }' : ''}
+
+      table td *,
+      table th * {
+        color: inherit !important;
+        font-size: inherit !important;
+        text-align: inherit !important;
+      }
+
+      table td > div,
+      table th > div {
+        margin: ${tableStyle.cellMargin}px !important;
+      }
+
+      table th:first-child,
+      table td:first-child {
+        ${tableStyle.firstColumnDifferent ? `color: ${tableStyle.firstColumnColor} !important; font-size: ${tableStyle.firstColumnFontSize}pt !important; text-align: ${tableStyle.firstColumnAlignment} !important;` : ''}
+      }
+
+      table thead {
+        display: ${tableHeader.visible ? (tableHeader.repeat ? 'table-header-group' : 'table-row-group') : 'none'} !important;
+      }
+
+      table thead th {
+        background-color: ${tableHeader.backgroundColor} !important;
+        color: ${tableHeader.color} !important;
+        font-size: ${tableHeader.fontSize}pt !important;
+        text-align: ${tableHeader.alignment} !important;
+        ${tableHeader.heightMode === 'fixed' ? `height: ${tableHeader.height}px !important;` : ''}
+      }
+
+      ${tableStyle.bandedRows ? `table tbody tr:nth-child(even) td:not([style*="background-color"]) { background-color: ${tableStyle.bandedColor} !important; }` : ''}
+      ${tableStyle.bandedColumns ? `table tbody td:nth-child(even):not([style*="background-color"]) { background-color: ${tableStyle.bandedColor} !important; }` : ''}
 
       /* ---- Sheet mode: print only the generated document ---- */
       #root {
@@ -152,7 +216,7 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
       }
 
       /* The subview uses utility text sizes, so inherit to make the font-size setting apply */
-      body.jzv-print-dom [data-print-target="active"] * {
+      body.jzv-print-dom [data-print-target="active"] *:not(th):not(td):not([style*="font-size"]) {
         font-size: inherit !important;
       }
 
@@ -173,10 +237,6 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
       tr {
         page-break-inside: avoid;
         page-break-after: auto;
-      }
-
-      thead {
-        display: table-header-group;
       }
 
       tfoot {
