@@ -343,6 +343,54 @@ const buildSeasonRows = (draftConfig, liveConfig) => {
   return rows;
 };
 
+const buildSlotComparisonRows = (draftData, liveData, lookups) => {
+  const toSlotMap = (slots) =>
+    new Map(
+      (slots || [])
+        .filter((slot) => slot)
+        .map((slot) => [`${slot.class_id}|${slot.day}|${slot.period_id}`, slot])
+    );
+  const liveSlots = toSlotMap(liveData?.slots);
+  const draftSlots = toSlotMap(draftData?.slots);
+  const keys = new Set([...liveSlots.keys(), ...draftSlots.keys()]);
+  const subjectField = { resolve: 'subject' };
+  const teacherField = { resolve: 'teacher' };
+
+  return [...keys]
+    .flatMap((key) => {
+      const live = liveSlots.get(key);
+      const draft = draftSlots.get(key);
+      if (
+        live &&
+        draft &&
+        String(live.subject_id ?? '') === String(draft.subject_id ?? '') &&
+        String(live.teacher_id ?? '') === String(draft.teacher_id ?? '')
+      ) {
+        return [];
+      }
+
+      const slot = draft || live;
+      const className = lookups.class.get(String(slot.class_id)) || `#${slot.class_id}`;
+      return [{
+        key,
+        className,
+        day: slot.day || '-',
+        period: periodLabel(slot.period_id, lookups),
+        fromSubject: live ? formatValue(live.subject_id, subjectField, lookups) : '-',
+        toSubject: draft ? formatValue(draft.subject_id, subjectField, lookups) : '-',
+        fromTeacher: live ? formatValue(live.teacher_id, teacherField, lookups) : '-',
+        toTeacher: draft ? formatValue(draft.teacher_id, teacherField, lookups) : '-',
+      }];
+    })
+    .sort((a, b) => {
+      const classOrder = a.className.localeCompare(b.className, undefined, { numeric: true });
+      if (classOrder) return classOrder;
+      const dayOrder = DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
+      if (dayOrder) return dayOrder;
+      return a.period.localeCompare(b.period, undefined, { numeric: true });
+    });
+};
+
 /**
  * Compare draft data with live data
  * @param {Object} draftData - Draft timetable data
@@ -351,10 +399,17 @@ const buildSeasonRows = (draftConfig, liveConfig) => {
  */
 export const compareTimetableData = (draftData, liveData) => {
   if (!draftData || !liveData) {
-    return { changes: [], groups: [], summary: { added: 0, removed: 0, modified: 0 }, totalChanges: 0 };
+    return {
+      changes: [],
+      slotRows: [],
+      groups: [],
+      summary: { added: 0, removed: 0, modified: 0 },
+      totalChanges: 0,
+    };
   }
 
   const lookups = buildLookups(draftData, liveData);
+  const slotRows = buildSlotComparisonRows(draftData, liveData, lookups);
   const allRows = [];
 
   ENTITY_ORDER.forEach((entity) => {
@@ -387,6 +442,7 @@ export const compareTimetableData = (draftData, liveData) => {
   return {
     changes: allRows,
     diffs: allRows, // retained for callers that still read `diffs`
+    slotRows,
     groups,
     summary,
     totalChanges: allRows.length,

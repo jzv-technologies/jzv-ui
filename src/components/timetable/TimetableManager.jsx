@@ -19,7 +19,6 @@ import {
   updateDraft,
   getFilteredDrafts,
   deleteDraft,
-  duplicateDraft,
   createBackupDraft,
   publishDraftSafely,
 } from '../../services/timetableDraftService';
@@ -112,17 +111,17 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
   },
 });
 
+const formatDraftDate = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString();
+};
+
 const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const canAccess = useCanAccess(userRoles);
 
   const WORKSPACE_TABS = useMemo(
     () => [
-      {
-        id: 'viewer',
-        componentName: 'timetable-view',
-        label: 'Timetable View',
-        icon: 'fa-calendar-alt',
-      },
       {
         id: 'scheduler',
         componentName: 'scheduler-setup',
@@ -165,7 +164,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     if (initialTab && availableTabs.some((t) => t.id === initialTab)) return initialTab;
     if (availableTabs.length > 0) return availableTabs[0].id;
     if (canAccess('scheduler-setup')) return 'scheduler';
-    return 'viewer';
+    return 'scheduler';
   });
 
   // Ensure activeTab is always one of the permitted availableTabs (unless sync is open)
@@ -199,12 +198,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const [confirmConfig, setConfirmConfig] = useState(null);
 
   // Live / Draft mode
-  // Selecting this option in the version dropdown creates a new version from live data.
-  const CREATE_DRAFT_VALUE = '__create_from_live__';
-
   const [dataMode, setDataMode] = useState('live');
   const [activeDraft, setActiveDraft] = useState(null);
   const [draftList, setDraftList] = useState([]);
+  const [isDraftListOpen, setIsDraftListOpen] = useState(false);
   const [isDraftListLoading, setIsDraftListLoading] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   // True while draft mode is being opened (the version list is fetched before the mode changes).
@@ -220,6 +217,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // denied until the row is registered.
   const canUseLiveMode = canAccess('timetable-live-mode');
   const canUseDraftMode = canAccess('timetable-draft-mode');
+  const canPublishDraft = canAccess('timetable-draft-publish');
+  const canDeleteDraft = canAccess('timetable-draft-delete');
 
   // Draft view protects live data even before a specific draft is picked, so live writes are
   // only ever enabled in Live mode, and only for users granted the live capability.
@@ -955,29 +954,62 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
   };
 
-  // Create a new draft from the current live data.
-  // Ask for a version name before snapshotting live data into a new draft.
-  const handleCreateDraftFromLive = () => {
+  // Ask for a name and source before creating a new draft version.
+  const handleOpenNewDraftModal = () => {
     setNewDraftRequest({
-      name: `Draft ${new Date().toLocaleString()}`,
+      name: '',
       description: '',
     });
   };
 
-  const confirmCreateDraftFromLive = async (name, description) => {
+  const confirmCreateDraft = async (name, description, source = {}) => {
     try {
-      const snapshot = liveSnapshotRef.current || takeLiveSnapshot();
+      let snapshot = liveSnapshotRef.current || takeLiveSnapshot();
+      let parentVersionId = null;
+      if (source.type === 'clone') {
+        const sourceDraft = draftList.find((draft) => draft.id === source.draftId);
+        if (!sourceDraft?.data) {
+          throw new Error('Select a saved draft version to clone');
+        }
+        snapshot = sourceDraft.data;
+        parentVersionId = sourceDraft.id;
+      } else if (source.type === 'blank') {
+        snapshot = {
+          ...snapshot,
+          slots: [],
+          seasonsConfig: snapshot.seasonsConfig
+            ? {
+                ...snapshot.seasonsConfig,
+                seasons: Object.fromEntries(
+                  Object.entries(snapshot.seasonsConfig.seasons || {}).map(([seasonId, season]) => [
+                    seasonId,
+                    { ...season, slots: [] },
+                  ])
+                ),
+              }
+            : snapshot.seasonsConfig,
+        };
+      }
+
       const created = await createDraft({
-        name: name?.trim() || `Draft ${new Date().toLocaleString()}`,
+        name: name.trim(),
         description: (description || '').trim(),
         data: snapshot,
+        parentVersionId,
       });
       await refreshDraftList();
       setActiveDraft(created);
       setDataMode('draft');
       applyDataToState(created.data || snapshot);
       setNewDraftRequest(null);
-      showToast(`Draft "${created.name}" created from live data`, 'success');
+      setIsDraftListOpen(false);
+      const sourceLabel =
+        source.type === 'clone'
+          ? 'a cloned draft'
+          : source.type === 'blank'
+            ? 'a blank timetable'
+            : 'live data';
+      showToast(`Draft "${created.name}" created from ${sourceLabel}`, 'success');
       return created;
     } catch (err) {
       showToast('Failed to create draft: ' + err.message, 'error');
@@ -2773,7 +2805,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const hasExistingBackup = draftList.some(isBackupVersion);
 
   const openPublishDialog = () => {
-    if (!activeDraft) return;
+    if (!activeDraft || !canPublishDraft) return;
     const optional = hasExistingBackup;
     setPublishRequest({
       backup: true,
@@ -2786,6 +2818,9 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
   const handlePublishActiveDraft = ({ backup, backupName }) =>
     runDraftAction('Publish', async () => {
+      if (!canPublishDraft) {
+        throw new Error('Publishing drafts is not enabled for your role');
+      }
       const { id, name } = activeDraft;
       let created = null;
       if (backup) {
@@ -2808,14 +2843,6 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       await refreshDraftList();
     });
 
-  const handleCloneActiveDraft = () =>
-    runDraftAction('Clone', async () => {
-      const { id, name } = activeDraft;
-      const copy = await duplicateDraft(id, `${name} (copy)`);
-      await refreshDraftList();
-      showToast(`Cloned "${name}" as "${copy?.name || 'copy'}"`, 'success');
-    });
-
   const handleRenameActiveDraft = (name, description) =>
     runDraftAction('Rename', async () => {
       const { id } = activeDraft;
@@ -2834,6 +2861,9 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // Deleting the version being edited returns to live data, which is still untouched.
   const handleDeleteActiveDraft = () =>
     runDraftAction('Delete', async () => {
+      if (!canDeleteDraft) {
+        throw new Error('Deleting drafts is not enabled for your role');
+      }
       const { id, name } = activeDraft;
       await deleteDraft(id);
       if (liveSnapshotRef.current) applyDataToState(liveSnapshotRef.current);
@@ -2845,13 +2875,17 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     });
 
   const draftPanelActions = [
-    {
-      label: 'Publish',
-      icon: 'fa-cloud-arrow-up',
-      className: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-      title: 'Replace the live timetable with this version',
-      onClick: openPublishDialog,
-    },
+    ...(canPublishDraft
+      ? [
+          {
+            label: 'Publish',
+            icon: 'fa-cloud-arrow-up',
+            className: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+            title: 'Replace the live timetable with this version',
+            onClick: openPublishDialog,
+          },
+        ]
+      : []),
     {
       label: 'Compare',
       icon: 'fa-code-compare',
@@ -2871,27 +2905,24 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           isRename: true,
         }),
     },
-    {
-      label: 'Clone',
-      icon: 'fa-copy',
-      className: 'bg-white text-dark-primary border border-amber-300 hover:bg-amber-100',
-      title: 'Create a copy of this version',
-      onClick: handleCloneActiveDraft,
-    },
-    {
-      label: 'Delete',
-      icon: 'fa-trash',
-      className: 'bg-red-600 hover:bg-red-700 text-white',
-      title: 'Delete this version',
-      onClick: () =>
-        setDraftConfirm({
-          title: 'Delete this version?',
-          message: `"${activeDraft?.name}" will be deleted permanently. Live data is not affected.`,
-          confirmText: 'Delete',
-          type: 'danger',
-          onConfirm: handleDeleteActiveDraft,
-        }),
-    },
+    ...(canDeleteDraft
+      ? [
+          {
+            label: 'Delete',
+            icon: 'fa-trash',
+            className: 'bg-red-600 hover:bg-red-700 text-white',
+            title: 'Delete this version',
+            onClick: () =>
+              setDraftConfirm({
+                title: 'Delete this version?',
+                message: `"${activeDraft?.name}" will be deleted permanently. Live data is not affected.`,
+                confirmText: 'Delete',
+                type: 'danger',
+                onConfirm: handleDeleteActiveDraft,
+              }),
+          },
+        ]
+      : []),
   ];
 
   // Draft version controls. Rendered inside the Scheduler Setup sub-tab area (directly under the
@@ -2903,31 +2934,71 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2"
       data-feature="scheduler-setup-draft-mode"
     >
-      <div className="flex items-center gap-2 flex-wrap">
-        <select
-          value={activeDraft?.id || ''}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value === CREATE_DRAFT_VALUE) {
-              handleCreateDraftFromLive();
-              return;
-            }
-            handleLoadDraft(value);
-          }}
+      <div className="relative w-full sm:w-80">
+        <button
+          type="button"
+          onClick={() => setIsDraftListOpen((open) => !open)}
           disabled={isDraftListLoading}
-          className="w-full sm:w-64 appearance-none bg-white border border-amber-300 rounded-xl px-3 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-amber-400 shadow-sm disabled:opacity-60"
+          className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-left shadow-sm disabled:opacity-60"
+          aria-expanded={isDraftListOpen}
+          aria-haspopup="listbox"
           title="Select a draft version to load"
         >
-          <option value="">
-            {isDraftListLoading ? 'Loading versions…' : `Select a version (${draftList.length})`}
-          </option>
-          {draftList.map((d) => (
-            <option key={d.id} value={d.id}>
-              {isBackupVersion(d) ? `⤺ ${d.name}` : d.name}
-            </option>
-          ))}
-          <option value={CREATE_DRAFT_VALUE}>＋ Create version from live data</option>
-        </select>
+          <span className="flex items-center justify-between gap-3">
+            <span className="truncate text-xs font-extrabold text-dark-primary">
+              {isDraftListLoading ? 'Loading versions…' : activeDraft?.name || `Select a version (${draftList.length})`}
+            </span>
+            <i className={`fas ${isDraftListOpen ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px] text-dark-soft`} />
+          </span>
+          {activeDraft && (
+            <span className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
+              <span>Created {formatDraftDate(activeDraft.createdAt)}</span>
+              <span>Updated {formatDraftDate(activeDraft.updatedAt)}</span>
+            </span>
+          )}
+        </button>
+        {isDraftListOpen && (
+          <div
+            className="absolute left-0 top-full z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-amber-200 bg-white p-1.5 shadow-xl"
+            role="listbox"
+            aria-label="Draft versions"
+          >
+            {draftList.map((draft) => (
+              <button
+                key={draft.id}
+                type="button"
+                role="option"
+                aria-selected={draft.id === activeDraft?.id}
+                onClick={() => {
+                  setIsDraftListOpen(false);
+                  handleLoadDraft(draft.id);
+                }}
+                className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
+                  draft.id === activeDraft?.id ? 'bg-amber-50' : 'hover:bg-light-lbg/60'
+                }`}
+              >
+                <span className="block truncate text-xs font-bold text-dark-primary">
+                  {isBackupVersion(draft) ? '⤺ ' : ''}{draft.name}
+                </span>
+                <span className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
+                  <span>Created {formatDraftDate(draft.createdAt)}</span>
+                  <span>Updated {formatDraftDate(draft.updatedAt)}</span>
+                </span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setIsDraftListOpen(false);
+                handleOpenNewDraftModal();
+              }}
+              className="mt-1 w-full rounded-lg border-t border-light-border px-2.5 py-2 text-left text-xs font-extrabold text-amber-700 hover:bg-amber-50"
+            >
+              <i className="fas fa-plus mr-2" />
+              Create new draft
+            </button>
+          </div>
+        )}
       </div>
 
       {isDraftMode && (
@@ -3086,27 +3157,12 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="flex-1" data-feature="timetable-content">
-            {activeTab === 'viewer' && (
-              <ConditionalBlock name="timetable-view" roles={userRoles}>
-                <TimetableAdminView
-                  classes={classes}
-                  teachers={teachers}
-                  subjects={subjects}
-                  classifications={classifications}
-                  periods={periods}
-                  slots={slots}
-                  assignments={assignments}
-                  seasonsConfig={seasonsConfig}
-                  onRefresh={handleRefreshData}
-                  refreshing={loading}
-                  user={user}
-                  showMyTimetable={true}
-                  printButton={printButton}
-                  onActiveViewChange={handleActiveViewChange}
-                />
-              </ConditionalBlock>
-            )}
+          <div
+            className={`flex-1 transition-colors ${
+              dataMode === 'draft' ? 'bg-amber-100/40' : ''
+            }`}
+            data-feature="timetable-content"
+          >
 
             {activeTab === 'scheduler' && (
               <ConditionalBlock name="scheduler-setup" roles={userRoles}>
@@ -3128,15 +3184,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                     </div>
                     <h4 className="text-base font-black text-amber-900">No Draft Available</h4>
                     <p className="text-xs font-semibold text-amber-800 mt-1 max-w-lg mx-auto">
-                      Create a version from the current live timetable to start working on it. Live
-                      data stays untouched until you publish a version.
+                      Create a new draft from live data, another version, or a blank timetable.
+                      Live data stays untouched until you publish a version.
                     </p>
                     <button
-                      onClick={handleCreateDraftFromLive}
+                      onClick={handleOpenNewDraftModal}
                       className="mt-4 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer"
                     >
                       <i className="fas fa-plus" />
-                      Create draft from live data
+                      Create new draft
                     </button>
                   </div>
                 ) : (
@@ -3265,8 +3321,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         {newDraftRequest && (
           <NewDraftNameModal
             initialName={newDraftRequest.name}
+            creationSources
+            drafts={draftList}
             onCancel={() => setNewDraftRequest(null)}
-            onConfirm={confirmCreateDraftFromLive}
+            onConfirm={confirmCreateDraft}
           />
         )}
 

@@ -2038,9 +2038,6 @@ const TimetableAdminView = ({
       >
         {/* MOBILE / TABLET VIEW (< lg): 2-Column equal 50/50 split row for View Dropdown + Filter */}
         <div className="lg:hidden flex flex-col gap-2.5 w-full">
-          {/* Caller-supplied control, e.g. Scheduler Setup's Live / Draft switch */}
-          {modeSwitcher && <div className="flex items-center gap-2 w-full">{modeSwitcher}</div>}
-
           {/* First row on mobile: View Switcher (Col 1) + Active View Filter (Col 2) */}
           <div className="grid grid-cols-2 gap-2 w-full items-center">
             {/* Col 1: Main View Switcher Dropdown */}
@@ -2302,9 +2299,6 @@ const TimetableAdminView = ({
                 );
               })()}
 
-            {/* Caller-supplied control, e.g. Scheduler Setup's Live / Draft switch */}
-            {modeSwitcher}
-
             {/* Today / Weekly toggle (My Timetable) */}
             {myTab === 'my' &&
               myTeacher &&
@@ -2424,6 +2418,7 @@ const TimetableAdminView = ({
             className="flex items-center gap-1.5 shrink-0 ml-auto"
             feature-icons="Scheduler Setup Icons"
           >
+            {modeSwitcher && <div className="mr-1">{modeSwitcher}</div>}
             {printButton || (
               <button
                 type="button"

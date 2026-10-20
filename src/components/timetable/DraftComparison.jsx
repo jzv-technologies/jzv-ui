@@ -16,8 +16,16 @@ const TYPE_FILTERS = [
 ];
 
 const DraftComparison = ({ comparison, onClose }) => {
-  const { draft, changes = [], groups = [], summary, totalChanges = 0 } = comparison || {};
+  const {
+    draft,
+    changes = [],
+    slotRows = [],
+    groups = [],
+    summary,
+    totalChanges = 0,
+  } = comparison || {};
 
+  const [comparisonView, setComparisonView] = useState('timetable');
   const [entityFilter, setEntityFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -26,7 +34,7 @@ const DraftComparison = ({ comparison, onClose }) => {
   // One table row per field-level change so Live vs Draft can be read side by side.
   const tableRows = useMemo(() => {
     const rows = [];
-    changes.forEach((change) => {
+    changes.filter((change) => change.entity !== 'slots').forEach((change) => {
       const fields = change.fields?.length ? change.fields : [{ label: '-', from: '-', to: '-' }];
       fields.forEach((field, idx) => {
         rows.push({
@@ -153,6 +161,34 @@ const DraftComparison = ({ comparison, onClose }) => {
         </div>
 
         {/* Filters */}
+        <div className="px-4 sm:px-6 pt-3 border-b border-light-border bg-light-lbg/40 shrink-0">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setComparisonView('timetable')}
+              className={`px-3 py-2 rounded-t-xl text-xs font-extrabold transition-colors ${
+                comparisonView === 'timetable'
+                  ? 'bg-white text-brand-primary border border-b-0 border-light-border'
+                  : 'text-dark-soft hover:text-dark-primary'
+              }`}
+            >
+              Timetable changes ({slotRows.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setComparisonView('setup')}
+              className={`px-3 py-2 rounded-t-xl text-xs font-extrabold transition-colors ${
+                comparisonView === 'setup'
+                  ? 'bg-white text-brand-primary border border-b-0 border-light-border'
+                  : 'text-dark-soft hover:text-dark-primary'
+              }`}
+            >
+              Other setup changes ({tableRows.length})
+            </button>
+          </div>
+        </div>
+
+        {comparisonView === 'setup' && (
         <div className="px-4 sm:px-6 py-3 border-b border-light-border bg-light-lbg/40 shrink-0 space-y-2">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-light-border overflow-x-auto no-scrollbar">
@@ -164,7 +200,7 @@ const DraftComparison = ({ comparison, onClose }) => {
               >
                 All sections
               </button>
-              {groups.map((g) => (
+              {groups.filter((group) => group.entity !== 'slots').map((g) => (
                 <button
                   key={g.entity}
                   onClick={() => setEntityFilter(g.entity)}
@@ -209,18 +245,63 @@ const DraftComparison = ({ comparison, onClose }) => {
             </div>
           </div>
         </div>
+        )}
 
         {/* Table */}
         <div className="flex-1 min-h-0 overflow-auto">
-          {sortedRows.length === 0 ? (
+          {comparisonView === 'timetable' ? (
+            slotRows.length === 0 ? (
+              <div className="text-center py-16 text-dark-soft">
+                <i className="fas fa-check-circle text-green-400 text-4xl mb-3" />
+                <p className="font-bold">No timetable slot differences</p>
+                <p className="text-xs mt-1">Every class, day and period matches the live timetable.</p>
+              </div>
+            ) : (
+              <table className="w-full min-w-[900px] border-collapse">
+                <thead className="sticky top-0 bg-light-lbg z-10 border-b border-light-border">
+                  <tr>
+                    {[
+                      'Class',
+                      'Day',
+                      'Period',
+                      'From (Live Subject)',
+                      'To (Draft Subject)',
+                      'From (Live Teacher)',
+                      'To (Draft Teacher)',
+                    ].map((label) => (
+                      <th
+                        key={label}
+                        className="px-3 py-2 text-left text-[11px] font-extrabold uppercase tracking-wide text-dark-soft whitespace-nowrap"
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {slotRows.map((row) => (
+                    <tr key={row.key} className="border-b border-light-border/70 hover:bg-light-lbg/40">
+                      <td className="px-3 py-2 text-xs font-bold text-dark-primary">{row.className}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft">{row.day}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft">{row.period}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-red-700">{row.fromSubject}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-green-700">{row.toSubject}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-red-700">{row.fromTeacher}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-green-700">{row.toTeacher}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : sortedRows.length === 0 ? (
             <div className="text-center py-16 text-dark-soft">
-              <i className={`fas ${totalChanges === 0 ? 'fa-check-circle text-green-400' : 'fa-filter'} text-4xl mb-3`} />
+              <i className={`fas ${tableRows.length === 0 ? 'fa-check-circle text-green-400' : 'fa-filter'} text-4xl mb-3`} />
               <p className="font-bold">
-                {totalChanges === 0 ? 'No differences found' : 'No changes match the filters'}
+                {tableRows.length === 0 ? 'No other setup differences' : 'No changes match the filters'}
               </p>
               <p className="text-xs mt-1">
-                {totalChanges === 0
-                  ? 'This draft is identical to the live timetable.'
+                {tableRows.length === 0
+                  ? 'The classes, teachers, subjects and periods match the live setup.'
                   : 'Adjust the section, change type or search.'}
               </p>
             </div>
@@ -276,7 +357,9 @@ const DraftComparison = ({ comparison, onClose }) => {
         {/* Footer */}
         <div className="px-4 sm:px-6 py-2.5 border-t border-light-border bg-light-lbg/40 shrink-0 flex items-center justify-between text-[11px] font-semibold text-dark-soft">
           <span>
-            Showing {sortedRows.length} of {tableRows.length} changes
+            {comparisonView === 'timetable'
+              ? `Showing ${slotRows.length} timetable slot changes`
+              : `Showing ${sortedRows.length} of ${tableRows.length} other setup changes`}
           </span>
           <span>Live data is never modified by comparing.</span>
         </div>

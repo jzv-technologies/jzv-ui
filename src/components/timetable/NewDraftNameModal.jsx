@@ -10,9 +10,11 @@ import React, { useState } from 'react';
 const NewDraftNameModal = ({
   initialName = '',
   initialDescription = '',
+  creationSources = false,
+  drafts = [],
   eyebrow = 'New Draft Version',
-  heading = 'Create draft from live data',
-  hint = 'The draft starts as a copy of the live timetable. Live data stays untouched until you publish it.',
+  heading = 'Create a new draft',
+  hint = 'Choose a starting point. Live data stays untouched until you publish a draft.',
   confirmLabel = 'Create Draft',
   confirmIcon = 'fa-plus',
   onCancel,
@@ -20,11 +22,14 @@ const NewDraftNameModal = ({
 }) => {
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
+  const [sourceType, setSourceType] = useState('live');
+  const [sourceDraftId, setSourceDraftId] = useState(drafts[0]?.id || '');
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onConfirm(name, description);
+    if (creationSources && sourceType === 'clone' && !sourceDraftId) return;
+    onConfirm(name, description, { type: sourceType, draftId: sourceDraftId });
   };
 
   return (
@@ -41,6 +46,57 @@ const NewDraftNameModal = ({
         </div>
 
         <div className="p-5 space-y-4">
+          {creationSources && (
+            <fieldset className="space-y-2">
+              <legend className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">
+                Start from
+              </legend>
+              {[
+                { id: 'live', label: 'Live data', detail: 'Copy the current live timetable.' },
+                { id: 'clone', label: 'Clone version', detail: 'Copy a saved draft version.' },
+                { id: 'blank', label: 'Blank table', detail: 'Keep setup data and clear scheduled slots.' },
+              ].map((option) => (
+                <label
+                  key={option.id}
+                  className={`flex items-start gap-2.5 rounded-xl border px-3 py-2 ${
+                    sourceType === option.id
+                      ? 'border-amber-400 bg-amber-50'
+                      : 'border-light-border bg-white'
+                  } ${option.id === 'clone' && drafts.length === 0 ? 'opacity-50' : 'cursor-pointer'}`}
+                >
+                  <input
+                    type="radio"
+                    name="draft-source"
+                    value={option.id}
+                    checked={sourceType === option.id}
+                    disabled={option.id === 'clone' && drafts.length === 0}
+                    onChange={() => setSourceType(option.id)}
+                    className="mt-0.5 accent-amber-500"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-bold text-dark-primary">{option.label}</span>
+                    <span className="block text-[11px] font-medium text-dark-soft">{option.detail}</span>
+                    {option.id === 'clone' && sourceType === 'clone' && drafts.length > 0 && (
+                      <select
+                        value={sourceDraftId}
+                        onChange={(e) => setSourceDraftId(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-2 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-2 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-amber-400"
+                        aria-label="Version to clone"
+                      >
+                        {drafts.map((draft) => (
+                          <option key={draft.id} value={draft.id}>
+                            {draft.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-1.5">
               Version Name
@@ -83,7 +139,7 @@ const NewDraftNameModal = ({
           </button>
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || (creationSources && sourceType === 'clone' && !sourceDraftId)}
             className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all cursor-pointer flex items-center gap-2"
           >
             <i className={`fas ${confirmIcon}`} />
