@@ -197,6 +197,17 @@ html[lang="ar"] textarea {
     display: block !important;
   }
 
+  .discipline-scorecard-print > .print-config-header {
+    position: static !important;
+    inset: auto !important;
+    height: auto !important;
+  }
+
+  .discipline-scorecard-print > .overflow-x-auto {
+    clear: both !important;
+    margin-top: 0 !important;
+  }
+
   .discipline-scorecard-print .print-config-footer {
     display: flex !important;
   }
@@ -271,8 +282,8 @@ html[lang="ar"] textarea {
     border: var(--pc-border-width) solid color-mix(in srgb, var(--pc-border-color) var(--pc-border-opacity), transparent) !important;
   }
 
-  .print-config-preview th:first-child,
-  .print-config-preview td:first-child {
+  .print-config-preview tbody th:first-child,
+  .print-config-preview tbody td:first-child {
     color: var(--pc-first-color) !important;
     font-size: var(--pc-first-size) !important;
     text-align: var(--pc-first-align) !important;
@@ -289,8 +300,8 @@ html[lang="ar"] textarea {
     text-align: var(--pc-header-align) !important;
   }
 
-  .print-config-preview .print-config-header,
-  .print-config-preview .print-config-footer,
+  .print-config-preview[data-preview-clone="true"] .print-config-header,
+  .print-config-preview[data-preview-clone="true"] .print-config-footer,
   .print-config-preview .hidden {
     display: none !important;
   }
@@ -304,15 +315,15 @@ html[lang="ar"] textarea {
   }
 
   /* Make table, cells, and inner wrappers compact */
-  table {
+  body.jzv-print-dom table {
     width: 100% !important;
     table-layout: fixed !important;
     page-break-inside: avoid;
     break-inside: avoid;
   }
 
-  table th,
-  table td {
+  body.jzv-print-dom table th,
+  body.jzv-print-dom table td {
     padding: 2px !important;
     height: auto !important;
     min-height: 0 !important;
@@ -324,7 +335,7 @@ html[lang="ar"] textarea {
   }
 
   /* Restrict heights of break blocks, free slots, and assigned slots */
-  table td > div {
+  body.jzv-print-dom table td > div {
     height: auto !important;
     min-height: 34px !important;
     padding: 3px 4px !important;
@@ -335,20 +346,20 @@ html[lang="ar"] textarea {
   }
 
   /* Tighten fonts and headers */
-  table td h5 {
+  body.jzv-print-dom table td h5 {
     font-size: 8.5px !important;
     font-weight: 800 !important;
     line-height: 1.1 !important;
   }
 
-  table td p,
-  table td span {
+  body.jzv-print-dom table td p,
+  body.jzv-print-dom table td span {
     font-size: 7.5px !important;
     line-height: 1.0 !important;
     margin-top: 1px !important;
   }
 
-  table td i {
+  body.jzv-print-dom table td i {
     font-size: 7px !important;
     margin-right: 2px !important;
   }
@@ -418,8 +429,8 @@ html[lang="ar"] textarea {
   margin: var(--pc-cell-margin);
 }
 
-.print-config-preview th:first-child,
-.print-config-preview td:first-child {
+.print-config-preview tbody th:first-child,
+.print-config-preview tbody td:first-child {
   color: var(--pc-first-color) !important;
   font-size: var(--pc-first-size) !important;
   text-align: var(--pc-first-align) !important;
@@ -436,8 +447,8 @@ html[lang="ar"] textarea {
   text-align: var(--pc-header-align) !important;
 }
 
-.print-config-preview .print-config-header,
-.print-config-preview .print-config-footer,
+.print-config-preview[data-preview-clone="true"] .print-config-header,
+.print-config-preview[data-preview-clone="true"] .print-config-footer,
 .print-config-preview .hidden {
   display: none;
 }

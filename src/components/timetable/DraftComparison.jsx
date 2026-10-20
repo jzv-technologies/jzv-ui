@@ -257,7 +257,16 @@ const DraftComparison = ({ comparison, onClose }) => {
                 <p className="text-xs mt-1">Every class, day and period matches the live timetable.</p>
               </div>
             ) : (
-              <table className="w-full min-w-[900px] border-collapse">
+              <table className="w-full min-w-[1080px] table-fixed border-collapse">
+                <colgroup>
+                  <col className="w-[14%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[16%]" />
+                </colgroup>
                 <thead className="sticky top-0 bg-light-lbg z-10 border-b border-light-border">
                   <tr>
                     {[
@@ -281,13 +290,13 @@ const DraftComparison = ({ comparison, onClose }) => {
                 <tbody>
                   {slotRows.map((row) => (
                     <tr key={row.key} className="border-b border-light-border/70 hover:bg-light-lbg/40">
-                      <td className="px-3 py-2 text-xs font-bold text-dark-primary">{row.className}</td>
-                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft">{row.day}</td>
-                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft">{row.period}</td>
-                      <td className="px-3 py-2 text-xs font-medium text-red-700">{row.fromSubject}</td>
-                      <td className="px-3 py-2 text-xs font-medium text-green-700">{row.toSubject}</td>
-                      <td className="px-3 py-2 text-xs font-medium text-red-700">{row.fromTeacher}</td>
-                      <td className="px-3 py-2 text-xs font-medium text-green-700">{row.toTeacher}</td>
+                      <td className="px-3 py-2 text-xs font-bold text-dark-primary whitespace-nowrap">{row.className}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft whitespace-nowrap">{row.day}</td>
+                      <td className="px-3 py-2 text-xs font-semibold text-dark-soft whitespace-nowrap">{row.period}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-red-700 break-words">{row.fromSubject}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-green-700 break-words">{row.toSubject}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-red-700 break-words">{row.fromTeacher}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-green-700 break-words">{row.toTeacher}</td>
                     </tr>
                   ))}
                 </tbody>

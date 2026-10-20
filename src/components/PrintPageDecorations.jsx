@@ -13,6 +13,9 @@ const PageDecoration = ({ item, context = {} }) => {
     ...alignmentStyle(item.alignment),
     color: item.color || '#0f172a',
     fontSize: `${item.fontSize || 12}px`,
+    fontWeight:
+      item.fontStyle?.includes('bold') || (!item.fontStyle && item.bold) ? 800 : 600,
+    fontStyle: item.fontStyle?.includes('italic') ? 'italic' : 'normal',
     width: '100%',
     display: 'flex',
     alignItems: 'center',
@@ -21,12 +24,18 @@ const PageDecoration = ({ item, context = {} }) => {
 
   if (item.type === 'image') {
     if (!item.imageUrl) return null;
+    const fixedHeight = item.imageSizing === 'fixed';
     return (
       <div className="flex w-full" style={alignmentStyle(item.imagePosition)}>
         <img
           src={item.imageUrl}
           alt={item.label || 'Print header image'}
-          style={{ width: `${item.imageSize || 80}%`, maxHeight: '35mm', objectFit: 'contain' }}
+          style={{
+            width: `${item.imageSize || 80}%`,
+            height: fixedHeight ? `${item.imageHeight || 20}mm` : 'auto',
+            maxHeight: fixedHeight ? undefined : '35mm',
+            objectFit: 'contain',
+          }}
         />
       </div>
     );

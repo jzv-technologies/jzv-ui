@@ -19,13 +19,58 @@ export const usePrintSettings = (storageKey = STORAGE_KEY, defaults = DEFAULT_PR
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored);
+        const pageHeaders = parsed.headerLines?.length
+          ? parsed.headerLines.map((line, index) => ({
+              id: line.id || `header-${index}`,
+              label: line.label || `Header ${index + 1}`,
+              type: 'text',
+              text:
+                line.text === 'JAMIA ZAYTOONAH VELLORE'
+                  ? ''
+                  : line.text || '',
+              imageUrl: '',
+              fontSize: line.fontSize || 12,
+              color: line.color || '#0f172a',
+              bold: Boolean(line.bold),
+              alignment: 'center',
+              imageSize: 80,
+              imageSizing: 'ratio',
+              imageHeight: 20,
+              imagePosition: 'center',
+              visible: line.visible !== false,
+            }))
+          : parsed.pageHeaders || defaults.pageHeaders;
+        const normalizedPageHeaders = pageHeaders.map((header) => ({
+          imageSizing: 'ratio',
+          imageHeight: 20,
+          ...header,
+          text:
+            ['JAMIA ZAYTOONAH VELLORE', '{timetableName}', '{className}{teacherName}'].includes(
+              header.text
+            )
+              ? ''
+              : header.text,
+        }));
         return {
           ...defaults,
           ...parsed,
-          tableHeader: { ...defaults.tableHeader, ...parsed.tableHeader },
-          tableStyle: { ...defaults.tableStyle, ...parsed.tableStyle },
-          pageHeaders: parsed.pageHeaders || defaults.pageHeaders,
-          pageFooter: { ...defaults.pageFooter, ...parsed.pageFooter },
+          tableHeader: {
+            ...defaults.tableHeader,
+            ...parsed.tableHeader,
+            visible: parsed.showHeaders ?? parsed.tableHeader?.visible ?? defaults.tableHeader.visible,
+          },
+          tableStyle: {
+            ...defaults.tableStyle,
+            ...parsed.tableStyle,
+            showBorders:
+              parsed.showGridLines ?? parsed.tableStyle?.showBorders ?? defaults.tableStyle.showBorders,
+          },
+          pageHeaders: normalizedPageHeaders,
+          pageFooter: {
+            ...defaults.pageFooter,
+            ...parsed.pageFooter,
+            text: parsed.footerText ?? parsed.pageFooter?.text ?? defaults.pageFooter.text,
+          },
         };
       }
     } catch (err) {

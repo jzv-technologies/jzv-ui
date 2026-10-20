@@ -27,7 +27,10 @@ const LINE_COLOURS = [
 ];
 
 const splitLabelIntoLines = (label) => {
-  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  const words = String(label || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (words.length < 2) return [words[0] || '', ''];
 
   let splitIndex = 1;
@@ -83,7 +86,9 @@ const ScorecardTab = ({
   const columns = useMemo(() => {
     const sorted = [...(rows || [])];
     const programmeOrder = (programme) => {
-      const normalized = String(programme || '').trim().toUpperCase();
+      const normalized = String(programme || '')
+        .trim()
+        .toUpperCase();
       if (normalized === 'PCC') return 0;
       if (normalized === 'GCC') return 1;
       return 2;
@@ -196,21 +201,13 @@ const ScorecardTab = ({
     ending.setDate(ending.getDate() + 6);
     const day = ending.getDate();
     const ordinal =
-      day % 100 >= 11 && day % 100 <= 13
-        ? 'th'
-        : ['th', 'st', 'nd', 'rd'][day % 10] || 'th';
+      day % 100 >= 11 && day % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][day % 10] || 'th';
     return `${day}${ordinal} ${ending.toLocaleDateString('en-US', { month: 'long' })}`;
   }, [selectedWeek]);
 
   return (
-    <div
-      className="discipline-scorecard-print space-y-4"
-      data-print-target="active"
-    >
-      <PrintPageDecorations
-        settings={printSettings}
-        context={{ weekEnding: weekEndingLabel }}
-      />
+    <div className="discipline-scorecard-print space-y-4" data-print-target="active">
+      <PrintPageDecorations settings={printSettings} context={{ weekEnding: weekEndingLabel }} />
       {weekLocked && (
         <div
           className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 print:hidden"
@@ -230,10 +227,7 @@ const ScorecardTab = ({
             const selected = (recommendationPicks[key] || entry.recommendedIds).map(String);
             const direct = (winnersByCategory?.[key] || []).filter((winner) => !winner._rule5);
             return (
-              <div
-                key={key}
-                className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3"
-              >
+              <div key={key} className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <h3 className="text-xs font-black text-dark-primary">{entry.categoryName}</h3>
@@ -313,15 +307,6 @@ const ScorecardTab = ({
                     onClick={() => toggleSort('name')}
                   >
                     Discipline
-                    <i
-                      className={`fas ml-1 text-[9px] ${
-                        sortConfig.key === 'name'
-                          ? sortConfig.direction === 'asc'
-                            ? 'fa-sort-up'
-                            : 'fa-sort-down'
-                          : 'fa-sort text-dark-soft/50'
-                      }`}
-                    />
                   </th>
                   {columns.map((row) => (
                     <th
@@ -426,7 +411,9 @@ const ScorecardTab = ({
                                   : 'text-dark-primary'
                             }`}
                             style={
-                              holdsShield && !provisional ? { backgroundColor: '#92D050' } : undefined
+                              holdsShield && !provisional
+                                ? { backgroundColor: '#92D050' }
+                                : undefined
                             }
                             title={
                               isRed
@@ -541,125 +528,124 @@ const ScorecardTab = ({
               view === 'graph' ? '' : 'hidden'
             }`}
           >
-          <div className="h-[380px]">
-            <ResponsiveContainer width="100%" height="100%">
-              {metric === 'trend' ? (
-                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {trendClasses.map((name, index) => (
-                    <Line
-                      key={name}
-                      type="monotone"
-                      dataKey={name}
-                      stroke={LINE_COLOURS[index % LINE_COLOURS.length]}
-                      strokeWidth={2}
-                      dot={{ r: 2 }}
-                    />
-                  ))}
-                </LineChart>
-              ) : (
-                <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {metric === 'coins'
-                    ? disciplines.map((category) => (
-                        <Bar
-                          key={category.code}
-                          dataKey={category.code}
-                          name={category.name}
-                          stackId="coins"
-                          fill={category.coin_accent || '#94a3b8'}
-                        />
-                      ))
-                    : [
-                        <Bar
-                          key="coins"
-                          dataKey="totalCoins"
-                          name="Coins left"
-                          fill="#10b981"
-                          stackId="p"
-                        />,
-                        <Bar
-                          key="silver"
-                          dataKey="silver"
-                          name="Silver points"
-                          fill="#94a3b8"
-                          stackId="p"
-                        />,
-                        <Bar
-                          key="golden"
-                          dataKey="golden"
-                          name="Gold points"
-                          fill="#eab308"
-                          stackId="p"
-                        />,
-                        <Bar
-                          key="rz"
-                          dataKey="redZones"
-                          name="Red-zone penalty"
-                          fill="#ef4444"
-                          stackId="p"
-                        />,
-                      ]}
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-4 border-t border-light-border pt-3">
-            <p className="text-[10px] font-black uppercase tracking-wide text-dark-soft mb-2">
-              Coins, as stacks
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {columns.map((row) => (
-                <div
-                  key={row.classId}
-                  className="flex-1 min-w-[130px] rounded-xl border border-light-border p-2"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <p className="text-[11px] font-black text-dark-primary">{row.className}</p>
-                    {canTakeCoins && (
-                      <button
-                        onClick={() => onOpenClass?.(row.classId)}
-                        className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-800 hover:bg-amber-100 transition-all cursor-pointer"
-                        title={`Take a coin from ${row.className}`}
-                        data-feature-action="discipline-take-coins-class"
-                      >
-                        <i className="fas fa-hand-holding-dollar" />
-                        Coins
-                      </button>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    {disciplines.map((category) => (
-                      <div key={category.id} className="flex items-center gap-1.5">
-                        <CoinStack
-                          image={category.coin_image}
-                          accent={category.coin_accent}
-                          shape={category.coin_shape}
-                          face={category.coin_face}
-                          count={Number(row.balances?.[category.code] || 0)}
-                          max={4}
-                          size={14}
-                        />
-                      </div>
+            <div className="h-[380px]">
+              <ResponsiveContainer width="100%" height="100%">
+                {metric === 'trend' ? (
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {trendClasses.map((name, index) => (
+                      <Line
+                        key={name}
+                        type="monotone"
+                        dataKey={name}
+                        stroke={LINE_COLOURS[index % LINE_COLOURS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
                     ))}
-                  </div>
-                </div>
-              ))}
+                  </LineChart>
+                ) : (
+                  <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {metric === 'coins'
+                      ? disciplines.map((category) => (
+                          <Bar
+                            key={category.code}
+                            dataKey={category.code}
+                            name={category.name}
+                            stackId="coins"
+                            fill={category.coin_accent || '#94a3b8'}
+                          />
+                        ))
+                      : [
+                          <Bar
+                            key="coins"
+                            dataKey="totalCoins"
+                            name="Coins left"
+                            fill="#10b981"
+                            stackId="p"
+                          />,
+                          <Bar
+                            key="silver"
+                            dataKey="silver"
+                            name="Silver points"
+                            fill="#94a3b8"
+                            stackId="p"
+                          />,
+                          <Bar
+                            key="golden"
+                            dataKey="golden"
+                            name="Gold points"
+                            fill="#eab308"
+                            stackId="p"
+                          />,
+                          <Bar
+                            key="rz"
+                            dataKey="redZones"
+                            name="Red-zone penalty"
+                            fill="#ef4444"
+                            stackId="p"
+                          />,
+                        ]}
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
             </div>
-          </div>
+
+            <div className="mt-4 border-t border-light-border pt-3">
+              <p className="text-[10px] font-black uppercase tracking-wide text-dark-soft mb-2">
+                Coins, as stacks
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {columns.map((row) => (
+                  <div
+                    key={row.classId}
+                    className="flex-1 min-w-[130px] rounded-xl border border-light-border p-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <p className="text-[11px] font-black text-dark-primary">{row.className}</p>
+                      {canTakeCoins && (
+                        <button
+                          onClick={() => onOpenClass?.(row.classId)}
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-black text-amber-800 hover:bg-amber-100 transition-all cursor-pointer"
+                          title={`Take a coin from ${row.className}`}
+                          data-feature-action="discipline-take-coins-class"
+                        >
+                          <i className="fas fa-hand-holding-dollar" />
+                          Coins
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {disciplines.map((category) => (
+                        <div key={category.id} className="flex items-center gap-1.5">
+                          <CoinStack
+                            image={category.coin_image}
+                            accent={category.coin_accent}
+                            shape={category.coin_shape}
+                            face={category.coin_face}
+                            count={Number(row.balances?.[category.code] || 0)}
+                            max={4}
+                            size={14}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </>
       )}
-
     </div>
   );
 };

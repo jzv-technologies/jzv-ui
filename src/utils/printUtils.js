@@ -138,16 +138,17 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
         margin: ${tableStyle.cellMargin}px !important;
       }
 
-      table th:first-child,
-      table td:first-child {
+      table tbody th:first-child,
+      table tbody td:first-child {
         ${tableStyle.firstColumnDifferent ? `color: ${tableStyle.firstColumnColor} !important; font-size: ${tableStyle.firstColumnFontSize}pt !important; text-align: ${tableStyle.firstColumnAlignment} !important;` : ''}
       }
 
-      table thead {
+      body.jzv-print-dom table thead {
         display: ${tableHeader.visible ? (tableHeader.repeat ? 'table-header-group' : 'table-row-group') : 'none'} !important;
       }
 
-      table thead th {
+      body.jzv-print-dom table thead th,
+      .timetable-print-area .print-sheet table .print-column-header th {
         background-color: ${tableHeader.backgroundColor} !important;
         color: ${tableHeader.color} !important;
         font-size: ${tableHeader.fontSize}pt !important;
@@ -155,19 +156,109 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
         ${tableHeader.heightMode === 'fixed' ? `height: ${tableHeader.height}px !important;` : ''}
       }
 
+      body.jzv-print-dom [data-print-target="active"] .print-config-header {
+        display: block !important;
+        position: static !important;
+        visibility: visible !important;
+        margin-bottom: ${s.headerMargin ?? 5}mm !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .print-config-footer {
+        display: flex !important;
+        position: static !important;
+        visibility: visible !important;
+        margin-top: ${s.footerMargin ?? 5}mm !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] table th,
+      body.jzv-print-dom [data-print-target="active"] table td {
+        color: ${tableStyle.cellColor} !important;
+        font-size: ${tableStyle.cellFontSize}pt !important;
+        text-align: ${tableStyle.cellAlignment} !important;
+        padding: ${tableStyle.cellPadding}px !important;
+        border: ${tableStyle.showBorders ? tableStyle.borderThickness : 0}px solid rgba(${borderColor}, ${tableStyle.borderOpacity / 100}) !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] table tbody th:first-child,
+      body.jzv-print-dom [data-print-target="active"] table tbody td:first-child {
+        ${tableStyle.firstColumnDifferent ? `color: ${tableStyle.firstColumnColor} !important; font-size: ${tableStyle.firstColumnFontSize}pt !important; text-align: ${tableStyle.firstColumnAlignment} !important;` : ''}
+        ${tableStyle.firstColumnWidthMode === 'fixed' ? `width: ${tableStyle.firstColumnWidth}px !important;` : tableStyle.columnWidthMode === 'fixed' ? 'width: auto !important;' : ''}
+      }
+
+      body.jzv-print-dom [data-print-target="active"] table thead th {
+        background-color: ${tableHeader.backgroundColor} !important;
+        color: ${tableHeader.color} !important;
+        font-size: ${tableHeader.fontSize}pt !important;
+        text-align: ${tableHeader.alignment} !important;
+        ${tableHeader.heightMode === 'fixed' ? `height: ${tableHeader.height}px !important;` : ''}
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table th,
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table td {
+        box-sizing: border-box !important;
+        position: static !important;
+        vertical-align: middle !important;
+        border-style: solid !important;
+        border-width: ${tableStyle.showBorders ? tableStyle.borderThickness : 0}px !important;
+        border-color: rgba(${borderColor}, ${tableStyle.borderOpacity / 100}) !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table tbody th,
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table tbody td {
+        height: ${tableStyle.rowHeightMode === 'fixed' ? `${tableStyle.rowHeight}px` : 'auto'} !important;
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table th:first-child,
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table td:first-child {
+        ${tableStyle.firstColumnWidthMode === 'fixed' ? `width: ${tableStyle.firstColumnWidth}px !important;` : tableStyle.columnWidthMode === 'fixed' ? 'width: auto !important;' : ''}
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table tbody th:first-child,
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table tbody td:first-child {
+        ${tableStyle.firstColumnDifferent ? `color: ${tableStyle.firstColumnColor} !important; font-size: ${tableStyle.firstColumnFontSize}pt !important; text-align: ${tableStyle.firstColumnAlignment} !important;` : ''}
+      }
+
+      body.jzv-print-dom [data-print-target="active"] .discipline-scorecard-table td > div {
+        min-height: 0 !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
       ${tableStyle.bandedRows ? `table tbody tr:nth-child(even) td:not([style*="background-color"]) { background-color: ${tableStyle.bandedColor} !important; }` : ''}
       ${tableStyle.bandedColumns ? `table tbody td:nth-child(even):not([style*="background-color"]) { background-color: ${tableStyle.bandedColor} !important; }` : ''}
 
       /* ---- Sheet mode: print only the generated document ---- */
-      #root {
+      body.jzv-print-sheet #root {
+        display: none !important;
+      }
+
+      body.jzv-print-sheet > *:not(.timetable-print-area) {
         display: none !important;
       }
 
       .timetable-print-area {
         display: block !important;
+        visibility: visible !important;
         width: 100% !important;
         margin: 0 !important;
         padding: 0 !important;
+      }
+
+      .timetable-print-area * {
+        visibility: visible !important;
       }
 
       .timetable-print-area .print-sheet {
@@ -176,6 +267,8 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
         padding: 0 !important;
         box-shadow: none !important;
         border: none !important;
+        break-inside: auto !important;
+        page-break-inside: auto !important;
       }
 
       /* When several sheets are printed at once (one per class) each starts on a new page */
@@ -187,6 +280,24 @@ export const generatePrintCSS = (settings, mode = 'sheet') => {
       .timetable-print-area .print-sheet:last-child {
         break-after: auto;
         page-break-after: auto;
+      }
+
+      .timetable-print-area .print-sheet table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+        border: ${tableStyle.showBorders ? tableStyle.borderThickness : 0}px solid rgba(${borderColor}, ${tableStyle.borderOpacity / 100}) !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+
+      .timetable-print-area .print-sheet table thead {
+        display: ${tableHeader.repeat ? 'table-header-group' : 'table-row-group'} !important;
+      }
+
+      .timetable-print-area .print-sheet table th,
+      .timetable-print-area .print-sheet table td {
+        border: ${tableStyle.showBorders ? tableStyle.borderThickness : 0}px solid rgba(${borderColor}, ${tableStyle.borderOpacity / 100}) !important;
       }
 
       /* ---- DOM mode: print the active subview as displayed ---- */

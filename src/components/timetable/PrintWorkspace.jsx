@@ -7,9 +7,39 @@
  */
 
 import React from 'react';
+import PrintConfigurationModal from '../PrintConfigurationModal';
 import PrintSettingsPanel from './PrintSettingsPanel';
 import PrintPreview from './PrintPreview';
 import PrintDocument from './PrintDocument';
+const mapHeaderLinesToPageHeaders = (lines, existingHeaders = []) => [
+  ...(lines || []).map((line, index) => ({
+    ...(existingHeaders.find((header) => header.id === line.id) || {}),
+    id: line.id || `header-${index}`,
+    label: line.label || `Header ${index + 1}`,
+    type: 'text',
+    text: line.text || '',
+    fontSize: line.fontSize || 12,
+    color: line.color || '#0f172a',
+    bold: Boolean(line.bold),
+    alignment: 'center',
+    visible: line.visible !== false,
+  })),
+  ...existingHeaders.filter((header) => header.type === 'image'),
+];
+
+const mapPageHeadersToLines = (headers, existingLines = []) =>
+  (headers || [])
+    .filter((header) => header.type !== 'image')
+    .map((header, index) => ({
+      ...(existingLines.find((line) => line.id === header.id) || {}),
+      id: header.id || `header-${index}`,
+      label: header.label || `Header ${index + 1}`,
+      text: header.text || '',
+      fontSize: header.fontSize || 12,
+      color: header.color || '#0f172a',
+      bold: Boolean(existingLines.find((line) => line.id === header.id)?.bold),
+      visible: header.visible !== false,
+    }));
 
 const PrintWorkspace = ({
   isOpen,
@@ -35,95 +65,110 @@ const PrintWorkspace = ({
       ? allClassesData
       : null;
   const sheetCount = classDatasets?.length || 1;
+  const contextData = classDatasets?.[0] || timetableData;
+  const entityName = contextData?.entityName || '';
+  const previewContext = {
+    className: variant === 'teacher' ? '' : entityName,
+    teacherName: variant === 'teacher' ? entityName : '',
+    viewLabel: contextData?.viewLabel || (variant === 'teacher' ? 'Teacher View' : 'Class View'),
+    timetableName: variant === 'teacher' ? 'Teacher Timetable' : 'Class Timetable',
+  };
+
+  const handleSettingsChange = (nextSettings) => {
+    const next = { ...nextSettings };
+    const pageHeadersChanged =
+      JSON.stringify(next.pageHeaders) !== JSON.stringify(settings?.pageHeaders);
+    const headerLinesChanged =
+      JSON.stringify(next.headerLines) !== JSON.stringify(settings?.headerLines);
+    if (headerLinesChanged && !pageHeadersChanged) {
+      next.pageHeaders = mapHeaderLinesToPageHeaders(next.headerLines, settings?.pageHeaders);
+    } else if (pageHeadersChanged) {
+      next.headerLines = mapPageHeadersToLines(next.pageHeaders, settings?.headerLines);
+    }
+
+    const pageFooterChanged =
+      JSON.stringify(next.pageFooter) !== JSON.stringify(settings?.pageFooter);
+    if (next.footerText !== settings?.footerText && !pageFooterChanged) {
+      next.pageFooter = {
+        ...next.pageFooter,
+        text: next.footerText || '',
+        visible: Boolean(next.footerText),
+      };
+    } else if (pageFooterChanged) {
+      next.footerText = next.pageFooter?.text || '';
+    }
+
+    const tableHeaderChanged =
+      JSON.stringify(next.tableHeader) !== JSON.stringify(settings?.tableHeader);
+    if (next.showHeaders !== settings?.showHeaders && !tableHeaderChanged) {
+      next.tableHeader = { ...next.tableHeader, visible: next.showHeaders };
+    } else if (tableHeaderChanged) {
+      next.showHeaders = next.tableHeader?.visible !== false;
+    }
+
+    const tableStyleChanged =
+      JSON.stringify(next.tableStyle) !== JSON.stringify(settings?.tableStyle);
+    if (next.showGridLines !== settings?.showGridLines && !tableStyleChanged) {
+      next.tableStyle = { ...next.tableStyle, showBorders: next.showGridLines };
+    } else if (tableStyleChanged) {
+      next.showGridLines = next.tableStyle?.showBorders !== false;
+    }
+
+    onSettingsChange(next);
+  };
 
   return (
-    <div className="print-workspace-overlay fixed inset-0 bg-dark-almostblack/50 backdrop-blur-sm z-[80] flex items-center justify-center p-2 sm:p-4">
-      <div className="print-workspace-shell bg-white rounded-2xl sm:rounded-3xl border border-light-border shadow-2xl w-full max-w-[1400px] h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="bg-brand-primary px-4 sm:px-6 py-3 text-white flex items-center justify-between gap-3 shrink-0">
-          <div className="min-w-0">
-            <span className="text-[10px] uppercase tracking-wider font-extrabold opacity-80 block">
-              Print Configuration
-            </span>
-            <h3 className="text-base sm:text-lg font-bold truncate">
-              {title}
-              {subtitle ? <span className="opacity-80 font-semibold"> - {subtitle}</span> : null}
-            </h3>
-            {classDatasets && (
-              <span className="text-[11px] font-semibold opacity-85 block">
-                {sheetCount} classes · one page each
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
-              title="Back to the timetable"
-            >
-              <i className="fas fa-arrow-left" />
-              <span className="hidden sm:inline">Back</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onPrint(mode)}
-              className="px-4 py-2 bg-white text-brand-primary hover:bg-light-bg rounded-xl text-sm font-bold transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-            >
-              <i className="fas fa-print" />
-              Print
-            </button>
-          </div>
-        </div>
-
-        {/* Side-by-side body */}
-        <div className="print-workspace-body flex-1 min-h-0 flex flex-col lg:flex-row">
-          <div className="print-workspace-settings w-full lg:w-[380px] lg:max-w-[380px] border-b lg:border-b-0 lg:border-r border-light-border flex flex-col min-h-0 max-h-[45vh] lg:max-h-none">
-            <PrintSettingsPanel
-              settings={settings}
-              onChange={onSettingsChange}
-              onReset={onReset}
-              timetableData={timetableData}
-              isDomMode={isDomMode}
-              variant={variant}
-              classCount={allClassesData?.length || 0}
-            />
-          </div>
-
-          <div className="print-workspace-preview flex-1 min-h-0 overflow-auto">
-            {isDomMode ? (
-              <div className="p-6 sm:p-10 flex items-start justify-center">
-                <div className="max-w-lg w-full rounded-2xl border border-light-border bg-white p-6 text-center">
-                  <div className="w-12 h-12 mx-auto rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl mb-3">
-                    <i className="fas fa-print" />
-                  </div>
-                  <h4 className="text-sm font-black text-dark-primary">
-                    Printing the current view
-                  </h4>
-                  <p className="text-xs font-semibold text-dark-soft mt-2">
-                    This prints
-                    {domViewLabel ? (
-                      <span className="font-black text-dark-primary"> {domViewLabel} </span>
-                    ) : (
-                      ' the subview currently on screen '
-                    )}
-                    exactly as displayed. Page size, orientation, margins and grid lines apply, and
-                    the days and periods filters trim the printed rows and columns.
-                  </p>
+    <>
+      <PrintConfigurationModal
+        isOpen={isOpen}
+        onClose={onClose}
+        settings={settings}
+        onSettingsChange={handleSettingsChange}
+        onReset={onReset}
+        onPrint={() => onPrint(mode)}
+        title={subtitle ? `${title} - ${subtitle}` : title}
+        previewContext={previewContext}
+        exclusiveContent={
+          <PrintSettingsPanel
+            settings={settings}
+            onChange={handleSettingsChange}
+            onReset={onReset}
+            timetableData={timetableData}
+            isDomMode={isDomMode}
+            variant={variant}
+            classCount={allClassesData?.length || 0}
+            exclusiveOnly
+          />
+        }
+        previewContent={
+          isDomMode ? (
+            <div className="p-6 sm:p-10 flex items-start justify-center">
+              <div className="max-w-lg w-full rounded-2xl border border-light-border bg-white p-6 text-center">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center text-xl mb-3">
+                  <i className="fas fa-print" />
                 </div>
+                <h4 className="text-sm font-black text-dark-primary">Printing the current view</h4>
+                <p className="text-xs font-semibold text-dark-soft mt-2">
+                  This prints
+                  {domViewLabel ? (
+                    <span className="font-black text-dark-primary"> {domViewLabel} </span>
+                  ) : (
+                    ' the subview currently on screen '
+                  )}
+                  exactly as displayed. Use the Exclusive tab to filter days and periods.
+                </p>
               </div>
-            ) : (
-              <PrintPreview
-                timetableData={timetableData}
-                datasets={classDatasets}
-                settings={settings}
-                variant={variant}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
+            </div>
+          ) : (
+            <PrintPreview
+              timetableData={timetableData}
+              datasets={classDatasets}
+              settings={settings}
+              variant={variant}
+            />
+          )
+        }
+      />
       {/* Print-only document, mounted outside the app tree */}
       {isOpen && !isDomMode && (
         <PrintDocument
@@ -133,7 +178,12 @@ const PrintWorkspace = ({
           variant={variant}
         />
       )}
-    </div>
+      {classDatasets && isOpen && (
+        <span className="sr-only" aria-live="polite">
+          {sheetCount} classes, one page each
+        </span>
+      )}
+    </>
   );
 };
 

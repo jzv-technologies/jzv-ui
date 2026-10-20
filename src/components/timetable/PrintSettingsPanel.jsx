@@ -50,6 +50,7 @@ const PrintSettingsPanel = ({
   isDomMode = false,
   variant = 'class',
   classCount = 0,
+  exclusiveOnly = false,
 }) => {
   const [activeTab, setActiveTab] = useState('layout');
   // Header line the variable chips insert into (the last one the user typed in).
@@ -101,13 +102,16 @@ const PrintSettingsPanel = ({
     id: String(p.id),
     label: p.name || `Period ${p.period_number}`,
   }));
+  const visibleTabs = exclusiveOnly
+    ? TABS.filter((tab) => !['appearance', 'advanced'].includes(tab.id))
+    : TABS;
 
   return (
     <div className={`flex flex-col h-full min-h-0 ${className}`}>
       {/* Tab Navigation */}
       <div className="bg-light-lbg/50 border-b border-light-border px-3 py-2 overflow-x-auto shrink-0">
         <div className="flex gap-1">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -129,7 +133,7 @@ const PrintSettingsPanel = ({
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
         {activeTab === 'layout' && (
           <div className="space-y-5">
-            <div>
+            {!exclusiveOnly && <div>
               <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2">
                 Page Size
               </label>
@@ -147,9 +151,9 @@ const PrintSettingsPanel = ({
                   </OptionButton>
                 ))}
               </div>
-            </div>
+            </div>}
 
-            <div>
+            {!exclusiveOnly && <div>
               <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2">
                 Orientation
               </label>
@@ -166,9 +170,9 @@ const PrintSettingsPanel = ({
                   </OptionButton>
                 ))}
               </div>
-            </div>
+            </div>}
 
-            <div>
+            {!exclusiveOnly && <div>
               <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2 flex items-center justify-between">
                 Font Size
                 <span className="text-brand-primary font-bold">{s.fontSize}pt</span>
@@ -186,9 +190,9 @@ const PrintSettingsPanel = ({
                 <span>6pt (Small)</span>
                 <span>14pt (Large)</span>
               </div>
-            </div>
+            </div>}
 
-            <div>
+            {!exclusiveOnly && <div>
               <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2 flex items-center justify-between">
                 Page Margin
                 <span className="text-brand-primary font-bold">{s.margin}mm</span>
@@ -206,7 +210,7 @@ const PrintSettingsPanel = ({
                 <span>5mm (Narrow)</span>
                 <span>30mm (Wide)</span>
               </div>
-            </div>
+            </div>}
 
             <div>
               <label className="block text-xs font-bold text-dark-soft uppercase tracking-wide mb-2">
@@ -442,7 +446,7 @@ const PrintSettingsPanel = ({
                       </button>
 
                       <span className="flex-1 text-[11px] font-bold text-dark-soft truncate">
-                        {line.label || `Line ${idx + 1}`}
+                        Header {idx + 1}
                       </span>
 
                       <input
