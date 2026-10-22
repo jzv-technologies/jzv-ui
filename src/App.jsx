@@ -23,6 +23,7 @@ const App = () => {
     useAuth();
 
   const [showLoginPortal, setShowLoginPortal] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
 
   const {
     cards,
@@ -119,11 +120,12 @@ const App = () => {
   if (authLoading) return <LoadingFallback />;
 
   const isDisplayBoard = location.pathname === '/portal/display';
+  const isPortalRoute = location.pathname === '/portal' || location.pathname.startsWith('/portal/');
 
 
   return (
     <div id="dashboard-section" className={isDisplayBoard ? "min-h-screen bg-[#064e3b]" : "min-h-screen pb-16 print:min-h-0 print:pb-0"}>
-      {!isDisplayBoard && (
+      {!isDisplayBoard && isHeaderVisible && (
         <Header
           user={user}
           userRoles={userRoles}
@@ -135,7 +137,21 @@ const App = () => {
             navigate("/");
           }}
           switchParentStudent={switchParentStudent}
+          onHideHeader={() => setIsHeaderVisible(false)}
+          showHeaderToggle={!isPortalRoute}
         />
+      )}
+
+      {!isDisplayBoard && !isPortalRoute && !isHeaderVisible && (
+        <button
+          type="button"
+          onClick={() => setIsHeaderVisible(true)}
+          aria-label="Show header"
+          title="Show header"
+          className="fixed right-0 top-4 z-50 flex h-11 w-10 items-center justify-center rounded-l-xl border border-r-0 border-light-border bg-white text-blue-primary shadow-lg transition-all hover:w-12 hover:bg-blue-lbg print:hidden"
+        >
+          <i className="fas fa-chevron-down" aria-hidden="true" />
+        </button>
       )}
 
 
@@ -148,6 +164,9 @@ const App = () => {
           gridCards={gridCards}
           openModal={handleCardClick}
           teacherRecord={teacherRecord}
+          isHeaderVisible={isHeaderVisible}
+          onShowHeader={() => setIsHeaderVisible(true)}
+          onHideHeader={() => setIsHeaderVisible(false)}
         />
       </main>
 

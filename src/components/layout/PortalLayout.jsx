@@ -70,6 +70,9 @@ const PortalLayout = ({
   groups = [],
   isCategoryView = true,
   onCategoryViewChange,
+  isHeaderVisible = true,
+  onShowHeader,
+  onHideHeader,
 }) => {
   const navigate = useNavigate();
 
@@ -80,7 +83,12 @@ const PortalLayout = ({
   };
 
   const handleGroupClick = () => {
-    if (onSetSubView) onSetSubView(null);
+    if (onSetSubView) {
+      const destination = activeGroup
+        ? `/portal?group=${encodeURIComponent(activeGroup)}`
+        : '/portal';
+      onSetSubView(null, destination);
+    }
   };
 
   const handleMobileBack = () => {
@@ -105,10 +113,17 @@ const PortalLayout = ({
         w-full bg-gradient-to-r ${styles.bgGradient}
         border-b ${styles.borderColor}
         px-3 sm:px-4 py-1 sm:py-1.5 flex items-center text-xs sm:text-sm
-        shadow-xs sticky top-[88px] sm:top-[96px] z-30 backdrop-blur-md bg-opacity-95 print:hidden
+        shadow-xs sticky ${isHeaderVisible ? 'top-[88px] sm:top-[96px]' : 'top-0'} z-30 backdrop-blur-md bg-opacity-95 print:hidden
       `}
     >
       <div className="w-full flex items-center justify-between gap-2">
+        {!isHeaderVisible && (
+          <img
+            src="/media/jzv-round-round-white-bg.png"
+            alt="JZV"
+            className="h-8 w-8 shrink-0 rounded-full object-contain"
+          />
+        )}
         {/* Left: Breadcrumbs Navigation */}
         <div className="hidden sm:flex items-center gap-1 sm:gap-1.5 min-w-0 flex-wrap">
           <button
@@ -189,7 +204,8 @@ const PortalLayout = ({
                       type="button"
                       title={g.info.label}
                       onClick={() => {
-                        if (onSetSubView) onSetSubView(null);
+                        if (onSetSubView)
+                          onSetSubView(null, `/portal?group=${encodeURIComponent(g.info.key)}`);
                         if (onSetActiveGroup) onSetActiveGroup(g.info.key);
                       }}
                       className={`w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
@@ -215,7 +231,8 @@ const PortalLayout = ({
                       title={g.info.label}
                       aria-label={g.info.label}
                       onClick={() => {
-                        if (onSetSubView) onSetSubView(null);
+                        if (onSetSubView)
+                          onSetSubView(null, `/portal?group=${encodeURIComponent(g.info.key)}`);
                         if (onSetActiveGroup) onSetActiveGroup(g.info.key);
                       }}
                       className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs transition-all cursor-pointer ${
@@ -244,6 +261,27 @@ const PortalLayout = ({
             />
             <span className="relative h-5 w-9 rounded-full bg-gray-300 transition-colors peer-checked:bg-orange-primary after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-xs after:transition-transform peer-checked:after:translate-x-4" />
           </label>
+          {isHeaderVisible ? (
+            <button
+              type="button"
+              onClick={onHideHeader}
+              aria-label="Hide header"
+              title="Hide header"
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${styles.borderColor} bg-white/90 ${styles.textColor} shadow-sm transition-colors hover:bg-white`}
+            >
+              <i className="fas fa-chevron-up text-[11px]" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onShowHeader}
+              aria-label="Show header"
+              title="Show header"
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${styles.borderColor} bg-white/90 ${styles.textColor} shadow-sm transition-colors hover:bg-white`}
+            >
+              <i className="fas fa-chevron-down text-[11px]" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
     </div>

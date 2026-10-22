@@ -124,8 +124,7 @@ const GroupedSubjectMultiSelect = ({
   const filteredSubjects = subjects.filter((s) => {
     const q = search.toLowerCase();
     return (
-      s.name.toLowerCase().includes(q) ||
-      (s.arabic_name && s.arabic_name.toLowerCase().includes(q))
+      s.name.toLowerCase().includes(q) || (s.arabic_name && s.arabic_name.toLowerCase().includes(q))
     );
   });
 
@@ -251,7 +250,10 @@ const GroupedSubjectMultiSelect = ({
                             <span className="truncate flex-1 flex items-center gap-1.5">
                               <span>{sub.name}</span>
                               {sub.arabic_name && (
-                                <span className="text-[10px] text-slate-500 font-medium font-arabic shrink-0" dir="rtl">
+                                <span
+                                  className="text-[10px] text-slate-500 font-medium font-arabic shrink-0"
+                                  dir="rtl"
+                                >
                                   ({sub.arabic_name})
                                 </span>
                               )}
@@ -569,7 +571,10 @@ export const TeacherMappingModal = ({
                           <span className="text-xs font-bold truncate flex-1 flex items-center gap-1.5">
                             <span>{sub.name}</span>
                             {sub.arabic_name && (
-                              <span className="text-[11px] text-slate-500 font-medium font-arabic shrink-0" dir="rtl">
+                              <span
+                                className="text-[11px] text-slate-500 font-medium font-arabic shrink-0"
+                                dir="rtl"
+                              >
                                 ({sub.arabic_name})
                               </span>
                             )}
@@ -1495,7 +1500,10 @@ export const ClassesSetup = ({
                             <span className="flex items-center gap-2">
                               <span>{subName}</span>
                               {subArabicName && (
-                                <span className="text-[11px] text-slate-500 font-medium font-arabic" dir="rtl">
+                                <span
+                                  className="text-[11px] text-slate-500 font-medium font-arabic"
+                                  dir="rtl"
+                                >
                                   ({subArabicName})
                                 </span>
                               )}
@@ -1583,6 +1591,7 @@ export const PeriodsSetup = ({
   slots,
   seasonsConfig,
   onSaveSeasonsConfig,
+  onSaveAvailabilityCategories,
   onCopySeason,
 }) => {
   const [periodCount, setPeriodCount] = useState(periods.length || 11);
@@ -1594,6 +1603,8 @@ export const PeriodsSetup = ({
   const [copySource, setCopySource] = useState('summer');
   const [copyTarget, setCopyTarget] = useState('winter');
   const [copyType, setCopyType] = useState('all');
+  const [selectedAvailabilityCategoryId, setSelectedAvailabilityCategoryId] = useState('');
+  const [newAvailabilityCategoryName, setNewAvailabilityCategoryName] = useState('');
 
   React.useEffect(() => {
     setPeriodCount(periods.length);
@@ -1635,6 +1646,108 @@ export const PeriodsSetup = ({
     Friday: 'Weekday',
     Saturday: 'Working Weekend',
     Sunday: 'Holiday Weekend',
+  };
+  const availabilityDays = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  const availabilityCategories = localSeasonsConfig.teacher_availability_categories || [];
+  const getDefaultCategoryPeriods = (day) =>
+    periodList
+      .filter((period) => {
+        if (period.is_break) return false;
+        if (
+          weekdayConfig[day] === 'Holiday Weekend' ||
+          (weekdayConfig[day] === 'Working Weekend' && period.applicable_on_weekends !== true)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .map((period) => Number(period.period_number));
+  const selectedAvailabilityCategory = availabilityCategories.find(
+    (category) => String(category.id) === String(selectedAvailabilityCategoryId)
+  );
+  const updateActiveSeason = (field, value) => {
+    setLocalSeasonsConfig((current) => ({
+      ...current,
+      seasons: {
+        ...current.seasons,
+        [activeSeasonId]: {
+          ...current.seasons[activeSeasonId],
+          [field]: value,
+        },
+      },
+    }));
+  };
+  const addAvailabilityCategory = () => {
+    const name = newAvailabilityCategoryName.trim();
+    if (!name) {
+      showToast('Enter a name for the availability category.', 'error');
+      return;
+    }
+    if (
+      availabilityCategories.some((category) => category.name.toLowerCase() === name.toLowerCase())
+    ) {
+      showToast('An availability category with this name already exists.', 'error');
+      return;
+    }
+    const category = {
+      id: generateLocalId(),
+      name,
+      periods: Object.fromEntries(
+        availabilityDays.map((day) => [day, getDefaultCategoryPeriods(day)])
+      ),
+    };
+    setLocalSeasonsConfig((current) => ({
+      ...current,
+      teacher_availability_categories: [
+        ...(current.teacher_availability_categories || []),
+        category,
+      ],
+    }));
+    setSelectedAvailabilityCategoryId(String(category.id));
+    setNewAvailabilityCategoryName('');
+  };
+  const toggleCategoryPeriod = (day, periodNumber) => {
+    if (!selectedAvailabilityCategory) return;
+    const selected = selectedAvailabilityCategory.periods?.[day] || [];
+    const nextDayPeriods = selected.includes(Number(periodNumber))
+      ? selected.filter((number) => Number(number) !== Number(periodNumber))
+      : [...selected, Number(periodNumber)];
+    setLocalSeasonsConfig((current) => ({
+      ...current,
+      teacher_availability_categories: availabilityCategories.map((category) =>
+        String(category.id) === String(selectedAvailabilityCategoryId)
+          ? {
+              ...category,
+              periods: { ...category.periods, [day]: nextDayPeriods },
+            }
+          : category
+      ),
+    }));
+  };
+  const removeAvailabilityCategory = () => {
+    if (!selectedAvailabilityCategory) return;
+    const assigned = Object.values(localSeasonsConfig.teacher_availability_assignments || {}).some(
+      (categoryId) => String(categoryId) === String(selectedAvailabilityCategory.id)
+    );
+    if (assigned) {
+      showToast('Unassign this category from teachers in Manage Portal User Roles first.', 'error');
+      return;
+    }
+    setLocalSeasonsConfig((current) => ({
+      ...current,
+      teacher_availability_categories: availabilityCategories.filter(
+        (category) => String(category.id) !== String(selectedAvailabilityCategory.id)
+      ),
+    }));
+    setSelectedAvailabilityCategoryId('');
   };
 
   const handleCountChange = (newCount) => {
@@ -1711,12 +1824,28 @@ export const PeriodsSetup = ({
   const handleSaveSeasonSettings = () => {
     setConfirmConfig({
       title: 'Save Season Settings',
-      message: 'Are you sure you want to save the season names and weekday configuration?',
+      message:
+        'Are you sure you want to save the season names and weekday configuration?',
       confirmText: 'Save Settings',
       type: 'primary',
       onConfirm: () => {
         setConfirmConfig(null);
         onSaveSeasonsConfig(localSeasonsConfig);
+      },
+    });
+  };
+
+  const handleSaveAvailabilityCategories = () => {
+    setConfirmConfig({
+      title: 'Save Availability Categories',
+      message: 'Save these teacher availability categories for use across timetable planning and portal roles?',
+      confirmText: 'Save Categories',
+      type: 'primary',
+      onConfirm: async () => {
+        setConfirmConfig(null);
+        await onSaveAvailabilityCategories(
+          localSeasonsConfig.teacher_availability_categories || []
+        );
       },
     });
   };
@@ -1912,7 +2041,120 @@ export const PeriodsSetup = ({
         </div>
       </div>
 
-      {/* 3. Daily Period Labels & Details */}
+      {/* 3. Teacher availability categories */}
+      <div className="bg-white border border-light-border rounded-2xl p-5 space-y-4">
+        <div>
+          <h4 className="text-sm font-bold text-dark-deepblue uppercase tracking-wide mb-1">
+            Teacher Availability Categories
+          </h4>
+          <p className="text-xs text-dark-soft">
+            Define reusable day and period schedules here, then assign a category to each teacher
+            from Manage Portal User Roles.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={newAvailabilityCategoryName}
+            onChange={(event) => setNewAvailabilityCategoryName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') addAvailabilityCategory();
+            }}
+            placeholder="New category name"
+            aria-label="New teacher availability category name"
+            className="flex-1 bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-semibold"
+          />
+          <button
+            type="button"
+            onClick={addAvailabilityCategory}
+            className="bg-brand-primary text-white rounded-xl px-4 py-2 text-xs font-bold"
+          >
+            Add Category
+          </button>
+        </div>
+        {availabilityCategories.length > 0 && (
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select
+              value={selectedAvailabilityCategoryId}
+              onChange={(event) => setSelectedAvailabilityCategoryId(event.target.value)}
+              aria-label="Select availability category"
+              className="flex-1 bg-white border border-light-border rounded-xl px-3 py-2 text-xs font-bold"
+            >
+              <option value="">Select category to configure</option>
+              {availabilityCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            {selectedAvailabilityCategory && (
+              <button
+                type="button"
+                onClick={removeAvailabilityCategory}
+                className="border border-red-200 bg-red-50 text-red-700 rounded-xl px-3 py-2 text-xs font-bold"
+              >
+                Remove Category
+              </button>
+            )}
+          </div>
+        )}
+        {selectedAvailabilityCategory && (
+          <div className="overflow-x-auto border border-light-border rounded-xl">
+            <table className="w-full text-xs">
+              <thead className="bg-light-bg text-dark-soft">
+                <tr>
+                  <th className="p-2 text-left">Day</th>
+                  {periodList
+                    .filter((period) => !period.is_break)
+                    .map((period) => (
+                      <th key={period.id || period.period_number} className="p-2 text-center">
+                        P{period.period_number}
+                      </th>
+                    ))}
+                </tr>
+              </thead>
+              <tbody>
+                {availabilityDays.map((day) => (
+                  <tr key={day} className="border-t border-light-border">
+                    <th className="p-2 text-left">{day}</th>
+                    {periodList
+                      .filter((period) => !period.is_break)
+                      .map((period) => {
+                        const periodValid =
+                          weekdayConfig[day] !== 'Holiday Weekend' &&
+                          (weekdayConfig[day] !== 'Working Weekend' ||
+                            period.applicable_on_weekends === true);
+                        const checked = (selectedAvailabilityCategory.periods?.[day] || []).some(
+                          (number) => Number(number) === Number(period.period_number)
+                        );
+                        return (
+                          <td key={period.id || period.period_number} className="p-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={!periodValid}
+                              onChange={() => toggleCategoryPeriod(day, period.period_number)}
+                              aria-label={`${selectedAvailabilityCategory.name}: ${day} period ${period.period_number}`}
+                            />
+                          </td>
+                        );
+                      })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="flex justify-end">
+          <button
+            onClick={handleSaveAvailabilityCategories}
+            className="bg-brand-primary hover:bg-brand-dark text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm"
+          >
+            Save Availability Categories
+          </button>
+        </div>
+      </div>
+
+      {/* 4. Daily Period Labels & Details */}
       <div className="bg-white border border-light-border rounded-2xl p-5 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -2018,7 +2260,7 @@ export const PeriodsSetup = ({
                       }
                       className="rounded border-light-border text-brand-primary focus:ring-brand-soft"
                     />
-                    Weekend Applicable
+                    Working Weekend
                   </label>
                 </div>
 

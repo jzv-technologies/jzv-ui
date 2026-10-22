@@ -11,6 +11,8 @@ const Header = ({
   onLoginClick,
   onLogoClick,
   switchParentStudent,
+  onHideHeader,
+  showHeaderToggle = true,
 }) => {
   const [showStudentDropdown, setShowStudentDropdown] = useState(false);
   const [showMobileDropdown, setShowMobileDropdown] = useState(false);
@@ -233,6 +235,17 @@ const Header = ({
               </span>
             </button>
           )}
+          {showHeaderToggle && (
+            <button
+              type="button"
+              onClick={onHideHeader}
+              aria-label="Hide header"
+              title="Hide header"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-light-border bg-white text-blue-primary shadow-sm transition-colors hover:bg-blue-lbg"
+            >
+              <i className="fas fa-chevron-up" aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         {/* Mobile logged‑out content: tagline + login button (stacked) */}
@@ -398,6 +411,17 @@ const Header = ({
                [&_.goog-te-gadget]:text-[0px] 
                [&_.goog-te-combo]:w-[70px] [&_.goog-te-combo]:max-w-[70px] [&_.goog-te-combo]:m-0 [&_.goog-te-combo]:text-sm"
             ></div>
+            {showHeaderToggle && (
+              <button
+                type="button"
+                onClick={onHideHeader}
+                aria-label="Hide header"
+                title="Hide header"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-light-border bg-white text-blue-primary shadow-sm transition-colors hover:bg-blue-lbg"
+              >
+                <i className="fas fa-chevron-up" aria-hidden="true" />
+              </button>
+            )}
           </div>
         </div>
       </div>

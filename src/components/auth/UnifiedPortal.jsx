@@ -1,5 +1,6 @@
 // src/components/auth/UnifiedPortal.jsx
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useViewConfig from '../../hooks/useViewConfig';
 import PortalLayout from '../layout/PortalLayout';
 import Translate from '../Translate';
@@ -44,6 +45,15 @@ import GroupCard from '../portal-shared/GroupCard';
 import DirectTile from '../portal-shared/DirectTile';
 
 const MANAGE_USER_ROLES_SUBVIEWS = ['manage-user-roles', 'portal-user-roles'];
+const getRouteFeature = (pathname) => {
+  const feature = pathname.split('/')[2] || null;
+  if (!feature) return null;
+  try {
+    return decodeURIComponent(feature);
+  } catch {
+    return feature;
+  }
+};
 
 export const UnifiedPortal = ({
   user,
@@ -52,13 +62,31 @@ export const UnifiedPortal = ({
   teacherRecord = null,
   openModal = () => {},
   initialSubView = null,
+  isHeaderVisible = true,
+  onShowHeader,
+  onHideHeader,
 }) => {
   const [subView, setSubView] = useState(initialSubView);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [hasVisitedManageUserRoles, setHasVisitedManageUserRoles] = useState(() =>
     MANAGE_USER_ROLES_SUBVIEWS.includes(initialSubView)
   );
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
   const isManageUserRolesSubview = MANAGE_USER_ROLES_SUBVIEWS.includes(subView);
+
+  useEffect(() => {
+    const routeFeature = getRouteFeature(location.pathname);
+    setSubView(routeFeature === 'v2' ? null : routeFeature);
+    if (!routeFeature) {
+      setActiveGroup(new URLSearchParams(location.search).get('group'));
+    }
+  }, [location.pathname, location.search]);
+
+  const navigateToSubView = useCallback((view, destination = null) => {
+    setSubView(view);
+    navigate(destination || (view ? `/portal/${encodeURIComponent(view)}` : '/portal'));
+  }, [navigate]);
 
   useEffect(() => {
     if (isManageUserRolesSubview) setHasVisitedManageUserRoles(true);
@@ -82,6 +110,20 @@ export const UnifiedPortal = ({
     return getVisibleTiles(userRoles);
   }, [getVisibleTiles, userRoles]);
 
+  useEffect(() => {
+    const routeFeature = getRouteFeature(location.pathname);
+    if (
+      routeFeature &&
+      routeFeature !== 'v2' &&
+      !loading &&
+      !allPermittedTiles.some(
+        (tile) => tile.id === routeFeature || tile.component_name === routeFeature
+      )
+    ) {
+      navigate('/portal', { replace: true });
+    }
+  }, [allPermittedTiles, loading, location.pathname, navigate]);
+
   const displayedTiles = allPermittedTiles;
 
   // Nested navigation states
@@ -92,7 +134,7 @@ export const UnifiedPortal = ({
     setIsCategoryView(enabled);
     if (!enabled) {
       setActiveGroup(null);
-      setSubView(null);
+      navigateToSubView(null);
     }
   };
 
@@ -161,6 +203,20 @@ export const UnifiedPortal = ({
     return allPermittedTiles.find((t) => t.id === subView || t.component_name === subView);
   }, [allPermittedTiles, subView]);
 
+  useEffect(() => {
+    const routeFeature = getRouteFeature(location.pathname);
+    if (!routeFeature || routeFeature === 'v2') return;
+    const routeTile = allPermittedTiles.find(
+      (tile) => tile.id === routeFeature || tile.component_name === routeFeature
+    );
+    if (routeTile?.parent_name) {
+      setActiveGroup(resolveGroupInfo(routeTile.parent_name).key);
+      setIsCategoryView(true);
+    } else {
+      setActiveGroup(null);
+    }
+  }, [allPermittedTiles, location.pathname]);
+
   // Derived active group title for breadcrumbs
   const activeGroupTitle = useMemo(() => {
     if (currentGroupEntry) {
@@ -174,6 +230,12 @@ export const UnifiedPortal = ({
     }
     return null;
   }, [currentGroupEntry, subView, activeTile, multiTileGroups]);
+  const portalBreadcrumbGroup = useMemo(() => {
+    if (activeGroup) return activeGroup;
+    return subView && activeTile?.parent_name
+      ? resolveGroupInfo(activeTile.parent_name).key
+      : null;
+  }, [activeGroup, subView, activeTile]);
 
   const subViewTitle =
     activeTile?.title ||
@@ -209,9 +271,9 @@ export const UnifiedPortal = ({
       if (MANAGE_USER_ROLES_SUBVIEWS.includes(tile.id)) {
         setHasVisitedManageUserRoles(true);
       }
-      setSubView(tile.id);
+      navigateToSubView(tile.id);
     },
-    [isCategoryView, multiTileGroups, openModal]
+    [isCategoryView, multiTileGroups, openModal, navigateToSubView]
   );
 
   // Subview component registry
@@ -290,7 +352,7 @@ export const UnifiedPortal = ({
       case 'form-configurations':
         return (
           <div data-feature="form-configurations">
-            <AdminFormConfigsContainer onBack={() => setSubView(null)} />
+            <AdminFormConfigsContainer onBack={() => navigateToSubView(null)} />
           </div>
         );
 
@@ -341,7 +403,7 @@ export const UnifiedPortal = ({
               user={user}
               classes={[]}
               subjects={[]}
-              onNavigate={(view) => setSubView(view)}
+              onNavigate={(view) => navigateToSubView(view)}
             />
           </div>
         );
@@ -353,7 +415,7 @@ export const UnifiedPortal = ({
             <ParentProgressReportView
               user={user}
               userRoles={userRoles}
-              onNavigate={(view) => setSubView(view)}
+              onNavigate={(view) => navigateToSubView(view)}
             />
           </div>
         );
@@ -528,7 +590,7 @@ export const UnifiedPortal = ({
               user={user}
               userRoles={userRoles}
               teacherRecord={teacherRecord}
-              onBack={() => setSubView(null)}
+              onBack={() => navigateToSubView(null)}
             />
           </div>
         );
@@ -537,7 +599,7 @@ export const UnifiedPortal = ({
       case 'view-controller-manager':
         return (
           <div data-feature="avc-admin-manager">
-            <ViewControllerManager onBack={() => setSubView(null)} />
+            <ViewControllerManager onBack={() => navigateToSubView(null)} />
           </div>
         );
 
@@ -577,7 +639,7 @@ export const UnifiedPortal = ({
               <ParentProgressReportView
                 user={user}
                 userRoles={userRoles}
-                onNavigate={(view) => setSubView(view)}
+                onNavigate={(view) => navigateToSubView(view)}
               />
             </div>
           );
@@ -601,7 +663,7 @@ export const UnifiedPortal = ({
             <ExamAnalysisManager
               user={user}
               userRoles={userRoles}
-              onBack={() => setSubView(null)}
+              onBack={() => navigateToSubView(null)}
             />
           </div>
         );
@@ -623,7 +685,7 @@ export const UnifiedPortal = ({
                     You do not have permission to access the Report Card Designer.
                   </p>
                   <button
-                    onClick={() => setSubView(null)}
+                    onClick={() => navigateToSubView(null)}
                     className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all cursor-pointer"
                   >
                     <i className="fas fa-arrow-left mr-2" />
@@ -632,7 +694,7 @@ export const UnifiedPortal = ({
                 </div>
               }
             >
-              <ReportCardDesigner userRoles={userRoles} onClose={() => setSubView(null)} />
+              <ReportCardDesigner userRoles={userRoles} onClose={() => navigateToSubView(null)} />
             </ConditionalBlock>
           </div>
         );
@@ -650,7 +712,7 @@ export const UnifiedPortal = ({
               This feature component is registered in the view controller registry.
             </p>
             <button
-              onClick={() => setSubView(null)}
+              onClick={() => navigateToSubView(null)}
               className="px-5 py-2.5 rounded-xl bg-orange-primary text-white text-xs font-bold hover:bg-orange-dark transition-all"
             >
               <i className="fas fa-arrow-left mr-2"></i>Back to Portal
@@ -665,14 +727,17 @@ export const UnifiedPortal = ({
       userRoles={userRoles}
       roleName={effectiveRole}
       subView={subView}
-      onSetSubView={setSubView}
+      onSetSubView={navigateToSubView}
       subViewTitle={subViewTitle}
-      activeGroup={activeGroup}
+      activeGroup={portalBreadcrumbGroup}
       onSetActiveGroup={setActiveGroup}
       activeGroupTitle={activeGroupTitle}
       groups={multiTileGroups}
       isCategoryView={isCategoryView}
       onCategoryViewChange={handleCategoryViewChange}
+      isHeaderVisible={isHeaderVisible}
+      onShowHeader={onShowHeader}
+      onHideHeader={onHideHeader}
     >
       <div className="w-full">
         {hasVisitedManageUserRoles && (
@@ -683,7 +748,7 @@ export const UnifiedPortal = ({
             <ManagePortalUserRolesView
               currentUser={user}
               canDeleteAuthUsers={isAdmin}
-              onBack={() => setSubView(null)}
+              onBack={() => navigateToSubView(null)}
             />
           </div>
         )}

@@ -1,6 +1,7 @@
 // src/components/portals/teacher/TeacherTimetableViewer.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../utils/supabase';
+import { mergeTeacherTimeBlocks } from '../../utils/timetableScheduleUtils';
 import TimetableAdminView from './TimetableAdminView';
 import {
   TIMETABLE_STORAGE_KEY,
@@ -22,6 +23,7 @@ const TeacherTimetableViewer = ({ user }) => {
   const [assignments, setAssignments] = useState([]);
   const [classifications, setClassifications] = useState([]);
   const [seasonsConfig, setSeasonsConfig] = useState(null);
+  const [currentTeacher, setCurrentTeacher] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -45,6 +47,7 @@ const TeacherTimetableViewer = ({ user }) => {
       }
       return t;
     });
+    setCurrentTeacher(mappedTeachers.find((teacher) => teacher.auth_id === user?.id) || null);
 
     setSubjects(parsed?.subjects?.length > 0 ? parsed.subjects : DEFAULT_MOCK_SUBJECTS);
     setTeachers(mappedTeachers);
@@ -83,6 +86,7 @@ const TeacherTimetableViewer = ({ user }) => {
         },
       };
     }
+    const activeSeason = seasonsCfg.seasons?.[seasonsCfg.active_season_id || 'summer'];
     setSeasonsConfig(seasonsCfg);
 
     if (!raw) {
@@ -117,6 +121,8 @@ const TeacherTimetableViewer = ({ user }) => {
         { data: currentTeacherData },
         { data: settingsData },
         { data: dbAssignments },
+        { data: availabilityCategoriesRow, error: availabilityCategoriesError },
+        { data: availabilityAssignmentsRow, error: availabilityAssignmentsError },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
@@ -132,7 +138,19 @@ const TeacherTimetableViewer = ({ user }) => {
           .eq('key', 'timetable_seasons_config')
           .maybeSingle(),
         supabase.from('class_assignments').select('*'),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'teacher_availability_categories')
+          .maybeSingle(),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'teacher_availability_assignments')
+          .maybeSingle(),
       ]);
+      if (availabilityCategoriesError) throw availabilityCategoriesError;
+      if (availabilityAssignmentsError) throw availabilityAssignmentsError;
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
         throw new Error('No classes or slots found in database. Loading mock data.');
@@ -143,6 +161,7 @@ const TeacherTimetableViewer = ({ user }) => {
       const currentTeacher = Array.isArray(currentTeacherData)
         ? currentTeacherData[0]
         : currentTeacherData || null;
+      setCurrentTeacher(currentTeacher);
 
       let allTeachers = Array.isArray(dbTeachers) && dbTeachers.length > 0 ? dbTeachers : [];
       if (allTeachers.length === 0 && currentTeacher) {
@@ -180,10 +199,32 @@ const TeacherTimetableViewer = ({ user }) => {
         }
       }
 
-      setSeasonsConfig(fetchedSeasonsConfig);
-
       const activeId = fetchedSeasonsConfig?.active_season_id || 'summer';
       const activeSeason = fetchedSeasonsConfig?.seasons?.[activeId];
+      const configuredTimeBlocks = [
+        ...(fetchedSeasonsConfig?.teacher_time_blocks || []),
+        ...Object.values(fetchedSeasonsConfig?.seasons || {}).flatMap(
+          (season) => season.teacher_time_blocks || []
+        ),
+      ];
+      const loadedTimeBlocks = mergeTeacherTimeBlocks(configuredTimeBlocks);
+      const availabilityCategories = availabilityCategoriesRow?.val
+        ? typeof availabilityCategoriesRow.val === 'string'
+          ? JSON.parse(availabilityCategoriesRow.val)
+          : availabilityCategoriesRow.val
+        : fetchedSeasonsConfig?.teacher_availability_categories || [];
+      const availabilityAssignments = availabilityAssignmentsRow?.val
+        ? typeof availabilityAssignmentsRow.val === 'string'
+          ? JSON.parse(availabilityAssignmentsRow.val)
+          : availabilityAssignmentsRow.val
+        : {};
+      const configuredSeasons = {
+        ...fetchedSeasonsConfig,
+        teacher_availability_categories: availabilityCategories,
+        teacher_availability_assignments: availabilityAssignments,
+        teacher_time_blocks: loadedTimeBlocks,
+      };
+      setSeasonsConfig(configuredSeasons);
 
       const rawPeriods = dbPeriods && dbPeriods.length > 0 ? dbPeriods : DEFAULT_MOCK_PERIODS;
       const mappedPeriods = rawPeriods.map((dbP) => {
@@ -224,21 +265,23 @@ const TeacherTimetableViewer = ({ user }) => {
   }
 
   return (
-    <TimetableAdminView
-      user={user}
-      showMyTimetable={true}
-      classes={classes}
-      teachers={teachers}
-      subjects={subjects}
-      periods={periods}
-      slots={slots}
-      assignments={assignments}
-      classifications={classifications}
-      seasonsConfig={seasonsConfig}
-      onRefresh={() => fetchTimetableData(false)}
-      refreshing={refreshing}
-      allowedViews={['scheduler', 'teacher', 'free_teachers', 'assigned_teachers']}
-    />
+    <div className="space-y-4">
+      <TimetableAdminView
+        user={user}
+        showMyTimetable={true}
+        classes={classes}
+        teachers={teachers}
+        subjects={subjects}
+        periods={periods}
+        slots={slots}
+        assignments={assignments}
+        classifications={classifications}
+        seasonsConfig={seasonsConfig}
+        onRefresh={() => fetchTimetableData(false)}
+        refreshing={refreshing}
+        allowedViews={['scheduler', 'teacher', 'free_teachers', 'assigned_teachers']}
+      />
+    </div>
   );
 };
 

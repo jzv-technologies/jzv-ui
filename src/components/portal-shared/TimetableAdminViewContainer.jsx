@@ -43,6 +43,7 @@ export const TimetableAdminViewContainer = ({ user }) => {
         { data: dbClassifications },
         { data: secureTeachersData, error: secureTeachersErr },
         { data: settingsData },
+        { data: availabilityCategoriesRow, error: availabilityCategoriesError },
       ] = await Promise.all([
         supabase.from('syl_subjects').select('*'),
         supabase.from('map_teacher_subject').select('*'),
@@ -62,7 +63,13 @@ export const TimetableAdminViewContainer = ({ user }) => {
           .select('*')
           .eq('key', 'timetable_seasons_config')
           .maybeSingle(),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'teacher_availability_categories')
+          .maybeSingle(),
       ]);
+      if (availabilityCategoriesError) throw availabilityCategoriesError;
 
       const teacherSubjectMappings = dbTeacherSubjects || [];
 
@@ -98,6 +105,15 @@ export const TimetableAdminViewContainer = ({ user }) => {
             fetchedSeasonsConfig = JSON.parse(localRaw);
           } catch (e) {}
         }
+      }
+      if (availabilityCategoriesRow?.val) {
+        fetchedSeasonsConfig = {
+          ...(fetchedSeasonsConfig || {}),
+          teacher_availability_categories:
+            typeof availabilityCategoriesRow.val === 'string'
+              ? JSON.parse(availabilityCategoriesRow.val)
+              : availabilityCategoriesRow.val,
+        };
       }
 
       setTtSeasonsConfig(fetchedSeasonsConfig);

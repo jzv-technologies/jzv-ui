@@ -5,6 +5,7 @@ import ConfirmModal from '../ConfirmModal';
 import { getSubjectColor } from './TimetableAdminView';
 import { renderSubjectOptionsGroupedByClassification } from './TimetableSetupTabs';
 import { CARD_THEMES } from '../../utils/cardTheme';
+import { isPeriodApplicable, isTeacherAvailable } from '../../utils/timetableScheduleUtils';
 
 const TimetableScheduler = ({
   classId,
@@ -17,8 +18,13 @@ const TimetableScheduler = ({
   assignments = [],
   onUpdateSlot,
   onMoveSlot,
+  onSwapSlots,
+  onBulkUpdateSlots,
   onClearSlots,
   onMoveColumn,
+  isMultiSelectEnabled = false,
+  onSelectionChange = () => {},
+  clearSelectedCellsToken = 0,
   showBreaks = true,
   seasonsConfig = null,
   isTransposed = false,
@@ -31,16 +37,43 @@ const TimetableScheduler = ({
   const [popover, setPopover] = useState(null); // { type, cellKey, targetElement, currentAssignData }
   const [movingSlot, setMovingSlot] = useState(null); // { day, periodId, classId, subjectId, teacherId }
   const [movingColumnPeriodId, setMovingColumnPeriodId] = useState(null);
+  const [selectedCells, setSelectedCells] = useState([]);
+  const [isSwapMode, setIsSwapMode] = useState(false);
+  const [firstSwapCell, setFirstSwapCell] = useState(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && editingSlot) {
-        setEditingSlot(null);
+      if (e.key === 'Escape') {
+        if (editingSlot) setEditingSlot(null);
+        if (movingSlot) setMovingSlot(null);
+        if (isSwapMode) {
+          setIsSwapMode(false);
+          setFirstSwapCell(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingSlot]);
+  }, [editingSlot, movingSlot, isSwapMode]);
+
+  useEffect(() => {
+    if (!isMultiSelectEnabled) {
+      setSelectedCells([]);
+    } else {
+      setMovingSlot(null);
+      setIsSwapMode(false);
+      setFirstSwapCell(null);
+      setEditingSlot(null);
+    }
+  }, [isMultiSelectEnabled]);
+
+  useEffect(() => {
+    onSelectionChange({ classId, cells: selectedCells });
+  }, [classId, onSelectionChange, selectedCells]);
+
+  useEffect(() => {
+    setSelectedCells([]);
+  }, [clearSelectedCellsToken]);
 
   const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
   const weekdayConfig = seasonsConfig?.seasons?.[activeSeasonId]?.weekday_config || {
@@ -77,13 +110,11 @@ const TimetableScheduler = ({
   };
 
   const renderCell = (day, period, key) => {
-    const dayType = weekdayConfig[day] || 'Weekday';
     const isBreak = period.is_break;
-    const isWorkingWeekend = dayType === 'Working Weekend';
-    const isWeekendApplicable = period.applicable_on_weekends;
-    const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+    const isPeriodDisabled = !isPeriodApplicable(day, period, weekdayConfig);
+    const slot = getSlotDetails(day, period.id);
 
-    if (isPeriodDisabled) {
+    if (isPeriodDisabled && !slot) {
       return (
         <td
           key={key}
@@ -97,7 +128,6 @@ const TimetableScheduler = ({
       );
     }
 
-    const slot = getSlotDetails(day, period.id);
     const isAssigned = slot && slot.subject_id;
     const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
     const isTeacherAssigned = slot && slot.teacher_id;
@@ -172,6 +202,14 @@ const TimetableScheduler = ({
       movingSlot &&
       movingSlot.day === day &&
       String(movingSlot.periodId) === String(period.id);
+    const isSwapSourceCell =
+      isSwapMode &&
+      firstSwapCell?.day === day &&
+      String(firstSwapCell?.periodId) === String(period.id);
+    const isActiveSourceCell = isSourceCell || isSwapSourceCell;
+    const isSelectedCell = selectedCells.some(
+      (cell) => cell.day === day && String(cell.periodId) === String(period.id)
+    );
 
     return (
       <td
@@ -181,13 +219,17 @@ const TimetableScheduler = ({
           isReadOnly
             ? ''
             : 'cursor-pointer group hover:bg-light-bg/40 transition-colors'
-        } ${movingSlot ? 'hover:bg-brand-lbg/10' : ''}`}
+        } ${movingSlot ? 'hover:bg-brand-lbg/10' : ''} ${
+          isSelectedCell ? 'ring-2 ring-inset ring-brand-primary bg-brand-lbg/20' : ''
+        } ${
+          isActiveSourceCell ? 'ring-2 ring-inset ring-gray-500 bg-gray-200' : ''
+        }`}
       >
         {isAssigned ? (
           <div
             className={`w-full h-full rounded-xl p-2 flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
-              isSourceCell
-                ? 'opacity-40 border border-dashed bg-brand-lbg/10'
+              isActiveSourceCell
+                ? 'border-2 border-gray-500 bg-gray-200 text-gray-700'
                 : `${colorClass} ${themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'}`
             } ${
               !isReadOnly && !movingSlot
@@ -218,8 +260,32 @@ const TimetableScheduler = ({
               </span>
             )}
 
+            {isMultiSelectEnabled && (
+              <span className="absolute top-1 left-1 text-xs text-brand-primary" aria-hidden="true">
+                {selectedCells.some((cell) => cell.day === day && String(cell.periodId) === String(period.id)) ? '☑' : '☐'}
+              </span>
+            )}
+            {isPeriodDisabled && (
+              <span className="absolute bottom-1 right-1 rounded bg-gray-100 px-1 text-[8px] text-gray-600">
+                Not Applicable
+              </span>
+            )}
+            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && onSwapSlots && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleStartSwap(day, period.id);
+                }}
+                className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                title="Swap this period with another"
+                aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
+              >
+                <i className="fas fa-exchange-alt text-[9px]"></i>
+              </button>
+            )}
             {/* Move Button */}
-            {!isReadOnly && !movingSlot && (
+            {!isReadOnly && !movingSlot && !isMultiSelectEnabled && !isSwapMode && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -235,15 +301,20 @@ const TimetableScheduler = ({
           </div>
         ) : (
           <div
-            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all ${
-              !isReadOnly && movingSlot
+            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] text-dark-muted font-bold transition-all relative ${
+              !isReadOnly && (movingSlot || isSwapMode)
                 ? 'border-brand-soft text-brand-primary bg-brand-lbg/5 hover:bg-brand-lbg/15 hover:border-brand-primary cursor-pointer'
                 : !isReadOnly
                   ? 'border-light-border bg-light-bg/10 group-hover:border-brand-soft group-hover:bg-brand-lbg/10'
                   : 'border-light-border bg-light-bg/5'
             }`}
           >
-            {isReadOnly ? (
+            {isMultiSelectEnabled ? (
+              <span className="flex items-center gap-1">
+                <i className={`fas ${isSelectedCell ? 'fa-check-square' : 'fa-square'} text-brand-primary`}></i>
+                {isSelectedCell ? 'Selected' : 'Select'}
+              </span>
+            ) : isReadOnly ? (
               'Free'
             ) : movingSlot ? (
               <span className="flex items-center gap-1">
@@ -251,6 +322,20 @@ const TimetableScheduler = ({
               </span>
             ) : (
               '+ Assign'
+            )}
+            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && onSwapSlots && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleStartSwap(day, period.id);
+                }}
+                className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                title="Swap this period with another"
+                aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
+              >
+                <i className="fas fa-exchange-alt text-[9px]"></i>
+              </button>
             )}
           </div>
         )}
@@ -275,6 +360,15 @@ const TimetableScheduler = ({
       teacherId: slot.teacher_id,
     });
     showToast('Move mode active. Click any target cell in the grid to place the slot.', 'info');
+  };
+
+  const handleStartSwap = (day, periodId) => {
+    setMovingSlot(null);
+    setMovingColumnPeriodId(null);
+    setEditingSlot(null);
+    setIsSwapMode(true);
+    setFirstSwapCell({ day, periodId });
+    showToast('Select another period to swap assignments. Press Escape to cancel.', 'info');
   };
 
   const handleCompleteMove = (targetDay, targetPeriodId) => {
@@ -314,26 +408,17 @@ const TimetableScheduler = ({
     };
 
     const checkTeacherConflictThenProceed = () => {
-      if (teacherConflicted) {
-        const teacherName = getTeacherName(movingSlot.teacherId);
-        setConfirmConfig({
-          title: 'Teacher Conflict Warning',
-          message: `Warning: Teacher ${teacherName} is already occupied in ${conflictClassName} on ${targetDay} at this period. Do you want to proceed anyway?`,
-          confirmText: 'Proceed',
-          type: 'warning',
-          onConfirm: () => {
-            setConfirmConfig(null);
-            executeMove();
-          },
-          onCancel: () => {
-            setConfirmConfig(null);
-            setMovingSlot(null);
-          },
-        });
-      } else {
+        if (teacherConflicted) {
+          const teacherName = getTeacherName(movingSlot.teacherId);
+          showToast(
+            `Move blocked: ${teacherName} is already assigned to ${conflictClassName} at this time.`,
+            'error'
+          );
+          setMovingSlot(null);
+          return;
+        }
         executeMove();
-      }
-    };
+      };
 
     if (hasAssignedSubject) {
       const targetSubName = getSubjectName(targetSlot.subject_id);
@@ -356,14 +441,93 @@ const TimetableScheduler = ({
     }
   };
 
+  const toggleCellGroup = (cells) => {
+    const selectableCells = cells.filter(({ day, periodId }) => {
+      const period = visiblePeriods.find((item) => String(item.id) === String(periodId));
+      return (
+        period &&
+        !period.is_break &&
+        (isPeriodApplicable(day, period, weekdayConfig) || getSlotDetails(day, periodId))
+      );
+    });
+    if (selectableCells.length === 0) return;
+
+    setSelectedCells((current) => {
+      const allSelected = selectableCells.every((cell) =>
+        current.some(
+          (selected) =>
+            selected.day === cell.day &&
+            String(selected.periodId) === String(cell.periodId)
+        )
+      );
+      if (allSelected) {
+        return current.filter(
+          (selected) =>
+            !selectableCells.some(
+              (cell) =>
+                cell.day === selected.day &&
+                String(cell.periodId) === String(selected.periodId)
+            )
+        );
+      }
+      const next = [...current];
+      selectableCells.forEach((cell) => {
+        if (
+          !next.some(
+            (selected) =>
+              selected.day === cell.day &&
+              String(selected.periodId) === String(cell.periodId)
+          )
+        ) {
+          next.push(cell);
+        }
+      });
+      return next;
+    });
+  };
+
   const handleCellClick = (day, period) => {
     if (isReadOnly) return;
+    if (isMultiSelectEnabled) {
+      const existing = getSlotDetails(day, period.id);
+      if (!isPeriodApplicable(day, period, weekdayConfig) && !existing) return;
+      setSelectedCells((current) => {
+        const found = current.some(
+          (cell) => cell.day === day && String(cell.periodId) === String(period.id)
+        );
+        return found
+          ? current.filter((cell) => cell.day !== day || String(cell.periodId) !== String(period.id))
+          : [...current, { day, periodId: period.id }];
+      });
+      return;
+    }
     if (movingSlot) {
+      if (!isPeriodApplicable(day, period, weekdayConfig) && !getSlotDetails(day, period.id)) {
+        showToast('A slot cannot be moved to a period that is not applicable on this day.', 'error');
+        return;
+      }
       handleCompleteMove(day, period.id);
       return;
     }
 
     const slot = getSlotDetails(day, period.id);
+    if (!isPeriodApplicable(day, period, weekdayConfig) && !slot) {
+      showToast('This period is not applicable on this day.', 'info');
+      return;
+    }
+    if (isSwapMode) {
+      const cell = { day, periodId: period.id };
+      if (!firstSwapCell) return;
+      if (firstSwapCell.day === cell.day && String(firstSwapCell.periodId) === String(cell.periodId)) {
+        setFirstSwapCell(null);
+        setIsSwapMode(false);
+        return;
+      }
+      onSwapSlots?.(classId, firstSwapCell, cell);
+      setFirstSwapCell(null);
+      setIsSwapMode(false);
+      return;
+    }
     setEditingSlot({
       day,
       periodId: period.id,
@@ -394,6 +558,29 @@ const TimetableScheduler = ({
       const teacher = teachers.find((t) => String(t.id) === String(selectedTeacherId));
       if (!teacher || !teacher.subjects.some((sid) => String(sid) === String(selectedSubjectId))) {
         showToast('Selected teacher is not qualified to teach this subject.', 'error');
+        return;
+      }
+
+      const activeSeason = seasonsConfig?.seasons?.[activeSeasonId] || {};
+      const unavailableDays = selectedDays.filter((day) => {
+        if (day === editingSlot.day && String(selectedTeacherId) === String(editingSlot.teacherId)) {
+          return false;
+        }
+        return !isTeacherAvailable({
+          teacher,
+          day,
+          period: editingPeriod,
+          availability: activeSeason.teacher_availability,
+          availabilityCategories: seasonsConfig?.teacher_availability_categories,
+          categoryAssignments: seasonsConfig?.teacher_availability_assignments,
+          timeBlocks: seasonsConfig?.teacher_time_blocks || activeSeason.teacher_time_blocks,
+        });
+      });
+      if (unavailableDays.length > 0) {
+        showToast(
+          `${teacher.name} is not available during this period on: ${unavailableDays.join(', ')}.`,
+          'error'
+        );
         return;
       }
 
@@ -463,11 +650,22 @@ const TimetableScheduler = ({
           String(a.teacher_id) === String(t.id) &&
           String(a.subject_id) === String(selectedSubjectId)
       );
+      const activeSeason = seasonsConfig?.seasons?.[activeSeasonId] || {};
+      const isUnavailable = !isTeacherAvailable({
+        teacher: t,
+        day: editingSlot.day,
+        period: periods.find((period) => String(period.id) === String(editingSlot.periodId)),
+        availability: activeSeason.teacher_availability,
+        availabilityCategories: seasonsConfig?.teacher_availability_categories,
+        categoryAssignments: seasonsConfig?.teacher_availability_assignments,
+        timeBlocks: seasonsConfig?.teacher_time_blocks || activeSeason.teacher_time_blocks,
+      });
 
       return {
         ...t,
         isConflicted: !!conflictingSlot,
         conflictingClassName: conflictingSlot ? getClassName(conflictingSlot.class_id) : '',
+        isUnavailable,
         isAssignedToThisClass,
       };
     });
@@ -482,6 +680,12 @@ const TimetableScheduler = ({
     if (!a.isConflicted && b.isConflicted) return -1;
     return a.name.localeCompare(b.name);
   });
+  const editingPeriod = editingSlot
+    ? periods.find((period) => String(period.id) === String(editingSlot.periodId))
+    : null;
+  const validDaysForEditingSlot = editingPeriod
+    ? days.filter((day) => isPeriodApplicable(day, editingPeriod, weekdayConfig))
+    : [];
 
   return (
     <div className="space-y-4">
@@ -548,6 +752,34 @@ const TimetableScheduler = ({
         </div>
       )}
 
+      {!isReadOnly && isMultiSelectEnabled && selectedCells.length > 0 && (
+        <div className="text-xs font-semibold text-dark-soft print:hidden" aria-live="polite">
+          {selectedCells.length} periods selected
+        </div>
+      )}
+      {isSwapMode && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 print:hidden">
+          <span className="text-xs font-semibold text-indigo-800">
+            {firstSwapCell
+              ? `Select the period to swap with ${firstSwapCell.day}, ${
+                  periods.find((period) => String(period.id) === String(firstSwapCell.periodId))?.name ||
+                  'the selected period'
+                }.`
+              : 'Select the first period to swap.'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSwapMode(false);
+              setFirstSwapCell(null);
+            }}
+            className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700"
+          >
+            Cancel Swap
+          </button>
+        </div>
+      )}
+
       {/* Grid view */}
       {visiblePeriods.length === 0 ? (
         <div className="text-center py-12 bg-white border border-light-border rounded-3xl">
@@ -567,7 +799,16 @@ const TimetableScheduler = ({
                   {days.map((day) => (
                     <th
                       key={day}
-                      className="py-3 px-3 text-center border-r border-light-border last:border-r-0 bg-light-lbg"
+                      className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 bg-light-lbg ${
+                        isMultiSelectEnabled ? 'cursor-pointer hover:bg-brand-lbg/30' : ''
+                      }`}
+                      onClick={() =>
+                        isMultiSelectEnabled &&
+                        toggleCellGroup(
+                          visiblePeriods.map((period) => ({ day, periodId: period.id }))
+                        )
+                      }
+                      title={isMultiSelectEnabled ? `Select all periods for ${day}` : undefined}
                     >
                       <div className="font-extrabold text-sm text-dark-deepblue">
                         {day}
@@ -581,7 +822,18 @@ const TimetableScheduler = ({
                   const isBreak = period.is_break;
                   return (
                     <tr key={period.id || period.period_number} className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors bg-white">
-                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col w-[120px]">
+                      <td
+                        className={`py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col w-[120px] ${
+                          isMultiSelectEnabled ? 'cursor-pointer hover:bg-brand-lbg/30' : ''
+                        }`}
+                        onClick={() =>
+                          isMultiSelectEnabled &&
+                          toggleCellGroup(
+                            days.map((day) => ({ day, periodId: period.id }))
+                          )
+                        }
+                        title={isMultiSelectEnabled ? `Select all days for ${period.name || `period ${period.period_number}`}` : undefined}
+                      >
                         <div className="font-extrabold text-sm text-dark-deepblue">
                           {period.name || `Period ${period.period_number}`}
                         </div>
@@ -645,9 +897,11 @@ const TimetableScheduler = ({
                   {visiblePeriods.map((period) => (
                     <th
                       key={period.id || period.period_number}
-                      className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 group relative select-none ${movingColumnPeriodId === period.id ? 'ring-2 ring-brand-primary bg-brand-lbg/20 z-10' : 'bg-light-lbg'} ${!isReadOnly && onMoveColumn ? 'cursor-pointer hover:bg-light-bg/20' : ''}`}
+                      className={`py-3 px-3 text-center border-r border-light-border last:border-r-0 group relative select-none ${movingColumnPeriodId === period.id ? 'ring-2 ring-brand-primary bg-brand-lbg/20 z-10' : 'bg-light-lbg'} ${isMultiSelectEnabled || (!isReadOnly && onMoveColumn) ? 'cursor-pointer hover:bg-light-bg/20' : ''}`}
                       onClick={() => {
-                        if (!isReadOnly && onMoveColumn) {
+                        if (isMultiSelectEnabled) {
+                          toggleCellGroup(days.map((day) => ({ day, periodId: period.id })));
+                        } else if (!isReadOnly && onMoveColumn) {
                           if (movingColumnPeriodId && movingColumnPeriodId !== period.id) {
                             onMoveColumn(classId, movingColumnPeriodId, period.id);
                             setMovingColumnPeriodId(null);
@@ -667,7 +921,7 @@ const TimetableScheduler = ({
                           {period.start_time} - {period.end_time}
                         </div>
                       )}
-                      {!isReadOnly && onMoveColumn && !movingColumnPeriodId && (
+                      {!isReadOnly && onMoveColumn && !movingColumnPeriodId && !isMultiSelectEnabled && (
                         <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             title="Move Column"
@@ -691,7 +945,18 @@ const TimetableScheduler = ({
                       key={day}
                       className="border-b border-light-border last:border-b-0 hover:bg-light-bg/20 transition-colors bg-white"
                     >
-                      <td className="py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col w-[120px]">
+                      <td
+                        className={`py-4 px-4 font-bold text-sm text-dark-deepblue border-r border-light-border bg-white table-sticky-col w-[120px] ${
+                          isMultiSelectEnabled ? 'cursor-pointer hover:bg-brand-lbg/30' : ''
+                        }`}
+                        onClick={() =>
+                          isMultiSelectEnabled &&
+                          toggleCellGroup(
+                            visiblePeriods.map((period) => ({ day, periodId: period.id }))
+                          )
+                        }
+                        title={isMultiSelectEnabled ? `Select all periods for ${day}` : undefined}
+                      >
                         {day}
                       </td>
                       {isHoliday ? (
@@ -786,8 +1051,15 @@ const TimetableScheduler = ({
                     if (t.isConflicted) {
                       label += ` (Busy in ${t.conflictingClassName})`;
                     }
+                    if (t.isUnavailable) {
+                      label += ' (Unavailable by schedule)';
+                    }
                     return (
-                      <option key={t.id} value={t.id} disabled={t.isConflicted}>
+                      <option
+                        key={t.id}
+                        value={t.id}
+                        disabled={t.isConflicted || t.isUnavailable}
+                      >
                         {label}
                       </option>
                     );
@@ -810,56 +1082,21 @@ const TimetableScheduler = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const validDaysForPeriod = days.filter((d) => {
-                        const dType = weekdayConfig[d] || 'Weekday';
-                        if (dType === 'Holiday Weekend') return false;
-                        if (dType === 'Working Weekend') {
-                          const currentPeriod = periods.find(
-                            (p) => String(p.id) === String(editingSlot.periodId)
-                          );
-                          return currentPeriod?.applicable_on_weekends;
-                        }
-                        return true;
-                      });
-                      if (selectedDays.length === validDaysForPeriod.length) {
+                      if (selectedDays.length === validDaysForEditingSlot.length) {
                         setSelectedDays([editingSlot.day]);
                       } else {
-                        setSelectedDays(validDaysForPeriod);
+                        setSelectedDays(validDaysForEditingSlot);
                       }
                     }}
                     className="text-[10px] font-extrabold text-brand-primary hover:text-brand-dark transition-all hover:underline uppercase tracking-wide"
                   >
-                    {(() => {
-                      const validDaysForPeriod = days.filter((d) => {
-                        const dType = weekdayConfig[d] || 'Weekday';
-                        if (dType === 'Holiday Weekend') return false;
-                        if (dType === 'Working Weekend') {
-                          const currentPeriod = periods.find(
-                            (p) => String(p.id) === String(editingSlot.periodId)
-                          );
-                          return currentPeriod?.applicable_on_weekends;
-                        }
-                        return true;
-                      });
-                      return selectedDays.length === validDaysForPeriod.length
-                        ? 'Reset to single day'
-                        : 'Select All Days';
-                    })()}
+                    {selectedDays.length === validDaysForEditingSlot.length
+                      ? 'Reset to single day'
+                      : 'Select All Days'}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {days
-                    .filter((d) => {
-                      const dType = weekdayConfig[d] || 'Weekday';
-                      if (dType === 'Holiday Weekend') return false;
-                      if (dType === 'Working Weekend') {
-                        const currentPeriod = periods.find(
-                          (p) => String(p.id) === String(editingSlot.periodId)
-                        );
-                        return currentPeriod?.applicable_on_weekends;
-                      }
-                      return true;
-                    })
+                  {validDaysForEditingSlot
                     .map((d) => {
                       const isSelected = selectedDays.includes(d);
                       return (

@@ -21,6 +21,9 @@ export const AppRoutes = ({
   gridCards,
   openModal,
   teacherRecord,
+  isHeaderVisible,
+  onShowHeader,
+  onHideHeader,
 }) => {
   const renderUnifiedPortal = () => {
     if (!user) return <Navigate to="/" replace />;
@@ -32,6 +35,9 @@ export const AppRoutes = ({
         fullName={fullName}
         teacherRecord={teacherRecord}
         openModal={openModal}
+        isHeaderVisible={isHeaderVisible}
+        onShowHeader={onShowHeader}
+        onHideHeader={onHideHeader}
       />
     );
   };
@@ -44,6 +50,7 @@ export const AppRoutes = ({
       {/* Primary Unified Portal Routes */}
       <Route path="/portal" element={renderUnifiedPortal()} />
       <Route path="/portal/v2" element={renderUnifiedPortal()} />
+      <Route path="/portal/:featureId" element={renderUnifiedPortal()} />
 
       {/* Standalone Display Board & Career Pages */}
       <Route path="/portal/display" element={<TVDisplayDashboard />} />

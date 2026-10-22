@@ -7,6 +7,14 @@ import ConfirmModal from '../ConfirmModal';
 import { normalizeRoles } from '../../utils/roleUtils';
 
 const userRolesDataCache = new Map();
+const TIMETABLE_CONFIG_KEY = 'timetable_seasons_config';
+const AVAILABILITY_CATEGORIES_KEY = 'teacher_availability_categories';
+const AVAILABILITY_ASSIGNMENTS_KEY = 'teacher_availability_assignments';
+
+const parseConfigValue = (value) => {
+  if (!value) return {};
+  return typeof value === 'string' ? JSON.parse(value) : value;
+};
 
 const formatPortalRoles = (userOrRoles) => {
   let roles = [];
@@ -44,6 +52,14 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
   const [employees, setEmployees] = useState(
     () => userRolesDataCache.get(currentUserId)?.employees || []
   );
+  const [availabilityCategories, setAvailabilityCategories] = useState(
+    () => userRolesDataCache.get(currentUserId)?.availabilityCategories || []
+  );
+  const [availabilityAssignments, setAvailabilityAssignments] = useState(
+    () => userRolesDataCache.get(currentUserId)?.availabilityAssignments || {}
+  );
+  const [availabilityCategoryDrafts, setAvailabilityCategoryDrafts] = useState({});
+  const [savingAvailabilityEmployeeId, setSavingAvailabilityEmployeeId] = useState(null);
   const [loading, setLoading] = useState(() => !userRolesDataCache.has(currentUserId));
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
@@ -54,6 +70,7 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
   const [editingAuthUser, setEditingAuthUser] = useState(null);
   const [editingRoles, setEditingRoles] = useState([]);
   const [editingEmpId, setEditingEmpId] = useState('');
+  const [editingAvailabilityCategoryId, setEditingAvailabilityCategoryId] = useState('');
 
   // Save role to database
   const saveUserRoleToDb = async (targetUserId, rolesArray, email = null) => {
@@ -133,11 +150,58 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
             : normalizeRoles(u.roles || u.role),
       }));
 
+      const [
+        { data: timetableConfigRow, error: timetableConfigError },
+        { data: availabilityCategoriesRow, error: availabilityCategoriesError },
+        { data: assignmentsRow, error: assignmentsError },
+      ] = await Promise.all([
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', TIMETABLE_CONFIG_KEY)
+          .maybeSingle(),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', AVAILABILITY_CATEGORIES_KEY)
+          .maybeSingle(),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', AVAILABILITY_ASSIGNMENTS_KEY)
+          .maybeSingle(),
+      ]);
+      if (timetableConfigError) throw timetableConfigError;
+      if (availabilityCategoriesError) throw availabilityCategoriesError;
+      if (assignmentsError) throw assignmentsError;
+
+      const timetableConfig = parseConfigValue(timetableConfigRow?.val);
+      const dedicatedCategories = parseConfigValue(availabilityCategoriesRow?.val);
+      let localCategories = [];
+      try {
+        const localConfig = JSON.parse(
+          localStorage.getItem('jzv_timetable_seasons_config') || '{}'
+        );
+        localCategories = localConfig.teacher_availability_categories;
+      } catch (err) {
+        console.warn('Could not read cached teacher availability categories:', err.message);
+      }
+      const categories = [
+        dedicatedCategories,
+        timetableConfig.teacher_availability_categories,
+        localCategories,
+      ].find((value) => Array.isArray(value) && value.length > 0) || [];
+      const assignments = parseConfigValue(assignmentsRow?.val);
+
       setAuthUsers(usersList);
+      setAvailabilityCategories(categories);
+      setAvailabilityAssignments(assignments);
       if (currentUserId) {
         userRolesDataCache.set(currentUserId, {
           authUsers: usersList,
           employees: empList,
+          availabilityCategories: categories,
+          availabilityAssignments: assignments,
         });
       }
     } catch (err) {
@@ -153,10 +217,15 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
     if (cachedData) {
       setAuthUsers(cachedData.authUsers);
       setEmployees(cachedData.employees);
+      setAvailabilityCategories(cachedData.availabilityCategories || []);
+      setAvailabilityAssignments(cachedData.availabilityAssignments || {});
       setLoading(false);
+      fetchData();
     } else {
       setAuthUsers([]);
       setEmployees([]);
+      setAvailabilityCategories([]);
+      setAvailabilityAssignments({});
       fetchData();
     }
   }, [currentUserId, fetchData]);
@@ -177,29 +246,55 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
   }, [employees]);
 
   // Save User Role & Employee Link
-  const handleSaveUserRoleDirect = async (targetUserId, newRoles, targetEmpId) => {
+  const handleSaveUserRoleDirect = async (
+    targetUserId,
+    newRoles,
+    targetEmpId,
+    availabilityCategoryId
+  ) => {
     setSaving(true);
     try {
       const finalRoles = Array.isArray(newRoles) ? newRoles : normalizeRoles(newRoles);
       const targetAuth = authUsers.find((u) => String(u.user_id) === String(targetUserId));
       const email = targetAuth?.email || null;
 
-      await saveUserRoleToDb(targetUserId, finalRoles, email);
+      const roleSaved = await saveUserRoleToDb(targetUserId, finalRoles, email);
+      if (!roleSaved) throw new Error('The portal role update was not saved.');
 
       const prevEmpLinked = employees.find((e) => String(e.auth_id) === String(targetUserId));
       if (prevEmpLinked && String(prevEmpLinked.id) !== String(targetEmpId)) {
-        await supabase.from('employees').update({ auth_id: null }).eq('id', prevEmpLinked.id);
+        const { error: unlinkError } = await supabase
+          .from('employees')
+          .update({ auth_id: null })
+          .eq('id', prevEmpLinked.id);
+        if (unlinkError) throw unlinkError;
       }
 
       if (targetEmpId) {
-        await supabase
+        const { error: linkError } = await supabase
           .from('employees')
           .update({
             auth_id: targetUserId,
             login_allowed: true,
           })
           .eq('id', targetEmpId);
+        if (linkError) throw linkError;
       }
+
+      const nextAvailabilityAssignments = { ...availabilityAssignments };
+      if (targetEmpId && finalRoles.includes('teacher') && availabilityCategoryId) {
+        nextAvailabilityAssignments[String(targetEmpId)] = availabilityCategoryId;
+      } else if (targetEmpId) {
+        delete nextAvailabilityAssignments[String(targetEmpId)];
+      }
+      const { error: availabilitySaveError } = await supabase
+        .from('admin_configruation')
+        .upsert(
+          { key: AVAILABILITY_ASSIGNMENTS_KEY, val: nextAvailabilityAssignments },
+          { onConflict: 'key' }
+        );
+      if (availabilitySaveError) throw availabilitySaveError;
+      setAvailabilityAssignments(nextAvailabilityAssignments);
 
       setAuthUsers((prev) =>
         prev.map((u) =>
@@ -217,6 +312,46 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
       showToast('Error updating role: ' + err.message, 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAvailabilityCategory = async (employeeId, categoryId) => {
+    const employeeKey = String(employeeId);
+    setSavingAvailabilityEmployeeId(employeeKey);
+    try {
+      const nextAssignments = { ...availabilityAssignments };
+      if (categoryId) {
+        nextAssignments[employeeKey] = categoryId;
+      } else {
+        delete nextAssignments[employeeKey];
+      }
+
+      const { error } = await supabase.from('admin_configruation').upsert(
+        { key: AVAILABILITY_ASSIGNMENTS_KEY, val: nextAssignments },
+        { onConflict: 'key' }
+      );
+      if (error) throw error;
+
+      setAvailabilityAssignments(nextAssignments);
+      setAvailabilityCategoryDrafts((current) => {
+        const next = { ...current };
+        delete next[employeeKey];
+        return next;
+      });
+      if (currentUserId) {
+        userRolesDataCache.set(currentUserId, {
+          authUsers,
+          employees,
+          availabilityCategories,
+          availabilityAssignments: nextAssignments,
+        });
+      }
+      showToast('Teacher availability category saved.', 'success');
+    } catch (err) {
+      console.error('Failed to save teacher availability category:', err);
+      showToast(`Could not save teacher availability category: ${err.message}`, 'error');
+    } finally {
+      setSavingAvailabilityEmployeeId(null);
     }
   };
 
@@ -281,7 +416,12 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
       const nextUsers = authUsers.filter((user) => user.user_id !== userPendingDelete.user_id);
       setAuthUsers(nextUsers);
       if (currentUserId) {
-        userRolesDataCache.set(currentUserId, { authUsers: nextUsers, employees });
+        userRolesDataCache.set(currentUserId, {
+          authUsers: nextUsers,
+          employees,
+          availabilityCategories,
+          availabilityAssignments,
+        });
       }
       showToast('External authentication account deleted successfully.', 'success');
     } catch (err) {
@@ -499,6 +639,7 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                       />
                     </span>
                   </th>
+                  <th className="py-3 px-4">Teacher Availability</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -506,6 +647,18 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                 {filteredUsers.map((u) => {
                   const mappedEmp = mappedAuthUserMap.get(String(u.user_id));
                   const isEditingThis = editingAuthUser === u.user_id;
+                  const employeeKey = mappedEmp ? String(mappedEmp.emp_id) : '';
+                  const currentCategoryId = mappedEmp
+                    ? availabilityAssignments[employeeKey]
+                    : '';
+                  const selectedCategoryId = Object.prototype.hasOwnProperty.call(
+                    availabilityCategoryDrafts,
+                    employeeKey
+                  )
+                    ? availabilityCategoryDrafts[employeeKey]
+                    : String(currentCategoryId || '');
+                  const hasCategoryChanges =
+                    !!mappedEmp && selectedCategoryId !== String(currentCategoryId || '');
 
                   return (
                     <tr
@@ -534,7 +687,12 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                         {isEditingThis ? (
                           <select
                             value={editingEmpId}
-                            onChange={(e) => setEditingEmpId(e.target.value)}
+                            onChange={(e) => {
+                              setEditingEmpId(e.target.value);
+                              setEditingAvailabilityCategoryId(
+                                String(availabilityAssignments[e.target.value] || '')
+                              );
+                            }}
                             className="w-full max-w-xs px-2.5 py-1.5 border rounded-xl text-xs bg-white font-bold outline-none border-purple-300 focus:ring-2 focus:ring-purple-200"
                           >
                             <option value="">-- External User (No Link) --</option>
@@ -575,6 +733,71 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                         )}
                       </td>
 
+                      {/* Teacher availability category */}
+                      <td className="py-3.5 px-4">
+                        {isEditingThis ? (
+                          editingRoles.includes('teacher') && editingEmpId ? (
+                            <select
+                              value={editingAvailabilityCategoryId}
+                              onChange={(event) =>
+                                setEditingAvailabilityCategoryId(event.target.value)
+                              }
+                              aria-label="Teacher availability category"
+                              className="w-full min-w-40 max-w-xs px-2.5 py-1.5 border rounded-xl text-xs bg-white font-bold outline-none border-purple-300 focus:ring-2 focus:ring-purple-200"
+                            >
+                              <option value="">Use default availability</option>
+                              {availabilityCategories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )
+                        ) : u.roles?.includes('teacher') && mappedEmp ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={selectedCategoryId}
+                              onChange={(event) =>
+                                setAvailabilityCategoryDrafts((current) => ({
+                                  ...current,
+                                  [employeeKey]: event.target.value,
+                                }))
+                              }
+                              aria-label={`Teacher availability category for ${mappedEmp.emp_name}`}
+                              className="w-full min-w-40 max-w-xs rounded-xl border border-purple-200 bg-white px-2.5 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
+                            >
+                              <option value="">Default availability</option>
+                              {availabilityCategories.map((category) => (
+                                <option key={category.id} value={String(category.id)}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSaveAvailabilityCategory(employeeKey, selectedCategoryId)
+                              }
+                              disabled={
+                                !hasCategoryChanges ||
+                                savingAvailabilityEmployeeId === employeeKey
+                              }
+                              className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {savingAvailabilityEmployeeId === employeeKey ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        ) : u.roles?.includes('teacher') ? (
+                          <span className="text-xs font-bold text-dark-muted">
+                            Link an employee to assign availability
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         {isEditingThis ? (
@@ -585,7 +808,8 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                                 handleSaveUserRoleDirect(
                                   u.user_id,
                                   editingRoles,
-                                  editingEmpId
+                                  editingEmpId,
+                                  editingAvailabilityCategoryId
                                 )
                               }
                               disabled={saving}
@@ -612,6 +836,11 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                                   : normalizeRoles(u.roles);
                                 setEditingRoles(initialRoles);
                                 setEditingEmpId(mappedEmp ? String(mappedEmp.emp_id) : '');
+                                setEditingAvailabilityCategoryId(
+                                  mappedEmp
+                                    ? String(availabilityAssignments[String(mappedEmp.emp_id)] || '')
+                                    : ''
+                                );
                               }}
                               className="px-3 py-1.5 bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                               title="Edit roles and employee mapping"

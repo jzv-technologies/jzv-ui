@@ -1,7 +1,8 @@
 // src/components/portals/admin/timetable/TimetableOverview.jsx
 import React, { useState } from 'react';
+import { DAYS, isPeriodApplicable, isTeacherAvailable } from '../../utils/timetableScheduleUtils';
+const OVERVIEW_DAYS = DAYS.filter((day) => day !== 'Sunday');
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_SHORT = {
   Monday: 'Mon',
   Tuesday: 'Tue',
@@ -52,8 +53,17 @@ const TimetableOverview = ({
   selAssignedClasses = [],
   freeTeachersGender = 'all',
   assignedTeachersGender = 'all',
+  seasonsConfig,
 }) => {
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
+  const activeSeason =
+    seasonsConfig?.seasons?.[seasonsConfig.active_season_id || 'summer'] || {};
+  const weekdayConfig = activeSeason.weekday_config || {};
+  const teacherAvailability = activeSeason.teacher_availability || {};
+  const teacherAvailabilityCategories = seasonsConfig?.teacher_availability_categories || [];
+  const teacherAvailabilityAssignments = seasonsConfig?.teacher_availability_assignments || {};
+  const teacherTimeBlocks =
+    seasonsConfig?.teacher_time_blocks || activeSeason.teacher_time_blocks || [];
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
   const getSubjectName = (id) => subjects.find((s) => String(s.id) === String(id))?.name || '?';
@@ -94,13 +104,22 @@ const TimetableOverview = ({
       return [];
     });
 
-  const getFreeTeachers = (day, periodId) =>
+  const getFreeTeachers = (day, period) =>
     teachers.filter(
       (t) =>
+        isTeacherAvailable({
+          teacher: t,
+          day,
+          period,
+          availability: teacherAvailability,
+          availabilityCategories: teacherAvailabilityCategories,
+          categoryAssignments: teacherAvailabilityAssignments,
+          timeBlocks: teacherTimeBlocks,
+        }) &&
         !slots.some(
           (s) =>
             s.day === day &&
-            String(s.period_id) === String(periodId) &&
+            String(s.period_id) === String(period.id) &&
             String(s.teacher_id) === String(t.id)
         )
     );
@@ -123,18 +142,23 @@ const TimetableOverview = ({
 
   // ─── Summary stats (global, for the header strip) ─────────────────────────
   const nonBreakPeriods = periods.filter((p) => !p.is_break);
-  const totalSlots = classes.length * DAYS.length * nonBreakPeriods.length;
+  const totalSlots = classes.length * OVERVIEW_DAYS.reduce(
+    (count, day) => count + nonBreakPeriods.filter((period) => isPeriodApplicable(day, period, weekdayConfig)).length,
+    0
+  );
   const assignedCount = slots.filter(
     (s) =>
       s.subject_id &&
       s.teacher_id &&
-      !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+      !periods.find((p) => String(p.id) === String(s.period_id))?.is_break &&
+      isPeriodApplicable(s.day, periods.find((p) => String(p.id) === String(s.period_id)) || {}, weekdayConfig)
   ).length;
   const subjectOnlyCount = slots.filter(
     (s) =>
       s.subject_id &&
       !s.teacher_id &&
-      !periods.find((p) => String(p.id) === String(s.period_id))?.is_break
+      !periods.find((p) => String(p.id) === String(s.period_id))?.is_break &&
+      isPeriodApplicable(s.day, periods.find((p) => String(p.id) === String(s.period_id)) || {}, weekdayConfig)
   ).length;
   const unscheduledCount = totalSlots - assignedCount - subjectOnlyCount;
 
@@ -210,6 +234,18 @@ const TimetableOverview = ({
 
   // ─── Cell renderer ────────────────────────────────────────────────────────
   const renderCell = (day, period) => {
+    if (!isPeriodApplicable(day, period, weekdayConfig)) {
+      return (
+        <td
+          key={period.id}
+          className="p-2 border-r border-light-border last:border-r-0 text-center bg-gray-50/40"
+          style={{ minWidth: 130, height: 80 }}
+        >
+          <span className="text-[9px] font-bold text-dark-muted">Not Applicable</span>
+        </td>
+      );
+    }
+
     if (period.is_break) {
       const nl = (period.name || '').toLowerCase();
       const icon =
@@ -329,7 +365,7 @@ const TimetableOverview = ({
 
     // ── Free Teachers ──
     if (view === 'free_teachers') {
-      const raw = getFreeTeachers(day, period.id);
+      const raw = getFreeTeachers(day, period);
       let freeList =
         selTeachers.length > 0 ? raw.filter((t) => selTeachers.includes(String(t.id))) : raw;
       if (freeTeachersGender === 'male') {
@@ -494,7 +530,7 @@ const TimetableOverview = ({
                 </tr>
               </thead>
               <tbody>
-                {DAYS.map((day) => (
+                {OVERVIEW_DAYS.map((day) => (
                   <tr
                     key={day}
                     data-print-day={day}

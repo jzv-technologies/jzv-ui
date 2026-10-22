@@ -24,6 +24,7 @@ import {
 } from '../../services/timetableDraftService';
 import { compareTimetableData } from '../../utils/timetableComparison';
 import { invalidateModuleCaches } from '../../utils/moduleCacheRegistry';
+import { mergeTeacherTimeBlocks } from '../../utils/timetableScheduleUtils';
 import {
   isRealId,
   dedupeSlots,
@@ -210,6 +211,32 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const liveSnapshotRef = React.useRef(null);
 
   const isDraftMode = dataMode === 'draft' && !!activeDraft;
+  const [isMultiSelectEnabled, setIsMultiSelectEnabled] = useState(false);
+  const [selectedMultiSelection, setSelectedMultiSelection] = useState({ classId: null, cells: [] });
+  const [clearSelectedCellsToken, setClearSelectedCellsToken] = useState(0);
+  const [isBulkClearModalOpen, setIsBulkClearModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isDraftMode || activeTab !== 'scheduler') {
+      setIsMultiSelectEnabled(false);
+      setSelectedMultiSelection({ classId: null, cells: [] });
+    }
+  }, [activeTab, isDraftMode]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (
+        event.key === 'Escape' &&
+        (isBulkClearModalOpen || isMultiSelectEnabled || selectedMultiSelection.cells.length > 0)
+      ) {
+        setIsBulkClearModalOpen(false);
+        setSelectedMultiSelection({ classId: null, cells: [] });
+        setClearSelectedCellsToken((token) => token + 1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBulkClearModalOpen, isMultiSelectEnabled, selectedMultiSelection.cells.length]);
 
   // Live and Draft are separate capabilities, each granted per role in app_view_controller
   // ('timetable-live-mode' / 'timetable-draft-mode'), so the mode control only ever offers the
@@ -318,6 +345,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         { data: dbAssignments },
         { data: dbSlots },
         { data: dbPeriods },
+        { data: availabilityCategoriesRow, error: availabilityCategoriesError },
+        { data: availabilityAssignmentsRow, error: availabilityAssignmentsError },
       ] = await Promise.all([
         supabase.from('syl_classifications').select('*').order('name', { ascending: true }),
         supabase.from('syl_subjects').select('*'),
@@ -335,7 +364,19 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         supabase.from('class_assignments').select('*'),
         supabase.from('timetable_slots').select('*'),
         supabase.from('periods').select('*').order('period_number', { ascending: true }),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'teacher_availability_categories')
+          .maybeSingle(),
+        supabase
+          .from('admin_configruation')
+          .select('val')
+          .eq('key', 'teacher_availability_assignments')
+          .maybeSingle(),
       ]);
+      if (availabilityCategoriesError) throw availabilityCategoriesError;
+      if (availabilityAssignmentsError) throw availabilityAssignmentsError;
 
       if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
         throw new Error(
@@ -421,6 +462,41 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       if (!fetchedSeasonsConfig) {
         fetchedSeasonsConfig = makeDefaultSeasonsConfig(finalPeriods, dbSlots || []);
       }
+      const availabilityAssignments = availabilityAssignmentsRow?.val
+        ? typeof availabilityAssignmentsRow.val === 'string'
+          ? JSON.parse(availabilityAssignmentsRow.val)
+          : availabilityAssignmentsRow.val
+        : {};
+      let localAvailabilityCategories = [];
+      try {
+        const localConfig = JSON.parse(
+          localStorage.getItem('jzv_timetable_seasons_config') || '{}'
+        );
+        localAvailabilityCategories = Array.isArray(localConfig.teacher_availability_categories)
+          ? localConfig.teacher_availability_categories
+          : [];
+      } catch (err) {
+        console.warn('Could not read local teacher availability categories:', err.message);
+      }
+      const availabilityCategories = availabilityCategoriesRow?.val
+        ? typeof availabilityCategoriesRow.val === 'string'
+          ? JSON.parse(availabilityCategoriesRow.val)
+          : availabilityCategoriesRow.val
+        : fetchedSeasonsConfig.teacher_availability_categories?.length
+          ? fetchedSeasonsConfig.teacher_availability_categories
+          : localAvailabilityCategories;
+      const configuredTimeBlocks = [
+        ...(fetchedSeasonsConfig.teacher_time_blocks || []),
+        ...Object.values(fetchedSeasonsConfig.seasons || {}).flatMap(
+          (season) => season.teacher_time_blocks || []
+        ),
+      ];
+      fetchedSeasonsConfig = {
+        ...fetchedSeasonsConfig,
+        teacher_availability_categories: availabilityCategories,
+        teacher_availability_assignments: availabilityAssignments,
+        teacher_time_blocks: mergeTeacherTimeBlocks(configuredTimeBlocks),
+      };
 
       setSeasonsConfig(fetchedSeasonsConfig);
 
@@ -1791,6 +1867,54 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     saveState({ periods: finalPeriods, slots: updatedSlots });
   };
 
+  const handleSaveAvailabilityCategories = async (categories) => {
+    const nextCategories = Array.isArray(categories) ? categories : [];
+    const nextSeasonsConfig = {
+      ...(seasonsConfig || makeDefaultSeasonsConfig(periods, slots)),
+      teacher_availability_categories: nextCategories,
+    };
+    const nextDraftData = {
+      classifications,
+      subjects,
+      teachers,
+      classes,
+      periods,
+      assignments,
+      slots,
+      seasonsConfig: nextSeasonsConfig,
+    };
+
+    try {
+      if (isDraftMode && activeDraft) {
+        await updateDraft(activeDraft.id, { data: nextDraftData });
+      }
+      if (isSupabaseMode) {
+        const { error } = await supabase.from('admin_configruation').upsert(
+          { key: 'teacher_availability_categories', val: nextCategories },
+          { onConflict: 'key' }
+        );
+        if (error) throw error;
+      }
+
+      setSeasonsConfig(nextSeasonsConfig);
+      localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
+      if (isDraftMode) {
+        setActiveDraft((current) =>
+          current ? { ...current, data: nextDraftData, updatedAt: new Date().toISOString() } : current
+        );
+      }
+      showToast(
+        isSupabaseMode
+          ? 'Availability categories saved to the database.'
+          : 'Availability categories saved locally; database is unavailable.',
+        isSupabaseMode ? 'success' : 'warning'
+      );
+    } catch (err) {
+      console.error('Failed to save teacher availability categories:', err);
+      showToast(`Could not save availability categories: ${err.message}`, 'error');
+    }
+  };
+
   // SAVE SEASONS CONFIGURATION & OPTIONALLY SWITCH ACTIVE SEASON
   const handleSaveSeasonsConfig = async (newConfig, targetActiveSeasonId = null) => {
     setLoading(true);
@@ -2133,6 +2257,100 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     saveState({ slots: updatedSlots });
   };
 
+  const handleBulkUpdateSlots = async (classId, updates) => {
+    const updatedSlots = [...slots];
+    for (const update of updates) {
+      const index = updatedSlots.findIndex(
+        (slot) =>
+          String(slot.class_id) === String(classId) &&
+          slot.day === update.day &&
+          String(slot.period_id) === String(update.periodId)
+      );
+      const isClear = update.subjectId == null && update.teacherId == null;
+      if (isClear) {
+        if (index !== -1) updatedSlots.splice(index, 1);
+      } else {
+        const slotValue = {
+          class_id: classId,
+          day: update.day,
+          period_id: update.periodId,
+          subject_id: update.subjectId,
+          teacher_id: update.teacherId,
+        };
+        if (index !== -1) updatedSlots[index] = { ...updatedSlots[index], ...slotValue };
+        else updatedSlots.push({ id: generateLocalId(), ...slotValue });
+      }
+    }
+
+    if (canWriteLive && !String(classId).startsWith('local-')) {
+      try {
+        await Promise.all(
+          updates.map(async (update) => {
+            const query = supabase
+              .from('timetable_slots')
+              .delete()
+              .eq('class_id', classId)
+              .eq('day', update.day)
+              .eq('period_id', update.periodId);
+            const { error: deleteError } = await query;
+            if (deleteError) throw deleteError;
+            if (update.subjectId != null || update.teacherId != null) {
+              const { error: upsertError } = await supabase
+                .from('timetable_slots')
+                .upsert(
+                  [{
+                    class_id: classId,
+                    day: update.day,
+                    period_id: update.periodId,
+                    subject_id: update.subjectId,
+                    teacher_id: update.teacherId,
+                  }],
+                  { onConflict: 'class_id,day,period_id' }
+                );
+              if (upsertError) throw upsertError;
+            }
+          })
+        );
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        await reloadActiveData();
+        return false;
+      }
+    }
+    await saveState({ slots: updatedSlots });
+    return true;
+  };
+
+  const handleClearSelectedPeriods = async (clearAssignments) => {
+    const { classId, cells } = selectedMultiSelection;
+    if (!classId || cells.length === 0) return;
+    const updates = cells.map(({ day, periodId }) => {
+      const slot = slots.find(
+        (item) =>
+          String(item.class_id) === String(classId) &&
+          item.day === day &&
+          String(item.period_id) === String(periodId)
+      );
+      return {
+        day,
+        periodId,
+        subjectId: clearAssignments ? null : slot?.subject_id ?? null,
+        teacherId: null,
+      };
+    });
+    const saved = await handleBulkUpdateSlots(classId, updates);
+    if (!saved) return;
+    setSelectedMultiSelection({ classId: null, cells: [] });
+    setClearSelectedCellsToken((token) => token + 1);
+    setIsBulkClearModalOpen(false);
+  };
+
+  const handleUnselectAllPeriods = () => {
+    setSelectedMultiSelection({ classId: null, cells: [] });
+    setClearSelectedCellsToken((token) => token + 1);
+    setIsBulkClearModalOpen(false);
+  };
+
   // MOVE SLOT HANDLER (Move slot from source day/period to target day/period)
   const handleMoveSlot = async (classId, sourceDay, sourcePeriodId, targetDay, targetPeriodId) => {
     const sourceSlot = slots.find(
@@ -2144,6 +2362,19 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     if (!sourceSlot) return;
 
     const { subject_id: subjectId, teacher_id: teacherId } = sourceSlot;
+    if (
+      teacherId &&
+      slots.some(
+        (slot) =>
+          String(slot.class_id) !== String(classId) &&
+          slot.day === targetDay &&
+          String(slot.period_id) === String(targetPeriodId) &&
+          String(slot.teacher_id) === String(teacherId)
+      )
+    ) {
+      showToast('Move blocked: the teacher is already assigned to another class at the target time.', 'error');
+      return;
+    }
     let updatedSlots = [...slots];
 
     // Remove source slot
@@ -2182,12 +2413,13 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     if (canWriteLive && !String(classId).startsWith('local-')) {
       try {
         // Delete source
-        await supabase
+        const { error: deleteError } = await supabase
           .from('timetable_slots')
           .delete()
           .eq('class_id', classId)
           .eq('day', sourceDay)
           .eq('period_id', sourcePeriodId);
+        if (deleteError) throw deleteError;
 
         // Upsert target
         const { data, error } = await supabase
@@ -2216,6 +2448,55 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
     saveState({ slots: updatedSlots });
     showToast('Slot moved successfully!', 'success');
+  };
+
+  const handleSwapSlots = async (classId, first, second) => {
+    if (first.day === second.day && String(first.periodId) === String(second.periodId)) return;
+    const firstSlot = slots.find(
+      (slot) =>
+        String(slot.class_id) === String(classId) &&
+        slot.day === first.day &&
+        String(slot.period_id) === String(first.periodId)
+    );
+    const secondSlot = slots.find(
+      (slot) =>
+        String(slot.class_id) === String(classId) &&
+        slot.day === second.day &&
+        String(slot.period_id) === String(second.periodId)
+    );
+    const assignmentsToValidate = [
+      { slot: firstSlot, day: second.day, periodId: second.periodId },
+      { slot: secondSlot, day: first.day, periodId: first.periodId },
+    ].filter(({ slot }) => slot?.teacher_id);
+    const hasConflict = assignmentsToValidate.some(({ slot, day, periodId }) =>
+      slots.some(
+        (candidate) =>
+          String(candidate.class_id) !== String(classId) &&
+          candidate.day === day &&
+          String(candidate.period_id) === String(periodId) &&
+          String(candidate.teacher_id) === String(slot.teacher_id)
+      )
+    );
+    if (hasConflict) {
+      showToast('Swap blocked: a teacher would be assigned to more than one class at the same time.', 'error');
+      return;
+    }
+    const updates = [
+      {
+        day: first.day,
+        periodId: first.periodId,
+        subjectId: secondSlot?.subject_id ?? null,
+        teacherId: secondSlot?.teacher_id ?? null,
+      },
+      {
+        day: second.day,
+        periodId: second.periodId,
+        subjectId: firstSlot?.subject_id ?? null,
+        teacherId: firstSlot?.teacher_id ?? null,
+      },
+    ];
+    await handleBulkUpdateSlots(classId, updates);
+    showToast('Periods swapped successfully.', 'success');
   };
 
   // MOVE COLUMN HANDLER (Move all slots for a class from one period to another)
@@ -2925,15 +3206,96 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       : []),
   ];
 
+  const handleSetTeacherTimeBlock = async (teacherId, targetDays, periodId, type) => {
+    if (!seasonsConfig || !teacherId || !Array.isArray(targetDays) || !targetDays.length) {
+      showToast('Select at least one day for the teacher schedule.', 'error');
+      return false;
+    }
+    const existingBlocks = seasonsConfig.teacher_time_blocks || [];
+    const days = new Set(targetDays);
+    const nextBlocks = existingBlocks.filter(
+      (block) =>
+        !(
+          String(block.teacher_id) === String(teacherId) &&
+          String(block.period_id) === String(periodId) &&
+          (days.has(block.day) || block.day === 'Every day')
+        )
+    );
+
+    if (type) {
+      const scheduledSlot = slots.find(
+        (slot) =>
+          String(slot.teacher_id) === String(teacherId) &&
+          String(slot.period_id) === String(periodId) &&
+          days.has(slot.day) &&
+          (slot.subject_id || slot.class_id)
+      );
+      if (scheduledSlot) {
+        showToast(
+          `This teacher already has a class assignment on ${scheduledSlot.day} in this period.`,
+          'error'
+        );
+        return false;
+      }
+      nextBlocks.push(
+        ...targetDays.map((day) => ({
+          id: generateLocalId(),
+          teacher_id: teacherId,
+          type,
+          day,
+          period_id: periodId,
+        }))
+      );
+    }
+
+    const nextSeasonsConfig = {
+      ...seasonsConfig,
+      teacher_time_blocks: nextBlocks,
+    };
+    const nextDraftData = {
+      classifications,
+      subjects,
+      teachers,
+      classes,
+      periods,
+      assignments,
+      slots,
+      seasonsConfig: nextSeasonsConfig,
+    };
+
+    try {
+      if (isDraftMode && activeDraft) {
+        await updateDraft(activeDraft.id, { data: nextDraftData });
+        setActiveDraft((current) =>
+          current ? { ...current, data: nextDraftData, updatedAt: new Date().toISOString() } : current
+        );
+      } else if (canWriteLive) {
+        const { error } = await supabase.from('admin_configruation').upsert(
+          { key: 'timetable_seasons_config', val: nextSeasonsConfig },
+          { onConflict: 'key' }
+        );
+        if (error) throw error;
+      }
+      setSeasonsConfig(nextSeasonsConfig);
+      localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
+      showToast(type ? 'Teacher period saved.' : 'Teacher period cleared.', 'success');
+      return true;
+    } catch (err) {
+      console.error('Failed to save teacher period:', err);
+      showToast(`Could not save teacher period: ${err.message}`, 'error');
+      return false;
+    }
+  };
+
   // Draft version controls. Rendered inside the Scheduler Setup sub-tab area (directly under the
   // sub-tab row, above the views) so the Live / Draft switch and the version it governs sit
   // together. The dropdown also offers creating a version from live data; the action buttons only
   // appear once a version is loaded.
   const draftPanel = dataMode === 'draft' && (isDraftListLoading || draftList.length > 0) && (
     <div
-      className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2"
-      data-feature="scheduler-setup-draft-mode"
-    >
+        className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2"
+        data-feature="scheduler-setup-draft-mode"
+      >
       <div className="relative w-full sm:w-80">
         <button
           type="button"
@@ -3003,6 +3365,44 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
       {isDraftMode && (
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setIsMultiSelectEnabled((enabled) => {
+                if (enabled) setSelectedMultiSelection({ classId: null, cells: [] });
+                return !enabled;
+              });
+            }}
+            aria-pressed={isMultiSelectEnabled}
+            className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              isMultiSelectEnabled
+                ? 'bg-brand-primary border-brand-primary text-white'
+                : 'bg-white border-amber-300 text-dark-primary hover:bg-amber-100'
+            }`}
+            title={isMultiSelectEnabled ? 'Turn off multi-select editing' : 'Turn on multi-select editing'}
+          >
+            <i className="fas fa-list-check" />
+            <span>Multi-select {isMultiSelectEnabled ? 'On' : 'Off'}</span>
+          </button>
+          {isMultiSelectEnabled && (
+            <button
+              type="button"
+              onClick={() => setIsBulkClearModalOpen(true)}
+              disabled={selectedMultiSelection.cells.length === 0}
+              className="px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              title={
+                selectedMultiSelection.cells.length
+                  ? `Clear ${selectedMultiSelection.cells.length} selected periods`
+                  : 'Select at least one period to clear'
+              }
+            >
+              <i className="fas fa-eraser" />
+              <span>Clear</span>
+              {selectedMultiSelection.cells.length > 0 && (
+                <span>({selectedMultiSelection.cells.length})</span>
+              )}
+            </button>
+          )}
           {draftPanelActions.map((action) => (
             <button
               key={action.label}
@@ -3213,9 +3613,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                     printButton={printButton}
                     onActiveViewChange={handleActiveViewChange}
                     onUpdateSlot={handleUpdateSlot}
+                    onSetTeacherTimeBlock={handleSetTeacherTimeBlock}
                     onMoveSlot={handleMoveSlot}
+                    onSwapSlots={handleSwapSlots}
+                    onBulkUpdateSlots={handleBulkUpdateSlots}
                     onClearSlots={handleClearSlots}
                     onMoveColumn={handleMoveColumn}
+                    isMultiSelectEnabled={isMultiSelectEnabled}
+                    onSelectionChange={setSelectedMultiSelection}
+                    clearSelectedCellsToken={clearSelectedCellsToken}
                   />
                 )}
               </ConditionalBlock>
@@ -3264,6 +3670,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                   slots={slots}
                   seasonsConfig={seasonsConfig}
                   onSaveSeasonsConfig={handleSaveSeasonsConfig}
+                  onSaveAvailabilityCategories={handleSaveAvailabilityCategories}
                   onCopySeason={handleCopySeason}
                 />
               </ConditionalBlock>
@@ -3293,6 +3700,64 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           onConfirm={confirmConfig?.onConfirm}
           onCancel={() => setConfirmConfig(null)}
         />
+        {isBulkClearModalOpen && (
+          <div
+            className="fixed inset-0 bg-dark-almostblack/45 backdrop-blur-sm z-[210] flex items-center justify-center p-4"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setIsBulkClearModalOpen(false);
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="bulk-clear-title"
+              className="w-full max-w-md rounded-2xl border border-light-border bg-white p-5 shadow-2xl space-y-4"
+            >
+              <div>
+                <h2 id="bulk-clear-title" className="text-base font-extrabold text-dark-primary">
+                  Clear selected periods?
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-dark-soft">
+                  Choose what to remove from {selectedMultiSelection.cells.length} selected period
+                  {selectedMultiSelection.cells.length === 1 ? '' : 's'}.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleClearSelectedPeriods(true)}
+                  className="flex-1 rounded-xl bg-red-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-red-700"
+                >
+                  Clear Selected Slots
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleClearSelectedPeriods(false)}
+                  className="flex-1 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                >
+                  Remove Teachers Only
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnselectAllPeriods}
+                  className="flex-1 rounded-xl border border-light-border bg-light-ui px-3 py-2.5 text-xs font-bold text-dark-primary hover:bg-light-border"
+                >
+                  Unselect All
+                </button>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkClearModalOpen(false)}
+                  className="rounded-xl bg-light-ui px-4 py-2 text-xs font-bold text-dark-soft hover:bg-light-border"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <TimetableCompareModal
           isOpen={isCompareOpen}
           onClose={() => setIsCompareOpen(false)}

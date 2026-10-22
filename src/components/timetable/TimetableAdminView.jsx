@@ -11,6 +11,7 @@ import MultiSelectDropdown from '../MultiSelectDropdown';
 import PrintConfigurationModal from '../PrintConfigurationModal';
 import PrintPageDecorations from '../PrintPageDecorations';
 import { usePrintSettings } from '../../hooks/usePrintSettings';
+import { isPeriodApplicable } from '../../utils/timetableScheduleUtils';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -311,7 +312,9 @@ const AssignPopover = ({
   slots,
   days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
   assignments,
+  timeBlocks = [],
   onAssign,
+  onSetTeacherTimeBlock,
   onClose,
 }) => {
   const ref = useRef(null);
@@ -320,6 +323,9 @@ const AssignPopover = ({
   const [selectedDays, setSelectedDays] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedNewClassId, setSelectedNewClassId] = useState('');
+  const [isTeaching, setIsTeaching] = useState(true);
+  const [selectedTimeType, setSelectedTimeType] = useState('Personal');
+  const initializedPopoverCellRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -329,18 +335,31 @@ const AssignPopover = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
+  const popoverCellKey = popover ? `${popover.teacherId}:${popover.cellKey}` : null;
+
   useEffect(() => {
-    if (popover) {
-      setSelSubjectId('');
-      setSelectedClassId('');
-      setSelectedNewClassId('');
-      if (popover.day) {
-        setSelectedDays([popover.day]);
-      } else {
-        setSelectedDays([]);
-      }
+    if (
+      !popoverCellKey ||
+      !popover ||
+      initializedPopoverCellRef.current === popoverCellKey
+    ) {
+      return;
     }
-  }, [popover]);
+    initializedPopoverCellRef.current = popoverCellKey;
+
+    setSelSubjectId('');
+    setSelectedClassId('');
+    setSelectedNewClassId('');
+    const existingTimeBlock = timeBlocks.find(
+      (block) =>
+        String(block.teacher_id) === String(popover.teacherId) &&
+        String(block.period_id) === String(popover.periodId) &&
+        (block.day === popover.day || block.day === 'Every day')
+    );
+    setIsTeaching(!existingTimeBlock);
+    setSelectedTimeType(existingTimeBlock?.type || 'Personal');
+    setSelectedDays(popover.day ? [popover.day] : []);
+  }, [popoverCellKey, popover, timeBlocks]);
 
   const { mode, day, periodId, classId, subjectId, teacherId } = popover;
 
@@ -636,27 +655,72 @@ const AssignPopover = ({
           <div className="text-[10px] opacity-75 mt-0.5">{day}</div>
         </div>
         <div className="p-3 space-y-3">
-          <div>
-            <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
-              Subject
-            </label>
-            <select
-              value={selSubjectId}
-              onChange={(e) => {
-                setSelSubjectId(e.target.value);
-                setSelectedClassId(''); // Reset selected class when subject changes
+          <div className="flex items-center justify-between rounded-lg border border-light-border bg-light-bg/30 px-3 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-dark-soft">
+              Teaching {isTeaching ? 'On' : 'Off'}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isTeaching}
+              aria-label="Teaching On or Off"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsTeaching((currentValue) => !currentValue);
+                setSelSubjectId('');
+                setSelectedClassId('');
               }}
-              className="w-full bg-white border border-light-border rounded-lg px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+              onMouseDown={(event) => event.stopPropagation()}
+              className={`relative h-6 w-11 rounded-full transition-colors ${
+                isTeaching ? 'bg-emerald-600' : 'bg-gray-400'
+              }`}
             >
-              <option value="">-- Choose Subject --</option>
-              {renderSubjectOptionsGroupedByClassification(
-                qualifiedSubjects,
-                classifications,
-                undefined,
-                selSubjectId
-              )}
-            </select>
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  isTeaching ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
           </div>
+
+          {isTeaching ? (
+            <div>
+              <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                Subject
+              </label>
+              <select
+                value={selSubjectId}
+                onChange={(e) => {
+                  setSelSubjectId(e.target.value);
+                  setSelectedClassId('');
+                }}
+                className="w-full bg-white border border-light-border rounded-lg px-3 py-1.5 text-xs font-semibold text-dark-primary outline-none focus:ring-2 focus:ring-brand-soft"
+              >
+                <option value="">-- Choose Subject --</option>
+                {renderSubjectOptionsGroupedByClassification(
+                  qualifiedSubjects,
+                  classifications,
+                  undefined,
+                  selSubjectId
+                )}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
+                Period Type
+              </label>
+              <select
+                value={selectedTimeType}
+                onChange={(event) => setSelectedTimeType(event.target.value)}
+                className="w-full bg-white border border-light-border rounded-lg px-3 py-1.5 text-xs font-semibold text-dark-primary"
+              >
+                <option value="Personal">Personal Time</option>
+                <option value="Preparation">Preparation Time</option>
+                <option value="Office">Office Time</option>
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1.5">
@@ -705,7 +769,7 @@ const AssignPopover = ({
             </div>
           </div>
 
-          {selSubjectId && (
+          {isTeaching && selSubjectId && (
             <div className="space-y-3">
               <div>
                 <label className="block text-[10px] font-bold text-dark-soft uppercase tracking-wide mb-1">
@@ -753,7 +817,14 @@ const AssignPopover = ({
                 <div className="pt-1.5">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      const cleared = await onSetTeacherTimeBlock?.(
+                        teacherId,
+                        selectedDays,
+                        periodId,
+                        null
+                      );
+                      if (cleared === false) return;
                       onAssign(selectedClassId, selectedDays, periodId, selSubjectId, teacherId);
                       onClose();
                     }}
@@ -762,6 +833,24 @@ const AssignPopover = ({
                     <i className="fas fa-plus-circle"></i> Add Schedule
                   </button>
                 </div>
+              )}
+              {!isTeaching && selectedDays.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const saved = await onSetTeacherTimeBlock?.(
+                      teacherId,
+                      selectedDays,
+                      periodId,
+                      selectedTimeType
+                    );
+                    if (saved !== false) onClose();
+                  }}
+                  className="w-full rounded-xl bg-indigo-600 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-700"
+                >
+                  <i className="fas fa-plus-circle mr-1.5" />
+                  Add Schedule
+                </button>
               )}
             </div>
           )}
@@ -783,6 +872,26 @@ const AssignPopover = ({
 
 // ─── Helpers for My Timetable ──────────────────────────────────────────────────
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const TEACHER_TIME_BLOCK_APPEARANCE = {
+  Preparation: {
+    label: 'Preparation Time',
+    icon: 'fa-book-open',
+    classes: 'border-amber-200 bg-amber-50 text-amber-800',
+  },
+  Personal: {
+    label: 'Personal Time',
+    icon: 'fa-mug-hot',
+    classes: 'border-violet-200 bg-violet-50 text-violet-800',
+  },
+  Office: {
+    label: 'Office Time',
+    icon: 'fa-briefcase',
+    classes: 'border-sky-200 bg-sky-50 text-sky-800',
+  },
+};
+
+const getTeacherTimeBlockAppearance = (type) =>
+  TEACHER_TIME_BLOCK_APPEARANCE[type] || TEACHER_TIME_BLOCK_APPEARANCE.Personal;
 
 const getTodayName = () => {
   const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -806,6 +915,7 @@ const MyTimetableToday = ({
   classes,
   subjects,
   classifications = [],
+  nonTeachingTimeBlocks = [],
   showBreaks = true,
 }) => {
   const today = getTodayName();
@@ -817,6 +927,13 @@ const MyTimetableToday = ({
         String(s.teacher_id) === String(teacherId) &&
         s.day === today &&
         String(s.period_id) === String(periodId)
+    );
+  const getTimeBlock = (day, periodId) =>
+    nonTeachingTimeBlocks.find(
+      (block) =>
+        String(block.teacher_id) === String(teacherId) &&
+        String(block.period_id) === String(periodId) &&
+        (block.day === day || block.day === 'Every day')
     );
 
   const getClassName = (id) => classes.find((c) => String(c.id) === String(id))?.name || '—';
@@ -851,6 +968,7 @@ const MyTimetableToday = ({
       {nonBreaks.map((period, idx) => {
         const slot = getSlot(period.id);
         const hasClass = slot?.subject_id;
+        const timeBlock = getTimeBlock(today, period.id);
         const breakBefore = periods
           .filter((p) => p.is_break)
           .find((bp) => {
@@ -973,6 +1091,17 @@ const MyTimetableToday = ({
                       </span>
                     </div>
                   </>
+                ) : timeBlock ? (
+                  <div
+                    className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${getTeacherTimeBlockAppearance(timeBlock.type).classes}`}
+                  >
+                    <i
+                      className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon} text-sm`}
+                    />
+                    <span className="text-xs font-extrabold">
+                      {getTeacherTimeBlockAppearance(timeBlock.type).label}
+                    </span>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2 text-dark-muted">
                     <i className="fas fa-minus-circle text-[11px]" />
@@ -1009,6 +1138,7 @@ const MyTimetableWeekly = ({
   classes,
   subjects,
   classifications = [],
+  nonTeachingTimeBlocks = [],
   showBreaks = true,
   isTransposed = false,
 }) => {
@@ -1020,6 +1150,13 @@ const MyTimetableWeekly = ({
         String(s.teacher_id) === String(teacherId) &&
         s.day === day &&
         String(s.period_id) === String(periodId)
+    );
+  const getTimeBlock = (day, periodId) =>
+    nonTeachingTimeBlocks.find(
+      (block) =>
+        String(block.teacher_id) === String(teacherId) &&
+        String(block.period_id) === String(periodId) &&
+        (block.day === day || block.day === 'Every day')
     );
 
   const getClassName = (id) => classes.find((c) => String(c.id) === String(id))?.name || '—';
@@ -1107,6 +1244,7 @@ const MyTimetableWeekly = ({
                       DAYS.map((day) => {
                         const slot = getSlot(day, period.id);
                         const hasClass = slot?.subject_id;
+                        const timeBlock = getTimeBlock(day, period.id);
 
                         const subjectObj = hasClass
                           ? subjects.find((s) => String(s.id) === String(slot.subject_id))
@@ -1161,6 +1299,17 @@ const MyTimetableWeekly = ({
                                     {getClassName(slot.class_id)}
                                   </span>
                                 </div>
+                              </div>
+                            ) : timeBlock ? (
+                              <div
+                                className={`flex min-h-[54px] items-center justify-center gap-1 rounded-xl border px-1 ${getTeacherTimeBlockAppearance(timeBlock.type).classes}`}
+                              >
+                                <i
+                                  className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon} text-[9px]`}
+                                />
+                                <span className="text-[9px] text-center font-bold">
+                                  {getTeacherTimeBlockAppearance(timeBlock.type).label}
+                                </span>
                               </div>
                             ) : (
                               <div className="flex items-center justify-center min-h-[54px] rounded-xl border border-dashed border-light-border">
@@ -1273,6 +1422,7 @@ const MyTimetableWeekly = ({
 
                     const slot = getSlot(day, period.id);
                     const hasClass = slot?.subject_id;
+                    const timeBlock = getTimeBlock(day, period.id);
 
                     const subjectObj = hasClass
                       ? subjects.find((s) => String(s.id) === String(slot.subject_id))
@@ -1327,6 +1477,17 @@ const MyTimetableWeekly = ({
                                 {getClassName(slot.class_id)}
                               </span>
                             </div>
+                          </div>
+                        ) : timeBlock ? (
+                          <div
+                            className={`flex min-h-[54px] items-center justify-center gap-1 rounded-xl border px-1 ${getTeacherTimeBlockAppearance(timeBlock.type).classes}`}
+                          >
+                            <i
+                              className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon} text-[9px]`}
+                            />
+                            <span className="text-[9px] text-center font-bold">
+                              {getTeacherTimeBlockAppearance(timeBlock.type).label}
+                            </span>
                           </div>
                         ) : (
                           <div className="flex items-center justify-center min-h-[54px] rounded-xl border border-dashed border-light-border">
@@ -1386,9 +1547,15 @@ const TimetableAdminView = ({
   refreshing = false,
   lockedClassId = '',
   onUpdateSlot = null, // if provided, viewer becomes interactive
+  onSetTeacherTimeBlock = null,
   onMoveSlot = null,
+  onSwapSlots = null,
+  onBulkUpdateSlots = null,
   onClearSlots = null,
   onMoveColumn = null,
+  isMultiSelectEnabled = false,
+  onSelectionChange = () => {},
+  clearSelectedCellsToken = 0,
   allowedViews = ALL_VIEWS, // restrict visible tabs e.g. ['class'] for teachers
   seasonsConfig = null, // seasons configuration
   user = null,
@@ -1489,6 +1656,7 @@ const TimetableAdminView = ({
   const [selAssignedClasses, setSelAssignedClasses] = useState([]);
 
   const activeSeasonId = seasonsConfig?.active_season_id || 'summer';
+  const nonTeachingTimeBlocks = seasonsConfig?.teacher_time_blocks || [];
   const weekdayConfig = seasonsConfig?.seasons?.[activeSeasonId]?.weekday_config || {
     Monday: 'Weekday',
     Tuesday: 'Weekday',
@@ -1770,13 +1938,11 @@ const TimetableAdminView = ({
   };
 
   const renderCell = (day, period, key) => {
-    const dayType = weekdayConfig[day] || 'Weekday';
     const isBreak = period.is_break;
-    const isWorkingWeekend = dayType === 'Working Weekend';
-    const isWeekendApplicable = period.applicable_on_weekends !== false;
-    const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+    const isPeriodDisabled = !isPeriodApplicable(day, period, weekdayConfig);
+    const slot = getSlotDetails(day, period.id);
 
-    if (isPeriodDisabled) {
+    if (isPeriodDisabled && !slot) {
       return (
         <td
           key={key}
@@ -1790,8 +1956,16 @@ const TimetableAdminView = ({
       );
     }
 
-    const slot = getSlotDetails(day, period.id);
     const isAssigned = slot && slot.subject_id;
+    const timeBlock =
+      viewType === 'teacher'
+        ? nonTeachingTimeBlocks.find(
+            (block) =>
+              String(block.teacher_id) === String(selectedTeacherId) &&
+              String(block.period_id) === String(period.id) &&
+              (block.day === day || block.day === 'Every day')
+          )
+        : null;
     const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
     const isTeacherAssigned = slot && slot.teacher_id;
     const teacher = isTeacherAssigned
@@ -1827,7 +2001,8 @@ const TimetableAdminView = ({
     const isClickable =
       isInteractive &&
       !isBreak &&
-      ((viewType === 'class' && isAssigned && !isTeacherAssigned) ||
+      ((isPeriodDisabled && !!slot) ||
+        (viewType === 'class' && isAssigned && !isTeacherAssigned) ||
         (viewType === 'teacher' && (!slot || !slot.subject_id)) ||
         (viewType === 'teacher' && isAssigned));
 
@@ -1874,12 +2049,17 @@ const TimetableAdminView = ({
       >
         {isAssigned ? (
           <div
-            className={`w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
+            className={`relative w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
               themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'
             } ${
               isClickable ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md' : ''
             } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
           >
+            {isPeriodDisabled && (
+              <span className="absolute top-1 right-1 rounded bg-gray-100/90 px-1 text-[8px] font-bold text-gray-600">
+                Not Applicable
+              </span>
+            )}
             <div className="flex items-center justify-between min-w-0">
               <h5 className="font-extrabold text-[10px] truncate leading-tight flex-1">
                 {subjectName}
@@ -1914,6 +2094,15 @@ const TimetableAdminView = ({
               </span>
             )}
           </div>
+        ) : timeBlock ? (
+          <div
+            className={`flex h-full min-h-[64px] w-full items-center justify-center gap-1 rounded-xl border px-1 text-center text-[9px] font-bold ${getTeacherTimeBlockAppearance(timeBlock.type).classes} ${
+              isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''
+            }`}
+          >
+            <i className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon}`} />
+            <span>{getTeacherTimeBlockAppearance(timeBlock.type).label}</span>
+          </div>
         ) : (
           <div
             className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
@@ -1942,17 +2131,11 @@ const TimetableAdminView = ({
             classifications={classifications}
             classes={classes}
             slots={slots}
-            days={days.filter((d) => {
-              const dType = weekdayConfig[d] || 'Weekday';
-              if (dType === 'Holiday Weekend') return false;
-              if (dType === 'Working Weekend') {
-                const currentPeriodObj = periods.find((p) => String(p.id) === String(period.id));
-                return currentPeriodObj?.applicable_on_weekends !== false;
-              }
-              return true;
-            })}
+            days={days.filter((day) => isPeriodApplicable(day, period, weekdayConfig))}
             assignments={assignments}
+            timeBlocks={nonTeachingTimeBlocks}
             onAssign={handleAssign}
+            onSetTeacherTimeBlock={onSetTeacherTimeBlock}
             onClose={() => setPopover(null)}
           />
         )}
@@ -2538,6 +2721,7 @@ const TimetableAdminView = ({
             classes={classes}
             subjects={subjects}
             classifications={classifications}
+            nonTeachingTimeBlocks={nonTeachingTimeBlocks}
             showBreaks={showBreaks}
           />
         ) : (
@@ -2548,6 +2732,7 @@ const TimetableAdminView = ({
             classes={classes}
             subjects={subjects}
             classifications={classifications}
+            nonTeachingTimeBlocks={nonTeachingTimeBlocks}
             showBreaks={showBreaks}
             isTransposed={isTransposed}
           />
@@ -2571,6 +2756,7 @@ const TimetableAdminView = ({
               selAssignedClasses={selAssignedClasses}
               freeTeachersGender={freeTeachersGender}
               assignedTeachersGender={assignedTeachersGender}
+              seasonsConfig={seasonsConfig}
             />
           )}
 
@@ -2599,13 +2785,11 @@ const TimetableAdminView = ({
             <>
               {(() => {
                 const renderGridCell = (day, period) => {
-                  const dayType = weekdayConfig[day] || 'Weekday';
                   const isBreak = period.is_break;
-                  const isWorkingWeekend = dayType === 'Working Weekend';
-                  const isWeekendApplicable = period.applicable_on_weekends !== false;
-                  const isPeriodDisabled = isWorkingWeekend && !isWeekendApplicable;
+                  const isPeriodDisabled = !isPeriodApplicable(day, period, weekdayConfig);
+                  const slot = getSlotDetails(day, period.id);
 
-                  if (isPeriodDisabled) {
+                  if (isPeriodDisabled && !slot) {
                     return (
                       <td
                         key={`${day}-${period.id}`}
@@ -2619,7 +2803,6 @@ const TimetableAdminView = ({
                     );
                   }
 
-                  const slot = getSlotDetails(day, period.id);
                   const isAssigned = slot && slot.subject_id;
                   const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
                   const isTeacherAssigned = slot && slot.teacher_id;
@@ -2770,17 +2953,9 @@ const TimetableAdminView = ({
                           classifications={classifications}
                           classes={classes}
                           slots={slots}
-                          days={days.filter((d) => {
-                            const dType = weekdayConfig[d] || 'Weekday';
-                            if (dType === 'Holiday Weekend') return false;
-                            if (dType === 'Working Weekend') {
-                              const currentPeriodObj = periods.find(
-                                (p) => String(p.id) === String(period.id)
-                              );
-                              return currentPeriodObj?.applicable_on_weekends;
-                            }
-                            return true;
-                          })}
+                          days={days.filter((day) =>
+                            isPeriodApplicable(day, period, weekdayConfig)
+                          )}
                           assignments={assignments}
                           onAssign={handleAssign}
                           onClose={() => setPopover(null)}
@@ -2967,8 +3142,13 @@ const TimetableAdminView = ({
                 assignments={assignments}
                 onUpdateSlot={onUpdateSlot}
                 onMoveSlot={onMoveSlot}
+                onSwapSlots={onSwapSlots}
+                onBulkUpdateSlots={onBulkUpdateSlots}
                 onClearSlots={onClearSlots}
                 onMoveColumn={onMoveColumn}
+                isMultiSelectEnabled={isMultiSelectEnabled}
+                onSelectionChange={onSelectionChange}
+                clearSelectedCellsToken={clearSelectedCellsToken}
                 showBreaks={showBreaks}
                 seasonsConfig={seasonsConfig}
                 isTransposed={isTransposed}
