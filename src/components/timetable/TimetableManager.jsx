@@ -21,6 +21,10 @@ import {
   deleteDraft,
   createBackupDraft,
   publishDraftSafely,
+  waitForDraftMutations,
+  getLocalDrafts,
+  restoreLocalDraft,
+  discardLocalDraft,
 } from '../../services/timetableDraftService';
 import { compareTimetableData } from '../../utils/timetableComparison';
 import { invalidateModuleCaches } from '../../utils/moduleCacheRegistry';
@@ -45,6 +49,29 @@ import {
   MOCK_TIMETABLE_STATE,
   MOCK_CLASSIFICATIONS as DEFAULT_MOCK_CLASSIFICATIONS,
 } from '../../data/mockTimetable';
+
+const DRAFT_ACTIVE_STORAGE_KEY = 'jzv_timetable_active_draft_id';
+
+const draftSlotKey = (slot) => `${slot.class_id}|${slot.day}|${slot.period_id}`;
+const draftSlotValue = (slot) => `${slot.subject_id ?? ''}|${slot.teacher_id ?? ''}`;
+
+/** Number of periods that differ between two slot lists. */
+const countChangedSlots = (localSlots = [], storedSlots = []) => {
+  const stored = new Map(storedSlots.map((slot) => [draftSlotKey(slot), draftSlotValue(slot)]));
+  let changed = 0;
+  const localKeys = new Set();
+
+  localSlots.forEach((slot) => {
+    const key = draftSlotKey(slot);
+    localKeys.add(key);
+    if (stored.get(key) !== draftSlotValue(slot)) changed += 1;
+  });
+  storedSlots.forEach((slot) => {
+    if (!localKeys.has(draftSlotKey(slot))) changed += 1;
+  });
+
+  return changed;
+};
 
 const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
   active_season_id: 'summer',
@@ -115,7 +142,14 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
 const formatDraftDate = (value) => {
   if (!value) return 'Not available';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString();
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return date.toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const TimetableManager = ({ userRoles, user, initialTab = null }) => {
@@ -205,14 +239,33 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const [isDraftListOpen, setIsDraftListOpen] = useState(false);
   const [isDraftListLoading, setIsDraftListLoading] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  // Reason shown in the draft bar when a save could not reach the database.
+  const [draftSaveError, setDraftSaveError] = useState('');
+  // Draft copies that only exist in this browser (written while database saves were refused).
+  const [localDraftRecovery, setLocalDraftRecovery] = useState([]);
+  const [isRestoringLocalDrafts, setIsRestoringLocalDrafts] = useState(false);
+  const [isDraftSyncBusy, setIsDraftSyncBusy] = useState(false);
   // True while draft mode is being opened (the version list is fetched before the mode changes).
   const [isDraftSwitching, setIsDraftSwitching] = useState(false);
   // Snapshot of live data taken when a draft is opened, so leaving draft mode restores live.
   const liveSnapshotRef = React.useRef(null);
 
   const isDraftMode = dataMode === 'draft' && !!activeDraft;
+  // Mirrors dataMode for async work: a live load that resolves after the user entered draft mode
+  // must not overwrite the draft data with live rows.
+  const dataModeRef = useRef(dataMode);
+  const activeDraftRef = useRef(activeDraft);
+  useEffect(() => {
+    dataModeRef.current = dataMode;
+  }, [dataMode]);
+  useEffect(() => {
+    activeDraftRef.current = activeDraft;
+  }, [activeDraft]);
   const [isMultiSelectEnabled, setIsMultiSelectEnabled] = useState(false);
-  const [selectedMultiSelection, setSelectedMultiSelection] = useState({ classId: null, cells: [] });
+  const [selectedMultiSelection, setSelectedMultiSelection] = useState({
+    classId: null,
+    cells: [],
+  });
   const [clearSelectedCellsToken, setClearSelectedCellsToken] = useState(0);
   const [isBulkClearModalOpen, setIsBulkClearModalOpen] = useState(false);
 
@@ -293,6 +346,9 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const refreshDraftList = React.useCallback(async () => {
     setIsDraftListLoading(true);
     try {
+      // Let any queued save land first, so the list never shows a version older than the edit the
+      // user just made.
+      await waitForDraftMutations();
       const loaded = await getFilteredDrafts({
         status: [],
         search: '',
@@ -300,6 +356,30 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         sortOrder: 'desc',
       });
       setDraftList(loaded);
+
+      // Surface browser-only copies: saves used to be redirected to localStorage when the database
+      // refused them, so these versions can hold edits the database never received.
+      const localCandidates = getLocalDrafts()
+        .filter((local) => local?.id && local.data)
+        .map((local) => {
+          const stored = loaded.find((d) => d.id === local.id);
+          const localAt = new Date(local.updatedAt || 0).getTime();
+          const storedAt = stored ? new Date(stored.updatedAt || 0).getTime() : -1;
+          if (!Number.isFinite(localAt) || localAt <= storedAt) return null;
+          return {
+            id: local.id,
+            name: local.name || 'Untitled version',
+            localUpdatedAt: local.updatedAt || null,
+            storedUpdatedAt: stored?.updatedAt || null,
+            localSlotCount: local.data.slots?.length ?? 0,
+            changedSlots: countChangedSlots(local.data.slots || [], stored?.data?.slots || []),
+            draft: local,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.changedSlots - a.changedSlots);
+      setLocalDraftRecovery(localCandidates);
+
       return loaded;
     } catch (err) {
       console.error('Failed to load drafts:', err);
@@ -378,10 +458,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       if (availabilityCategoriesError) throw availabilityCategoriesError;
       if (availabilityAssignmentsError) throw availabilityAssignmentsError;
 
-      if (!dbClasses || dbClasses.length === 0 || !dbSlots || dbSlots.length === 0) {
-        throw new Error(
-          'No classes or slots found in database. Falling back to local offline mode.'
-        );
+      if (!dbClasses || dbClasses.length === 0) {
+        throw new Error('No classes found in database. Falling back to local offline mode.');
       }
 
       const teacherSubjectMappings = dbTeacherSubjects || [];
@@ -397,6 +475,9 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             .map((ts) => ts.subject_id),
         };
       });
+
+      // A live read that resolves after a draft became active must not replace the draft data.
+      if (dataModeRef.current === 'draft' && activeDraftRef.current) return;
 
       setClassifications(dbClassifications || []);
       setSubjects(dbSubjects || []);
@@ -517,8 +598,14 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       setIsSupabaseMode(true);
     } catch (err) {
       console.warn('Supabase mode not active, loading from LocalStorage:', err.message);
+      setError(err.message);
       setIsSupabaseMode(false);
-      loadLocalData();
+      // Offline mode silently drops every write, so say so instead of only logging it.
+      showToast(
+        `Timetable is in offline mode (${err.message}). Changes will not be saved to the database.`,
+        'error'
+      );
+      if (dataModeRef.current === 'live' || !activeDraftRef.current) loadLocalData();
     } finally {
       setLoading(false);
     }
@@ -663,9 +750,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       setActiveDraft((prev) => (prev ? { ...prev, data: nextDraftData } : prev));
       setIsSavingDraft(true);
       try {
-        await updateDraft(activeDraft.id, { data: nextDraftData });
+        const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
+        // Keep the panel (id, saved time, counts) in step with what the database actually holds.
+        setActiveDraft((current) =>
+          current && savedDraft && current.id === savedDraft.id ? savedDraft : current
+        );
+        setDraftSaveError('');
       } catch (err) {
         console.error('Failed to save draft:', err);
+        setDraftSaveError(err.message);
         showToast('Failed to save draft: ' + err.message, 'error');
       } finally {
         setIsSavingDraft(false);
@@ -735,6 +828,25 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           .then(({ error }) => {
             if (error) console.error('Error saving seasons config to DB:', error);
           });
+        // Keep the dedicated availability key in step with the saved configuration so portal role
+        // assignment can list the categories even when only the season save is used.
+        if (
+          Array.isArray(updatedConfig.teacher_availability_categories) &&
+          updatedConfig.teacher_availability_categories.length > 0
+        ) {
+          supabase
+            .from('admin_configruation')
+            .upsert(
+              {
+                key: 'teacher_availability_categories',
+                val: updatedConfig.teacher_availability_categories,
+              },
+              { onConflict: 'key' }
+            )
+            .then(({ error }) => {
+              if (error) console.error('Error saving availability categories to DB:', error);
+            });
+        }
       }
     }
 
@@ -768,32 +880,74 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   });
 
   const applyDataToState = (data) => {
-    setClassifications(data.classifications || []);
-    setSubjects(data.subjects || []);
-    setTeachers(data.teachers || []);
-    setClasses(data.classes || []);
-    setPeriods(data.periods || []);
-    setAssignments(data.assignments || []);
-    setSlots(data.slots || []);
-    setSeasonsConfig(data.seasonsConfig || seasonsConfig);
+    if (!data) return;
+    setClassifications((prev) => data.classifications ?? prev);
+    setSubjects((prev) => data.subjects ?? prev);
+    setTeachers((prev) => data.teachers ?? prev);
+    setClasses((prev) => data.classes ?? prev);
+    setPeriods((prev) => data.periods ?? prev);
+    setAssignments((prev) => data.assignments ?? prev);
+    setSlots((prev) => data.slots ?? prev);
+    setSeasonsConfig((prev) => {
+      const next = data.seasonsConfig || prev;
+      if (!next) return prev;
+      // Time blocks can live on the root or inside a season; normalise so the views always see one
+      // list, exactly like the live load does.
+      const blocks = [
+        ...(next.teacher_time_blocks || []),
+        ...Object.values(next.seasons || {}).flatMap((season) => season.teacher_time_blocks || []),
+      ];
+      return { ...next, teacher_time_blocks: mergeTeacherTimeBlocks(blocks) };
+    });
   };
 
+  // Any version that becomes active must have its payload in the working state, regardless of the
+  // path that selected it (draft switch, version dropdown, clone, backup).
+  const appliedDraftIdRef = useRef(null);
+  useEffect(() => {
+    if (dataMode !== 'draft') {
+      appliedDraftIdRef.current = null;
+      return;
+    }
+    if (!activeDraft?.data || appliedDraftIdRef.current === activeDraft.id) return;
+    appliedDraftIdRef.current = activeDraft.id;
+    applyDataToState(activeDraft.data);
+    // applyDataToState only calls state setters, so the closure is intentionally not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataMode, activeDraft]);
+
+  // Remember the active version so a remount or refresh reopens the same draft instead of quietly
+  // dropping back to live data.
+  useEffect(() => {
+    if (dataMode === 'draft' && activeDraft?.id) {
+      localStorage.setItem(DRAFT_ACTIVE_STORAGE_KEY, activeDraft.id);
+    } else if (dataMode === 'live') {
+      localStorage.removeItem(DRAFT_ACTIVE_STORAGE_KEY);
+    }
+  }, [dataMode, activeDraft]);
+
   // Load a draft's JSON into every Scheduler Setup tab without touching live data.
-  const handleLoadDraft = async (draftId) => {
+  const handleLoadDraft = async (draftId, { silent = false } = {}) => {
     if (!draftId) return;
     // Always refetch so the latest saved draft JSON is loaded, not a stale list entry.
     const available = await refreshDraftList();
     const draft =
       available.find((d) => d.id === draftId) || draftList.find((d) => d.id === draftId);
     if (!draft || !draft.data) {
+      if (silent) {
+        localStorage.removeItem(DRAFT_ACTIVE_STORAGE_KEY);
+        return;
+      }
       showToast('Draft has no saved data to load', 'error');
       return;
     }
     if (dataMode !== 'draft') liveSnapshotRef.current = takeLiveSnapshot();
+    dataModeRef.current = 'draft';
     setDataMode('draft');
     setActiveDraft(draft);
     applyDataToState(draft.data);
-    showToast(`Loaded draft "${draft.name}"`, 'success');
+    setDraftSaveError('');
+    if (!silent) showToast(`Loaded draft "${draft.name}"`, 'success');
   };
 
   // Return to live data, discarding any draft-only edits.
@@ -807,6 +961,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       liveSnapshotRef.current = null;
     }
     setActiveDraft(null);
+    setDraftSaveError('');
+    dataModeRef.current = 'live';
     setDataMode('live');
     showToast('Switched back to live timetable', 'info');
   };
@@ -822,10 +978,17 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
     setIsDraftSwitching(true);
     liveSnapshotRef.current = takeLiveSnapshot();
+    dataModeRef.current = 'draft';
     setDataMode('draft');
     try {
       const available = await refreshDraftList();
-      const latest = available.find((d) => d.data);
+      // Prefer the version that was open before, then the newest working version. A backup is a
+      // copy of live data, so silently auto-opening one made edits look like they vanished.
+      const storedId = localStorage.getItem(DRAFT_ACTIVE_STORAGE_KEY);
+      const latest =
+        available.find((d) => d.data && d.id === storedId) ||
+        available.find((d) => d.data && !isBackupVersion(d)) ||
+        available.find((d) => d.data);
       if (latest) {
         setActiveDraft(latest);
         applyDataToState(latest.data);
@@ -840,6 +1003,19 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
   };
 
+  // Reopen the version that was active before a reload/remount, once the live load has settled.
+  const draftRestoreAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (draftRestoreAttemptedRef.current) return;
+    if (canAccess.loading || loading || classes.length === 0) return;
+    draftRestoreAttemptedRef.current = true;
+    if (!canUseDraftMode || dataMode !== 'live') return;
+    const storedId = localStorage.getItem(DRAFT_ACTIVE_STORAGE_KEY);
+    if (storedId) handleLoadDraft(storedId, { silent: true });
+    // Runs once per mount; handleLoadDraft is re-created every render and is not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccess.loading, loading, canUseDraftMode, dataMode, classes.length]);
+
   // A permission change (or the first config load) can leave the app on a mode the user may no
   // longer use, so fall back to the mode their role allows without touching live data.
   useEffect(() => {
@@ -850,6 +1026,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         liveSnapshotRef.current = null;
       }
       setActiveDraft(null);
+      dataModeRef.current = 'live';
       setDataMode('live');
       return;
     }
@@ -1015,6 +1192,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       liveSnapshotRef.current = null;
       if (canUseLiveMode) {
         setActiveDraft(null);
+        dataModeRef.current = 'live';
         setDataMode('live');
         await loadData();
       } else {
@@ -1075,6 +1253,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       });
       await refreshDraftList();
       setActiveDraft(created);
+      dataModeRef.current = 'draft';
       setDataMode('draft');
       applyDataToState(created.data || snapshot);
       setNewDraftRequest(null);
@@ -1886,36 +2065,67 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
     try {
       if (isDraftMode && activeDraft) {
-        await updateDraft(activeDraft.id, { data: nextDraftData });
+        const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
+        setActiveDraft((current) =>
+          current && savedDraft && current.id === savedDraft.id ? savedDraft : current
+        );
       }
       if (isSupabaseMode) {
-        const { error } = await supabase.from('admin_configruation').upsert(
-          { key: 'teacher_availability_categories', val: nextCategories },
-          { onConflict: 'key' }
-        );
+        const { error } = await supabase
+          .from('admin_configruation')
+          .upsert(
+            { key: 'teacher_availability_categories', val: nextCategories },
+            { onConflict: 'key' }
+          );
         if (error) throw error;
+        // Keep the season configuration's copy in step too: it is what a draft publish and the
+        // role screen's legacy fallback read.
+        if (!isDraftMode) {
+          const { error: configError } = await supabase
+            .from('admin_configruation')
+            .upsert(
+              { key: 'timetable_seasons_config', val: nextSeasonsConfig },
+              { onConflict: 'key' }
+            );
+          if (configError) throw configError;
+        }
+      } else {
+        showToast(
+          'Availability categories were not saved: the database connection is unavailable.',
+          'error'
+        );
+        return false;
       }
 
       setSeasonsConfig(nextSeasonsConfig);
       localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
-      if (isDraftMode) {
-        setActiveDraft((current) =>
-          current ? { ...current, data: nextDraftData, updatedAt: new Date().toISOString() } : current
-        );
-      }
       showToast(
-        isSupabaseMode
-          ? 'Availability categories saved to the database.'
-          : 'Availability categories saved locally; database is unavailable.',
-        isSupabaseMode ? 'success' : 'warning'
+        isDraftMode
+          ? 'Availability categories saved to the database and this draft.'
+          : 'Availability categories saved to the database.',
+        'success'
       );
+      return true;
     } catch (err) {
       console.error('Failed to save teacher availability categories:', err);
       showToast(`Could not save availability categories: ${err.message}`, 'error');
+      return false;
     }
   };
 
   // SAVE SEASONS CONFIGURATION & OPTIONALLY SWITCH ACTIVE SEASON
+  // Availability categories are edited in Periods Setup but consumed by Manage Portal User Roles,
+  // which reads its own configuration key. Write that key whenever a season configuration that
+  // carries categories is saved, so the two screens cannot drift apart.
+  const persistAvailabilityCategories = async (config) => {
+    const categories = config?.teacher_availability_categories;
+    if (!Array.isArray(categories) || categories.length === 0) return;
+    const { error } = await supabase
+      .from('admin_configruation')
+      .upsert({ key: 'teacher_availability_categories', val: categories }, { onConflict: 'key' });
+    if (error) throw error;
+  };
+
   const handleSaveSeasonsConfig = async (newConfig, targetActiveSeasonId = null) => {
     setLoading(true);
     try {
@@ -2000,6 +2210,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             { onConflict: 'key' }
           );
           if (settingsError) throw settingsError;
+          await persistAvailabilityCategories(finalConfig);
         } else if (dataMode === 'live') {
           // Local offline mode
           localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(finalConfig));
@@ -2049,6 +2260,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             { onConflict: 'key' }
           );
           if (settingsError) throw settingsError;
+          await persistAvailabilityCategories(finalConfig);
         }
         showToast('Season settings saved successfully.', 'success');
       }
@@ -2295,18 +2507,18 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             const { error: deleteError } = await query;
             if (deleteError) throw deleteError;
             if (update.subjectId != null || update.teacherId != null) {
-              const { error: upsertError } = await supabase
-                .from('timetable_slots')
-                .upsert(
-                  [{
+              const { error: upsertError } = await supabase.from('timetable_slots').upsert(
+                [
+                  {
                     class_id: classId,
                     day: update.day,
                     period_id: update.periodId,
                     subject_id: update.subjectId,
                     teacher_id: update.teacherId,
-                  }],
-                  { onConflict: 'class_id,day,period_id' }
-                );
+                  },
+                ],
+                { onConflict: 'class_id,day,period_id' }
+              );
               if (upsertError) throw upsertError;
             }
           })
@@ -2334,7 +2546,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       return {
         day,
         periodId,
-        subjectId: clearAssignments ? null : slot?.subject_id ?? null,
+        subjectId: clearAssignments ? null : (slot?.subject_id ?? null),
         teacherId: null,
       };
     });
@@ -2372,7 +2584,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           String(slot.teacher_id) === String(teacherId)
       )
     ) {
-      showToast('Move blocked: the teacher is already assigned to another class at the target time.', 'error');
+      showToast(
+        'Move blocked: the teacher is already assigned to another class at the target time.',
+        'error'
+      );
       return;
     }
     let updatedSlots = [...slots];
@@ -2478,7 +2693,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       )
     );
     if (hasConflict) {
-      showToast('Swap blocked: a teacher would be assigned to more than one class at the same time.', 'error');
+      showToast(
+        'Swap blocked: a teacher would be assigned to more than one class at the same time.',
+        'error'
+      );
       return;
     }
     const updates = [
@@ -3150,10 +3368,90 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       if (liveSnapshotRef.current) applyDataToState(liveSnapshotRef.current);
       liveSnapshotRef.current = null;
       setActiveDraft(null);
+      dataModeRef.current = 'live';
       setDataMode('live');
       await refreshDraftList();
       showToast(`Draft "${name}" deleted — live data untouched`, 'success');
     });
+
+  // Push browser-only draft copies into the database, keeping each version's id.
+  const handleRestoreLocalDrafts = async () => {
+    if (localDraftRecovery.length === 0) return;
+    setIsRestoringLocalDrafts(true);
+    try {
+      for (const item of localDraftRecovery) {
+        await restoreLocalDraft(item.draft);
+      }
+      showToast(
+        `${localDraftRecovery.length} browser-only draft version(s) saved to the database.`,
+        'success'
+      );
+      await refreshDraftList();
+    } catch (err) {
+      console.error('Failed to restore browser-only drafts:', err);
+      showToast(`Could not restore browser-only drafts: ${err.message}`, 'error');
+    } finally {
+      setIsRestoringLocalDrafts(false);
+    }
+  };
+
+  // Write the active version's current state (including any browser-only edits) to the database.
+  const handleSyncActiveDraft = async () => {
+    if (!activeDraft) return;
+    setIsDraftSyncBusy(true);
+    try {
+      const savedDraft = await updateDraft(activeDraft.id, { data: activeDraft.data });
+      setActiveDraft((current) =>
+        current && savedDraft && current.id === savedDraft.id ? savedDraft : current
+      );
+      setDraftSaveError('');
+      await refreshDraftList();
+      showToast('Draft saved to the database.', 'success');
+    } catch (err) {
+      console.error('Failed to save the draft to the database:', err);
+      setDraftSaveError(err.message);
+      showToast(`Could not save the draft: ${err.message}`, 'error');
+    } finally {
+      setIsDraftSyncBusy(false);
+    }
+  };
+
+  // Drop the browser-only copy and reload the stored version.
+  const handleDiscardActiveDraftChanges = async () => {
+    if (!activeDraft) return;
+    setIsDraftSyncBusy(true);
+    try {
+      discardLocalDraft(activeDraft.id);
+      setDraftSaveError('');
+      await handleLoadDraft(activeDraft.id, { silent: true });
+      await refreshDraftList();
+      showToast('Browser-only changes discarded; the saved version was reloaded.', 'info');
+    } catch (err) {
+      console.error('Failed to discard browser-only draft changes:', err);
+      showToast(`Could not discard the changes: ${err.message}`, 'error');
+    } finally {
+      setIsDraftSyncBusy(false);
+    }
+  };
+
+  const activeLocalCopy = activeDraft
+    ? localDraftRecovery.find((item) => item.id === activeDraft.id)
+    : null;
+  const hasLocalOnlyChanges = Boolean(activeLocalCopy) || Boolean(draftSaveError);
+  const draftSaveStatusColor = isSavingDraft
+    ? 'text-amber-500'
+    : hasLocalOnlyChanges
+      ? 'text-red-500'
+      : 'text-emerald-500';
+  const draftSaveStatusTitle = isSavingDraft
+    ? 'Saving to the database…'
+    : hasLocalOnlyChanges
+      ? `Saved in this browser only${
+          activeLocalCopy?.changedSlots
+            ? ` — ${activeLocalCopy.changedSlots} period(s) differ from the stored version`
+            : ''
+        }. Use the sync icon to save it to the database.`
+      : 'Saved to the database.';
 
   const draftPanelActions = [
     ...(canPublishDraft
@@ -3265,16 +3563,25 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
     try {
       if (isDraftMode && activeDraft) {
-        await updateDraft(activeDraft.id, { data: nextDraftData });
+        const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
         setActiveDraft((current) =>
-          current ? { ...current, data: nextDraftData, updatedAt: new Date().toISOString() } : current
+          current && savedDraft && current.id === savedDraft.id ? savedDraft : current
         );
       } else if (canWriteLive) {
-        const { error } = await supabase.from('admin_configruation').upsert(
-          { key: 'timetable_seasons_config', val: nextSeasonsConfig },
-          { onConflict: 'key' }
-        );
+        const { error } = await supabase
+          .from('admin_configruation')
+          .upsert(
+            { key: 'timetable_seasons_config', val: nextSeasonsConfig },
+            { onConflict: 'key' }
+          );
         if (error) throw error;
+      } else {
+        // Never report success for a change that only lived in React state.
+        showToast(
+          'This period was not saved: live editing is not enabled for your role and no draft version is active.',
+          'error'
+        );
+        return false;
       }
       setSeasonsConfig(nextSeasonsConfig);
       localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
@@ -3291,77 +3598,165 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // sub-tab row, above the views) so the Live / Draft switch and the version it governs sit
   // together. The dropdown also offers creating a version from live data; the action buttons only
   // appear once a version is loaded.
-  const draftPanel = dataMode === 'draft' && (isDraftListLoading || draftList.length > 0) && (
+  const draftPanel = dataMode === 'draft' && (
     <div
-        className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:items-center justify-between gap-2"
-        data-feature="scheduler-setup-draft-mode"
-      >
-      <div className="relative w-full sm:w-80">
-        <button
-          type="button"
-          onClick={() => setIsDraftListOpen((open) => !open)}
-          disabled={isDraftListLoading}
-          className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-left shadow-sm disabled:opacity-60"
-          aria-expanded={isDraftListOpen}
-          aria-haspopup="listbox"
-          title="Select a draft version to load"
-        >
-          <span className="flex items-center justify-between gap-3">
-            <span className="truncate text-xs font-extrabold text-dark-primary">
-              {isDraftListLoading ? 'Loading versions…' : activeDraft?.name || `Select a version (${draftList.length})`}
-            </span>
-            <i className={`fas ${isDraftListOpen ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px] text-dark-soft`} />
-          </span>
-          {activeDraft && (
-            <span className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
-              <span>Created {formatDraftDate(activeDraft.createdAt)}</span>
-              <span>Updated {formatDraftDate(activeDraft.updatedAt)}</span>
-            </span>
-          )}
-        </button>
-        {isDraftListOpen && (
-          <div
-            className="absolute left-0 top-full z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-amber-200 bg-white p-1.5 shadow-xl"
-            role="listbox"
-            aria-label="Draft versions"
+      className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-2"
+      data-feature="scheduler-setup-draft-mode"
+    >
+      <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="relative w-full sm:w-80">
+          <button
+            type="button"
+            onClick={() => setIsDraftListOpen((open) => !open)}
+            disabled={isDraftListLoading}
+            className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-left shadow-sm disabled:opacity-60"
+            aria-expanded={isDraftListOpen}
+            aria-haspopup="listbox"
+            title="Select a draft version to load"
           >
-            {draftList.map((draft) => (
+            <span className="flex items-center justify-between gap-3">
+              <span className="truncate text-xs font-extrabold text-dark-primary">
+                {isDraftListLoading
+                  ? 'Loading versions…'
+                  : activeDraft
+                    ? `${activeDraft.name} (v_${String(activeDraft.id).match(/_(\d+)_/)?.[1] ?? activeDraft.id})`
+                    : `Select a version (${draftList.length})`}
+              </span>
+              <i
+                className={`fas ${isDraftListOpen ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px] text-dark-soft`}
+              />
+            </span>
+          </button>
+          {isDraftListOpen && (
+            <div
+              className="absolute left-0 top-full z-[110] mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-amber-200 bg-white p-1.5 shadow-2xl"
+              role="listbox"
+              aria-label="Draft versions"
+            >
+              {draftList.map((draft) => (
+                <button
+                  key={draft.id}
+                  type="button"
+                  role="option"
+                  aria-selected={draft.id === activeDraft?.id}
+                  onClick={() => {
+                    setIsDraftListOpen(false);
+                    handleLoadDraft(draft.id);
+                  }}
+                  className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
+                    draft.id === activeDraft?.id ? 'bg-amber-50' : 'hover:bg-light-lbg/60'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 truncate text-xs font-bold text-dark-primary">
+                    {isBackupVersion(draft) ? '⤺ ' : ''}
+                    <span className="truncate">{draft.name}</span>
+                    {isBackupVersion(draft) && (
+                      <span className="shrink-0 rounded bg-amber-200 px-1 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-900">
+                        Backup
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
+                    <span>Created {formatDraftDate(draft.createdAt)}</span>
+                    <span>Updated {formatDraftDate(draft.updatedAt)}</span>
+                    <span className="font-mono">{draft.id}</span>
+                  </span>
+                </button>
+              ))}
               <button
-                key={draft.id}
                 type="button"
-                role="option"
-                aria-selected={draft.id === activeDraft?.id}
                 onClick={() => {
                   setIsDraftListOpen(false);
-                  handleLoadDraft(draft.id);
+                  handleOpenNewDraftModal();
                 }}
-                className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
-                  draft.id === activeDraft?.id ? 'bg-amber-50' : 'hover:bg-light-lbg/60'
-                }`}
+                className="mt-1 w-full rounded-lg border-t border-light-border px-2.5 py-2 text-left text-xs font-extrabold text-amber-700 hover:bg-amber-50"
               >
-                <span className="block truncate text-xs font-bold text-dark-primary">
-                  {isBackupVersion(draft) ? '⤺ ' : ''}{draft.name}
-                </span>
-                <span className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
-                  <span>Created {formatDraftDate(draft.createdAt)}</span>
-                  <span>Updated {formatDraftDate(draft.updatedAt)}</span>
-                </span>
+                <i className="fas fa-plus mr-2" />
+                Create new draft
               </button>
-            ))}
+            </div>
+          )}
+        </div>
+
+        {activeDraft && (
+          <div
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-amber-300 bg-white px-1.5 py-1"
+            data-feature="draft-save-status"
+          >
+            <span className="flex items-center px-0.5" title={draftSaveStatusTitle}>
+              <i
+                className={`fas fa-circle text-[9px] ${draftSaveStatusColor} ${
+                  isSavingDraft ? 'animate-pulse' : ''
+                }`}
+                aria-hidden="true"
+              />
+              <span className="sr-only">{draftSaveStatusTitle}</span>
+            </span>
             <button
               type="button"
-              onClick={() => {
-                setIsDraftListOpen(false);
-                handleOpenNewDraftModal();
-              }}
-              className="mt-1 w-full rounded-lg border-t border-light-border px-2.5 py-2 text-left text-xs font-extrabold text-amber-700 hover:bg-amber-50"
+              onClick={handleSyncActiveDraft}
+              disabled={!hasLocalOnlyChanges || isDraftSyncBusy}
+              className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-amber-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Save the browser-only changes to the database"
+              aria-label="Save the browser-only changes to the database"
             >
-              <i className="fas fa-plus mr-2" />
-              Create new draft
+              <i className={`fas fa-arrows-rotate text-[11px] ${isDraftSyncBusy ? 'fa-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleDiscardActiveDraftChanges}
+              disabled={!hasLocalOnlyChanges || isDraftSyncBusy}
+              className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Discard the browser-only changes and reload the saved version"
+              aria-label="Discard the browser-only changes and reload the saved version"
+            >
+              <i className="fas fa-rotate-left text-[11px]" />
             </button>
           </div>
         )}
       </div>
+
+      {draftSaveError && (
+        <div
+          className="w-full rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-800"
+          data-feature="draft-save-error"
+          role="alert"
+        >
+          <i className="fas fa-triangle-exclamation mr-1" />
+          Not saved to the database: {draftSaveError}
+        </div>
+      )}
+
+      {localDraftRecovery.length > 0 && (
+        <div
+          className="w-full rounded-lg border border-amber-400 bg-amber-100 px-2.5 py-2 text-[10px] font-semibold text-amber-900 space-y-1"
+          data-feature="draft-local-recovery"
+          role="status"
+        >
+          <div>
+            <i className="fas fa-hard-drive mr-1" />
+            {localDraftRecovery.length} version(s) in this browser are newer than the database and
+            were never stored there:
+          </div>
+          <ul className="space-y-0.5">
+            {localDraftRecovery.map((item) => (
+              <li key={item.id} className="font-mono">
+                {item.name} · {item.changedSlots} period(s) differ · {item.localSlotCount} slots ·
+                browser copy from{' '}
+                {item.localUpdatedAt ? formatDraftDate(item.localUpdatedAt) : 'unknown'}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={handleRestoreLocalDrafts}
+            disabled={isRestoringLocalDrafts}
+            className="rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+          >
+            {isRestoringLocalDrafts ? 'Recovering…' : 'Recover to database'}
+          </button>
+        </div>
+      )}
 
       {isDraftMode && (
         <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -3379,7 +3774,11 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                 ? 'bg-brand-primary border-brand-primary text-white'
                 : 'bg-white border-amber-300 text-dark-primary hover:bg-amber-100'
             }`}
-            title={isMultiSelectEnabled ? 'Turn off multi-select editing' : 'Turn on multi-select editing'}
+            title={
+              isMultiSelectEnabled
+                ? 'Turn off multi-select editing'
+                : 'Turn on multi-select editing'
+            }
           >
             <i className="fas fa-list-check" />
             <span>Multi-select {isMultiSelectEnabled ? 'On' : 'Off'}</span>
@@ -3558,12 +3957,9 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           </div>
         ) : (
           <div
-            className={`flex-1 transition-colors ${
-              dataMode === 'draft' ? 'bg-amber-100/40' : ''
-            }`}
+            className={`flex-1 transition-colors ${dataMode === 'draft' ? 'bg-amber-100/40' : ''}`}
             data-feature="timetable-content"
           >
-
             {activeTab === 'scheduler' && (
               <ConditionalBlock name="scheduler-setup" roles={userRoles}>
                 {/* The version bar and the views render as soon as draft mode is entered; only when
@@ -3584,8 +3980,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                     </div>
                     <h4 className="text-base font-black text-amber-900">No Draft Available</h4>
                     <p className="text-xs font-semibold text-amber-800 mt-1 max-w-lg mx-auto">
-                      Create a new draft from live data, another version, or a blank timetable.
-                      Live data stays untouched until you publish a version.
+                      Create a new draft from live data, another version, or a blank timetable. Live
+                      data stays untouched until you publish a version.
                     </p>
                     <button
                       onClick={handleOpenNewDraftModal}

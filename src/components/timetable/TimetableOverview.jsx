@@ -56,8 +56,7 @@ const TimetableOverview = ({
   seasonsConfig,
 }) => {
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
-  const activeSeason =
-    seasonsConfig?.seasons?.[seasonsConfig.active_season_id || 'summer'] || {};
+  const activeSeason = seasonsConfig?.seasons?.[seasonsConfig.active_season_id || 'summer'] || {};
   const weekdayConfig = activeSeason.weekday_config || {};
   const teacherAvailability = activeSeason.teacher_availability || {};
   const teacherAvailabilityCategories = seasonsConfig?.teacher_availability_categories || [];
@@ -142,23 +141,35 @@ const TimetableOverview = ({
 
   // ─── Summary stats (global, for the header strip) ─────────────────────────
   const nonBreakPeriods = periods.filter((p) => !p.is_break);
-  const totalSlots = classes.length * OVERVIEW_DAYS.reduce(
-    (count, day) => count + nonBreakPeriods.filter((period) => isPeriodApplicable(day, period, weekdayConfig)).length,
-    0
-  );
+  const totalSlots =
+    classes.length *
+    OVERVIEW_DAYS.reduce(
+      (count, day) =>
+        count +
+        nonBreakPeriods.filter((period) => isPeriodApplicable(day, period, weekdayConfig)).length,
+      0
+    );
   const assignedCount = slots.filter(
     (s) =>
       s.subject_id &&
       s.teacher_id &&
       !periods.find((p) => String(p.id) === String(s.period_id))?.is_break &&
-      isPeriodApplicable(s.day, periods.find((p) => String(p.id) === String(s.period_id)) || {}, weekdayConfig)
+      isPeriodApplicable(
+        s.day,
+        periods.find((p) => String(p.id) === String(s.period_id)) || {},
+        weekdayConfig
+      )
   ).length;
   const subjectOnlyCount = slots.filter(
     (s) =>
       s.subject_id &&
       !s.teacher_id &&
       !periods.find((p) => String(p.id) === String(s.period_id))?.is_break &&
-      isPeriodApplicable(s.day, periods.find((p) => String(p.id) === String(s.period_id)) || {}, weekdayConfig)
+      isPeriodApplicable(
+        s.day,
+        periods.find((p) => String(p.id) === String(s.period_id)) || {},
+        weekdayConfig
+      )
   ).length;
   const unscheduledCount = totalSlots - assignedCount - subjectOnlyCount;
 
@@ -498,7 +509,10 @@ const TimetableOverview = ({
           <p className="text-dark-soft font-semibold">No periods configured.</p>
         </div>
       ) : (
-        <div className="bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm">
+        <div
+          className="bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm"
+          data-feature-subview="teacher-subject-pending"
+        >
           {/* ── Table — header aligned to match Class Schedule style ── */}
           <div className="w-full overflow-x-auto">
             <table className="w-full border-collapse min-w-[900px]">

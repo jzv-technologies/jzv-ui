@@ -97,6 +97,64 @@ const saveAllDraftsLocal = (drafts) => {
 };
 
 /**
+ * Serialise draft writes. Each save is a full snapshot read-modify-write, so two overlapping
+ * saves could previously finish out of order and let an older snapshot overwrite a newer one.
+ */
+let draftMutationQueue = Promise.resolve();
+const queueDraftMutation = (operation) => {
+  const result = draftMutationQueue.then(operation, operation);
+  draftMutationQueue = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+};
+
+/**
+ * Resolves once every queued draft write has finished. Reads wait on this so a version list or
+ * version reload cannot return a snapshot older than a save that is still in flight.
+ * @returns {Promise<void>}
+ */
+export const waitForDraftMutations = () => draftMutationQueue;
+
+/**
+ * Draft copies held in this browser. Saves used to fall back to localStorage when the database
+ * refused the write, so these can be newer than the stored versions.
+ * @returns {Array<Object>}
+ */
+export const getLocalDrafts = () => getAllDraftsLocal();
+
+/**
+ * Drop the browser-only copy of a version, so the stored version is authoritative again.
+ * @param {string} draftId
+ */
+export const discardLocalDraft = (draftId) => {
+  const remaining = getAllDraftsLocal().filter((draft) => draft.id !== draftId);
+  saveAllDraftsLocal(remaining);
+};
+
+/**
+ * Push a browser-only draft copy back into the database, keeping its id and payload.
+ * @param {Object} draft - Local draft object
+ * @returns {Promise<Object>} The restored draft
+ */
+export const restoreLocalDraft = (draft) =>
+  queueDraftMutation(async () => {
+    if (!draft?.id) throw new Error('A browser-only draft without an id cannot be restored.');
+
+    const restored = { ...draft, updatedAt: new Date().toISOString() };
+    await saveDraftToSupabase(restored);
+
+    const local = getAllDraftsLocal();
+    const index = local.findIndex((d) => d.id === restored.id);
+    if (index === -1) local.unshift(restored);
+    else local[index] = restored;
+    saveAllDraftsLocal(local);
+
+    return restored;
+  });
+
+/**
  * Get all drafts from Supabase admin_configuration
  * @returns {Promise<Array>} Array of draft objects
  */
@@ -173,36 +231,44 @@ export const getAllDrafts = async () => {
 
 /**
  * Save draft to Supabase admin_configuration under its canonical id key.
+ * Throws when the write is refused, so callers never report a save that did not happen.
  * @param {Object} draft - Draft object
  * @returns {Promise<boolean>}
  */
 const saveDraftToSupabase = async (draft) => {
-  try {
-    const key = getDraftKey(draft);
-    const { error } = await supabase
-      .from('admin_configruation')
-      .upsert({ key, val: draft }, { onConflict: 'key' });
+  const key = getDraftKey(draft);
+  const { error } = await supabase
+    .from('admin_configruation')
+    .upsert({ key, val: draft }, { onConflict: 'key' });
 
-    if (error) throw error;
+  if (error) throw new Error(error.message);
 
-    // Drop any row left behind under the old name-based key. This is what previously made a
-    // rename look like it created a second draft.
-    const legacyKey = getLegacyDraftKey(draft.name);
-    if (legacyKey !== key) {
-      const { error: cleanupErr } = await supabase
-        .from('admin_configruation')
-        .delete()
-        .eq('key', legacyKey);
-      if (cleanupErr) {
-        console.warn('Failed to remove legacy draft row:', cleanupErr.message);
-      }
-    }
-
-    return true;
-  } catch (err) {
-    console.error('Failed to save draft to Supabase:', err);
-    return false;
+  // Read back: a silently dropped or redirected write must not be reported as saved.
+  const { data: stored, error: verifyError } = await supabase
+    .from('admin_configruation')
+    .select('val')
+    .eq('key', key)
+    .maybeSingle();
+  if (verifyError) throw new Error(verifyError.message);
+  const storedDraft = stored ? parseDraftRow(stored) : null;
+  if (!storedDraft || storedDraft.updatedAt !== draft.updatedAt) {
+    throw new Error('the database did not keep the saved draft version');
   }
+
+  // Drop any row left behind under the old name-based key. This is what previously made a
+  // rename look like it created a second draft.
+  const legacyKey = getLegacyDraftKey(draft.name);
+  if (legacyKey !== key) {
+    const { error: cleanupErr } = await supabase
+      .from('admin_configruation')
+      .delete()
+      .eq('key', legacyKey);
+    if (cleanupErr) {
+      console.warn('Failed to remove legacy draft row:', cleanupErr.message);
+    }
+  }
+
+  return true;
 };
 
 /**
@@ -251,12 +317,17 @@ export const createDraft = async ({ name, description = '', data, parentVersionI
   };
   
   // Save to Supabase
-  const saved = await saveDraftToSupabase(newDraft);
-  if (!saved) {
-    // Fallback to localStorage
+  try {
+    await queueDraftMutation(() => saveDraftToSupabase(newDraft));
+  } catch (err) {
+    console.error('Failed to save draft to Supabase:', err);
+    // Fallback to localStorage so an offline session can still draft; the caller is told the
+    // version lives in this browser only.
     const drafts = getAllDraftsLocal();
     drafts.unshift(newDraft);
     saveAllDraftsLocal(drafts);
+    newDraft.persistedLocallyOnly = true;
+    newDraft.persistenceError = err.message;
   }
   
   return newDraft;
@@ -273,60 +344,99 @@ export const getDraftById = async (draftId) => {
 };
 
 /**
+ * Read a single draft by id. Reading one row (instead of the whole list) keeps saves cheap and
+ * avoids the list-level cleanup that could otherwise run during a save.
+ * @param {string} draftId
+ * @returns {Promise<Object|null>}
+ */
+const readDraftById = async (draftId) => {
+  const key = getDraftKey(draftId);
+  try {
+    const { data, error } = await supabase
+      .from('admin_configruation')
+      .select('key, val')
+      .eq('key', key)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? parseDraftRow(data) : null;
+  } catch (err) {
+    console.warn('Failed to read draft from Supabase, using local copy:', err.message);
+    return getAllDraftsLocal().find((d) => d.id === draftId) || null;
+  }
+};
+
+/**
  * Update a draft
+ *
+ * The write is serialised and throws when it cannot reach the database, so a failed save is never
+ * mistaken for a successful one (which previously left the on-screen draft newer than the stored
+ * version).
+ *
  * @param {string} draftId - Draft ID
  * @param {Object} updates - Fields to update
- * @returns {Promise<Object|null>} Updated draft or null if not found
+ * @returns {Promise<Object>} Updated draft
  */
-export const updateDraft = async (draftId, updates) => {
-  const drafts = await getAllDrafts();
-  const index = drafts.findIndex((d) => d.id === draftId);
-  
-  if (index === -1) return null;
-  
-  const updatedDraft = {
-    ...drafts[index],
-    ...updates,
-    updatedAt: new Date().toISOString(),
-    // Prevent changing certain fields
-    id: drafts[index].id,
-    createdAt: drafts[index].createdAt,
-    createdBy: drafts[index].createdBy,
-    versionNumber: drafts[index].versionNumber,
-  };
-  
-  // Save to Supabase
-  const saved = await saveDraftToSupabase(updatedDraft);
-  if (!saved) {
-    // Fallback to localStorage
-    drafts[index] = updatedDraft;
-    saveAllDraftsLocal(drafts);
-  }
-  
-  return updatedDraft;
-};
+export const updateDraft = (draftId, updates) =>
+  queueDraftMutation(async () => {
+    const existing =
+      (await readDraftById(draftId)) ||
+      getAllDraftsLocal().find((d) => d.id === draftId) ||
+      null;
+
+    if (!existing) {
+      throw new Error(
+        'This draft version could not be found in the database. Reload the version list and try again.'
+      );
+    }
+
+    const updatedDraft = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+      // Prevent changing certain fields
+      id: existing.id,
+      createdAt: existing.createdAt,
+      createdBy: existing.createdBy,
+      versionNumber: existing.versionNumber,
+    };
+
+    try {
+      await saveDraftToSupabase(updatedDraft);
+    } catch (err) {
+      console.error('Failed to save draft to Supabase:', err);
+      const local = getAllDraftsLocal();
+      const localIndex = local.findIndex((d) => d.id === draftId);
+      if (localIndex === -1) local.unshift(updatedDraft);
+      else local[localIndex] = updatedDraft;
+      saveAllDraftsLocal(local);
+      throw new Error(`Draft changes were kept in this browser only: ${err.message}`);
+    }
+
+    return updatedDraft;
+  });
 
 /**
  * Delete a draft
  * @param {string} draftId - Draft ID
  * @returns {Promise<boolean>} True if deleted
  */
-export const deleteDraft = async (draftId) => {
-  const drafts = await getAllDrafts();
-  const draft = drafts.find((d) => d.id === draftId);
-  
-  if (!draft) return false;
-  
-  // Delete from Supabase (removes the id key and any legacy name key)
-  const deleted = await deleteDraftFromSupabase(draft);
-  if (!deleted) {
-    // Fallback to localStorage
-    const filtered = drafts.filter((d) => d.id !== draftId);
-    saveAllDraftsLocal(filtered);
-  }
-  
-  return true;
-};
+export const deleteDraft = (draftId) =>
+  queueDraftMutation(async () => {
+    const drafts = await getAllDrafts();
+    const draft = drafts.find((d) => d.id === draftId);
+
+    if (!draft) return false;
+
+    // Delete from Supabase (removes the id key and any legacy name key)
+    const deleted = await deleteDraftFromSupabase(draft);
+    if (!deleted) {
+      const filtered = drafts.filter((d) => d.id !== draftId);
+      saveAllDraftsLocal(filtered);
+      throw new Error('The draft version could not be deleted from the database.');
+    }
+
+    return true;
+  });
 
 /**
  * Mark a draft as the published version.
@@ -555,4 +665,8 @@ export default {
   getDraftStats,
   getDueScheduledDrafts,
   createBackupDraft,
+  waitForDraftMutations,
+  getLocalDrafts,
+  restoreLocalDraft,
+  discardLocalDraft,
 };

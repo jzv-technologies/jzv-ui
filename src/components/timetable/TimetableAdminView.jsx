@@ -338,11 +338,7 @@ const AssignPopover = ({
   const popoverCellKey = popover ? `${popover.teacherId}:${popover.cellKey}` : null;
 
   useEffect(() => {
-    if (
-      !popoverCellKey ||
-      !popover ||
-      initializedPopoverCellRef.current === popoverCellKey
-    ) {
+    if (!popoverCellKey || !popover || initializedPopoverCellRef.current === popoverCellKey) {
       return;
     }
     initializedPopoverCellRef.current = popoverCellKey;
@@ -671,12 +667,12 @@ const AssignPopover = ({
                 setSelectedClassId('');
               }}
               onMouseDown={(event) => event.stopPropagation()}
-              className={`relative h-6 w-11 rounded-full transition-colors ${
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
                 isTeaching ? 'bg-emerald-600' : 'bg-gray-400'
               }`}
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
                   isTeaching ? 'translate-x-5' : 'translate-x-0.5'
                 }`}
               />
@@ -834,23 +830,34 @@ const AssignPopover = ({
                   </button>
                 </div>
               )}
-              {!isTeaching && selectedDays.length > 0 && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const saved = await onSetTeacherTimeBlock?.(
-                      teacherId,
-                      selectedDays,
-                      periodId,
-                      selectedTimeType
-                    );
-                    if (saved !== false) onClose();
-                  }}
-                  className="w-full rounded-xl bg-indigo-600 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-700"
-                >
-                  <i className="fas fa-plus-circle mr-1.5" />
-                  Add Schedule
-                </button>
+            </div>
+          )}
+
+          {!isTeaching && (
+            <div className="space-y-1.5 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const saved = await onSetTeacherTimeBlock?.(
+                    teacherId,
+                    selectedDays,
+                    periodId,
+                    selectedTimeType
+                  );
+                  // Only close when the write actually succeeded; otherwise the popover stays open
+                  // so a missing handler or refused write is not mistaken for success.
+                  if (saved === true) onClose();
+                }}
+                disabled={selectedDays.length === 0}
+                className="w-full rounded-xl bg-indigo-600 py-2 text-xs font-bold text-white transition-all hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <i className="fas fa-plus-circle mr-1.5" />
+                Add Non Teaching
+              </button>
+              {selectedDays.length === 0 && (
+                <p className="text-[10px] font-semibold text-dark-muted">
+                  Select at least one day to add this period.
+                </p>
               )}
             </div>
           )}
@@ -2804,6 +2811,15 @@ const TimetableAdminView = ({
                   }
 
                   const isAssigned = slot && slot.subject_id;
+                  const timeBlock =
+                    viewType === 'teacher'
+                      ? nonTeachingTimeBlocks.find(
+                          (block) =>
+                            String(block.teacher_id) === String(selectedTeacherId) &&
+                            String(block.period_id) === String(period.id) &&
+                            (block.day === day || block.day === 'Every day')
+                        )
+                      : null;
                   const subjectName = isAssigned ? getSubjectName(slot.subject_id) : '';
                   const isTeacherAssigned = slot && slot.teacher_id;
                   const teacher = isTeacherAssigned
@@ -2925,6 +2941,15 @@ const TimetableAdminView = ({
                             </span>
                           )}
                         </div>
+                      ) : timeBlock ? (
+                        <div
+                          className={`flex h-full min-h-[64px] w-full items-center justify-center gap-1 rounded-xl border px-1 text-center text-[10px] font-bold ${getTeacherTimeBlockAppearance(timeBlock.type).classes} ${
+                            isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''
+                          }`}
+                        >
+                          <i className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon}`} />
+                          <span>{getTeacherTimeBlockAppearance(timeBlock.type).label}</span>
+                        </div>
                       ) : (
                         <div
                           className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
@@ -2957,7 +2982,9 @@ const TimetableAdminView = ({
                             isPeriodApplicable(day, period, weekdayConfig)
                           )}
                           assignments={assignments}
+                          timeBlocks={nonTeachingTimeBlocks}
                           onAssign={handleAssign}
+                          onSetTeacherTimeBlock={onSetTeacherTimeBlock}
                           onClose={() => setPopover(null)}
                         />
                       )}
@@ -2966,7 +2993,10 @@ const TimetableAdminView = ({
                 };
 
                 return (
-                  <div className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none">
+                  <div
+                    className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none"
+                    data-feature-subview="teacher-view"
+                  >
                     {isTransposed ? (
                       <table className="w-full border-collapse min-w-[900px] print:min-w-full">
                         <thead className="table-sticky-header">

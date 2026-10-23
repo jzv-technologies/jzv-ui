@@ -58,8 +58,6 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
   const [availabilityAssignments, setAvailabilityAssignments] = useState(
     () => userRolesDataCache.get(currentUserId)?.availabilityAssignments || {}
   );
-  const [availabilityCategoryDrafts, setAvailabilityCategoryDrafts] = useState({});
-  const [savingAvailabilityEmployeeId, setSavingAvailabilityEmployeeId] = useState(null);
   const [loading, setLoading] = useState(() => !userRolesDataCache.has(currentUserId));
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState(false);
@@ -312,46 +310,6 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
       showToast('Error updating role: ' + err.message, 'error');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleSaveAvailabilityCategory = async (employeeId, categoryId) => {
-    const employeeKey = String(employeeId);
-    setSavingAvailabilityEmployeeId(employeeKey);
-    try {
-      const nextAssignments = { ...availabilityAssignments };
-      if (categoryId) {
-        nextAssignments[employeeKey] = categoryId;
-      } else {
-        delete nextAssignments[employeeKey];
-      }
-
-      const { error } = await supabase.from('admin_configruation').upsert(
-        { key: AVAILABILITY_ASSIGNMENTS_KEY, val: nextAssignments },
-        { onConflict: 'key' }
-      );
-      if (error) throw error;
-
-      setAvailabilityAssignments(nextAssignments);
-      setAvailabilityCategoryDrafts((current) => {
-        const next = { ...current };
-        delete next[employeeKey];
-        return next;
-      });
-      if (currentUserId) {
-        userRolesDataCache.set(currentUserId, {
-          authUsers,
-          employees,
-          availabilityCategories,
-          availabilityAssignments: nextAssignments,
-        });
-      }
-      showToast('Teacher availability category saved.', 'success');
-    } catch (err) {
-      console.error('Failed to save teacher availability category:', err);
-      showToast(`Could not save teacher availability category: ${err.message}`, 'error');
-    } finally {
-      setSavingAvailabilityEmployeeId(null);
     }
   };
 
@@ -651,14 +609,9 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                   const currentCategoryId = mappedEmp
                     ? availabilityAssignments[employeeKey]
                     : '';
-                  const selectedCategoryId = Object.prototype.hasOwnProperty.call(
-                    availabilityCategoryDrafts,
-                    employeeKey
-                  )
-                    ? availabilityCategoryDrafts[employeeKey]
-                    : String(currentCategoryId || '');
-                  const hasCategoryChanges =
-                    !!mappedEmp && selectedCategoryId !== String(currentCategoryId || '');
+                  const currentCategory = availabilityCategories.find(
+                    (category) => String(category.id) === String(currentCategoryId || '')
+                  );
 
                   return (
                     <tr
@@ -756,39 +709,11 @@ export const ManagePortalUserRolesView = ({ currentUser, onBack, canDeleteAuthUs
                             <span className="text-gray-400">—</span>
                           )
                         ) : u.roles?.includes('teacher') && mappedEmp ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <select
-                              value={selectedCategoryId}
-                              onChange={(event) =>
-                                setAvailabilityCategoryDrafts((current) => ({
-                                  ...current,
-                                  [employeeKey]: event.target.value,
-                                }))
-                              }
-                              aria-label={`Teacher availability category for ${mappedEmp.emp_name}`}
-                              className="w-full min-w-40 max-w-xs rounded-xl border border-purple-200 bg-white px-2.5 py-1.5 text-xs font-bold outline-none focus:ring-2 focus:ring-purple-200"
-                            >
-                              <option value="">Default availability</option>
-                              {availabilityCategories.map((category) => (
-                                <option key={category.id} value={String(category.id)}>
-                                  {category.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSaveAvailabilityCategory(employeeKey, selectedCategoryId)
-                              }
-                              disabled={
-                                !hasCategoryChanges ||
-                                savingAvailabilityEmployeeId === employeeKey
-                              }
-                              className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {savingAvailabilityEmployeeId === employeeKey ? 'Saving...' : 'Save'}
-                            </button>
-                          </div>
+                          <span className="text-xs font-bold text-dark-primary">
+                            {currentCategory?.name || (
+                              <span className="text-dark-muted">Default availability</span>
+                            )}
+                          </span>
                         ) : u.roles?.includes('teacher') ? (
                           <span className="text-xs font-bold text-dark-muted">
                             Link an employee to assign availability
