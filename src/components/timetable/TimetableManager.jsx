@@ -51,6 +51,8 @@ import {
 } from '../../data/mockTimetable';
 
 const DRAFT_ACTIVE_STORAGE_KEY = 'jzv_timetable_active_draft_id';
+// Draft edits are held in memory and written on this interval, not on every keystroke/click.
+const DRAFT_AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
 
 const draftSlotKey = (slot) => `${slot.class_id}|${slot.day}|${slot.period_id}`;
 const draftSlotValue = (slot) => `${slot.subject_id ?? ''}|${slot.teacher_id ?? ''}`;
@@ -239,6 +241,11 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const [isDraftListOpen, setIsDraftListOpen] = useState(false);
   const [isDraftListLoading, setIsDraftListLoading] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  // True between an edit and the next autosave (or manual save).
+  const [isDraftDirty, setIsDraftDirty] = useState(false);
+  const pendingDraftDataRef = useRef(null);
+  const draftDirtyRef = useRef(false);
+  const draftAutosaveTimerRef = useRef(null);
   // Reason shown in the draft bar when a save could not reach the database.
   const [draftSaveError, setDraftSaveError] = useState('');
   // Draft copies that only exist in this browser (written while database saves were refused).
@@ -697,6 +704,82 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
   // Sync state helper. In draft mode writes land on the draft only; live data is reached
   // exclusively through publishDraftToLive().
+  // Write the pending draft snapshot. Returns true when the database kept it.
+  const persistDraftData = React.useCallback(async (draftId, data) => {
+    if (draftAutosaveTimerRef.current) {
+      clearTimeout(draftAutosaveTimerRef.current);
+      draftAutosaveTimerRef.current = null;
+    }
+    setIsSavingDraft(true);
+    // An edit made while this save is in flight must stay pending, so only clear when the snapshot
+    // still on the queue is the one being written.
+    const settlePending = () => {
+      if (pendingDraftDataRef.current !== data) return;
+      pendingDraftDataRef.current = null;
+      draftDirtyRef.current = false;
+      setIsDraftDirty(false);
+    };
+    try {
+      const savedDraft = await updateDraft(draftId, { data });
+      // Keep the panel (id, counts) in step with what the database actually holds — unless another
+      // edit arrived meanwhile, in which case the newer in-memory snapshot stays authoritative.
+      setActiveDraft((current) => {
+        if (!current || !savedDraft || current.id !== savedDraft.id) return current;
+        if (pendingDraftDataRef.current && pendingDraftDataRef.current !== data) return current;
+        return savedDraft;
+      });
+      setDraftSaveError('');
+      settlePending();
+      return true;
+    } catch (err) {
+      console.error('Failed to save draft:', err);
+      // The edit is preserved in the browser copy; the indicator turns red until it is synced.
+      setDraftSaveError(err.message);
+      settlePending();
+      showToast('Failed to save draft: ' + err.message, 'error');
+      return false;
+    } finally {
+      setIsSavingDraft(false);
+    }
+  }, []);
+
+  // Draft edits wait for this timer instead of being written on every change.
+  const scheduleDraftAutosave = React.useCallback(() => {
+    if (draftAutosaveTimerRef.current) return;
+    draftAutosaveTimerRef.current = setTimeout(() => {
+      draftAutosaveTimerRef.current = null;
+      const draft = activeDraftRef.current;
+      const data = pendingDraftDataRef.current;
+      if (!draft || !data) return;
+      persistDraftData(draft.id, data);
+    }, DRAFT_AUTOSAVE_INTERVAL_MS);
+  }, [persistDraftData]);
+
+  const flushPendingDraftSave = async () => {
+    const draft = activeDraftRef.current;
+    const data = pendingDraftDataRef.current;
+    if (!draft || !data) return true;
+    return persistDraftData(draft.id, data);
+  };
+
+  // Never leave an autosave timer behind, and try to write a pending edit when the screen closes.
+  useEffect(
+    () => () => {
+      if (draftAutosaveTimerRef.current) {
+        clearTimeout(draftAutosaveTimerRef.current);
+        draftAutosaveTimerRef.current = null;
+      }
+      const draft = activeDraftRef.current;
+      const data = pendingDraftDataRef.current;
+      if (draft?.id && data) {
+        updateDraft(draft.id, { data }).catch((err) =>
+          console.error('Failed to save the draft while leaving the screen:', err)
+        );
+      }
+    },
+    []
+  );
+
   const saveState = async (updates) => {
     const nextClassifications =
       updates.classifications !== undefined ? updates.classifications : classifications;
@@ -748,21 +831,12 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         seasonsConfig: nextSeasonsConfig,
       };
       setActiveDraft((prev) => (prev ? { ...prev, data: nextDraftData } : prev));
-      setIsSavingDraft(true);
-      try {
-        const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
-        // Keep the panel (id, saved time, counts) in step with what the database actually holds.
-        setActiveDraft((current) =>
-          current && savedDraft && current.id === savedDraft.id ? savedDraft : current
-        );
-        setDraftSaveError('');
-      } catch (err) {
-        console.error('Failed to save draft:', err);
-        setDraftSaveError(err.message);
-        showToast('Failed to save draft: ' + err.message, 'error');
-      } finally {
-        setIsSavingDraft(false);
-      }
+      // Hold the edit in memory and let the 5-minute autosave (or the save icon) write it.
+      pendingDraftDataRef.current = nextDraftData;
+      draftDirtyRef.current = true;
+      setIsDraftDirty(true);
+      setDraftSaveError('');
+      scheduleDraftAutosave();
       return;
     }
 
@@ -929,6 +1003,11 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // Load a draft's JSON into every Scheduler Setup tab without touching live data.
   const handleLoadDraft = async (draftId, { silent = false } = {}) => {
     if (!draftId) return;
+    // Switching versions must not drop edits that are still waiting for the autosave.
+    const previousDraft = activeDraftRef.current;
+    if (pendingDraftDataRef.current && previousDraft && previousDraft.id !== draftId) {
+      await flushPendingDraftSave();
+    }
     // Always refetch so the latest saved draft JSON is loaded, not a stale list entry.
     const available = await refreshDraftList();
     const draft =
@@ -947,14 +1026,31 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     setActiveDraft(draft);
     applyDataToState(draft.data);
     setDraftSaveError('');
+    pendingDraftDataRef.current = null;
+    draftDirtyRef.current = false;
+    setIsDraftDirty(false);
+    if (draftAutosaveTimerRef.current) {
+      clearTimeout(draftAutosaveTimerRef.current);
+      draftAutosaveTimerRef.current = null;
+    }
     if (!silent) showToast(`Loaded draft "${draft.name}"`, 'success');
   };
 
-  // Return to live data, discarding any draft-only edits.
-  const handleSwitchToLive = () => {
+  // Return to live data. Pending draft edits are written first so they are not lost.
+  const handleSwitchToLive = async () => {
     if (!canUseLiveMode) {
       showToast('Your role can only work on draft versions', 'error');
       return;
+    }
+    if (draftDirtyRef.current) {
+      const saved = await flushPendingDraftSave();
+      if (!saved) {
+        showToast(
+          'Your unsaved draft changes could not be saved, so draft mode was kept to avoid losing them.',
+          'error'
+        );
+        return;
+      }
     }
     if (liveSnapshotRef.current) {
       applyDataToState(liveSnapshotRef.current);
@@ -962,6 +1058,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
     setActiveDraft(null);
     setDraftSaveError('');
+    setIsDraftDirty(false);
     dataModeRef.current = 'live';
     setDataMode('live');
     showToast('Switched back to live timetable', 'info');
@@ -1188,6 +1285,11 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
   const handlePublishDraftToLive = async (liveData) => {
     try {
+      // Publish what is on screen: write the pending autosave first so the stored version matches.
+      if (draftDirtyRef.current) {
+        const saved = await flushPendingDraftSave();
+        if (!saved) throw new Error('the unsaved draft changes could not be stored');
+      }
       await publishDraftToLive(liveData);
       liveSnapshotRef.current = null;
       if (canUseLiveMode) {
@@ -3364,6 +3466,13 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
         throw new Error('Deleting drafts is not enabled for your role');
       }
       const { id, name } = activeDraft;
+      if (draftAutosaveTimerRef.current) {
+        clearTimeout(draftAutosaveTimerRef.current);
+        draftAutosaveTimerRef.current = null;
+      }
+      pendingDraftDataRef.current = null;
+      draftDirtyRef.current = false;
+      setIsDraftDirty(false);
       await deleteDraft(id);
       if (liveSnapshotRef.current) applyDataToState(liveSnapshotRef.current);
       liveSnapshotRef.current = null;
@@ -3395,18 +3504,18 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
   };
 
-  // Write the active version's current state (including any browser-only edits) to the database.
+  // Save the active version's current state now (the save icon, or before leaving draft mode).
   const handleSyncActiveDraft = async () => {
-    if (!activeDraft) return;
+    const draft = activeDraftRef.current || activeDraft;
+    if (!draft) return;
     setIsDraftSyncBusy(true);
     try {
-      const savedDraft = await updateDraft(activeDraft.id, { data: activeDraft.data });
-      setActiveDraft((current) =>
-        current && savedDraft && current.id === savedDraft.id ? savedDraft : current
-      );
-      setDraftSaveError('');
-      await refreshDraftList();
-      showToast('Draft saved to the database.', 'success');
+      const data = pendingDraftDataRef.current || draft.data;
+      const saved = await persistDraftData(draft.id, data);
+      if (saved) {
+        await refreshDraftList();
+        showToast('Draft saved to the database.', 'success');
+      }
     } catch (err) {
       console.error('Failed to save the draft to the database:', err);
       setDraftSaveError(err.message);
@@ -3416,18 +3525,25 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     }
   };
 
-  // Drop the browser-only copy and reload the stored version.
+  // Drop pending/browser-only changes and reload the stored version.
   const handleDiscardActiveDraftChanges = async () => {
     if (!activeDraft) return;
     setIsDraftSyncBusy(true);
     try {
+      if (draftAutosaveTimerRef.current) {
+        clearTimeout(draftAutosaveTimerRef.current);
+        draftAutosaveTimerRef.current = null;
+      }
+      pendingDraftDataRef.current = null;
+      draftDirtyRef.current = false;
+      setIsDraftDirty(false);
       discardLocalDraft(activeDraft.id);
       setDraftSaveError('');
       await handleLoadDraft(activeDraft.id, { silent: true });
       await refreshDraftList();
-      showToast('Browser-only changes discarded; the saved version was reloaded.', 'info');
+      showToast('Unsaved changes discarded; the saved version was reloaded.', 'info');
     } catch (err) {
-      console.error('Failed to discard browser-only draft changes:', err);
+      console.error('Failed to discard draft changes:', err);
       showToast(`Could not discard the changes: ${err.message}`, 'error');
     } finally {
       setIsDraftSyncBusy(false);
@@ -3438,11 +3554,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     ? localDraftRecovery.find((item) => item.id === activeDraft.id)
     : null;
   const hasLocalOnlyChanges = Boolean(activeLocalCopy) || Boolean(draftSaveError);
+  const hasPendingDraftChanges = isDraftDirty;
+  const canWriteDraftNow = hasPendingDraftChanges || hasLocalOnlyChanges;
   const draftSaveStatusColor = isSavingDraft
     ? 'text-amber-500'
     : hasLocalOnlyChanges
       ? 'text-red-500'
-      : 'text-emerald-500';
+      : hasPendingDraftChanges
+        ? 'text-amber-500'
+        : 'text-emerald-500';
   const draftSaveStatusTitle = isSavingDraft
     ? 'Saving to the database…'
     : hasLocalOnlyChanges
@@ -3450,8 +3570,10 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           activeLocalCopy?.changedSlots
             ? ` — ${activeLocalCopy.changedSlots} period(s) differ from the stored version`
             : ''
-        }. Use the sync icon to save it to the database.`
-      : 'Saved to the database.';
+        }. Use the save icon to write it to the database.`
+      : hasPendingDraftChanges
+        ? 'Unsaved changes — autosaves every 5 minutes, or use the save icon.'
+        : 'Saved to the database.';
 
   const draftPanelActions = [
     ...(canPublishDraft
@@ -3685,7 +3807,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
           >
             <span className="flex items-center px-0.5" title={draftSaveStatusTitle}>
               <i
-                className={`fas fa-circle text-[9px] ${draftSaveStatusColor} ${
+                className={`fas fa-lightbulb text-xl ${draftSaveStatusColor} ${
                   isSavingDraft ? 'animate-pulse' : ''
                 }`}
                 aria-hidden="true"
@@ -3695,22 +3817,22 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
             <button
               type="button"
               onClick={handleSyncActiveDraft}
-              disabled={!hasLocalOnlyChanges || isDraftSyncBusy}
+              disabled={!canWriteDraftNow || isDraftSyncBusy}
               className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-amber-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Save the browser-only changes to the database"
-              aria-label="Save the browser-only changes to the database"
+              title="Save the draft to the database now"
+              aria-label="Save the draft to the database now"
             >
-              <i className={`fas fa-arrows-rotate text-[11px] ${isDraftSyncBusy ? 'fa-spin' : ''}`} />
+              <i className={`fas fa-save text-xl ${isDraftSyncBusy ? 'fa-spin' : ''}`} />
             </button>
             <button
               type="button"
               onClick={handleDiscardActiveDraftChanges}
-              disabled={!hasLocalOnlyChanges || isDraftSyncBusy}
+              disabled={!canWriteDraftNow || isDraftSyncBusy}
               className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Discard the browser-only changes and reload the saved version"
-              aria-label="Discard the browser-only changes and reload the saved version"
+              title="Discard unsaved changes and reload the saved version"
+              aria-label="Discard unsaved changes and reload the saved version"
             >
-              <i className="fas fa-rotate-left text-[11px]" />
+              <i className="fas fa-rotate-left text-xl" />
             </button>
           </div>
         )}

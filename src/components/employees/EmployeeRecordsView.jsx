@@ -42,6 +42,11 @@ const EmployeeRecordsView = ({
     Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
   const canAccess = useCanAccess(effectiveRoles);
 
+  const hasRole = (name) =>
+    effectiveRoles.some((r) => String(r || '').toLowerCase() === name);
+  const isAdmin = hasRole('admin');
+  const isManagement = hasRole('management');
+
   const canEdit = canAccess('emp-edit-record');
   const canDelete = canAccess('emp-delete-record');
   const canAdd = canAccess('emp-add-record');
