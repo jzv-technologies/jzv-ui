@@ -158,16 +158,14 @@ const SalaryPaymentLogView = ({
                   </div>
                 )}
 
-                {/* Org Salary Table */}
-                <div className="overflow-x-auto border border-gray-200 rounded-2xl shadow-2xs">
-                  <SalaryTrackerTable
-                    items={orgItems}
-                    onOpenExtras={handleOpenExtrasModal}
-                    onOpenPayment={handleOpenPaymentModal}
-                    onOpenHistory={handleOpenHistoryModal}
-                    canUpdate={canUpdateSalaryTracker}
-                  />
-                </div>
+                {/* Org Salary Records (cards on mobile, table on desktop) */}
+                <SalaryTrackerTable
+                  items={orgItems}
+                  onOpenExtras={handleOpenExtrasModal}
+                  onOpenPayment={handleOpenPaymentModal}
+                  onOpenHistory={handleOpenHistoryModal}
+                  canUpdate={canUpdateSalaryTracker}
+                />
               </div>
             );
           })}
