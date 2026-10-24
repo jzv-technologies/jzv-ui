@@ -104,12 +104,24 @@ const EmployeeRecordsView = ({
   }); // 'records' | 'salary_dashboard' | 'salary_list'
 
   useEffect(() => {
-    if (mode === 'salary') setActiveTab('salary_dashboard');
-    else if (mode === 'records') setActiveTab('records');
-    else if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
+    if (mode === 'salary') {
+      // Keep the user's choice between the two salary tabs; only fall back when the
+      // active tab does not belong to salary mode.
+      if (activeTab !== 'salary_dashboard' && activeTab !== 'salary_list') {
+        setActiveTab('salary_dashboard');
+      }
+    } else if (mode === 'records') {
+      if (activeTab !== 'records') setActiveTab('records');
+    } else if (availableTabs.length > 0 && !availableTabs.some((t) => t.id === activeTab)) {
       setActiveTab(availableTabs[0].id);
     }
   }, [availableTabs, activeTab, mode]);
+
+  // Keep the Salary Tracker's own Dashboard/List View switcher in sync with the tab state
+  const handleSalaryViewModeChange = (nextViewMode) => {
+    setActiveTab(nextViewMode === 'monthly' ? 'salary_list' : 'salary_dashboard');
+  };
+
   const [salaryControls, setSalaryControls] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [authUsers, setAuthUsers] = useState([]);
@@ -1836,6 +1848,7 @@ const EmployeeRecordsView = ({
             user={user}
             userRoles={effectiveRoles}
             viewMode="matrix"
+            setViewMode={handleSalaryViewModeChange}
             onRegisterControls={setSalaryControls}
             hideHeaderTopRow={true}
           />
@@ -1848,6 +1861,7 @@ const EmployeeRecordsView = ({
             user={user}
             userRoles={effectiveRoles}
             viewMode="monthly"
+            setViewMode={handleSalaryViewModeChange}
             onRegisterControls={setSalaryControls}
             hideHeaderTopRow={true}
           />
