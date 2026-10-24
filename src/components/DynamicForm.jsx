@@ -402,7 +402,7 @@ EmbeddedConversationChat.displayName = 'EmbeddedConversationChat';
 // MAIN FORM
 // =========================
 
-const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) => {
+const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isDirectLink = false }) => {
   const auth = useAuth();
   const currentUserObj = auth?.user;
   const currentFullName = auth?.fullName;
@@ -410,8 +410,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
 
   const effectiveRoles = userRoles && userRoles.length > 0 ? userRoles : currentRoles;
 
-  const bgColor = textColor.replace('text-', 'bg-');
-  const borderColor = textColor.replace('text-', 'border-');
+  const safeTextColor = textColor || 'text-blue-600';
+  const bgColor = safeTextColor.replace('text-', 'bg-');
+  const borderColor = safeTextColor.replace('text-', 'border-');
 
   const [fields, setFields] = useState([]);
   const [formData, setFormData] = useState({});
@@ -425,11 +426,33 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [idPattern, setIdPattern] = useState('ID-XXXXX');
   const [sheetMapping, setSheetMapping] = useState(null);
+  // Bumped after a successful submission so the form is re-seeded and internal
+  // widget state (chat drafts, open dropdowns) is cleared.
+  const [formResetKey, setFormResetKey] = useState(0);
 
   const stringToArray = (str) => {
     if (Array.isArray(str)) return str;
     if (!str || str === '') return [];
     return str.split(',').map((s) => s.trim());
+  };
+
+  // Initial values for a freshly loaded (or freshly reset) form
+  const buildDefaultFormData = (fieldsList) => {
+    const defaults = {};
+    (Array.isArray(fieldsList) ? fieldsList : []).forEach((field) => {
+      const key = field['Field Name']?.trim();
+      if (!key) return;
+      const type = field['Field Type']?.trim().toLowerCase();
+      const defaultVal = field['Default Value']?.toString() || '';
+      if (type === 'checkbox') {
+        defaults[key] = defaultVal === 'true';
+      } else if (type === 'multi-checkbox') {
+        defaults[key] = stringToArray(defaultVal);
+      } else {
+        defaults[key] = defaultVal;
+      }
+    });
+    return defaults;
   };
 
   useEffect(() => {
@@ -485,22 +508,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
             setIdPattern(idPat);
             setSheetMapping(sMap);
 
-            const defaults = {};
-            fieldsList.forEach((field) => {
-              const key = field['Field Name'].trim();
-              const type = field['Field Type']?.trim().toLowerCase();
-              let defaultVal = field['Default Value']?.toString() || '';
-
-              if (type === 'checkbox') {
-                defaults[key] = defaultVal === 'true';
-              } else if (type === 'multi-checkbox') {
-                defaults[key] = stringToArray(defaultVal);
-              } else {
-                defaults[key] = defaultVal;
-              }
-            });
-
-            setFormData(defaults);
+            setFormData(buildDefaultFormData(fieldsList));
             setValidationErrors({});
             setLoading(false);
             return;
@@ -511,8 +519,8 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
       }
 
       try {
-        // Fetch form configuration with session-cache and role filtering
-        const configRecord = await fetchUserDynamicFormConfigByUuid(uuid, effectiveRoles);
+        // Fetch form configuration with session-cache and role filtering (bypassed if isDirectLink)
+        const configRecord = await fetchUserDynamicFormConfigByUuid(uuid, effectiveRoles, isDirectLink);
 
         if (!configRecord) {
           throw new Error(`No form configuration record found for "${uuid}" or access denied`);
@@ -562,24 +570,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
         setIdPattern(finalIdPattern);
         setSheetMapping(resolvedMapping);
 
-        const defaults = {};
-
-        cleanFields.forEach((field) => {
-          const key = field['Field Name'].trim();
-          const type = field['Field Type']?.trim().toLowerCase();
-
-          let defaultVal = field['Default Value']?.toString() || '';
-
-          if (type === 'checkbox') {
-            defaults[key] = defaultVal === 'true';
-          } else if (type === 'multi-checkbox') {
-            defaults[key] = stringToArray(defaultVal);
-          } else {
-            defaults[key] = defaultVal;
-          }
-        });
-
-        setFormData(defaults);
+        setFormData(buildDefaultFormData(cleanFields));
         setValidationErrors({});
       } catch (err) {
         setError(err.message);
@@ -621,7 +612,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
         return updated ? next : prev;
       });
     }
-  }, [fields, currentUserObj, currentFullName]);
+  }, [fields, currentUserObj, currentFullName, formResetKey]);
 
   const validateField = (field, value) => {
     const type = field['Field Type']?.trim().toLowerCase();
@@ -729,12 +720,27 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
     if (allowed.includes('all')) return true;
     if (allowed.includes('none')) return false;
 
+    // For direct public links, fields visible to reporter, public, parent or all are accessible
+    if (isDirectLink) {
+      if (
+        allowed.includes('reporter') ||
+        allowed.includes('public') ||
+        allowed.includes('parent') ||
+        allowed.includes('all')
+      ) {
+        return true;
+      }
+    }
+
     const rolesLower = (effectiveRoles || []).map((r) => r.toLowerCase());
     if (rolesLower.length === 0) {
-      rolesLower.push('parent', 'reporter');
+      rolesLower.push('parent', 'reporter', 'public');
     }
     if (!rolesLower.includes('reporter')) {
       rolesLower.push('reporter');
+    }
+    if (isDirectLink && !rolesLower.includes('public')) {
+      rolesLower.push('public');
     }
 
     return rolesLower.some((r) => allowed.includes(r));
@@ -868,6 +874,16 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
       submittingRef.current = false;
       setSubmitting(false);
     }
+  };
+
+  // "Continue" on the success modal: close it and start a fresh, empty form
+  const handleSuccessContinue = () => {
+    setShowSuccessModal(false);
+    setSuccessMessage('');
+    setError('');
+    setValidationErrors({});
+    setFormData(buildDefaultFormData(fields));
+    setFormResetKey((key) => key + 1);
   };
 
   // =========================
@@ -1325,13 +1341,13 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
           className={`
             rounded-[32px]
            bg-white
-          border ${textColor.replace('text-', 'border-')}/50 bg-white p-6 shadow-md
-          ${textColor}
+          border ${borderColor}/50 bg-white p-6 shadow-md
+          ${safeTextColor}
             shadow-2xl
             p-6 md:p-8
           `}
         >
-          <form onSubmit={handleSubmit}>
+          <form key={formResetKey} onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {visibleFields.map(renderField)}
             </div>
@@ -1343,7 +1359,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
                 className={`
                   mt-8 w-full
                   rounded-2xl
-                  ${textColor.replace('text-', 'bg-')} hover:bg-blue-700
+                  ${bgColor} hover:opacity-90
                   text-white font-semibold
                   py-4
                   transition-all duration-300
@@ -1362,7 +1378,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [] }) =
       )}
 
       {showSuccessModal && (
-        <SuccessModal message={successMessage} onClose={() => setShowSuccessModal(false)} />
+        <SuccessModal message={successMessage} onClose={handleSuccessContinue} />
       )}
     </div>
   );

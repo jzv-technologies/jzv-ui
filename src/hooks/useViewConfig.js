@@ -80,6 +80,7 @@ export const STATIC_MANAGED_COMPONENTS = new Set([
   'report-card-designer',
   'report-card-designer-edit',
   'requests-exceptions',
+  'review-requests',
   'salary-tracker',
   'scheduler-setup',
   'season-setup',

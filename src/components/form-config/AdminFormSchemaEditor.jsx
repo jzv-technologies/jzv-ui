@@ -540,6 +540,44 @@ const AdminFormSchemaEditor = ({
       </div>
 
       <div className="p-8 border-b border-light-border bg-gray-50/20 space-y-6">
+        {uuid && (
+          <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+                <i className="fas fa-link" />
+              </div>
+              <div>
+                <p className="font-bold text-indigo-950">Direct Public Submission Link</p>
+                <p className="text-indigo-700 font-mono text-[11px] break-all">
+                  {window.location.origin}/{uuid}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/${uuid}`);
+                  showToast(`Direct link copied: ${window.location.origin}/${uuid}`, "success");
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              >
+                <i className="fas fa-copy" />
+                <span>Copy Link</span>
+              </button>
+              <a
+                href={`/${uuid}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <i className="fas fa-external-link-alt" />
+                <span>Open Form</span>
+              </a>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Form Name Input */}
           <div>

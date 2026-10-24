@@ -1,5 +1,6 @@
 // src/components/portals/admin/AdminFormConfigList.jsx
 import React from "react";
+import { showToast } from "../../utils/toast";
 
 const AdminFormConfigList = ({
   configs,
@@ -17,6 +18,15 @@ const AdminFormConfigList = ({
   onClearCache,
   clearingCacheUuid,
 }) => {
+  const handleCopyLink = (formName) => {
+    try {
+      const url = `${window.location.origin}/${formName}`;
+      navigator.clipboard.writeText(url);
+      showToast(`Direct form link copied: ${url}`, "success");
+    } catch {
+      showToast("Failed to copy link", "error");
+    }
+  };
   return (
     <div className="bg-white border-0 overflow-hidden">
 
@@ -116,6 +126,13 @@ const AdminFormConfigList = ({
                           </button>
                         </>
                       )}
+                      <button
+                        onClick={() => handleCopyLink(config.form_name || config.uuid)}
+                        className="bg-purple-50 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-purple-100 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        title={`Copy direct link: ${window.location.origin}/${config.form_name || config.uuid}`}
+                      >
+                        <i className="fas fa-link"></i> Share
+                      </button>
                       <button
                         onClick={() => onEdit(config)}
                         disabled={dbTableMissing}

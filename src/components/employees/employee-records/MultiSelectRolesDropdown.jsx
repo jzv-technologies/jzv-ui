@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import {
-  SYSTEM_ROLES,
-  normalizeRoles,
-  fetchAllAppRoles,
-} from '../../../utils/roleUtils';
+import { SYSTEM_ROLES, normalizeRoles, fetchAllAppRoles } from '../../../utils/roleUtils';
 
-const MultiSelectRolesDropdown = ({ value, onChange, disabled, rolesList }) => {
+const MultiSelectRolesDropdown = ({ value, onChange, disabled, rolesList, placeholder }) => {
   const [open, setOpen] = useState(false);
   const [allRoles, setAllRoles] = useState(rolesList || SYSTEM_ROLES);
   const dropdownRef = useRef(null);
@@ -62,7 +58,7 @@ const MultiSelectRolesDropdown = ({ value, onChange, disabled, rolesList }) => {
   const displayText =
     selectedRoles.length > 0
       ? selectedRoles.map((r) => r.label || r.name).join(', ')
-      : 'Select portal roles...';
+      : placeholder || 'Select portal roles...';
 
   return (
     <div className="relative w-full" ref={dropdownRef}>
@@ -103,9 +99,7 @@ const MultiSelectRolesDropdown = ({ value, onChange, disabled, rolesList }) => {
                   onChange={() => handleToggle(role.id)}
                   className="rounded text-purple-600 focus:ring-purple-500 w-3.5 h-3.5 border-gray-300"
                 />
-                <span className="truncate flex-1">
-                  {role.label || role.name}
-                </span>
+                <span className="truncate flex-1">{role.label || role.name}</span>
                 {role.is_system_role === false && (
                   <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-purple-200/80 text-purple-800">
                     Custom

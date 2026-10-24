@@ -121,11 +121,20 @@ const App = () => {
 
   const isDisplayBoard = location.pathname === '/portal/display';
   const isPortalRoute = location.pathname === '/portal' || location.pathname.startsWith('/portal/');
-
+  const isDirectFormRoute = location.pathname !== '/' && !isPortalRoute;
 
   return (
-    <div id="dashboard-section" className={isDisplayBoard ? "min-h-screen bg-[#064e3b]" : "min-h-screen pb-16 print:min-h-0 print:pb-0"}>
-      {!isDisplayBoard && isHeaderVisible && (
+    <div
+      id="dashboard-section"
+      className={
+        isDisplayBoard
+          ? "min-h-screen bg-[#064e3b]"
+          : isDirectFormRoute
+            ? "min-h-screen"
+            : "min-h-screen pb-16 print:min-h-0 print:pb-0"
+      }
+    >
+      {!isDisplayBoard && !isDirectFormRoute && isHeaderVisible && (
         <Header
           user={user}
           userRoles={userRoles}
@@ -142,7 +151,7 @@ const App = () => {
         />
       )}
 
-      {!isDisplayBoard && !isPortalRoute && !isHeaderVisible && (
+      {!isDisplayBoard && !isPortalRoute && !isDirectFormRoute && !isHeaderVisible && (
         <button
           type="button"
           onClick={() => setIsHeaderVisible(true)}

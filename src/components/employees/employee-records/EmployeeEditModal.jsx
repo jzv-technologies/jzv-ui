@@ -2,6 +2,7 @@ import React from 'react';
 import ModalErrorBoundary from './ModalErrorBoundary';
 import MultiSelectRolesDropdown from './MultiSelectRolesDropdown';
 import { normalizeRoles } from '../../../utils/roleUtils';
+import { getDesignationOptions } from '../../../utils/employeeOptions';
 
 const DEFAULT_ORGANIZATIONS = [
   'MRQU Educational & Charitable Trust',
@@ -13,18 +14,6 @@ const DEFAULT_ORGANIZATIONS = [
   'Rahmaniya Masjid',
 ];
 
-const DEFAULT_ROLES = [
-  'Teacher',
-  'Admin',
-  'Management',
-  'Accountant',
-  'Staff',
-  'Principal',
-  'Vice Principal',
-  'Librarian',
-];
-
-const DESIGNATIONS = DEFAULT_ROLES;
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 const MARITAL_STATUSES = ['Single', 'Married', 'Divorced', 'Widowed'];
 const EMERGENCY_RELATIONS = [
@@ -850,7 +839,7 @@ const EmployeeEditModal = ({
                           : 'bg-white text-dark-primary border-gray-300'
                       }`}
                     >
-                      {DESIGNATIONS.map((d) => (
+                      {getDesignationOptions(formData.designation).map((d) => (
                         <option key={d} value={d}>
                           {d}
                         </option>
@@ -982,7 +971,9 @@ const EmployeeEditModal = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFormData({ ...formData, login_allowed: false })}
+                        onClick={() =>
+                          setFormData({ ...formData, login_allowed: false, mapped_roles: [] })
+                        }
                         className={`px-4 py-1.5 rounded-lg font-extrabold text-xs transition-all ${
                           !formData.login_allowed
                             ? 'bg-gray-700 text-white shadow-sm'
@@ -1062,7 +1053,7 @@ const EmployeeEditModal = ({
                           mapped_roles:
                             Array.isArray(matched?.roles) && matched.roles.length > 0
                               ? matched.roles
-                              : formData.mapped_roles || ['teacher'],
+                              : formData.mapped_roles || [],
                         });
                       }}
                       className={`w-full px-3 py-2 border rounded-xl font-bold outline-none ${
@@ -1128,7 +1119,14 @@ const EmployeeEditModal = ({
                     </label>
                     <MultiSelectRolesDropdown
                       disabled={!formData.login_allowed || !formData.auth_id}
-                      value={formData.mapped_roles || ['teacher']}
+                      value={formData.login_allowed ? formData.mapped_roles || [] : []}
+                      placeholder={
+                        !formData.login_allowed
+                          ? 'None — portal access not allowed'
+                          : !formData.auth_id
+                            ? 'Link an auth user first'
+                            : 'None — no portal role assigned'
+                      }
                       onChange={(nextRoles) =>
                         setFormData({
                           ...formData,
@@ -1136,6 +1134,12 @@ const EmployeeEditModal = ({
                         })
                       }
                     />
+                    {!formData.login_allowed && (
+                      <div className="text-[11px] font-medium text-gray-500 mt-1 flex items-center gap-1">
+                        <i className="fas fa-ban text-gray-400"></i> No portal role is assigned while
+                        portal access is not allowed.
+                      </div>
+                    )}
                     {!formData.auth_id && formData.login_allowed && (
                       <div className="text-[11px] font-medium text-amber-700 mt-1 flex items-center gap-1">
                         <i className="fas fa-lock text-amber-600"></i> Auth Mapping is required.

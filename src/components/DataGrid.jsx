@@ -8,6 +8,8 @@ const DataGrid = ({
   onRowClick = null,
   excludeColumns = ["uuid"],
   columnConfig = {},
+  onColumnsChange = null,
+  mobileCardView = false,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [columnFilters, setColumnFilters] = useState({});
@@ -51,6 +53,16 @@ const DataGrid = ({
       return updated;
     });
   }, [data, excludeColumns]);
+
+  // Report the active column layout so parents can mirror it (e.g. split view navigation)
+  useEffect(() => {
+    if (typeof onColumnsChange !== "function") return;
+    onColumnsChange({
+      columnOrder,
+      visibleColumns,
+      visibleHeaders: columnOrder.filter((h) => visibleColumns[h] !== false),
+    });
+  }, [columnOrder, visibleColumns, onColumnsChange]);
 
   // Drag & drop for column order (only on header row)
   const handleDragStart = (e, index) => {
@@ -190,7 +202,7 @@ const DataGrid = ({
   const visibleHeaders = columnOrder.filter((h) => visibleColumns[h] !== false);
 
   return (
-    <div className="bg-white border-0 shadow-none overflow-hidden rounded-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-full m-0 p-0 flex flex-col">
+    <div className="bg-white border-0 shadow-none overflow-visible rounded-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-full m-0 p-0 flex flex-col">
       {/* Stats & Column Manager Bar */}
       <div className="px-4 sm:px-6 py-3 border-b border-light-border bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm shrink-0">
         <span className="text-dark-muted font-medium">
@@ -216,7 +228,7 @@ const DataGrid = ({
               <i className="fas fa-columns"></i> Columns
             </button>
             {showColumnManager && (
-              <div className="absolute right-0 top-full mt-1 bg-white border border-light-border rounded-lg shadow-lg z-20 min-w-[200px] p-2">
+              <div className="absolute right-0 top-full mt-1 bg-white border border-light-border rounded-lg shadow-lg z-30 w-[min(18rem,calc(100vw-1.5rem))] p-2">
                 <div className="max-h-64 overflow-y-auto space-y-1">
                   {columnOrder.map((col) => (
                     <label
@@ -247,7 +259,68 @@ const DataGrid = ({
           <p>No records match your filters.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto w-full">
+        <>
+          {mobileCardView && (
+            <div className="md:hidden p-3 space-y-2.5">
+              {processedData.map((item, idx) => {
+                const [primaryCol, ...restCols] = visibleHeaders;
+                const primaryValue = String(item[primaryCol] ?? "").trim();
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => onRowClick && onRowClick(item)}
+                    className={`rounded-2xl border border-light-border bg-white shadow-2xs p-3 space-y-2 ${onRowClick ? "cursor-pointer active:scale-[0.99]" : ""} ${getRowStatusClass(item)}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[9px] font-extrabold uppercase tracking-wide text-dark-muted truncate">
+                        {columnConfig[primaryCol]?.label ||
+                          columnConfig[primaryCol]?.Label ||
+                          primaryCol ||
+                          "Record"}
+                      </div>
+                      <div className="text-sm font-black text-dark-primary break-words">
+                        {primaryValue || "—"}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      {restCols.map((h) => {
+                        const raw = String(item[h] ?? "").trim();
+                        const isStatus = [
+                          "open",
+                          "in-progress",
+                          "in progress",
+                          "resolved",
+                          "rejected",
+                        ].includes(raw.toLowerCase());
+                        return (
+                          <div
+                            key={h}
+                            className="flex items-start justify-between gap-3 text-[11px] leading-snug"
+                          >
+                            <span className="font-bold text-dark-muted shrink-0 max-w-[45%] truncate">
+                              {columnConfig[h]?.label || columnConfig[h]?.Label || h}
+                            </span>
+                            <span className="text-right text-dark-charcoal break-words min-w-0">
+                              {isStatus ? (
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyles(raw)}`}
+                                >
+                                  {raw}
+                                </span>
+                              ) : (
+                                raw || "—"
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className={mobileCardView ? "hidden md:block overflow-x-auto w-full" : "overflow-x-auto w-full"}>
           <table className="w-full text-left border-collapse">
             <thead>
               {/* Filter Row - no drag & drop */}
@@ -367,7 +440,8 @@ const DataGrid = ({
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </div>
   );

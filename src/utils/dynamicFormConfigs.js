@@ -120,9 +120,14 @@ export const fetchUserDynamicFormConfigs = async (userRoles = [], forceRefresh =
  *
  * @param {string} formName - Form identifier
  * @param {string[]} userRoles - Current user's roles
+ * @param {boolean} isDirectLink - If true, bypasses role filtering for public direct link access (baseurl/<form_name>)
  * @returns {Promise<Object|null>} Form config object or null
  */
-export const fetchUserDynamicFormConfigByUuid = async (formName, userRoles = []) => {
+export const fetchUserDynamicFormConfigByUuid = async (
+  formName,
+  userRoles = [],
+  isDirectLink = false
+) => {
   if (!formName) return null;
 
   const rolesKey = getRolesKey(userRoles);
@@ -149,21 +154,23 @@ export const fetchUserDynamicFormConfigByUuid = async (formName, userRoles = [])
     // Ignore storage errors
   }
 
-  // 3. Fallback to RPC get_user_dynamic_form_config_by_uuid
-  try {
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      'get_user_dynamic_form_config_by_uuid',
-      {
-        p_form_name: formName,
-        p_user_roles: userRoles || [],
-      }
-    );
+  // 3. Fallback to RPC get_user_dynamic_form_config_by_uuid (only for role-gated queries)
+  if (!isDirectLink) {
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'get_user_dynamic_form_config_by_uuid',
+        {
+          p_form_name: formName,
+          p_user_roles: userRoles || [],
+        }
+      );
 
-    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
-      return rpcData[0];
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        return rpcData[0];
+      }
+    } catch (err) {
+      // RPC failed or not found, fall through to table query
     }
-  } catch (err) {
-    // RPC failed or not found, fall through to table query
   }
 
   // 4. Fallback to direct query
@@ -174,16 +181,29 @@ export const fetchUserDynamicFormConfigByUuid = async (formName, userRoles = [])
     .limit(1);
 
   if (directError) {
+    console.warn('[dynamicFormConfigs] Error fetching form config:', directError.message);
     throw directError;
   }
 
   if (directData && directData.length > 0) {
     const record = directData[0];
+    // If accessed directly via shared link (baseurl/<form_name>), permit access to anyone
+    if (isDirectLink) {
+      return record;
+    }
     const filtered = filterFormsByRoles([record], userRoles);
     return filtered.length > 0 ? filtered[0] : null;
   }
 
   return null;
+};
+
+/**
+ * Fetch a single dynamic form configuration directly for public access
+ * @param {string} formName
+ */
+export const fetchPublicDynamicFormConfig = async (formName) => {
+  return fetchUserDynamicFormConfigByUuid(formName, [], true);
 };
 
 /**

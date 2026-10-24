@@ -15,18 +15,8 @@ import ConfirmModal from '../ConfirmModal';
 import SalaryTrackerView from './SalaryTrackerView';
 import MonthSwatches from './salary-tracker/MonthSwatches';
 import { normalizeRoles, fetchAllAppRoles } from '../../utils/roleUtils';
+import { getDesignationOptions } from '../../utils/employeeOptions';
 import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBlock';
-
-const DEFAULT_ROLES = [
-  'Teacher',
-  'Admin',
-  'Management',
-  'Accountant',
-  'Staff',
-  'Principal',
-  'Vice Principal',
-  'Librarian',
-];
 
 const employeeRecordsCache = new Map();
 
@@ -42,8 +32,7 @@ const EmployeeRecordsView = ({
     Array.isArray(userRoles) && userRoles.length > 0 ? userRoles : role ? [role] : [];
   const canAccess = useCanAccess(effectiveRoles);
 
-  const hasRole = (name) =>
-    effectiveRoles.some((r) => String(r || '').toLowerCase() === name);
+  const hasRole = (name) => effectiveRoles.some((r) => String(r || '').toLowerCase() === name);
   const isAdmin = hasRole('admin');
   const isManagement = hasRole('management');
 
@@ -214,7 +203,7 @@ const EmployeeRecordsView = ({
     is_active: true,
     login_allowed: false,
     auth_id: '',
-    mapped_roles: ['teacher'],
+    mapped_roles: [],
   });
 
   const [newIncrement, setNewIncrement] = useState({
@@ -508,6 +497,12 @@ const EmployeeRecordsView = ({
     return list;
   }, [employees, searchQuery, roleFilter, statusFilter, sortField, sortOrder]);
 
+  // Designation options: static defaults + whatever exists in the records
+  const designationOptions = useMemo(
+    () => getDesignationOptions(employees.map((e) => e.designation)),
+    [employees]
+  );
+
   const currentIndex = useMemo(() => {
     if (!selectedEmployee) return -1;
     return filteredEmployees.findIndex((e) => String(e.id) === String(selectedEmployee.id));
@@ -550,7 +545,7 @@ const EmployeeRecordsView = ({
         is_active: true,
         login_allowed: false,
         auth_id: '',
-        mapped_roles: ['teacher'],
+        mapped_roles: [],
       };
       setFormData(nextData);
       setInitialFormData(nextData);
@@ -561,14 +556,14 @@ const EmployeeRecordsView = ({
         const matchedAuth = targetEmp.auth_id
           ? authUsers.find((u) => String(u.user_id) === String(targetEmp.auth_id))
           : null;
-        const initialRoles =
-          Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
+        const loginAllowed = targetEmp.login_allowed === true;
+        const initialRoles = loginAllowed
+          ? Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
             ? matchedAuth.roles
             : normalizeRoles(
-                targetEmp.mapped_roles ||
-                  targetEmp.mapped_roles_sum ||
-                  matchedAuth?.role || ['teacher']
-              );
+                targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || []
+              )
+          : [];
 
         const nextData = {
           name: targetEmp.name || '',
@@ -610,7 +605,7 @@ const EmployeeRecordsView = ({
             : [],
           is_teacher: targetEmp.is_teacher !== false,
           is_active: targetEmp.is_active !== false,
-          login_allowed: targetEmp.login_allowed || false,
+          login_allowed: loginAllowed,
           auth_id: targetEmp.auth_id || '',
           mapped_roles: initialRoles,
         };
@@ -631,12 +626,14 @@ const EmployeeRecordsView = ({
     const matchedAuth = targetEmp.auth_id
       ? authUsers.find((u) => String(u.user_id) === String(targetEmp.auth_id))
       : null;
-    const initialRoles =
-      Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
+    const loginAllowed = targetEmp.login_allowed === true;
+    const initialRoles = loginAllowed
+      ? Array.isArray(matchedAuth?.roles) && matchedAuth.roles.length > 0
         ? matchedAuth.roles
         : normalizeRoles(
-            targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || ['teacher']
-          );
+            targetEmp.mapped_roles || targetEmp.mapped_roles_sum || matchedAuth?.role || []
+          )
+      : [];
 
     const nextData = {
       name: targetEmp.name || '',
@@ -678,7 +675,7 @@ const EmployeeRecordsView = ({
         : [],
       is_teacher: targetEmp.is_teacher !== false,
       is_active: targetEmp.is_active !== false,
-      login_allowed: targetEmp.login_allowed || false,
+      login_allowed: loginAllowed,
       auth_id: targetEmp.auth_id || '',
       mapped_roles: initialRoles,
     };
@@ -928,21 +925,22 @@ const EmployeeRecordsView = ({
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if ((isAdmin || isManagement) && formData.auth_id) {
-          const rolesArray =
-            Array.isArray(formData.mapped_roles) && formData.mapped_roles.length > 0
-              ? formData.mapped_roles
-              : ['teacher'];
+        if ((isAdmin || isManagement) && formData.login_allowed && formData.auth_id) {
+          // Portal roles come from the Portal Access section only; never fall back
+          // to a default role when the admin left the selection empty.
+          const rolesArray = Array.isArray(formData.mapped_roles) ? formData.mapped_roles : [];
 
-          await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
+          if (rolesArray.length > 0) {
+            await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
 
-          setAuthUsers((prev) =>
-            prev.map((u) =>
-              String(u.user_id) === String(formData.auth_id)
-                ? { ...u, roles: rolesArray, email: formData.email || u.email }
-                : u
-            )
-          );
+            setAuthUsers((prev) =>
+              prev.map((u) =>
+                String(u.user_id) === String(formData.auth_id)
+                  ? { ...u, roles: rolesArray, email: formData.email || u.email }
+                  : u
+              )
+            );
+          }
         }
 
         showToast('New employee record created successfully!', 'success');
@@ -994,21 +992,22 @@ const EmployeeRecordsView = ({
           localStorage.setItem('jzv_employees_local_data', JSON.stringify(updatedList));
         }
 
-        if ((isAdmin || isManagement) && formData.auth_id) {
-          const rolesArray =
-            Array.isArray(formData.mapped_roles) && formData.mapped_roles.length > 0
-              ? formData.mapped_roles
-              : ['teacher'];
+        if ((isAdmin || isManagement) && formData.login_allowed && formData.auth_id) {
+          // Portal roles come from the Portal Access section only; never fall back
+          // to a default role when the admin left the selection empty.
+          const rolesArray = Array.isArray(formData.mapped_roles) ? formData.mapped_roles : [];
 
-          await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
+          if (rolesArray.length > 0) {
+            await saveUserRoleToDb(formData.auth_id, rolesArray, formData.email || null);
 
-          setAuthUsers((prev) =>
-            prev.map((u) =>
-              String(u.user_id) === String(formData.auth_id)
-                ? { ...u, roles: rolesArray, email: formData.email || u.email }
-                : u
-            )
-          );
+            setAuthUsers((prev) =>
+              prev.map((u) =>
+                String(u.user_id) === String(formData.auth_id)
+                  ? { ...u, roles: rolesArray, email: formData.email || u.email }
+                  : u
+              )
+            );
+          }
         }
 
         showToast('Employee record updated successfully!', 'success');
@@ -1576,7 +1575,10 @@ const EmployeeRecordsView = ({
 
   // Admin & Management View
   return (
-    <div className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300" data-feature="employee-management">
+    <div
+      className="flex flex-col min-h-[500px] space-y-6 animate-in fade-in duration-300"
+      data-feature="employee-management"
+    >
       {/* ── Unified Top Header Panel ── */}
       <div className="bg-white border border-light-border p-2 sm:p-4 rounded-3xl shadow-sm space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-light-border/60">
@@ -1636,7 +1638,10 @@ const EmployeeRecordsView = ({
 
         {/* Search, Filter & Action Controls for Employee Records tab */}
         {activeTab === 'records' && (
-          <div className="flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-2.5 w-full justify-between pt-1" data-feature-filter={activeTab}>
+          <div
+            className="flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-2.5 w-full justify-between pt-1"
+            data-feature-filter={activeTab}
+          >
             {/* Left section: Search & 50/50 split filters on mobile */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto flex-1">
               {/* Search Input */}
@@ -1661,9 +1666,9 @@ const EmployeeRecordsView = ({
                   title="Filter by Designation"
                 >
                   <option value="">All Designations</option>
-                  {DEFAULT_ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
+                  {designationOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
                     </option>
                   ))}
                 </select>
@@ -1729,7 +1734,10 @@ const EmployeeRecordsView = ({
 
         {/* Repurposed Controls Bar for Salary tabs */}
         {(activeTab === 'salary_dashboard' || activeTab === 'salary_list') && salaryControls && (
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1" data-feature-filter={activeTab}>
+          <div
+            className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 w-full justify-between pt-1"
+            data-feature-filter={activeTab}
+          >
             {/* Left section: Search & 50/50 split controls on mobile */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto flex-1">
               {/* Search Input for Salary */}

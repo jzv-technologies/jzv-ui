@@ -7,6 +7,8 @@ import Translate from './Translate';
 import TVDisplayDashboard from './dashboard/TVDisplayDashboard';
 import UnifiedPortal from './auth/UnifiedPortal';
 
+import StandaloneFormPage from './forms/StandaloneFormPage';
+
 const portalRouteFallback = (
   <div className="min-h-screen flex items-center justify-center">
     <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
@@ -56,20 +58,13 @@ export const AppRoutes = ({
       <Route path="/portal/display" element={<TVDisplayDashboard />} />
       <Route
         path="/career"
-        element={
-          <div className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
-            <div className="w-full max-w-2xl">
-              <h1 className="text-white text-2xl mb-4 font-bold">
-                <Translate id="home.career.title">Career Opportunities</Translate>
-              </h1>
-              <DynamicForm
-                uuid="career"
-                textColor={CARD_THEMES.blueDark.textColor}
-                userRoles={userRoles}
-              />
-            </div>
-          </div>
-        }
+        element={<StandaloneFormPage user={user} userRoles={userRoles} formUuid="career" />}
+      />
+
+      {/* Public Dynamic Form Direct Link: baseurl/<form_name> */}
+      <Route
+        path="/:formName"
+        element={<StandaloneFormPage user={user} userRoles={userRoles} />}
       />
 
       {/* Catch-all fallback */}

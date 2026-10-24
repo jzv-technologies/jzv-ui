@@ -37,6 +37,7 @@ import TimetableAdminViewContainer from '../portal-shared/TimetableAdminViewCont
 import AdminFormConfigsContainer from '../portal-shared/AdminFormConfigsContainer';
 import CandidateTestAccessManager from '../portal-shared/CandidateTestAccessManager';
 import SubmissionsTableView from '../portal-shared/SubmissionsTableView';
+import ReviewRequestsManager from '../requests/ReviewRequestsManager';
 import { getEffectiveRole } from '../../utils/roleUtils';
 
 // Memoized tile components
@@ -527,29 +528,23 @@ export const UnifiedPortal = ({
           </div>
         );
 
+      case 'review-requests':
       case 'job-applications':
-        return (
-          <div data-feature="job-applications">
-            <SubmissionsTableView
-              formUuid="career"
-              title="Job Application Details"
-              user={user}
-              fullName={fullName}
-              userRoles={userRoles}
-            />
-          </div>
-        );
-
       case 'view-complaints':
       case 'registered-complaints':
         return (
-          <div data-feature="view-complaints">
-            <SubmissionsTableView
-              formUuid="complaint"
-              title="View Complaints"
+          <div data-feature="review-requests">
+            <ReviewRequestsManager
               user={user}
               fullName={fullName}
               userRoles={userRoles}
+              initialSchema={
+                subView === 'job-applications'
+                  ? 'career'
+                  : subView === 'registered-complaints' || subView === 'view-complaints'
+                    ? 'complaint'
+                    : null
+              }
             />
           </div>
         );

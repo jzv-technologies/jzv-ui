@@ -107,8 +107,17 @@ export const TILE_METADATA_REGISTRY = {
   },
 
   // ── Management components ──────────────────────────────────────────
+  'review-requests': {
+    title: 'Review Requests',
+    description: 'Review and process submitted feedback, complaints, job applications, and dynamic form requests.',
+    icon: 'fa-inbox',
+    buttonColor: 'bg-indigo-600 text-white',
+    shadow: 'shadow-indigo-200',
+    group: 'Administration',
+    action: 'subview',
+  },
   'view-complaints': {
-    title: 'View Complaints',
+    title: 'Review Requests',
     description: 'Track and review user complaints and feedback submitted through the portal.',
     icon: 'fa-comments',
     buttonColor: 'bg-amber-600 text-white',
@@ -117,7 +126,7 @@ export const TILE_METADATA_REGISTRY = {
     action: 'subview',
   },
   'registered-complaints': {
-    title: 'View Complaints',
+    title: 'Review Requests',
     description: 'Track and review user complaints and feedback submitted through the portal.',
     icon: 'fa-comments',
     buttonColor: 'bg-amber-600 text-white',
