@@ -429,7 +429,7 @@ const TimetableOverview = ({
                     style={{ color: t.is_male === false ? '#F472B6' : '#14B8A6' }}
                   />
                   <span
-                    className={`font-bold text-[9px] truncate ${t.is_male === false ? 'text-purple-900' : 'text-teal-900'}`}
+                    className={`font-bold text-xs truncate ${t.is_male === false ? 'text-purple-900' : 'text-teal-900'}`}
                   >
                     {t.name}
                   </span>
@@ -487,14 +487,14 @@ const TimetableOverview = ({
                         style={{ color: a.isFemale ? '#F472B6' : '#3B82F6' }}
                       />
                       <span
-                        className="font-extrabold text-[9px] truncate leading-tight"
+                        className="font-extrabold text-sm truncate leading-tight"
                         style={{ color: p.text }}
                       >
                         {a.teacherName}
                       </span>
                     </div>
                     <div className="flex items-center gap-1 pl-3">
-                      <span className="text-[8px] font-semibold text-dark-soft truncate">
+                      <span className="text-xs font-semibold text-dark-soft truncate">
                         {a.subjectName}{' '}
                         <i className="fas fa-arrow-right text-[7px] text-dark-muted" />{' '}
                         {a.className}
@@ -523,7 +523,7 @@ const TimetableOverview = ({
       ) : (
         <div
           className="bg-white border border-light-border rounded-3xl overflow-hidden shadow-sm"
-          data-feature-subview="teacher-subject-pending"
+          data-feature-subview="teachers-subject-pending-free-teachers-grid"
         >
           {/* ── Table — header aligned to match Class Schedule style ── */}
           <div className="w-full overflow-x-auto">
@@ -531,7 +531,7 @@ const TimetableOverview = ({
               <thead className="table-sticky-header">
                 <tr className="bg-light-lbg border-b border-light-border">
                   <th
-                    className="py-4 px-4 text-left font-bold text-xs text-dark-primary tracking-wider uppercase border-r border-light-border table-sticky-col table-sticky-intersection bg-light-lbg"
+                    className="py-4 px-4 text-left font-bold text-xm text-dark-primary tracking-wider uppercase border-r border-light-border table-sticky-col table-sticky-intersection bg-light-lbg"
                     style={{ minWidth: 120 }}
                   >
                     Day
@@ -547,7 +547,7 @@ const TimetableOverview = ({
                         {period.name || `Period ${period.period_number}`}
                       </div>
                       {period.start_time && period.end_time && (
-                        <div className="text-[10px] text-dark-soft font-semibold mt-0.5">
+                        <div className="text-xs text-dark-soft font-semibold mt-0.5">
                           {period.start_time} - {period.end_time}
                         </div>
                       )}

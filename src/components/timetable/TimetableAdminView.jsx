@@ -1589,7 +1589,7 @@ const TimetableAdminView = ({
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [freeTeachersGender, setFreeTeachersGender] = useState('all');
   const [assignedTeachersGender, setAssignedTeachersGender] = useState('all');
-  const [isTransposed, setIsTransposed] = useState(true);
+  const [isTransposed, setIsTransposed] = useState(false);
 
   const selectedId = viewType === 'teacher' ? selectedTeacherId : selectedClassId;
   const setSelectedId = (id) => {
@@ -2106,7 +2106,7 @@ const TimetableAdminView = ({
           </div>
         ) : (
           <div
-            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+            className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-xs font-bold transition-all ${
               isClickable
                 ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
                 : 'border-light-border text-dark-muted bg-light-bg/20'
@@ -2237,23 +2237,21 @@ const TimetableAdminView = ({
                 key="my-view"
                 className="flex bg-light-lbg border border-light-border rounded-xl p-0.5 items-center w-full"
               >
-                  {[
-                    { id: 'today', label: 'Today', icon: 'fa-sun' },
-                    { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
-                  ].map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => setMyView(v.id)}
-                      className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                        myView === v.id
-                          ? activeAccentClass
-                          : 'text-dark-soft hover:text-dark-primary'
-                      }`}
-                    >
-                      <i className={`fas ${v.icon} text-[9px]`} />
-                      {v.label}
-                    </button>
-                  ))}
+                {[
+                  { id: 'today', label: 'Today', icon: 'fa-sun' },
+                  { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
+                ].map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setMyView(v.id)}
+                    className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                      myView === v.id ? activeAccentClass : 'text-dark-soft hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className={`fas ${v.icon} text-[9px]`} />
+                    {v.label}
+                  </button>
+                ))}
               </div>
             );
           }
@@ -2358,64 +2356,67 @@ const TimetableAdminView = ({
                 className={`min-w-0 flex flex-wrap items-center justify-end gap-1.5 ${
                   actionsShareRow ? 'col-span-1' : 'col-span-2'
                 }`}
-              >            {!(myTab === 'my' && !myTeacher) &&
-              (myTab === 'my'
-                ? myView === 'weekly'
-                : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
-                <button
-                  onClick={() => setIsTransposed((v) => !v)}
-                  title={isTransposed ? 'Original View' : 'Transpose View'}
-                  className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                    isTransposed
-                      ? activeAccentClass
-                      : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
-                  }`}
-                >
-                  <i className="fa-solid fa-retweet text-xs" />
-                </button>
-              )}
-
-            {!(myTab === 'my' && !myTeacher) && (
-              <button
-                onClick={() => setShowBreaks((v) => !v)}
-                title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                  showBreaks
-                    ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                    : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
-                }`}
               >
-                <i className="fas fa-mug-hot text-xs" />
-              </button>
-            )}
-
-            {!(myTab === 'my' && !myTeacher) && (
-              <button
-                onClick={handleExportCSV}
-                disabled={
-                  myTab === 'class' &&
-                  (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
-                  !selectedId
-                }
-                title="Export to CSV / Excel"
-                className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <i className="fas fa-file-excel text-sm" />
-              </button>
-            )}
-
-            {myTab === 'class' &&
-              (viewType === 'class' || viewType === 'scheduler') &&
-              selectedId &&
-              typeof onClearSlots === 'function' && (
-                <button
-                  onClick={() => setIsClearModalOpen(true)}
-                  title="Clear Multiple Slots"
-                  className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
-                >
-                  <i className="fas fa-eraser text-sm" />
-                </button>
-              )}
+                {' '}
+                {!(myTab === 'my' && !myTeacher) &&
+                  (myTab === 'my'
+                    ? myView === 'weekly'
+                    : viewType === 'class' ||
+                      viewType === 'teacher' ||
+                      viewType === 'scheduler') && (
+                    <button
+                      onClick={() => setIsTransposed((v) => !v)}
+                      title={isTransposed ? 'Original View' : 'Transpose View'}
+                      className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                        isTransposed
+                          ? activeAccentClass
+                          : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
+                      }`}
+                    >
+                      <i className="fa-solid fa-retweet text-xs" />
+                    </button>
+                  )}
+                {!(myTab === 'my' && !myTeacher) && (
+                  <button
+                    onClick={() => setShowBreaks((v) => !v)}
+                    title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
+                    className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                      showBreaks
+                        ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                        : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className="fas fa-mug-hot text-xs" />
+                  </button>
+                )}
+                {!(myTab === 'my' && !myTeacher) && (
+                  <button
+                    onClick={handleExportCSV}
+                    disabled={
+                      myTab === 'class' &&
+                      (viewType === 'scheduler' ||
+                        viewType === 'teacher' ||
+                        viewType === 'class') &&
+                      !selectedId
+                    }
+                    title="Export to CSV / Excel"
+                    className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <i className="fas fa-file-excel text-sm" />
+                  </button>
+                )}
+                {myTab === 'class' &&
+                  (viewType === 'class' || viewType === 'scheduler') &&
+                  selectedId &&
+                  typeof onClearSlots === 'function' && (
+                    <button
+                      onClick={() => setIsClearModalOpen(true)}
+                      title="Clear Multiple Slots"
+                      className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
+                    >
+                      <i className="fas fa-eraser text-sm" />
+                    </button>
+                  )}
               </div>
 
               {/* Scheduler Setup draft version controls: a full-width row of its own so they are
@@ -2883,7 +2884,7 @@ const TimetableAdminView = ({
                         </div>
                       ) : timeBlock ? (
                         <div
-                          className={`flex h-full min-h-[64px] w-full items-center justify-center gap-1 rounded-xl border px-1 text-center text-[10px] font-bold ${getTeacherTimeBlockAppearance(timeBlock.type).classes} ${
+                          className={`flex h-full min-h-[64px] w-full items-center justify-center gap-1 rounded-xl border px-1 text-center text-sm font-bold ${getTeacherTimeBlockAppearance(timeBlock.type).classes} ${
                             isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''
                           }`}
                         >
@@ -2894,7 +2895,7 @@ const TimetableAdminView = ({
                         </div>
                       ) : (
                         <div
-                          className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-[10px] font-bold transition-all ${
+                          className={`w-full h-full rounded-xl border border-dashed flex items-center justify-center text-xs font-bold transition-all ${
                             isClickable
                               ? 'border-brand-soft text-brand-primary bg-brand-lbg/10 hover:bg-brand-lbg/25 hover:border-brand-primary'
                               : 'border-light-border text-dark-muted bg-light-bg/20'
@@ -2938,7 +2939,7 @@ const TimetableAdminView = ({
                 return (
                   <div
                     className="w-full overflow-x-auto rounded-2xl border border-light-border shadow-sm print:overflow-visible print:border-none print:shadow-none"
-                    data-feature-subview="teacher-view"
+                    data-feature-name="teacher-view-subview-grid"
                   >
                     {isTransposed ? (
                       <table className="w-full border-collapse min-w-[900px] print:min-w-full">

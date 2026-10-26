@@ -124,7 +124,7 @@ const TimetableScheduler = ({
           key={key}
           className="p-1.5 border-r border-light-border last:border-r-0 text-center min-w-[120px] h-[80px] bg-gray-50/40 select-none"
         >
-          <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-[10px] text-dark-muted font-bold">
+          <div className="w-full h-full rounded-xl border border-dashed border-gray-200 bg-gray-50/20 flex flex-col items-center justify-center text-xs text-dark-muted font-bold">
             <i className="fas fa-ban mb-1 text-[10px] text-gray-400"></i>
             Not Applicable
           </div>
@@ -242,19 +242,19 @@ const TimetableScheduler = ({
                   : ''
             } relative`}
           >
-            <span className="font-extrabold text-[10px] tracking-wide uppercase truncate">
+            <span className="font-extrabold text-xs tracking-wide uppercase truncate">
               {subjectName}
             </span>
             {!isTeacherAssigned && requiresTeacher ? (
-              <span className="text-[9px] font-bold truncate text-red-primary flex items-center justify-center gap-1">
+              <span className="text-xs font-bold truncate text-red-primary flex items-center justify-center gap-1">
                 <i className="fas fa-exclamation-triangle text-[8px] animate-pulse"></i>
                 Not Assigned
               </span>
             ) : isTeacherAssigned ? (
               <span
-                className={`text-[9px] opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}
+                className={`text-xs opacity-90 font-bold truncate ${isFemale ? 'text-pink-primary' : 'text-dark-charcoal'}`}
               >
-                {isFemale && <i className="fas fa-female mr-1 text-[8px]"></i>}
+                {isFemale && <i className="fas fa-female mr-1"></i>}
                 {getTeacherName(slot.teacher_id)}
               </span>
             ) : (
@@ -277,20 +277,25 @@ const TimetableScheduler = ({
                 Not Applicable
               </span>
             )}
-            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && !copyingSlot && onSwapSlots && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleStartSwap(day, period.id);
-                }}
-                className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
-                title="Swap this period with another"
-                aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
-              >
-                <i className="fas fa-exchange-alt text-[9px]"></i>
-              </button>
-            )}
+            {!isReadOnly &&
+              !isMultiSelectEnabled &&
+              !movingSlot &&
+              !isSwapMode &&
+              !copyingSlot &&
+              onSwapSlots && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleStartSwap(day, period.id);
+                  }}
+                  className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                  title="Swap this period with another"
+                  aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
+                >
+                  <i className="fas fa-exchange-alt text-[9px]"></i>
+                </button>
+              )}
             {/* Copy Button: duplicates the subject and teacher into another period */}
             {!isReadOnly && !movingSlot && !isMultiSelectEnabled && !isSwapMode && onCopySlot && (
               <button
@@ -360,20 +365,25 @@ const TimetableScheduler = ({
             ) : (
               '+ Assign'
             )}
-            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && !copyingSlot && onSwapSlots && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleStartSwap(day, period.id);
-                }}
-                className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
-                title="Swap this period with another"
-                aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
-              >
-                <i className="fas fa-exchange-alt text-[9px]"></i>
-              </button>
-            )}
+            {!isReadOnly &&
+              !isMultiSelectEnabled &&
+              !movingSlot &&
+              !isSwapMode &&
+              !copyingSlot &&
+              onSwapSlots && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleStartSwap(day, period.id);
+                  }}
+                  className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-indigo-700 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm"
+                  title="Swap this period with another"
+                  aria-label={`Start swap from ${day}, ${period.name || `period ${period.period_number}`}`}
+                >
+                  <i className="fas fa-exchange-alt text-[9px]"></i>
+                </button>
+              )}
           </div>
         )}
       </td>
@@ -902,8 +912,8 @@ const TimetableScheduler = ({
             <span className="font-extrabold uppercase text-gray-900">
               {getSubjectName(copyingSlot.subjectId)}
             </span>{' '}
-            ({getTeacherName(copyingSlot.teacherId)}) from {copyingSlot.day}. Click the target period;
-            the source stays unchanged.
+            ({getTeacherName(copyingSlot.teacherId)}) from {copyingSlot.day}. Click the target
+            period; the source stays unchanged.
           </span>
           <button
             type="button"
