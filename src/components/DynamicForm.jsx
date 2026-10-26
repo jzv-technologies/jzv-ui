@@ -138,11 +138,11 @@ const FloatingLabelField = React.memo(function FloatingLabelField({
   w-full rounded-2xl border
   bg-white/90 backdrop-blur-sm
 
-  px-6 sm:px-8
+  px-4 sm:px-8
 
   ${isDate ? 'pt-7 pb-2' : 'pt-5 sm:pt-6 pb-2.5 sm:pb-3'}
 
-  text-sm text-gray-800
+  text-base sm:text-sm text-gray-800
   shadow-sm
   transition-all duration-300
   focus:outline-none
@@ -163,7 +163,7 @@ const FloatingLabelField = React.memo(function FloatingLabelField({
 
   const labelClass = `
   absolute
-  left-6 sm:left-8
+  left-4 sm:left-8
   transition-all duration-200
   pointer-events-none
   z-10
@@ -362,7 +362,7 @@ const EmbeddedConversationChat = React.memo(function EmbeddedConversationChat({
           value={newMsg}
           onChange={(e) => setNewMsg(e.target.value)}
           placeholder="Type your message here..."
-          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-sm resize-none"
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-base sm:text-sm resize-none"
         />
         <div className="flex justify-end">
           <button
@@ -1033,7 +1033,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
             key={key}
             className="
               rounded-3xl border border-gray-200
-              bg-white p-5 shadow-sm
+              bg-white p-4 sm:p-5 shadow-sm
               md:col-span-2
             "
           >
@@ -1045,7 +1045,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
               {required && <span className="text-red-500 ml-1">*</span>}
             </legend>
 
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
               {listValues.map((option) => {
                 const checked = Array.isArray(formData[key]) && formData[key].includes(option);
 
@@ -1094,7 +1094,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
             key={key}
             className="
         rounded-3xl border border-gray-200
-        bg-white p-5 shadow-sm
+        bg-white p-4 sm:p-5 shadow-sm
         md:col-span-2
       "
           >
@@ -1106,7 +1106,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
               {required && <span className="text-red-500 ml-1">*</span>}
             </legend>
 
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
               {listValues.map((val) => {
                 const active = formData[key] === val;
 
@@ -1157,7 +1157,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
             className="
               flex items-start gap-4
               rounded-3xl border border-gray-200
-              bg-white p-5 shadow-sm
+              bg-white p-4 sm:p-5 shadow-sm
               md:col-span-2
             "
           >
@@ -1361,7 +1361,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
   // =========================
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-6 text-gray-800">
+    <div className="w-full max-w-6xl mx-auto px-0 sm:px-4 py-4 sm:py-6 text-gray-800">
       {successState ? (
         <FormSuccessPanel
           message={successState.message}
@@ -1383,7 +1383,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
                   key={tab.id}
                   type="button"
                   onClick={() => setActivePanel(tab.id)}
-                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                     activePanel === tab.id
                       ? 'bg-white text-indigo-700 shadow-xs'
                       : 'text-gray-500 hover:text-gray-800'
@@ -1418,16 +1418,16 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
               {visibleFields.length > 0 && (
                 <div
                   className={`
-                    rounded-[32px]
-                   bg-white
-                  border ${borderColor}/50 bg-white p-6 shadow-md
-                  ${safeTextColor}
-                    shadow-2xl
-                    p-6 md:p-8
+                    rounded-3xl sm:rounded-[32px]
+                    bg-white
+                    border ${borderColor}/50
+                    ${safeTextColor}
+                    shadow-md shadow-2xl
+                    p-4 sm:p-6 md:p-8
                   `}
                 >
                   <form key={formResetKey} onSubmit={handleSubmit}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                       {visibleFields.map(renderField)}
                     </div>
 

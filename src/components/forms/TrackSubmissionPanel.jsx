@@ -76,7 +76,7 @@ const findEmailColumn = (record) =>
   Object.keys(record || {}).find((key) => /e-?mail/i.test(key)) || null;
 
 const INPUT_CLASS =
-  'w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 bg-white outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-100 disabled:text-gray-500';
+  'w-full px-4 py-2.5 border border-gray-200 rounded-xl text-base sm:text-sm text-gray-800 bg-white outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-100 disabled:text-gray-500';
 
 const Control = ({ field, value, onChange, placeholder }) => {
   const type = normalizeType(field);

@@ -71,7 +71,7 @@ export const StandaloneFormPage = ({ user, userRoles = [], formUuid = null }) =>
   return (
     <div className="min-h-screen bg-linear-to-b from-slate-900 via-slate-850 to-slate-950 text-slate-100 flex flex-col justify-between selection:bg-rose-500 selection:text-white">
       {/* ── MAIN CONTENT ── */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-3 sm:px-6 py-6 sm:py-12">
         {loading ? (
           <div className="py-24 flex flex-col items-center justify-center text-center">
             <div className="w-12 h-12 rounded-2xl border-4 border-rose-500 border-t-transparent animate-spin mb-4" />
@@ -98,14 +98,14 @@ export const StandaloneFormPage = ({ user, userRoles = [], formUuid = null }) =>
         ) : (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* Form Header Card */}
-            <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-xl backdrop-blur-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4">
+            <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-5 sm:p-8 shadow-xl backdrop-blur-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3 sm:gap-4 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-rose-500/20 to-amber-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center text-xl shrink-0">
                     <i className={`fas ${formConfig.icon || 'fa-clipboard-list'}`} />
                   </div>
-                  <div>
-                    <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-1">
+                  <div className="min-w-0">
+                    <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-1 break-words">
                       {formConfig.display_name || formConfig.form_name}
                     </h1>
                     {formConfig.description && (
@@ -118,7 +118,7 @@ export const StandaloneFormPage = ({ user, userRoles = [], formUuid = null }) =>
 
                 <button
                   onClick={handleCopyLink}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer shrink-0 self-start"
                   title="Copy form link"
                 >
                   <i className="fas fa-link text-[11px]" />
@@ -128,7 +128,7 @@ export const StandaloneFormPage = ({ user, userRoles = [], formUuid = null }) =>
             </div>
 
             {/* Embed Dynamic Form */}
-            <div className="bg-white rounded-2xl p-4 sm:p-8 shadow-2xl text-slate-800 border border-slate-200">
+            <div className="bg-white rounded-2xl p-2 sm:p-8 shadow-2xl text-slate-800 border border-slate-200">
               <DynamicForm
                 uuid={formName}
                 isDirectLink={true}
