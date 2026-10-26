@@ -14,19 +14,32 @@ const getRolesKey = (userRoles = []) => {
 };
 
 /**
- * Filter dynamic form configs by user roles (client-side fallback)
+ * Filter dynamic form configs by user roles (client-side gate).
+ *
+ * - A form whose role-based link is disabled never appears as a portal tile.
+ * - An empty `form_visibility` means "no role selected", so it is hidden. Pass
+ *   `allowEmptyVisibility: true` for an explicit by-name/uuid reference, where legacy forms
+ *   without a visibility list must keep rendering.
  */
-export const filterFormsByRoles = (forms = [], userRoles = []) => {
+export const filterFormsByRoles = (
+  forms = [],
+  userRoles = [],
+  { allowEmptyVisibility = false } = {}
+) => {
   if (!Array.isArray(forms)) return [];
   const normalizedUserRoles = (userRoles || []).map((r) => String(r).toLowerCase().trim());
 
   return forms.filter((item) => {
-    // A form whose role-based link is disabled must not appear as a portal tile.
     if (item.role_link_enabled === false) return false;
-    if (!item.form_visibility || !String(item.form_visibility).trim()) return true;
-    const permitted = String(item.form_visibility)
+
+    const visibility = String(item.form_visibility ?? '').trim();
+    if (!visibility) return allowEmptyVisibility;
+
+    const permitted = visibility
       .split(',')
-      .map((r) => r.trim().toLowerCase());
+      .map((r) => r.trim().toLowerCase())
+      .filter(Boolean);
+    if (permitted.length === 0) return allowEmptyVisibility;
     if (permitted.includes('all')) return true;
     return normalizedUserRoles.some((r) => permitted.includes(r));
   });
@@ -55,9 +68,12 @@ export const fetchUserDynamicFormConfigs = async (userRoles = [], forceRefresh =
   const rolesKey = getRolesKey(userRoles);
   const sessionKey = `${SESSION_CACHE_PREFIX}${rolesKey}`;
 
-  // 1. Check in-memory cache
+  // 1. Check in-memory cache. Cached rows keep their own flags, so re-filtering here is what makes
+  // a freshly disabled role link (or a narrowed visibility) take effect without a new request.
   if (!forceRefresh && memoryCache.has(rolesKey)) {
-    return memoryCache.get(rolesKey);
+    const cached = filterFormsByRoles(memoryCache.get(rolesKey), userRoles);
+    memoryCache.set(rolesKey, cached);
+    return cached;
   }
 
   // 2. Check sessionStorage
@@ -67,8 +83,9 @@ export const fetchUserDynamicFormConfigs = async (userRoles = [], forceRefresh =
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          memoryCache.set(rolesKey, parsed);
-          return parsed;
+          const cached = filterFormsByRoles(parsed, userRoles);
+          memoryCache.set(rolesKey, cached);
+          return cached;
         }
       }
     } catch (e) {
@@ -92,7 +109,9 @@ export const fetchUserDynamicFormConfigs = async (userRoles = [], forceRefresh =
       let resultData = [];
 
       if (!rpcError && Array.isArray(rpcData)) {
-        resultData = rpcData;
+        // Defence in depth: the RPC already filters, but the same rules are applied client-side so a
+        // stale/older database function can never leak a form into the portal.
+        resultData = filterFormsByRoles(rpcData, userRoles);
       } else {
         // Graceful fallback to direct table query if RPC is not present in schema cache
         const { data: tableData, error: tableError } = await supabase
@@ -206,7 +225,7 @@ export const fetchUserDynamicFormConfigByUuid = async (
     if (isDirectLink) {
       return record;
     }
-    const filtered = filterFormsByRoles([record], userRoles);
+    const filtered = filterFormsByRoles([record], userRoles, { allowEmptyVisibility: true });
     return filtered.length > 0 ? filtered[0] : null;
   }
 

@@ -6,6 +6,7 @@ import { CARD_THEMES } from '../utils/cardTheme';
 import { sortRolesByPriority } from '../utils/roleUtils';
 import {
   fetchUserDynamicFormConfigs,
+  filterFormsByRoles,
   invalidateDynamicFormConfigsCache,
 } from '../utils/dynamicFormConfigs';
 
@@ -429,9 +430,9 @@ export const useViewConfig = (userRoles = []) => {
         };
       });
 
-      // dynamicConfigs from RPC are already filtered by user roles
-      // Filter and map dynamic forms for userRoles
-      const dynamicTiles = (dynamicConfigs || []).map((config) => {
+      // Apply the form's own portal rules at render time (`role_link_enabled` + `form_visibility`),
+      // so a cached list can never show a form to a role it is not assigned to.
+      const dynamicTiles = filterFormsByRoles(dynamicConfigs || [], userRoles).map((config) => {
         const themeKey = config.card_theme || 'orange';
         const theme = CARD_THEMES[themeKey] || CARD_THEMES.orange;
         let shadowClass = 'shadow-orange-200';
