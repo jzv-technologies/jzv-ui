@@ -687,6 +687,7 @@ const ManagementPortal = ({ user, fullName, userRoles, subView, onSetSubView, op
 
   const dynamicTiles = dynamicConfigs
     .filter((config) => {
+      if (config.role_link_enabled === false) return false;
       if (!config.form_visibility) return false;
       const roles = config.form_visibility.split(',').map((r) => r.trim().toLowerCase());
       return roles.includes('management') || roles.includes('all');

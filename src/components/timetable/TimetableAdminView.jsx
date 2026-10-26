@@ -12,6 +12,7 @@ import PrintConfigurationModal from '../PrintConfigurationModal';
 import PrintPageDecorations from '../PrintPageDecorations';
 import { usePrintSettings } from '../../hooks/usePrintSettings';
 import { isPeriodApplicable } from '../../utils/timetableScheduleUtils';
+import { useTimetableDraftMode } from './timetableDraftContext';
 
 // Helper to get a consistent color style for a subject name
 export const getSubjectColor = (subjectName) => {
@@ -58,108 +59,6 @@ export const getSubjectColor = (subjectName) => {
     'bg-emerald-50 text-emerald-900 border-emerald-200',
   ];
   return colors[Math.abs(hash) % colors.length];
-};
-
-// ─── Mobile compact select (replaces scrolling pill tabs on small screens) ───
-// Renders as a styled button trigger + portal panel listing icon+label options.
-const MobileSelectDropdown = ({ options, selected, onChange, fullWidth = false }) => {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef(null);
-  const [panelStyle, setPanelStyle] = useState({});
-
-  const updatePosition = useCallback(() => {
-    if (!triggerRef.current) return;
-    const r = triggerRef.current.getBoundingClientRect();
-    const minW = Math.max(180, Math.floor(r.width));
-    const maxLeft = Math.max(10, Math.min(r.left, window.innerWidth - minW - 10));
-    setPanelStyle({
-      position: 'fixed',
-      top: r.bottom + 6,
-      left: maxLeft,
-      minWidth: minW,
-      zIndex: 9999,
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    updatePosition();
-    const s = () => updatePosition();
-    window.addEventListener('scroll', s, true);
-    window.addEventListener('resize', s);
-    return () => {
-      window.removeEventListener('scroll', s, true);
-      window.removeEventListener('resize', s);
-    };
-  }, [open, updatePosition]);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => {
-      if (
-        triggerRef.current &&
-        !triggerRef.current.contains(e.target) &&
-        !e.target.closest('[data-dropdown-panel]')
-      )
-        setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
-  const activeOpt = options.find((o) => o.id === selected) || options[0];
-
-  const panel =
-    open &&
-    ReactDOM.createPortal(
-      <div
-        data-dropdown-panel
-        className="bg-white border border-light-border rounded-2xl shadow-2xl overflow-hidden"
-        style={panelStyle}
-      >
-        {options.map((opt) => {
-          const isActive = opt.id === selected;
-          return (
-            <button
-              key={opt.id}
-              onClick={() => {
-                onChange(opt.id);
-                setOpen(false);
-              }}
-              className={`w-full flex items-center gap-2.5 px-4 py-3 text-xs font-extrabold transition-all border-none outline-none text-left ${isActive ? 'bg-brand-primary text-white' : 'text-dark-primary hover:bg-light-lbg/60'}`}
-            >
-              <i className={`fas ${opt.icon} text-[11px] w-4 text-center shrink-0`} />
-              <span className="truncate">{opt.label}</span>
-              {isActive && <i className="fas fa-check text-[10px] ml-auto shrink-0" />}
-            </button>
-          );
-        })}
-      </div>,
-      document.body
-    );
-
-  return (
-    <div className={fullWidth ? 'w-full' : 'relative'}>
-      <button
-        ref={triggerRef}
-        onClick={() => setOpen((o) => !o)}
-        className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-light-border bg-white text-xs font-extrabold text-dark-primary hover:border-brand-soft hover:bg-light-lbg transition-all shadow-sm ${
-          fullWidth ? 'w-full' : 'whitespace-nowrap shrink-0'
-        }`}
-      >
-        <span className="flex items-center gap-1.5 truncate min-w-0">
-          {activeOpt && (
-            <i className={`fas ${activeOpt.icon} text-[10px] text-brand-primary shrink-0`} />
-          )}
-          <span className="truncate">{activeOpt?.label}</span>
-        </span>
-        <i
-          className={`fas fa-chevron-${open ? 'up' : 'down'} text-[8px] text-dark-soft ml-1 shrink-0`}
-        />
-      </button>
-      {panel}
-    </div>
-  );
 };
 
 // ─── Portal-based dropdown panel ─────────────────────────────────────────────
@@ -315,6 +214,7 @@ const AssignPopover = ({
   timeBlocks = [],
   onAssign,
   onSetTeacherTimeBlock,
+  onRemoveTeacherTimeBlock,
   onClose,
 }) => {
   const ref = useRef(null);
@@ -358,6 +258,14 @@ const AssignPopover = ({
   }, [popoverCellKey, popover, timeBlocks]);
 
   const { mode, day, periodId, classId, subjectId, teacherId } = popover;
+
+  // Existing non-teaching blocks for this teacher/period/day (includes "Every day").
+  const existingTimeBlocks = timeBlocks.filter(
+    (block) =>
+      String(block.teacher_id) === String(teacherId) &&
+      String(block.period_id) === String(periodId) &&
+      (block.day === day || block.day === 'Every day')
+  );
 
   const getEligibleClasses = (subId, tId) => {
     if (!subId) return [];
@@ -858,6 +766,41 @@ const AssignPopover = ({
                 <p className="text-[10px] font-semibold text-dark-muted">
                   Select at least one day to add this period.
                 </p>
+              )}
+
+              {existingTimeBlocks.length > 0 && (
+                <div className="pt-1.5 mt-1.5 border-t border-light-border space-y-1.5">
+                  <p className="text-[10px] font-bold text-dark-muted uppercase tracking-wide">
+                    Remove non-teaching time
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const removed = await onRemoveTeacherTimeBlock?.(teacherId, periodId, {
+                        scope: 'day',
+                        day,
+                      });
+                      if (removed === true) onClose();
+                    }}
+                    className="w-full rounded-xl bg-red-50 border border-red-200 py-2 text-xs font-bold text-red-700 transition-all hover:bg-red-100"
+                  >
+                    <i className="fas fa-calendar-minus mr-1.5" />
+                    Remove this day{day ? ` (${day})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const removed = await onRemoveTeacherTimeBlock?.(teacherId, periodId, {
+                        scope: 'all',
+                      });
+                      if (removed === true) onClose();
+                    }}
+                    className="w-full rounded-xl bg-red-600 py-2 text-xs font-bold text-white transition-all hover:bg-red-700"
+                  >
+                    <i className="fas fa-trash-can mr-1.5" />
+                    Remove all days
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1555,7 +1498,9 @@ const TimetableAdminView = ({
   lockedClassId = '',
   onUpdateSlot = null, // if provided, viewer becomes interactive
   onSetTeacherTimeBlock = null,
+  onRemoveTeacherTimeBlock = null,
   onMoveSlot = null,
+  onCopySlot = null,
   onSwapSlots = null,
   onBulkUpdateSlots = null,
   onClearSlots = null,
@@ -1567,8 +1512,9 @@ const TimetableAdminView = ({
   seasonsConfig = null, // seasons configuration
   user = null,
   showMyTimetable = false,
-  /** Optional control rendered with the sub-tab pills (e.g. Scheduler Setup's Live / Draft switch). */
-  modeSwitcher = null,
+  /** Controlled sub-view selection. When provided, the manager header owns the picker. */
+  viewType: viewTypeProp = null,
+  onViewTypeChange = null,
   /** Optional panel rendered under the sub-tab row (e.g. Scheduler Setup's draft version controls). */
   draftPanel = null,
   /** Optional icon rendered with the Scheduler Setup action icons (e.g. the Print button). */
@@ -1577,7 +1523,18 @@ const TimetableAdminView = ({
 }) => {
   const filteredViews = allowedViews;
   const defaultView = filteredViews[0] || 'scheduler';
-  const [viewType, setViewType] = useState(defaultView);
+  const [localViewType, setLocalViewType] = useState(defaultView);
+  const isViewControlled = Boolean(viewTypeProp);
+  const viewType = isViewControlled ? viewTypeProp : localViewType;
+  const setViewType = (nextView) => {
+    setLocalViewType(nextView);
+    if (typeof onViewTypeChange === 'function') onViewTypeChange(nextView);
+  };
+  // Scheduler Setup sub-views follow draft mode: active controls turn amber while drafting.
+  const draftMode = useTimetableDraftMode();
+  const activeAccentClass = draftMode
+    ? 'bg-amber-500 border-amber-500 text-white'
+    : 'bg-brand-primary border-brand-primary text-white';
   const viewObj = viewOptionsMap[viewType] || viewOptionsMap['scheduler'];
 
   // Resolve logged-in teacher if user object is passed
@@ -1677,7 +1634,42 @@ const TimetableAdminView = ({
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const visiblePeriods = showBreaks ? periods : periods.filter((p) => !p.is_break);
   const isInteractive = typeof onUpdateSlot === 'function';
-  const showTabSwitcher = !lockedClassId && filteredViews.length > 1;
+
+  // Standalone viewers (e.g. the teacher Timetable Viewer tile) have no manager header, so they
+  // render their own sub-view picker. When the manager controls the view, this stays hidden.
+  const showSubViewPicker = !isViewControlled && !lockedClassId && filteredViews.length > 1;
+  const subViewOptions = [
+    ...(showMyTimetable && myTeacher
+      ? [{ id: 'my', label: 'My Timetable', icon: 'fa-user-clock' }]
+      : []),
+    ...filteredViews.map((id) => viewOptionsMap[id]).filter(Boolean),
+  ];
+  const selectSubView = (value) => {
+    if (value === 'my') {
+      setMyTab('my');
+      return;
+    }
+    setMyTab('class');
+    setViewType(value);
+  };
+  const standaloneViewPicker = showSubViewPicker ? (
+    <div className="relative w-full">
+      <select
+        value={myTab === 'my' ? 'my' : viewType}
+        onChange={(e) => selectSubView(e.target.value)}
+        aria-label="Select timetable view"
+        data-feature="scheduler-view-select"
+        className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none shadow-xs focus:ring-2 focus:ring-brand-primary cursor-pointer"
+      >
+        {subViewOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+    </div>
+  ) : null;
 
   // ── Filter option lists ──
   const classOptions = [...classes]
@@ -2057,7 +2049,9 @@ const TimetableAdminView = ({
         {isAssigned ? (
           <div
             className={`relative w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
-              themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'
+              themeStyles
+                ? `border-l-[6px] border-l-${themeStyles.color}`
+                : `border border-l-4 ${isFemale ? 'border-l-pink-400' : 'border-l-blue-500'}`
             } ${
               isClickable ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md' : ''
             } ${isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''}`}
@@ -2143,6 +2137,7 @@ const TimetableAdminView = ({
             timeBlocks={nonTeachingTimeBlocks}
             onAssign={handleAssign}
             onSetTeacherTimeBlock={onSetTeacherTimeBlock}
+            onRemoveTeacherTimeBlock={onRemoveTeacherTimeBlock}
             onClose={() => setPopover(null)}
           />
         )}
@@ -2222,49 +2217,19 @@ const TimetableAdminView = ({
         }}
       />
       {/* ── Header ── */}
-      <div
-        className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5"
-        data-feature-sub-tab-for="scheduler-setup"
-      >
-        {/* MOBILE / TABLET VIEW (< lg): 2-Column equal 50/50 split row for View Dropdown + Filter */}
-        <div className="lg:hidden flex flex-col gap-2.5 w-full">
-          {/* First row on mobile: View Switcher (Col 1) + Active View Filter (Col 2) */}
-          <div className="grid grid-cols-2 gap-2 w-full items-center">
-            {/* Col 1: Main View Switcher Dropdown */}
-            {!lockedClassId && (
-              <MobileSelectDropdown
-                options={[
-                  ...(showMyTimetable
-                    ? [{ id: 'my', label: 'My Timetable', icon: 'fa-user-clock' }]
-                    : []),
-                  ...[
-                    { id: 'scheduler', label: 'Class View', icon: 'fa-th-large' },
-                    { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
-                    { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
-                    { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
-                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
-                    {
-                      id: 'assigned_teachers',
-                      label: 'Assigned Teachers',
-                      icon: 'fa-chalkboard-teacher',
-                    },
-                  ].filter((v) => filteredViews.includes(v.id)),
-                ]}
-                selected={myTab === 'my' ? 'my' : viewType}
-                onChange={(val) => {
-                  if (val === 'my') {
-                    setMyTab('my');
-                  } else {
-                    setMyTab('class');
-                    setViewType(val);
-                  }
-                }}
-                fullWidth={true}
-              />
-            )}
-
-            {/* Col 2: Active Filter/Selector matching the selected view */}
-            <div className="w-full">
+      <div className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5">
+        {/* MOBILE / TABLET VIEW (< lg): filters in two columns, actions on their own row */}
+        <div
+          className="lg:hidden grid grid-cols-2 gap-2 w-full items-start"
+          data-feature-sub-tab-for="scheduler-setup-mobile"
+        >
+          {/* Filters: two per row (e.g. Teachers + Classes for Assigned Teachers) */}
+          <div className="min-w-0 w-full col-span-2 grid grid-cols-2 gap-2 items-start">
+            {standaloneViewPicker}
+            {/* Active Filter/Selector matching the selected view.
+                `contents` lets each control become its own grid cell, so paired filters
+                (Teachers + Classes) sit side by side instead of stacking. */}
+            <div className="contents">
               {myTab === 'my' && myTeacher && (
                 <div className="flex bg-light-lbg border border-light-border rounded-xl p-0.5 items-center w-full">
                   {[
@@ -2276,7 +2241,7 @@ const TimetableAdminView = ({
                       onClick={() => setMyView(v.id)}
                       className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                         myView === v.id
-                          ? 'bg-brand-primary text-white shadow-sm'
+                          ? activeAccentClass
                           : 'text-dark-soft hover:text-dark-primary'
                       }`}
                     >
@@ -2352,143 +2317,94 @@ const TimetableAdminView = ({
                 </>
               )}
             </div>
+
+            {/* Secondary filter for Assigned Teachers */}
+            {myTab === 'class' && viewType === 'assigned_teachers' && (
+              <MultiSelectDropdown
+                label="Classes"
+                options={classOptions}
+                selected={selAssignedClasses}
+                onChange={setSelAssignedClasses}
+                fullWidth={true}
+              />
+            )}
           </div>
 
-          {/* Second row on mobile: Secondary filter (if assigned_teachers) + Action Buttons */}
-          <div className="flex items-center justify-between gap-2 w-full pt-0.5">
-            {myTab === 'class' && viewType === 'assigned_teachers' ? (
-              <div className="w-1/2">
-                <MultiSelectDropdown
-                  label="Classes"
-                  options={classOptions}
-                  selected={selAssignedClasses}
-                  onChange={setSelAssignedClasses}
-                  fullWidth={true}
-                />
-              </div>
-            ) : (
-              <div />
-            )}
+          {/* Scheduler Setup draft version controls: a full-width row of its own so they are
+            visible on every breakpoint (they used to sit inside the desktop-only row). */}
+          {draftPanel && <div className="col-span-2 w-full min-w-0">{draftPanel}</div>}
 
-            {/* Action Icons */}
-            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-              {!(myTab === 'my' && !myTeacher) &&
-                (myTab === 'my'
-                  ? myView === 'weekly'
-                  : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
-                  <button
-                    onClick={() => setIsTransposed((v) => !v)}
-                    title={isTransposed ? 'Original View' : 'Transpose View'}
-                    className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                      isTransposed
-                        ? 'bg-brand-primary border-brand-primary text-white shadow-sm'
-                        : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
-                    }`}
-                  >
-                    <i className="fa-solid fa-retweet text-xs" />
-                  </button>
-                )}
-
-              {!(myTab === 'my' && !myTeacher) && (
+          {/* Action Icons */}
+          <div className="min-w-0 col-span-2 flex flex-wrap items-center justify-end gap-1.5">
+            {!(myTab === 'my' && !myTeacher) &&
+              (myTab === 'my'
+                ? myView === 'weekly'
+                : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
                 <button
-                  onClick={() => setShowBreaks((v) => !v)}
-                  title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
+                  onClick={() => setIsTransposed((v) => !v)}
+                  title={isTransposed ? 'Original View' : 'Transpose View'}
                   className={`p-2 rounded-xl border transition-all cursor-pointer ${
-                    showBreaks
-                      ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                    isTransposed
+                      ? activeAccentClass
                       : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
                   }`}
                 >
-                  <i className="fas fa-mug-hot text-xs" />
+                  <i className="fa-solid fa-retweet text-xs" />
                 </button>
               )}
 
-              {!(myTab === 'my' && !myTeacher) && (
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={() => setShowBreaks((v) => !v)}
+                title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
+                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                  showBreaks
+                    ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
+                    : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
+                }`}
+              >
+                <i className="fas fa-mug-hot text-xs" />
+              </button>
+            )}
+
+            {!(myTab === 'my' && !myTeacher) && (
+              <button
+                onClick={handleExportCSV}
+                disabled={
+                  myTab === 'class' &&
+                  (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
+                  !selectedId
+                }
+                title="Export to CSV / Excel"
+                className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-file-excel text-sm" />
+              </button>
+            )}
+
+            {myTab === 'class' &&
+              (viewType === 'class' || viewType === 'scheduler') &&
+              selectedId &&
+              typeof onClearSlots === 'function' && (
                 <button
-                  onClick={handleExportCSV}
-                  disabled={
-                    myTab === 'class' &&
-                    (viewType === 'scheduler' || viewType === 'teacher' || viewType === 'class') &&
-                    !selectedId
-                  }
-                  title="Export to CSV / Excel"
-                  className="p-2 rounded-lg border border-light-border bg-light-bg text-green-dark hover:bg-light-ui hover:text-green-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setIsClearModalOpen(true)}
+                  title="Clear Multiple Slots"
+                  className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
                 >
-                  <i className="fas fa-file-excel text-sm" />
+                  <i className="fas fa-eraser text-sm" />
                 </button>
               )}
-
-              {myTab === 'class' &&
-                (viewType === 'class' || viewType === 'scheduler') &&
-                selectedId &&
-                typeof onClearSlots === 'function' && (
-                  <button
-                    onClick={() => setIsClearModalOpen(true)}
-                    title="Clear Multiple Slots"
-                    className="p-2 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex items-center justify-center"
-                  >
-                    <i className="fas fa-eraser text-sm" />
-                  </button>
-                )}
-            </div>
           </div>
         </div>
 
         {/* DESKTOP VIEW (>= lg): Single combined row layout */}
-        <div className="hidden lg:flex flex-wrap items-center justify-between gap-2.5 w-full">
-          {/* Left section: Top Tabs + Sub-views & Entity Selectors */}
+        <div
+          className="hidden lg:flex flex-wrap items-center justify-between gap-2.5 w-full"
+          data-feature-sub-tab-for="scheduler-setup-desktop"
+        >
+          {/* Left section: Entity Selectors (the sub-view picker lives in the manager header) */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Top Navigation Pill Tabs (My Timetable + Subviews directly) */}
-            {showTabSwitcher &&
-              (() => {
-                const navOptions = [
-                  ...(showMyTimetable
-                    ? [{ id: 'my', label: 'My Timetable', icon: 'fa-user-clock' }]
-                    : []),
-                  ...[
-                    { id: 'scheduler', label: 'Class View', icon: 'fa-th-large' },
-                    { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
-                    { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
-                    { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
-                    { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
-                    {
-                      id: 'assigned_teachers',
-                      label: 'Assigned Teachers',
-                      icon: 'fa-chalkboard-teacher',
-                    },
-                  ].filter((v) => filteredViews.includes(v.id)),
-                ];
-
-                const activeNavId = myTab === 'my' ? 'my' : viewType;
-
-                return (
-                  <div className="flex bg-light-lbg border border-light-border rounded-2xl p-1 items-center gap-1">
-                    {navOptions.map((tab) => (
-                      <button
-                        key={tab.id}
-                        onClick={() => {
-                          if (tab.id === 'my') {
-                            setMyTab('my');
-                          } else {
-                            setMyTab('class');
-                            setViewType(tab.id);
-                          }
-                        }}
-                        title={tab.label}
-                        className={`flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
-                          activeNavId === tab.id
-                            ? 'text-white bg-brand-primary shadow-sm'
-                            : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
-                        }`}
-                      >
-                        <i className={`fas ${tab.icon} text-[10px]`} />
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-
+            {standaloneViewPicker && <div className="w-56 shrink-0">{standaloneViewPicker}</div>}
             {/* Today / Weekly toggle (My Timetable) */}
             {myTab === 'my' &&
               myTeacher &&
@@ -2505,7 +2421,7 @@ const TimetableAdminView = ({
                         onClick={() => setMyView(v.id)}
                         className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                           myView === v.id
-                            ? 'bg-brand-primary text-white shadow-sm'
+                            ? activeAccentClass
                             : 'text-dark-soft hover:text-dark-primary hover:bg-white/50'
                         }`}
                       >
@@ -2602,13 +2518,11 @@ const TimetableAdminView = ({
               </div>
             )}
           </div>
-
+          {/* Scheduler Setup draft version controls: a full-width row of its own so they are
+            visible on every breakpoint (they used to sit inside the desktop-only row). */}
+          {draftPanel && <div className="">{draftPanel}</div>}
           {/* Right Side: Action Icons */}
-          <div
-            className="flex items-center gap-1.5 shrink-0 ml-auto"
-            feature-icons="Scheduler Setup Icons"
-          >
-            {modeSwitcher && <div className="mr-1">{modeSwitcher}</div>}
+          <div className="flex items-center gap-1.5 shrink-0" feature-icons="Scheduler Setup Icons">
             {printButton || (
               <button
                 type="button"
@@ -2629,7 +2543,7 @@ const TimetableAdminView = ({
                   title={isTransposed ? 'Original View' : 'Transpose View'}
                   className={`p-2 rounded-xl border transition-all cursor-pointer ${
                     isTransposed
-                      ? 'bg-brand-primary border-brand-primary text-white shadow-sm'
+                      ? activeAccentClass
                       : 'bg-white border-light-border text-dark-soft hover:bg-light-lbg hover:text-dark-primary'
                   }`}
                 >
@@ -2680,10 +2594,6 @@ const TimetableAdminView = ({
               )}
           </div>
         </div>
-
-        {/* Sub-tab row extras: the Scheduler Setup draft version controls sit here, directly under
-            the sub-tab row, so the Live / Draft switch and the version it governs stay together. */}
-        {draftPanel && <div className="w-full">{draftPanel}</div>}
       </div>
 
       {myTab === 'my' ? (
@@ -2906,7 +2816,9 @@ const TimetableAdminView = ({
                       {isAssigned ? (
                         <div
                           className={`w-full h-full p-2 rounded-xl text-left flex flex-col justify-center min-h-[64px] shadow-sm transition-all duration-200 ${colorClass} ${
-                            themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'
+                            themeStyles
+                              ? `border-l-[6px] border-l-${themeStyles.color}`
+                              : `border border-l-4 ${isFemale ? 'border-l-pink-400' : 'border-l-blue-500'}`
                           } ${
                             isClickable
                               ? 'hover:scale-[1.02] active:scale-98 cursor-pointer hover:shadow-md'
@@ -2947,7 +2859,9 @@ const TimetableAdminView = ({
                             isPopoverOpen ? 'ring-2 ring-brand-primary ring-offset-1' : ''
                           }`}
                         >
-                          <i className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon}`} />
+                          <i
+                            className={`fas ${getTeacherTimeBlockAppearance(timeBlock.type).icon}`}
+                          />
                           <span>{getTeacherTimeBlockAppearance(timeBlock.type).label}</span>
                         </div>
                       ) : (
@@ -2985,6 +2899,7 @@ const TimetableAdminView = ({
                           timeBlocks={nonTeachingTimeBlocks}
                           onAssign={handleAssign}
                           onSetTeacherTimeBlock={onSetTeacherTimeBlock}
+                          onRemoveTeacherTimeBlock={onRemoveTeacherTimeBlock}
                           onClose={() => setPopover(null)}
                         />
                       )}
@@ -3172,6 +3087,7 @@ const TimetableAdminView = ({
                 assignments={assignments}
                 onUpdateSlot={onUpdateSlot}
                 onMoveSlot={onMoveSlot}
+                onCopySlot={onCopySlot}
                 onSwapSlots={onSwapSlots}
                 onBulkUpdateSlots={onBulkUpdateSlots}
                 onClearSlots={onClearSlots}

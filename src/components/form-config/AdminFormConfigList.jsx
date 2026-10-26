@@ -17,6 +17,7 @@ const AdminFormConfigList = ({
   validatingUuid,
   onClearCache,
   clearingCacheUuid,
+  onOpenRecords,
 }) => {
   const handleCopyLink = (formName) => {
     try {
@@ -125,6 +126,15 @@ const AdminFormConfigList = ({
                             Clear Cache
                           </button>
                         </>
+                      )}
+                      {config.data_id && (
+                        <button
+                          onClick={() => onOpenRecords?.(config)}
+                          className="bg-slate-50 border border-slate-200 text-slate-700 px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-slate-100 transition-all flex items-center gap-1.5 shadow-xs"
+                          title="Open this form's submitted records in Review Requests"
+                        >
+                          <i className="fas fa-table-list"></i> Records
+                        </button>
                       )}
                       <button
                         onClick={() => handleCopyLink(config.form_name || config.uuid)}

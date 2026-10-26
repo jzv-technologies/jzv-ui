@@ -109,6 +109,7 @@ const PortalLayout = ({
 
   const Breadcrumbs = () => (
     <div
+      data-portal-breadcrumbs
       className={`
         w-full bg-gradient-to-r ${styles.bgGradient}
         border-b ${styles.borderColor}

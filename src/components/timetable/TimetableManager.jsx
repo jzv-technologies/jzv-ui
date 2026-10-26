@@ -6,6 +6,7 @@ import { ConditionalBlock, useCanAccess } from '../portal-shared/ConditionalBloc
 import TimetableAdminView from './TimetableAdminView';
 import PrintWorkspace from './PrintWorkspace';
 import NewDraftNameModal from './NewDraftNameModal';
+import TimetableDraftPanel, { isBackupVersion } from './TimetableDraftPanel';
 import { TimetableDraftModeContext } from './timetableDraftContext';
 import { usePrintSettings } from '../../hooks/usePrintSettings';
 import ConfirmModal from '../ConfirmModal';
@@ -28,7 +29,7 @@ import {
 } from '../../services/timetableDraftService';
 import { compareTimetableData } from '../../utils/timetableComparison';
 import { invalidateModuleCaches } from '../../utils/moduleCacheRegistry';
-import { mergeTeacherTimeBlocks } from '../../utils/timetableScheduleUtils';
+import { mergeTeacherTimeBlocks, DAYS } from '../../utils/timetableScheduleUtils';
 import {
   isRealId,
   dedupeSlots,
@@ -53,6 +54,17 @@ import {
 const DRAFT_ACTIVE_STORAGE_KEY = 'jzv_timetable_active_draft_id';
 // Draft edits are held in memory and written on this interval, not on every keystroke/click.
 const DRAFT_AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000;
+
+// Scheduler Setup sub-views. The switcher lives in the manager header (only while
+// Scheduler Setup is the active workspace tab) instead of inside the view itself.
+const SCHEDULER_VIEW_OPTIONS = [
+  { id: 'scheduler', label: 'Class View', icon: 'fa-th-large' },
+  { id: 'teacher', label: 'Teacher View', icon: 'fa-user' },
+  { id: 'teacher_unassigned', label: 'Teacher Pending', icon: 'fa-school' },
+  { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
+  { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
+  { id: 'assigned_teachers', label: 'Assigned Teachers', icon: 'fa-chalkboard-teacher' },
+];
 
 const draftSlotKey = (slot) => `${slot.class_id}|${slot.day}|${slot.period_id}`;
 const draftSlotValue = (slot) => `${slot.subject_id ?? ''}|${slot.teacher_id ?? ''}`;
@@ -140,19 +152,6 @@ const makeDefaultSeasonsConfig = (initialPeriods, initialSlots) => ({
     },
   },
 });
-
-const formatDraftDate = (value) => {
-  if (!value) return 'Not available';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Not available';
-  return date.toLocaleString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
 
 const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const canAccess = useCanAccess(userRoles);
@@ -329,6 +328,8 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     viewLabel: 'Class View',
     entityName: null,
   });
+  // Sub-view selection for Scheduler Setup, driven by the manager header dropdown.
+  const [schedulerViewType, setSchedulerViewType] = useState('scheduler');
   // Naming prompt used when a draft is created from live data, and when one is renamed.
   const [newDraftRequest, setNewDraftRequest] = useState(null);
   const [renameDraftRequest, setRenameDraftRequest] = useState(null);
@@ -337,6 +338,49 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   const [draftComparison, setDraftComparison] = useState(null);
   // Label of the draft action currently running; keeps the action buttons locked while it writes.
   const [draftActionBusy, setDraftActionBusy] = useState(null);
+
+  // The planner header sticks directly under the page header and the portal breadcrumb bar.
+  // Both change height across breakpoints (and the page header can be hidden), so measure them
+  // instead of hardcoding a top offset.
+  const plannerHeaderRef = useRef(null);
+  const [stickyTop, setStickyTop] = useState(null);
+  useEffect(() => {
+    const findBars = () =>
+      [
+        document.querySelector('header[data-app-header]'),
+        document.querySelector('[data-portal-breadcrumbs]'),
+      ].filter((node) => node && node.getClientRects().length > 0);
+
+    const measure = () => {
+      const offset = findBars().reduce(
+        (total, node) => total + node.getBoundingClientRect().height,
+        0
+      );
+      setStickyTop((prev) => (prev === offset ? prev : offset));
+    };
+
+    // Scroll also re-measures: the page header can be collapsed while the view is open.
+    let frame = null;
+    const scheduleMeasure = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        measure();
+      });
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', scheduleMeasure, { passive: true });
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    findBars().forEach((node) => observer?.observe(node));
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', scheduleMeasure);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, []);
 
   // Stable so TimetableAdminView's reporting effect does not loop.
   const handleActiveViewChange = React.useCallback((ctx) => {
@@ -2767,6 +2811,88 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     showToast('Slot moved successfully!', 'success');
   };
 
+  // Copy keeps the source slot and writes the same subject + teacher into the target period.
+  const handleCopySlot = async (classId, sourceDay, sourcePeriodId, targetDay, targetPeriodId) => {
+    if (sourceDay === targetDay && String(sourcePeriodId) === String(targetPeriodId)) return;
+    const sourceSlot = slots.find(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.day === sourceDay &&
+        String(s.period_id) === String(sourcePeriodId)
+    );
+    if (!sourceSlot?.subject_id) {
+      showToast('Copy needs a period with a subject assigned.', 'error');
+      return;
+    }
+
+    const { subject_id: subjectId, teacher_id: teacherId } = sourceSlot;
+
+    if (
+      teacherId &&
+      slots.some(
+        (slot) =>
+          !(String(slot.class_id) === String(classId) &&
+            slot.day === targetDay &&
+            String(slot.period_id) === String(targetPeriodId)) &&
+          slot.day === targetDay &&
+          String(slot.period_id) === String(targetPeriodId) &&
+          String(slot.teacher_id) === String(teacherId)
+      )
+    ) {
+      showToast(
+        'Copy blocked: the teacher is already assigned to another class at the target time.',
+        'error'
+      );
+      return;
+    }
+
+    const updatedSlots = [...slots];
+    const tgtIndex = updatedSlots.findIndex(
+      (s) =>
+        String(s.class_id) === String(classId) &&
+        s.day === targetDay &&
+        String(s.period_id) === String(targetPeriodId)
+    );
+    const newSlotVal = {
+      class_id: classId,
+      day: targetDay,
+      period_id: targetPeriodId,
+      subject_id: subjectId,
+      teacher_id: teacherId,
+    };
+    if (tgtIndex > -1) {
+      updatedSlots[tgtIndex] = { ...updatedSlots[tgtIndex], ...newSlotVal };
+    } else {
+      updatedSlots.push({ id: generateLocalId(), ...newSlotVal });
+    }
+
+    if (canWriteLive && !String(classId).startsWith('local-')) {
+      try {
+        const { data, error } = await supabase
+          .from('timetable_slots')
+          .upsert([newSlotVal], { onConflict: 'class_id,day,period_id' })
+          .select();
+        if (error) throw error;
+        if (data && data.length > 0) {
+          const idx = updatedSlots.findIndex(
+            (s) =>
+              String(s.class_id) === String(data[0].class_id) &&
+              s.day === data[0].day &&
+              String(s.period_id) === String(data[0].period_id)
+          );
+          if (idx > -1) updatedSlots[idx] = data[0];
+        }
+      } catch (err) {
+        showToast('DB Error: ' + err.message, 'error');
+        await reloadActiveData();
+        return;
+      }
+    }
+
+    saveState({ slots: updatedSlots });
+    showToast('Period copied successfully!', 'success');
+  };
+
   const handleSwapSlots = async (classId, first, second) => {
     if (first.day === second.day && String(first.periodId) === String(second.periodId)) return;
     const firstSlot = slots.find(
@@ -3318,15 +3444,15 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // marker instead, so a missing control is never mistaken for a broken view.
   const schedulerModeSwitch = canUseDraftMode ? (
     <div
-      className="flex items-center gap-1 bg-light-bg/60 p-1 rounded-xl border border-light-border"
+      className="flex w-full sm:w-auto items-center gap-1 bg-light-bg/60 p-1 rounded-xl border border-light-border"
       data-feature-tab="scheduler-mode-switch"
     >
       {canUseLiveMode && (
         <button
           onClick={handleSwitchToLive}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+          className={`flex-1 sm:flex-none justify-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
             dataMode === 'live'
-              ? 'bg-white text-emerald-700 shadow-xs'
+              ? 'bg-emerald-700 text-emerald-100 shadow-xs'
               : 'text-dark-soft hover:text-dark-primary'
           }`}
           title="Work on the live timetable"
@@ -3337,7 +3463,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       )}
       <button
         onClick={handleOpenDraftMode}
-        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+        className={`flex-1 sm:flex-none justify-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
           dataMode === 'draft'
             ? 'bg-amber-500 text-white shadow-xs'
             : 'text-dark-soft hover:text-dark-primary'
@@ -3350,7 +3476,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     </div>
   ) : canUseLiveMode ? null : (
     <span
-      className="px-3 py-1.5 rounded-xl border border-light-border bg-light-bg/60 text-[11px] font-bold text-dark-soft inline-flex items-center gap-1.5"
+      className="w-full sm:w-auto justify-center px-3 py-1.5 rounded-xl border border-light-border bg-light-bg/60 text-[11px] font-bold text-dark-soft inline-flex items-center gap-1.5"
       data-feature="scheduler-mode-readonly"
       title="Neither the live nor the draft capability is enabled for your role"
     >
@@ -3402,7 +3528,6 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
 
   // A backup of the live timetable can be taken before publishing. The first backup is mandatory:
   // with no earlier backup there would be nothing to go back to if a publish went wrong.
-  const isBackupVersion = (d) => /^backup\b/i.test(String(d?.name || '').trim());
   const hasExistingBackup = draftList.some(isBackupVersion);
 
   const openPublishDialog = () => {
@@ -3561,7 +3686,7 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
     : hasLocalOnlyChanges
       ? 'text-red-500'
       : hasPendingDraftChanges
-        ? 'text-amber-500'
+        ? 'text-red-500'
         : 'text-emerald-500';
   const draftSaveStatusTitle = isSavingDraft
     ? 'Saving to the database…'
@@ -3626,6 +3751,37 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       : []),
   ];
 
+  // Persist a teacher_time_blocks change to the active draft (or to live storage).
+  const persistSeasonsConfig = async (nextSeasonsConfig) => {
+    const nextDraftData = {
+      classifications,
+      subjects,
+      teachers,
+      classes,
+      periods,
+      assignments,
+      slots,
+      seasonsConfig: nextSeasonsConfig,
+    };
+
+    if (isDraftMode && activeDraft) {
+      const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
+      setActiveDraft((current) =>
+        current && savedDraft && current.id === savedDraft.id ? savedDraft : current
+      );
+    } else if (canWriteLive) {
+      const { error } = await supabase
+        .from('admin_configruation')
+        .upsert({ key: 'timetable_seasons_config', val: nextSeasonsConfig }, { onConflict: 'key' });
+      if (error) throw error;
+    } else {
+      throw new Error('live editing is not enabled for your role and no draft version is active');
+    }
+
+    setSeasonsConfig(nextSeasonsConfig);
+    localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
+  };
+
   const handleSetTeacherTimeBlock = async (teacherId, targetDays, periodId, type) => {
     if (!seasonsConfig || !teacherId || !Array.isArray(targetDays) || !targetDays.length) {
       showToast('Select at least one day for the teacher schedule.', 'error');
@@ -3672,48 +3828,93 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       ...seasonsConfig,
       teacher_time_blocks: nextBlocks,
     };
-    const nextDraftData = {
-      classifications,
-      subjects,
-      teachers,
-      classes,
-      periods,
-      assignments,
-      slots,
-      seasonsConfig: nextSeasonsConfig,
-    };
 
     try {
-      if (isDraftMode && activeDraft) {
-        const savedDraft = await updateDraft(activeDraft.id, { data: nextDraftData });
-        setActiveDraft((current) =>
-          current && savedDraft && current.id === savedDraft.id ? savedDraft : current
-        );
-      } else if (canWriteLive) {
-        const { error } = await supabase
-          .from('admin_configruation')
-          .upsert(
-            { key: 'timetable_seasons_config', val: nextSeasonsConfig },
-            { onConflict: 'key' }
-          );
-        if (error) throw error;
-      } else {
-        // Never report success for a change that only lived in React state.
-        showToast(
-          'This period was not saved: live editing is not enabled for your role and no draft version is active.',
-          'error'
-        );
-        return false;
-      }
-      setSeasonsConfig(nextSeasonsConfig);
-      localStorage.setItem('jzv_timetable_seasons_config', JSON.stringify(nextSeasonsConfig));
+      await persistSeasonsConfig(nextSeasonsConfig);
       showToast(type ? 'Teacher period saved.' : 'Teacher period cleared.', 'success');
       return true;
     } catch (err) {
       console.error('Failed to save teacher period:', err);
-      showToast(`Could not save teacher period: ${err.message}`, 'error');
+      showToast(
+        /not enabled/.test(err.message)
+          ? `This period was not saved: ${err.message}.`
+          : `Could not save teacher period: ${err.message}`,
+        'error'
+      );
       return false;
     }
+  };
+
+  /**
+   * Removes non-teaching time for a teacher in a period.
+   * scope 'day' removes only the clicked day (splitting an "Every day" block);
+   * scope 'all' removes every block for that teacher and period.
+   */
+  const handleRemoveTeacherTimeBlock = async (
+    teacherId,
+    periodId,
+    { scope = 'day', day = null } = {}
+  ) => {
+    const existingBlocks = seasonsConfig?.teacher_time_blocks || [];
+    const matchesTarget = (block) =>
+      String(block.teacher_id) === String(teacherId) &&
+      String(block.period_id) === String(periodId);
+
+    if (!existingBlocks.some(matchesTarget)) {
+      showToast('No non-teaching block found for that period.', 'info');
+      return false;
+    }
+
+    let nextBlocks;
+    if (scope === 'all') {
+      nextBlocks = existingBlocks.filter((block) => !matchesTarget(block));
+    } else {
+      nextBlocks = [];
+      existingBlocks.forEach((block) => {
+        if (!matchesTarget(block)) {
+          nextBlocks.push(block);
+          return;
+        }
+        if (block.day === 'Every day') {
+          // Keep the block for the other days, only dropping the requested day.
+          DAYS.forEach((dayName) => {
+            if (dayName !== day) {
+              nextBlocks.push({ ...block, id: generateLocalId(), day: dayName });
+            }
+          });
+        } else if (block.day !== day) {
+          nextBlocks.push(block);
+        }
+      });
+    }
+
+    try {
+      await persistSeasonsConfig({ ...seasonsConfig, teacher_time_blocks: nextBlocks });
+      showToast(
+        scope === 'all'
+          ? 'Non-teaching time removed.'
+          : `Non-teaching time removed for ${day || 'the selected day'}.`,
+        'success'
+      );
+      return true;
+    } catch (err) {
+      console.error('Failed to remove non-teaching time:', err);
+      showToast(
+        /not enabled/.test(err.message)
+          ? `This period was not removed: ${err.message}.`
+          : `Could not remove non-teaching time: ${err.message}`,
+        'error'
+      );
+      return false;
+    }
+  };
+
+  // Multi-select editing is a draft-only affordance; turning it off also drops the selection.
+  const handleToggleMultiSelect = () => {
+    setIsMultiSelectEnabled((enabled) => {
+      if (enabled) setSelectedMultiSelection({ classId: null, cells: [] });
+      return !enabled;
+    });
   };
 
   // Draft version controls. Rendered inside the Scheduler Setup sub-tab area (directly under the
@@ -3721,354 +3922,209 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
   // together. The dropdown also offers creating a version from live data; the action buttons only
   // appear once a version is loaded.
   const draftPanel = dataMode === 'draft' && (
-    <div
-      className="rounded-2xl border border-amber-300 bg-amber-50 px-3 py-2 flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-2"
-      data-feature="scheduler-setup-draft-mode"
-    >
-      <div className="flex w-full items-center gap-2 sm:w-auto">
-        <div className="relative w-full sm:w-80">
-          <button
-            type="button"
-            onClick={() => setIsDraftListOpen((open) => !open)}
-            disabled={isDraftListLoading}
-            className="w-full bg-white border border-amber-300 rounded-xl px-3 py-2 text-left shadow-sm disabled:opacity-60"
-            aria-expanded={isDraftListOpen}
-            aria-haspopup="listbox"
-            title="Select a draft version to load"
-          >
-            <span className="flex items-center justify-between gap-3">
-              <span className="truncate text-xs font-extrabold text-dark-primary">
-                {isDraftListLoading
-                  ? 'Loading versions…'
-                  : activeDraft
-                    ? `${activeDraft.name} (v_${String(activeDraft.id).match(/_(\d+)_/)?.[1] ?? activeDraft.id})`
-                    : `Select a version (${draftList.length})`}
-              </span>
-              <i
-                className={`fas ${isDraftListOpen ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px] text-dark-soft`}
-              />
-            </span>
-          </button>
-          {isDraftListOpen && (
-            <div
-              className="absolute left-0 top-full z-[110] mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-amber-200 bg-white p-1.5 shadow-2xl"
-              role="listbox"
-              aria-label="Draft versions"
-            >
-              {draftList.map((draft) => (
-                <button
-                  key={draft.id}
-                  type="button"
-                  role="option"
-                  aria-selected={draft.id === activeDraft?.id}
-                  onClick={() => {
-                    setIsDraftListOpen(false);
-                    handleLoadDraft(draft.id);
-                  }}
-                  className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors ${
-                    draft.id === activeDraft?.id ? 'bg-amber-50' : 'hover:bg-light-lbg/60'
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 truncate text-xs font-bold text-dark-primary">
-                    {isBackupVersion(draft) ? '⤺ ' : ''}
-                    <span className="truncate">{draft.name}</span>
-                    {isBackupVersion(draft) && (
-                      <span className="shrink-0 rounded bg-amber-200 px-1 py-0.5 text-[8px] font-black uppercase tracking-wide text-amber-900">
-                        Backup
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-0.5 flex flex-wrap gap-x-3 text-[10px] font-medium text-gray-400">
-                    <span>Created {formatDraftDate(draft.createdAt)}</span>
-                    <span>Updated {formatDraftDate(draft.updatedAt)}</span>
-                    <span className="font-mono">{draft.id}</span>
-                  </span>
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDraftListOpen(false);
-                  handleOpenNewDraftModal();
-                }}
-                className="mt-1 w-full rounded-lg border-t border-light-border px-2.5 py-2 text-left text-xs font-extrabold text-amber-700 hover:bg-amber-50"
-              >
-                <i className="fas fa-plus mr-2" />
-                Create new draft
-              </button>
-            </div>
-          )}
-        </div>
-
-        {activeDraft && (
-          <div
-            className="flex shrink-0 items-center gap-1 rounded-xl border border-amber-300 bg-white px-1.5 py-1"
-            data-feature="draft-save-status"
-          >
-            <span className="flex items-center px-0.5" title={draftSaveStatusTitle}>
-              <i
-                className={`fas fa-lightbulb text-xl ${draftSaveStatusColor} ${
-                  isSavingDraft ? 'animate-pulse' : ''
-                }`}
-                aria-hidden="true"
-              />
-              <span className="sr-only">{draftSaveStatusTitle}</span>
-            </span>
-            <button
-              type="button"
-              onClick={handleSyncActiveDraft}
-              disabled={!canWriteDraftNow || isDraftSyncBusy}
-              className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-amber-50 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Save the draft to the database now"
-              aria-label="Save the draft to the database now"
-            >
-              <i className={`fas fa-save text-xl ${isDraftSyncBusy ? 'fa-spin' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={handleDiscardActiveDraftChanges}
-              disabled={!canWriteDraftNow || isDraftSyncBusy}
-              className="rounded-lg p-1 text-dark-soft transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-              title="Discard unsaved changes and reload the saved version"
-              aria-label="Discard unsaved changes and reload the saved version"
-            >
-              <i className="fas fa-rotate-left text-xl" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {draftSaveError && (
-        <div
-          className="w-full rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-[10px] font-semibold text-red-800"
-          data-feature="draft-save-error"
-          role="alert"
-        >
-          <i className="fas fa-triangle-exclamation mr-1" />
-          Not saved to the database: {draftSaveError}
-        </div>
-      )}
-
-      {localDraftRecovery.length > 0 && (
-        <div
-          className="w-full rounded-lg border border-amber-400 bg-amber-100 px-2.5 py-2 text-[10px] font-semibold text-amber-900 space-y-1"
-          data-feature="draft-local-recovery"
-          role="status"
-        >
-          <div>
-            <i className="fas fa-hard-drive mr-1" />
-            {localDraftRecovery.length} version(s) in this browser are newer than the database and
-            were never stored there:
-          </div>
-          <ul className="space-y-0.5">
-            {localDraftRecovery.map((item) => (
-              <li key={item.id} className="font-mono">
-                {item.name} · {item.changedSlots} period(s) differ · {item.localSlotCount} slots ·
-                browser copy from{' '}
-                {item.localUpdatedAt ? formatDraftDate(item.localUpdatedAt) : 'unknown'}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={handleRestoreLocalDrafts}
-            disabled={isRestoringLocalDrafts}
-            className="rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-amber-700 disabled:opacity-60"
-          >
-            {isRestoringLocalDrafts ? 'Recovering…' : 'Recover to database'}
-          </button>
-        </div>
-      )}
-
-      {isDraftMode && (
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <button
-            type="button"
-            onClick={() => {
-              setIsMultiSelectEnabled((enabled) => {
-                if (enabled) setSelectedMultiSelection({ classId: null, cells: [] });
-                return !enabled;
-              });
-            }}
-            aria-pressed={isMultiSelectEnabled}
-            className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-              isMultiSelectEnabled
-                ? 'bg-brand-primary border-brand-primary text-white'
-                : 'bg-white border-amber-300 text-dark-primary hover:bg-amber-100'
-            }`}
-            title={
-              isMultiSelectEnabled
-                ? 'Turn off multi-select editing'
-                : 'Turn on multi-select editing'
-            }
-          >
-            <i className="fas fa-list-check" />
-            <span>Multi-select {isMultiSelectEnabled ? 'On' : 'Off'}</span>
-          </button>
-          {isMultiSelectEnabled && (
-            <button
-              type="button"
-              onClick={() => setIsBulkClearModalOpen(true)}
-              disabled={selectedMultiSelection.cells.length === 0}
-              className="px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-              title={
-                selectedMultiSelection.cells.length
-                  ? `Clear ${selectedMultiSelection.cells.length} selected periods`
-                  : 'Select at least one period to clear'
-              }
-            >
-              <i className="fas fa-eraser" />
-              <span>Clear</span>
-              {selectedMultiSelection.cells.length > 0 && (
-                <span>({selectedMultiSelection.cells.length})</span>
-              )}
-            </button>
-          )}
-          {draftPanelActions.map((action) => (
-            <button
-              key={action.label}
-              onClick={action.onClick}
-              disabled={!!draftActionBusy}
-              className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${action.className}`}
-              title={action.title}
-            >
-              <i
-                className={`fas ${
-                  draftActionBusy === action.label ? 'fa-spinner fa-spin' : action.icon
-                }`}
-              />
-              <span className="hidden sm:inline">{action.label}</span>
-            </button>
-          ))}
-          <button
-            onClick={handleSwitchToLive}
-            className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Exit draft mode"
-          >
-            <i className="fas fa-arrow-left" />
-            Exit
-          </button>
-        </div>
-      )}
-    </div>
+    <TimetableDraftPanel
+      activeDraft={activeDraft}
+      draftList={draftList}
+      isDraftListOpen={isDraftListOpen}
+      onToggleDraftList={() => setIsDraftListOpen((open) => !open)}
+      onCloseDraftList={() => setIsDraftListOpen(false)}
+      isDraftListLoading={isDraftListLoading}
+      onSelectDraft={handleLoadDraft}
+      onCreateNewDraft={handleOpenNewDraftModal}
+      draftSaveStatusTitle={draftSaveStatusTitle}
+      draftSaveStatusColor={draftSaveStatusColor}
+      isSavingDraft={isSavingDraft}
+      canSaveDraft={canWriteDraftNow}
+      isDraftSyncBusy={isDraftSyncBusy}
+      onSaveNow={handleSyncActiveDraft}
+      onDiscardChanges={handleDiscardActiveDraftChanges}
+      draftSaveError={draftSaveError}
+      localDraftRecovery={localDraftRecovery}
+      isRestoringLocalDrafts={isRestoringLocalDrafts}
+      onRestoreLocalDrafts={handleRestoreLocalDrafts}
+      showActions={isDraftMode}
+      isMultiSelectEnabled={isMultiSelectEnabled}
+      onToggleMultiSelect={handleToggleMultiSelect}
+      selectedCellCount={selectedMultiSelection.cells.length}
+      onOpenBulkClear={() => setIsBulkClearModalOpen(true)}
+      actions={draftPanelActions}
+      actionBusy={draftActionBusy}
+      onExitDraft={handleSwitchToLive}
+    />
   );
 
   return (
     <TimetableDraftModeContext.Provider value={dataMode === 'draft'}>
       <div className="flex flex-col min-h-[500px]" data-feature="timetable-planner">
-        {/* Top Banner Control Panel */}
-        <div className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2 print:hidden">
-          {/* Title & Actions Row */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2">
+        {/* Top Banner Control Panel — sticky just below the page header + portal breadcrumb bar */}
+        <div
+          ref={plannerHeaderRef}
+          className="bg-light-lbg border border-light-border p-2 sm:p-4 mb-2 flex flex-col gap-2 -mx-2 print:hidden sticky z-30"
+          style={stickyTop !== null ? { top: `${stickyTop}px` } : undefined}
+          data-feature="timetable-planner-header-block"
+        >
+          {/* Title, workspace tabs and Scheduler actions.
+              The tabs stay next to the title on desktop, so they no longer shift when the
+              Scheduler Setup controls appear or disappear. */}
+          <div className="flex flex-col md:flex-row md:flex-wrap justify-between items-start md:items-center gap-2">
+            {/* The title and tabs keep their natural width; the Scheduler controls wrap to the
+                next line instead of squeezing (and re-wrapping) the tabs. */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 min-w-0 w-full md:w-auto md:shrink-0">
+              <h3 className="text-xl sm:text-2xl font-extrabold text-dark-primary flex items-center gap-2 shrink-0">
                 <i className="fas fa-calendar-alt text-brand-primary"></i>
                 Timetable
-                <div className="flex items-center gap-2 mt-1">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xl font-bold ${
-                      isSupabaseMode ? 'text-green-dark' : 'text-orange-dark'
-                    }`}
-                  >
-                    <i className="fas fa-lightbulb "></i>
-                  </span>
-                </div>
-              </h2>
-            </div>
-
-            {/* Workspace Tabs (Inside the Top Banner Card) */}
-            {/* Mobile view (< sm): Dropdown */}
-            <div className="sm:hidden w-full" data-feature-tab="timetable-tabs-mobile">
-              <div className="relative">
-                <select
-                  value={activeTab}
-                  onChange={(e) => setActiveTab(e.target.value)}
-                  className="w-full appearance-none bg-white border border-light-border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold text-dark-primary outline-none focus:ring-2 focus:ring-brand-primary shadow-sm"
-                >
-                  {availableTabs.map((tab) => (
-                    <option key={tab.id} value={tab.id}>
-                      {tab.label}
-                    </option>
-                  ))}
-                </select>
-                <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Desktop view (>= sm): Pill tabs */}
-            <div
-              className="hidden sm:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-wrap gap-1 w-full sm:w-auto"
-              data-feature-tab="timetable-tabs"
-            >
-              {availableTabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer ${
-                    activeTab === tab.id
-                      ? 'text-white bg-brand-primary shadow-sm'
-                      : 'text-dark-soft hover:text-dark-primary'
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xl font-bold ${
+                    dataMode === 'draft' ? 'text-amber-600' : 'text-green-700'
                   }`}
                 >
-                  <i className={`fas ${tab.icon} text-[10px]`}></i>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            {/* Export / Import backup */}
-            <ConditionalBlock name="timetable-json-config" roles={userRoles}>
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <button
-                  onClick={handleExportJson}
-                  className="flex-1 md:flex-none bg-green-500 hover:bg-green-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  title="Download full timetable configuration in JSON format"
-                >
-                  <i className="fas fa-file-download"></i>
-                </button>
+                  <i className="fas fa-lightbulb "></i>
+                </span>
+              </h3>
 
-                <input
-                  type="file"
-                  accept=".json"
-                  ref={fileInputRef}
-                  onChange={handleImportJson}
-                  className="hidden"
-                />
-
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 md:flex-none bg-blue-500 hover:bg-blue-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  title="Upload and restore timetable config from a JSON file"
-                >
-                  <i className="fas fa-file-upload"></i>
-                </button>
-
-                {/* Compare Button */}
-                <input
-                  type="file"
-                  accept=".json"
-                  ref={compareInputRef}
-                  onChange={handleCompareJson}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => compareInputRef.current?.click()}
-                  className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
-                  title="Compare offline JSON with currently active timetable"
-                >
-                  <i className="fas fa-wave-square"></i>
-                </button>
-                <button
-                  onClick={handleRefreshData}
-                  disabled={loading}
-                  className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={isDraftMode ? 'Reload Draft Data' : 'Refresh Timetable Data'}
-                >
-                  <i
-                    className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
-                  ></i>
-                </button>
+              {/* Desktop: workspace pill tabs */}
+              <div
+                className="hidden sm:flex bg-light-bg/40 p-1 rounded-xl border border-light-border flex-nowrap gap-1 w-auto"
+                data-feature-tab="timetable-tabs-desktop"
+              >
+                {availableTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap cursor-pointer ${
+                      activeTab === tab.id
+                        ? dataMode === 'draft' && tab.id === 'scheduler'
+                          ? 'text-white bg-amber-500 shadow-sm'
+                          : 'text-white bg-brand-primary shadow-sm'
+                        : dataMode === 'draft' && tab.id === 'scheduler'
+                          ? 'text-amber-800 bg-amber-100 border border-amber-300 hover:bg-amber-200'
+                          : 'text-dark-soft hover:text-dark-primary'
+                    }`}
+                  >
+                    <i className={`fas ${tab.icon} text-[10px]`}></i>
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-            </ConditionalBlock>
+            </div>
+
+            {/* Scheduler Setup controls + export/import.
+                Mobile (< sm): 2x2 grid — [tabs][export/import] / [view picker][live-draft].
+                Desktop (>= sm): one inline row on the right. */}
+            <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:gap-2 sm:w-auto sm:ml-auto">
+              {/* Mobile: workspace tabs dropdown */}
+              <div
+                className="min-w-0 w-full order-1 sm:order-none sm:hidden"
+                data-feature-tab="timetable-tabs-mobile"
+              >
+                <div className="relative">
+                  <select
+                    value={activeTab}
+                    onChange={(e) => setActiveTab(e.target.value)}
+                    className={`w-full appearance-none border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold outline-none shadow-sm ${
+                      dataMode === 'draft' && activeTab === 'scheduler'
+                        ? 'bg-amber-50 border-amber-400 text-amber-900 focus:ring-2 focus:ring-amber-200'
+                        : 'bg-white border-light-border text-dark-primary focus:ring-2 focus:ring-brand-primary'
+                    }`}
+                  >
+                    {availableTabs.map((tab) => (
+                      <option key={tab.id} value={tab.id}>
+                        {tab.label}
+                      </option>
+                    ))}
+                  </select>
+                  <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Scheduler Setup controls: sub-view picker + Live/Draft switch.
+                  Rendered only while Scheduler Setup is the active workspace tab. */}
+              {activeTab === 'scheduler' && (
+                <>
+                  <div
+                    className="relative min-w-0 w-full order-3 sm:w-64 sm:order-2"
+                    data-feature-filter="scheduler-setup"
+                  >
+                    <select
+                      value={schedulerViewType}
+                      onChange={(e) => setSchedulerViewType(e.target.value)}
+                      className={`w-full appearance-none border rounded-xl px-3.5 py-2 pr-8 text-xs font-extrabold outline-none shadow-sm cursor-pointer ${
+                        dataMode === 'draft'
+                          ? 'bg-amber-50 border-amber-400 text-amber-900 focus:ring-2 focus:ring-amber-200'
+                          : 'bg-white border-light-border text-dark-primary focus:ring-2 focus:ring-brand-primary'
+                      }`}
+                      data-feature="scheduler-view-select"
+                    >
+                      {SCHEDULER_VIEW_OPTIONS.map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-dark-soft pointer-events-none" />
+                  </div>
+
+                  <div className="min-w-0 w-full flex items-center order-4 sm:w-auto sm:order-3">
+                    {schedulerModeSwitch}
+                  </div>
+                </>
+              )}
+
+              {/* Export / Import backup (mobile column 2 of the first row) */}
+              <ConditionalBlock name="timetable-json-config" roles={userRoles}>
+                <div className="flex items-center justify-end gap-2 w-full order-2 sm:w-auto sm:order-last">
+                  <button
+                    onClick={handleExportJson}
+                    className="flex-1 sm:flex-none bg-green-500 hover:bg-green-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                    title="Download full timetable configuration in JSON format"
+                  >
+                    <i className="fas fa-file-download"></i>
+                  </button>
+
+                  <input
+                    type="file"
+                    accept=".json"
+                    ref={fileInputRef}
+                    onChange={handleImportJson}
+                    className="hidden"
+                  />
+
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 sm:flex-none bg-blue-500 hover:bg-blue-800 text-white border border-light-border px-3 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                    title="Upload and restore timetable config from a JSON file"
+                  >
+                    <i className="fas fa-file-upload"></i>
+                  </button>
+
+                  {/* Compare Button */}
+                  <input
+                    type="file"
+                    accept=".json"
+                    ref={compareInputRef}
+                    onChange={handleCompareJson}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => compareInputRef.current?.click()}
+                    className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-800 text-white border border-light-border px-2 py-2 rounded-xl text-xl font-bold flex items-center justify-center gap-2 transition-all"
+                    title="Compare offline JSON with currently active timetable"
+                  >
+                    <i className="fas fa-wave-square"></i>
+                  </button>
+                  <button
+                    onClick={handleRefreshData}
+                    disabled={loading}
+                    className={`text-light-text hover:text-brand-primary transition-all p-1.5 rounded-lg hover:bg-light-ui/80 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title={isDraftMode ? 'Reload Draft Data' : 'Refresh Timetable Data'}
+                  >
+                    <i
+                      className={`fas fa-sync-alt ${loading ? 'animate-spin text-brand-primary' : ''}`}
+                    ></i>
+                  </button>
+                </div>
+              </ConditionalBlock>
+            </div>
           </div>
         </div>
 
@@ -4093,9 +4149,6 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                 !isDraftListLoading &&
                 !isDraftSwitching ? (
                   <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-6 sm:p-10 text-center">
-                    <div className="flex items-center justify-center mb-4">
-                      {schedulerModeSwitch}
-                    </div>
                     {draftPanel && <div className="mb-5 text-left">{draftPanel}</div>}
                     <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500 text-white flex items-center justify-center text-xl mb-3">
                       <i className="fas fa-file-pen" />
@@ -4126,13 +4179,16 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
                     onRefresh={handleRefreshData}
                     refreshing={loading}
                     user={user}
-                    modeSwitcher={schedulerModeSwitch}
+                    viewType={schedulerViewType}
+                    onViewTypeChange={setSchedulerViewType}
                     draftPanel={draftPanel}
                     printButton={printButton}
                     onActiveViewChange={handleActiveViewChange}
                     onUpdateSlot={handleUpdateSlot}
                     onSetTeacherTimeBlock={handleSetTeacherTimeBlock}
+                    onRemoveTeacherTimeBlock={handleRemoveTeacherTimeBlock}
                     onMoveSlot={handleMoveSlot}
+                    onCopySlot={handleCopySlot}
                     onSwapSlots={handleSwapSlots}
                     onBulkUpdateSlots={handleBulkUpdateSlots}
                     onClearSlots={handleClearSlots}

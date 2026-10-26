@@ -6,7 +6,7 @@ import AdminFormConfigsView from '../form-config/AdminFormConfigsView';
 import ConfirmModal from '../ConfirmModal';
 import { invalidateViewConfigCache } from '../../hooks/useViewConfig';
 
-export const AdminFormConfigsContainer = ({ onBack }) => {
+export const AdminFormConfigsContainer = ({ onBack, onOpenRecords }) => {
   const [configs, setConfigs] = useState([]);
   const [sheetMappings, setSheetMappings] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -61,7 +61,8 @@ export const AdminFormConfigsContainer = ({ onBack }) => {
     formVisibility,
     dataVisibility,
     conversationVisibility,
-    cardTheme
+    cardTheme,
+    extra = {}
   ) => {
     setSaving(true);
     try {
@@ -78,6 +79,11 @@ export const AdminFormConfigsContainer = ({ onBack }) => {
           data_visibility: dataVisibility || null,
           conversation_visibility: conversationVisibility || null,
           card_theme: cardTheme || 'orange',
+          success_message: extra.successMessage || null,
+          search_enabled: extra.searchEnabled === true,
+          search_fields: Array.isArray(extra.searchFields) ? extra.searchFields : [],
+          direct_link_enabled: extra.directLinkEnabled !== false,
+          role_link_enabled: extra.roleLinkEnabled !== false,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'form_name' }
@@ -181,6 +187,7 @@ export const AdminFormConfigsContainer = ({ onBack }) => {
         onDeleteConfig={handleDeleteConfig}
         onSaveMapping={handleSaveMapping}
         onDeleteMapping={handleDeleteMapping}
+        onOpenRecords={onOpenRecords}
         onBack={onBack}
       />
       <ConfirmModal

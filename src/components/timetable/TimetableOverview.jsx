@@ -80,6 +80,10 @@ const TimetableOverview = ({
         String(s.period_id) === String(periodId)
     );
 
+  // Thick left border for assignment chips: pink for female teachers, blue for male teachers.
+  const getAssignmentAccentClass = (isFemale) =>
+    isFemale ? 'border-l-4 border-l-pink-400' : 'border-l-4 border-l-blue-500';
+
   // ─── Data builders ────────────────────────────────────────────────────────
   const getUnassignedClasses = (day, periodId) =>
     classes.flatMap((cls) => {
@@ -129,15 +133,21 @@ const TimetableOverview = ({
         (s) =>
           s.day === day && String(s.period_id) === String(periodId) && s.teacher_id && s.subject_id
       )
-      .map((s) => ({
-        teacherName: getTeacherName(s.teacher_id),
-        className: getClassName(s.class_id),
-        subjectName: getSubjectName(s.subject_id),
-        teacherId: s.teacher_id,
-        classId: s.class_id,
-        isFemale: teachers.find((t) => String(t.id) === String(s.teacher_id))?.is_male === false,
-        palette: getTeacherPalette(s.teacher_id),
-      }));
+      .map((s) => {
+        const isFemale =
+          teachers.find((t) => String(t.id) === String(s.teacher_id))?.is_male === false;
+        return {
+          teacherName: getTeacherName(s.teacher_id),
+          className: getClassName(s.class_id),
+          subjectName: getSubjectName(s.subject_id),
+          teacherId: s.teacher_id,
+          classId: s.class_id,
+          subjectId: s.subject_id,
+          isFemale,
+          palette: getTeacherPalette(s.teacher_id),
+          accentClass: getAssignmentAccentClass(isFemale),
+        };
+      });
 
   // ─── Summary stats (global, for the header strip) ─────────────────────────
   const nonBreakPeriods = periods.filter((p) => !p.is_break);
@@ -462,12 +472,14 @@ const TimetableOverview = ({
                 return (
                   <div
                     key={i}
+                    className={`rounded-lg px-2 py-1 border ${a.accentClass}`}
                     style={{
                       backgroundColor: p.bg,
-                      border: `1px solid ${p.border}`,
-                      borderLeft: `3px solid ${a.isFemale ? '#F472B6' : '#3B82F6'}`,
+                      color: p.text,
+                      borderTopColor: p.border,
+                      borderRightColor: p.border,
+                      borderBottomColor: p.border,
                     }}
-                    className="rounded-lg px-2 py-1"
                   >
                     <div className="flex items-center gap-1">
                       <i
@@ -626,12 +638,15 @@ const TimetableOverview = ({
                     {uniqueTeachersInSlots.map((t) => (
                       <div
                         key={t.id}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border"
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border border-l-4 ${
+                          t.isFemale ? 'border-l-pink-400' : 'border-l-blue-500'
+                        }`}
                         style={{
                           backgroundColor: t.palette.bg,
                           color: t.palette.text,
-                          border: `1px solid ${t.palette.border}`,
-                          borderLeft: `3px solid ${t.isFemale ? '#F472B6' : '#3B82F6'}`,
+                          borderTopColor: t.palette.border,
+                          borderRightColor: t.palette.border,
+                          borderBottomColor: t.palette.border,
                         }}
                       >
                         <i

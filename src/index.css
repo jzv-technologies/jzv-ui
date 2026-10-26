@@ -172,7 +172,9 @@ html[lang="ar"] textarea {
 }
 
 .table-sticky-intersection {
-  z-index: 30 !important;
+  /* 25 keeps the sticky corner above the header row (20) and sticky column (10) while staying
+     below the sticky page/timetable header blocks (30). */
+  z-index: 25 !important;
 }
 
 /* Optimize timetable view for landscape printing/PDFs */

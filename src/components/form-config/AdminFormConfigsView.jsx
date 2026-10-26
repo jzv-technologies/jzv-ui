@@ -8,6 +8,20 @@ import AdminLinksView from '../admin-settings/AdminLinksView';
 
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
 
+// JSONB columns can arrive as an array or (legacy cache) a JSON string.
+const parseSearchFields = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 const AdminFormConfigsView = ({
   configs,
   sheetMappings = [],
@@ -19,6 +33,7 @@ const AdminFormConfigsView = ({
   onDeleteConfig,
   onSaveMapping,
   onDeleteMapping,
+  onOpenRecords,
   onBack,
 }) => {
   const [activeTab, setActiveTab] = useState('configs');
@@ -39,6 +54,11 @@ const AdminFormConfigsView = ({
   const [editorDataVisibility, setEditorDataVisibility] = useState('');
   const [editorConversationVisibility, setEditorConversationVisibility] = useState('');
   const [editorCardTheme, setEditorCardTheme] = useState('orange');
+  const [editorSuccessMessage, setEditorSuccessMessage] = useState('');
+  const [editorSearchEnabled, setEditorSearchEnabled] = useState(false);
+  const [editorSearchFields, setEditorSearchFields] = useState([]);
+  const [editorDirectLinkEnabled, setEditorDirectLinkEnabled] = useState(true);
+  const [editorRoleLinkEnabled, setEditorRoleLinkEnabled] = useState(true);
   const [isNewForm, setIsNewForm] = useState(false);
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState('[]');
@@ -74,6 +94,11 @@ const AdminFormConfigsView = ({
     setEditorDataVisibility('');
     setEditorConversationVisibility('');
     setEditorCardTheme('orange');
+    setEditorSuccessMessage('');
+    setEditorSearchEnabled(false);
+    setEditorSearchFields([]);
+    setEditorDirectLinkEnabled(true);
+    setEditorRoleLinkEnabled(true);
     setJsonError('');
     setJsonMode(false);
     setEditorFields([]);
@@ -94,6 +119,11 @@ const AdminFormConfigsView = ({
     setEditorDataVisibility(config.data_visibility || '');
     setEditorConversationVisibility(config.conversation_visibility || '');
     setEditorCardTheme(config.card_theme || 'orange');
+    setEditorSuccessMessage(config.success_message || '');
+    setEditorSearchEnabled(config.search_enabled === true);
+    setEditorSearchFields(parseSearchFields(config.search_fields));
+    setEditorDirectLinkEnabled(config.direct_link_enabled !== false);
+    setEditorRoleLinkEnabled(config.role_link_enabled !== false);
     setJsonError('');
     setJsonMode(false);
 
@@ -161,7 +191,14 @@ const AdminFormConfigsView = ({
         config.form_visibility,
         config.data_visibility,
         config.conversation_visibility,
-        config.card_theme || 'orange'
+        config.card_theme || 'orange',
+        {
+          successMessage: config.success_message || '',
+          searchEnabled: config.search_enabled === true,
+          searchFields: parseSearchFields(config.search_fields),
+          directLinkEnabled: config.direct_link_enabled !== false,
+          roleLinkEnabled: config.role_link_enabled !== false,
+        }
       );
       showToast(`Form schema cloned successfully as "${newName}"!`, 'success');
     } catch (err) {
@@ -213,7 +250,14 @@ const AdminFormConfigsView = ({
       editorFormVisibility,
       editorDataVisibility,
       editorConversationVisibility,
-      editorCardTheme
+      editorCardTheme,
+      {
+        successMessage: editorSuccessMessage,
+        searchEnabled: editorSearchEnabled,
+        searchFields: editorSearchFields,
+        directLinkEnabled: editorDirectLinkEnabled,
+        roleLinkEnabled: editorRoleLinkEnabled,
+      }
     );
     setIsEditing(false);
   };
@@ -463,6 +507,11 @@ const AdminFormConfigsView = ({
         dataVisibility={editorDataVisibility}
         conversationVisibility={editorConversationVisibility}
         cardTheme={editorCardTheme}
+        successMessage={editorSuccessMessage}
+        searchEnabled={editorSearchEnabled}
+        searchFields={editorSearchFields}
+        directLinkEnabled={editorDirectLinkEnabled}
+        roleLinkEnabled={editorRoleLinkEnabled}
         sheetMappings={sheetMappings}
         jsonMode={jsonMode}
         setJsonMode={setJsonMode}
@@ -481,6 +530,11 @@ const AdminFormConfigsView = ({
         onChangeDataVisibility={setEditorDataVisibility}
         onChangeConversationVisibility={setEditorConversationVisibility}
         onChangeCardTheme={setEditorCardTheme}
+        onChangeSuccessMessage={setEditorSuccessMessage}
+        onChangeSearchEnabled={setEditorSearchEnabled}
+        onChangeSearchFields={setEditorSearchFields}
+        onChangeDirectLinkEnabled={setEditorDirectLinkEnabled}
+        onChangeRoleLinkEnabled={setEditorRoleLinkEnabled}
         onAddField={() => {
           const newFields = [
             ...editorFields,
@@ -677,6 +731,7 @@ const AdminFormConfigsView = ({
             validatingUuid={validatingUuid}
             onClearCache={handleClearIndividualCache}
             clearingCacheUuid={clearingCacheUuid}
+            onOpenRecords={onOpenRecords}
             onCreateNew={() => {
               setIsNewForm(true);
               setEditorUuid('');
@@ -689,6 +744,11 @@ const AdminFormConfigsView = ({
               setEditorDataVisibility('');
               setEditorConversationVisibility('');
               setEditorCardTheme('orange');
+              setEditorSuccessMessage('');
+              setEditorSearchEnabled(false);
+              setEditorSearchFields([]);
+              setEditorDirectLinkEnabled(true);
+              setEditorRoleLinkEnabled(true);
               setEditorFields([]);
               setJsonText('[]');
               setJsonError('');

@@ -109,7 +109,10 @@ const Header = ({
   }, [showStudentDropdown, showMobileDropdown]);
 
   return (
-    <header className="bg-light-white shadow-sm sticky top-0 z-40 border-b border-light-border print:hidden">
+    <header
+      data-app-header
+      className="bg-light-white shadow-sm sticky top-0 z-40 border-b border-light-border print:hidden"
+    >
       <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 py-4 mr-2">
         {/* Mobile row: Logo + (if logged in) user info + logout button on the right */}
         <div className="flex items-center justify-between sm:justify-start sm:gap-4 sm:hidden">

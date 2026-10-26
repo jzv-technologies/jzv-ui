@@ -353,7 +353,17 @@ export const UnifiedPortal = ({
       case 'form-configurations':
         return (
           <div data-feature="form-configurations">
-            <AdminFormConfigsContainer onBack={() => navigateToSubView(null)} />
+            <AdminFormConfigsContainer
+              onBack={() => navigateToSubView(null)}
+              onOpenRecords={(config) => {
+                const formName = config?.form_name || config?.uuid || '';
+                if (!formName) return;
+                navigateToSubView(
+                  'review-requests',
+                  `/portal/review-requests?schema=${encodeURIComponent(formName)}`
+                );
+              }}
+            />
           </div>
         );
 
@@ -539,11 +549,12 @@ export const UnifiedPortal = ({
               fullName={fullName}
               userRoles={userRoles}
               initialSchema={
-                subView === 'job-applications'
+                new URLSearchParams(location.search).get('schema') ||
+                (subView === 'job-applications'
                   ? 'career'
                   : subView === 'registered-complaints' || subView === 'view-complaints'
                     ? 'complaint'
-                    : null
+                    : null)
               }
             />
           </div>

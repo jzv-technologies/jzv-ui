@@ -21,6 +21,8 @@ export const filterFormsByRoles = (forms = [], userRoles = []) => {
   const normalizedUserRoles = (userRoles || []).map((r) => String(r).toLowerCase().trim());
 
   return forms.filter((item) => {
+    // A form whose role-based link is disabled must not appear as a portal tile.
+    if (item.role_link_enabled === false) return false;
     if (!item.form_visibility || !String(item.form_visibility).trim()) return true;
     const permitted = String(item.form_visibility)
       .split(',')
@@ -28,6 +30,17 @@ export const filterFormsByRoles = (forms = [], userRoles = []) => {
     if (permitted.includes('all')) return true;
     return normalizedUserRoles.some((r) => permitted.includes(r));
   });
+};
+
+/**
+ * Whether a config may be reached through the given access path.
+ * Direct links are governed by `direct_link_enabled`; role-based portal links by
+ * `role_link_enabled`. Missing values default to enabled for older records.
+ */
+const isAccessPathAllowed = (record, isDirectLink) => {
+  if (!record) return false;
+  if (isDirectLink) return record.direct_link_enabled !== false;
+  return record.role_link_enabled !== false;
 };
 
 /**
@@ -137,7 +150,7 @@ export const fetchUserDynamicFormConfigByUuid = async (
   const memoryForms = memoryCache.get(rolesKey);
   if (memoryForms) {
     const match = memoryForms.find((f) => f.form_name === formName);
-    if (match) return match;
+    if (match && isAccessPathAllowed(match, isDirectLink)) return match;
   }
 
   // 2. Check session cache
@@ -147,7 +160,7 @@ export const fetchUserDynamicFormConfigByUuid = async (
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         const match = parsed.find((f) => f.form_name === formName);
-        if (match) return match;
+        if (match && isAccessPathAllowed(match, isDirectLink)) return match;
       }
     }
   } catch (e) {
@@ -165,7 +178,7 @@ export const fetchUserDynamicFormConfigByUuid = async (
         }
       );
 
-      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0 && isAccessPathAllowed(rpcData[0], false)) {
         return rpcData[0];
       }
     } catch (err) {
@@ -187,6 +200,8 @@ export const fetchUserDynamicFormConfigByUuid = async (
 
   if (directData && directData.length > 0) {
     const record = directData[0];
+    // A disabled access path behaves exactly like a missing form.
+    if (!isAccessPathAllowed(record, isDirectLink)) return null;
     // If accessed directly via shared link (baseurl/<form_name>), permit access to anyone
     if (isDirectLink) {
       return record;
@@ -221,6 +236,18 @@ export const invalidateDynamicFormConfigsCache = () => {
       }
     }
     keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch (e) {
+    // Ignore storage errors
+  }
+  // Per-form config snapshots (success message, search fields, link flags) live in
+  // localStorage with a short TTL; drop them so a saved change applies immediately.
+  try {
+    const localKeys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('form_config_')) localKeys.push(key);
+    }
+    localKeys.forEach((k) => localStorage.removeItem(k));
   } catch (e) {
     // Ignore storage errors
   }

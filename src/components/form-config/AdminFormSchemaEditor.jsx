@@ -1,8 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
-import { showToast } from "../../utils/toast";
-import { CARD_THEMES } from "../../utils/cardTheme";
+import React, { useState, useEffect, useRef } from 'react';
+import { showToast } from '../../utils/toast';
+import { CARD_THEMES } from '../../utils/cardTheme';
 
-const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder = "Select roles..." }) => {
+const MultiSelectDropdown = ({
+  label,
+  options,
+  selected,
+  onChange,
+  placeholder = 'Select roles...',
+}) => {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -12,23 +18,28 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder =
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedList = selected ? selected.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const selectedList = selected
+    ? selected
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
 
   const handleToggle = (option) => {
     let next;
     if (selectedList.includes(option)) {
-      next = selectedList.filter(item => item !== option);
+      next = selectedList.filter((item) => item !== option);
     } else {
       next = [...selectedList, option];
     }
-    onChange(next.join(", "));
+    onChange(next.join(', '));
   };
 
-  const displayText = selectedList.length > 0 ? selectedList.join(", ") : placeholder;
+  const displayText = selectedList.length > 0 ? selectedList.join(', ') : placeholder;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -38,7 +49,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder =
         className="w-full flex items-center justify-between px-4 py-2.5 border border-light-border bg-white rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm font-semibold text-dark-deepblue text-left"
       >
         <span className="truncate pr-2">{displayText}</span>
-        <i className={`fas fa-chevron-${open ? "up" : "down"} text-xs text-dark-muted`}></i>
+        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-xs text-dark-muted`}></i>
       </button>
       {open && (
         <div className="absolute left-0 right-0 mt-1.5 p-2 bg-white border border-light-border rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
@@ -49,9 +60,7 @@ const MultiSelectDropdown = ({ label, options, selected, onChange, placeholder =
                 <label
                   key={option}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer text-sm font-semibold transition-colors ${
-                    isChecked
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-dark-primary hover:bg-gray-50"
+                    isChecked ? 'bg-blue-50 text-blue-700' : 'text-dark-primary hover:bg-gray-50'
                   }`}
                 >
                   <input
@@ -83,23 +92,27 @@ const ScreenDropdown = ({ value, onChange }) => {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const options = ["New", "Update", "Data Grid"];
-  const selectedList = value !== undefined && value !== null && value !== ""
-    ? String(value).split(",").map(s => s.trim()).filter(Boolean)
-    : options;
+  const options = ['New', 'Update', 'Data Grid'];
+  const selectedList =
+    value !== undefined && value !== null && value !== ''
+      ? String(value)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : options;
 
   const handleToggle = (option) => {
     let next;
     if (selectedList.includes(option)) {
-      next = selectedList.filter(item => item !== option);
+      next = selectedList.filter((item) => item !== option);
     } else {
       next = [...selectedList, option];
     }
-    onChange(next.join(", "));
+    onChange(next.join(', '));
   };
 
   const handleToggleOpen = () => {
@@ -111,7 +124,12 @@ const ScreenDropdown = ({ value, onChange }) => {
     setOpen(!open);
   };
 
-  const displayText = selectedList.length === 3 ? "All" : selectedList.length === 0 ? "None" : selectedList.join(", ");
+  const displayText =
+    selectedList.length === 3
+      ? 'All'
+      : selectedList.length === 0
+        ? 'None'
+        : selectedList.join(', ');
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -122,10 +140,12 @@ const ScreenDropdown = ({ value, onChange }) => {
         className="w-full flex items-center justify-between px-3 py-1.5 border border-light-border bg-white rounded-lg text-xs font-semibold text-dark-deepblue transition-all"
       >
         <span className="truncate pr-1 max-w-[80px]">{displayText}</span>
-        <i className={`fas fa-chevron-${open ? "up" : "down"} text-[10px] text-dark-muted`}></i>
+        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[10px] text-dark-muted`}></i>
       </button>
       {open && (
-        <div className={`absolute right-0 ${openAbove ? "bottom-full mb-1" : "mt-1"} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[120px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}>
+        <div
+          className={`absolute right-0 ${openAbove ? 'bottom-full mb-1' : 'mt-1'} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[120px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}
+        >
           <div className="space-y-0.5">
             {options.map((option) => {
               const isChecked = selectedList.includes(option);
@@ -133,9 +153,7 @@ const ScreenDropdown = ({ value, onChange }) => {
                 <label
                   key={option}
                   className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs font-medium transition-colors ${
-                    isChecked
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-dark-primary hover:bg-gray-50"
+                    isChecked ? 'bg-blue-50 text-blue-700' : 'text-dark-primary hover:bg-gray-50'
                   }`}
                 >
                   <input
@@ -167,33 +185,46 @@ const UpdateAllowedDropdown = ({ value, onChange }) => {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const options = ["All", "None", "Reporter", "Reviewer", "Parent", "Teacher", "Management", "Admin"];
-  const selectedList = value !== undefined && value !== null && value !== ""
-    ? String(value).split(",").map(s => s.trim()).filter(Boolean)
-    : ["None"];
+  const options = [
+    'All',
+    'None',
+    'Reporter',
+    'Reviewer',
+    'Parent',
+    'Teacher',
+    'Management',
+    'Admin',
+  ];
+  const selectedList =
+    value !== undefined && value !== null && value !== ''
+      ? String(value)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : ['None'];
 
   const handleToggle = (option) => {
     let next = [];
-    if (option === "All") {
-      next = ["All"];
-    } else if (option === "None") {
-      next = ["None"];
+    if (option === 'All') {
+      next = ['All'];
+    } else if (option === 'None') {
+      next = ['None'];
     } else {
-      const filtered = selectedList.filter(item => item !== "All" && item !== "None");
+      const filtered = selectedList.filter((item) => item !== 'All' && item !== 'None');
       if (filtered.includes(option)) {
-        next = filtered.filter(item => item !== option);
+        next = filtered.filter((item) => item !== option);
       } else {
         next = [...filtered, option];
       }
       if (next.length === 0) {
-        next = ["None"];
+        next = ['None'];
       }
     }
-    onChange(next.join(", "));
+    onChange(next.join(', '));
   };
 
   const handleToggleOpen = () => {
@@ -205,11 +236,11 @@ const UpdateAllowedDropdown = ({ value, onChange }) => {
     setOpen(!open);
   };
 
-  const displayText = selectedList.includes("All")
-    ? "All"
-    : selectedList.includes("None") || selectedList.length === 0
-      ? "None"
-      : selectedList.join(", ");
+  const displayText = selectedList.includes('All')
+    ? 'All'
+    : selectedList.includes('None') || selectedList.length === 0
+      ? 'None'
+      : selectedList.join(', ');
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -220,10 +251,12 @@ const UpdateAllowedDropdown = ({ value, onChange }) => {
         className="w-full flex items-center justify-between px-3 py-1.5 border border-light-border bg-white rounded-lg text-xs font-semibold text-dark-deepblue transition-all"
       >
         <span className="truncate pr-1 max-w-[80px]">{displayText}</span>
-        <i className={`fas fa-chevron-${open ? "up" : "down"} text-[10px] text-dark-muted`}></i>
+        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[10px] text-dark-muted`}></i>
       </button>
       {open && (
-        <div className={`absolute right-0 ${openAbove ? "bottom-full mb-1" : "mt-1"} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[120px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}>
+        <div
+          className={`absolute right-0 ${openAbove ? 'bottom-full mb-1' : 'mt-1'} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[120px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}
+        >
           <div className="space-y-0.5">
             {options.map((option) => {
               const isChecked = selectedList.includes(option);
@@ -231,9 +264,7 @@ const UpdateAllowedDropdown = ({ value, onChange }) => {
                 <label
                   key={option}
                   className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs font-medium transition-colors ${
-                    isChecked
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-dark-primary hover:bg-gray-50"
+                    isChecked ? 'bg-blue-50 text-blue-700' : 'text-dark-primary hover:bg-gray-50'
                   }`}
                 >
                   <input
@@ -265,33 +296,46 @@ const FieldVisibilityDropdown = ({ value, onChange }) => {
         setOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const options = ["All", "None", "Reporter", "Reviewer", "Parent", "Teacher", "Management", "Admin"];
-  const selectedList = value !== undefined && value !== null && value !== ""
-    ? String(value).split(",").map(s => s.trim()).filter(Boolean)
-    : ["All"];
+  const options = [
+    'All',
+    'None',
+    'Reporter',
+    'Reviewer',
+    'Parent',
+    'Teacher',
+    'Management',
+    'Admin',
+  ];
+  const selectedList =
+    value !== undefined && value !== null && value !== ''
+      ? String(value)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : ['All'];
 
   const handleToggle = (option) => {
     let next = [];
-    if (option === "All") {
-      next = ["All"];
-    } else if (option === "None") {
-      next = ["None"];
+    if (option === 'All') {
+      next = ['All'];
+    } else if (option === 'None') {
+      next = ['None'];
     } else {
-      const filtered = selectedList.filter(item => item !== "All" && item !== "None");
+      const filtered = selectedList.filter((item) => item !== 'All' && item !== 'None');
       if (filtered.includes(option)) {
-        next = filtered.filter(item => item !== option);
+        next = filtered.filter((item) => item !== option);
       } else {
         next = [...filtered, option];
       }
       if (next.length === 0) {
-        next = ["None"];
+        next = ['None'];
       }
     }
-    onChange(next.join(", "));
+    onChange(next.join(', '));
   };
 
   const handleToggleOpen = () => {
@@ -303,11 +347,11 @@ const FieldVisibilityDropdown = ({ value, onChange }) => {
     setOpen(!open);
   };
 
-  const displayText = selectedList.includes("All")
-    ? "All"
-    : selectedList.includes("None") || selectedList.length === 0
-      ? "None"
-      : selectedList.join(", ");
+  const displayText = selectedList.includes('All')
+    ? 'All'
+    : selectedList.includes('None') || selectedList.length === 0
+      ? 'None'
+      : selectedList.join(', ');
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -318,10 +362,12 @@ const FieldVisibilityDropdown = ({ value, onChange }) => {
         className="w-full flex items-center justify-between px-3 py-1.5 border border-light-border bg-white rounded-lg text-xs font-semibold text-dark-deepblue transition-all"
       >
         <span className="truncate pr-1 max-w-[90px]">{displayText}</span>
-        <i className={`fas fa-chevron-${open ? "up" : "down"} text-[10px] text-dark-muted`}></i>
+        <i className={`fas fa-chevron-${open ? 'up' : 'down'} text-[10px] text-dark-muted`}></i>
       </button>
       {open && (
-        <div className={`absolute right-0 ${openAbove ? "bottom-full mb-1" : "mt-1"} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[140px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}>
+        <div
+          className={`absolute right-0 ${openAbove ? 'bottom-full mb-1' : 'mt-1'} p-1 bg-white border border-light-border rounded-lg shadow-xl z-50 min-w-[140px] text-left animate-in fade-in slide-in-from-top-1 duration-150 font-sans`}
+        >
           <div className="space-y-0.5">
             {options.map((option) => {
               const isChecked = selectedList.includes(option);
@@ -329,9 +375,7 @@ const FieldVisibilityDropdown = ({ value, onChange }) => {
                 <label
                   key={option}
                   className={`flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs font-medium transition-colors ${
-                    isChecked
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-dark-primary hover:bg-gray-50"
+                    isChecked ? 'bg-blue-50 text-blue-700' : 'text-dark-primary hover:bg-gray-50'
                   }`}
                 >
                   <input
@@ -364,6 +408,11 @@ const AdminFormSchemaEditor = ({
   dataVisibility,
   conversationVisibility,
   cardTheme,
+  successMessage,
+  searchEnabled,
+  searchFields,
+  directLinkEnabled,
+  roleLinkEnabled,
   sheetMappings = [],
   jsonMode,
   setJsonMode,
@@ -382,6 +431,11 @@ const AdminFormSchemaEditor = ({
   onChangeDataVisibility,
   onChangeConversationVisibility,
   onChangeCardTheme,
+  onChangeSuccessMessage,
+  onChangeSearchEnabled,
+  onChangeSearchFields,
+  onChangeDirectLinkEnabled,
+  onChangeRoleLinkEnabled,
   onAddField,
   onRemoveField,
   onMoveField,
@@ -391,115 +445,174 @@ const AdminFormSchemaEditor = ({
   const [testingConnection, setTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
-  const formRoles = ["Parent", "Teacher", "Management", "Admin"];
-  const dataRoles = ["Reporter", "Reviewer", "Parent", "Teacher", "Management", "Admin"];
-  const conversationRoles = ["Reporter", "Reviewer", "Parent", "Teacher", "Management", "Admin"];
+  const formRoles = ['Parent', 'Teacher', 'Management', 'Admin'];
+  const dataRoles = ['Reporter', 'Reviewer', 'Parent', 'Teacher', 'Management', 'Admin'];
+  const conversationRoles = ['Reporter', 'Reviewer', 'Parent', 'Teacher', 'Management', 'Admin'];
 
   const toggleFormVisibility = (role) => {
-    const current = formVisibility ? formVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = formVisibility
+      ? formVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     let updated;
     if (current.includes(role)) {
       updated = current.filter((r) => r !== role);
     } else {
       updated = [...current, role];
     }
-    onChangeFormVisibility(updated.join(", "));
+    onChangeFormVisibility(updated.join(', '));
   };
 
   const toggleDataVisibility = (role) => {
-    const current = dataVisibility ? dataVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = dataVisibility
+      ? dataVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     let updated;
     if (current.includes(role)) {
       updated = current.filter((r) => r !== role);
     } else {
       updated = [...current, role];
     }
-    onChangeDataVisibility(updated.join(", "));
+    onChangeDataVisibility(updated.join(', '));
   };
 
   const isFormRoleActive = (role) => {
-    const current = formVisibility ? formVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = formVisibility
+      ? formVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     return current.includes(role);
   };
 
   const isDataRoleActive = (role) => {
-    const current = dataVisibility ? dataVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = dataVisibility
+      ? dataVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     return current.includes(role);
   };
 
   const toggleConversationVisibility = (role) => {
-    const current = conversationVisibility ? conversationVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = conversationVisibility
+      ? conversationVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     let updated;
     if (current.includes(role)) {
       updated = current.filter((r) => r !== role);
     } else {
       updated = [...current, role];
     }
-    onChangeConversationVisibility(updated.join(", "));
+    onChangeConversationVisibility(updated.join(', '));
   };
 
   const isConversationRoleActive = (role) => {
-    const current = conversationVisibility ? conversationVisibility.split(",").map(r => r.trim()).filter(Boolean) : [];
+    const current = conversationVisibility
+      ? conversationVisibility
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean)
+      : [];
     return current.includes(role);
   };
 
   const fieldTypes = [
-    "text",
-    "email",
-    "number",
-    "phone",
-    "date",
-    "textarea",
-    "dropdown",
-    "select",
-    "checkbox",
-    "radio",
-    "multi-checkbox",
-    "conversation",
-    "person",
-    "currentTimeStamp",
-    "currentUser",
-    "status",
-    "description",
-    "currentAssignee",
+    'text',
+    'email',
+    'number',
+    'phone',
+    'date',
+    'textarea',
+    'dropdown',
+    'select',
+    'checkbox',
+    'radio',
+    'multi-checkbox',
+    'conversation',
+    'person',
+    'currentTimeStamp',
+    'currentUser',
+    'status',
+    'description',
+    'currentAssignee',
   ];
+
+  const availableFieldNames = fields
+    .map((field) => (field['Field Name'] || '').trim())
+    .filter(Boolean);
+
+  const selectedSearchFields = searchFields || [];
+
+  const toggleSearchField = (fieldName) => {
+    const current = selectedSearchFields;
+    const next = current.includes(fieldName)
+      ? current.filter((name) => name !== fieldName)
+      : [...current, fieldName];
+    onChangeSearchFields(next);
+  };
+
+  // Enabling search always includes the generated tracking id: it is the primary search key.
+  const handleSearchEnabledChange = (enabled) => {
+    onChangeSearchEnabled(enabled);
+    if (enabled && !selectedSearchFields.some((name) => name.toLowerCase() === 'id')) {
+      onChangeSearchFields(['id', ...selectedSearchFields]);
+    }
+  };
+
+  const appendPlaceholder = (fieldName) => {
+    const token = `{{${fieldName}}}`;
+    const current = successMessage || '';
+    const spacer = current && !current.endsWith(' ') ? ' ' : '';
+    onChangeSuccessMessage(`${current}${spacer}${token}`);
+  };
 
   const handleTest = async () => {
     const selected = sheetMappings.find((m) => m.data_id === dataId);
     if (!selected) {
-      showToast("Please select a valid mapping target first.", "error");
+      showToast('Please select a valid mapping target first.', 'error');
       return;
     }
     setTestingConnection(true);
     setTestResult(null);
     try {
       const url = `${import.meta.env.VITE_APPS_SCRIPT_URL}?action=test-connection&google_sheet_id=${encodeURIComponent(
-        selected.google_sheet_id,
+        selected.google_sheet_id
       )}&data_sheet_name=${encodeURIComponent(selected.data_sheet_name)}`;
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
-        const msg = data.data?.message || "Connected successfully!";
+        const msg = data.data?.message || 'Connected successfully!';
         setTestResult({
           success: true,
           message: msg,
         });
-        showToast(msg, "success");
+        showToast(msg, 'success');
       } else {
-        const msg = data.error || "Connection failed.";
+        const msg = data.error || 'Connection failed.';
         setTestResult({
           success: false,
           message: msg,
         });
-        showToast(msg, "error");
+        showToast(msg, 'error');
       }
     } catch (err) {
-      const errMsg = "Connection request failed: " + err.message;
+      const errMsg = 'Connection request failed: ' + err.message;
       setTestResult({
         success: false,
         message: errMsg,
       });
-      showToast(errMsg, "error");
+      showToast(errMsg, 'error');
     } finally {
       setTestingConnection(false);
     }
@@ -510,11 +623,10 @@ const AdminFormSchemaEditor = ({
       <div className="p-8 border-b border-light-border flex flex-col md:flex-row justify-between items-start md:items-center bg-gray-50/50 gap-4">
         <div>
           <h3 className="text-2xl font-bold text-dark-deepblue">
-            {isNew ? "Create New Form Schema" : `Edit Form Schema: ${uuid}`}
+            {isNew ? 'Create New Form Schema' : `Edit Form Schema: ${uuid}`}
           </h3>
           <p className="text-sm text-dark-muted">
-            Define the field elements, types, validation, and visibility
-            conditions.
+            Define the field elements, types, validation, and visibility conditions.
           </p>
         </div>
         <div className="flex gap-3 w-full md:w-auto">
@@ -523,11 +635,7 @@ const AdminFormSchemaEditor = ({
             disabled={saving}
             className="flex-1 md:flex-initial bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-100"
           >
-            {saving ? (
-              <i className="fas fa-spinner fa-spin"></i>
-            ) : (
-              <i className="fas fa-save"></i>
-            )}{" "}
+            {saving ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-save"></i>}{' '}
             Save to DB
           </button>
           <button
@@ -541,39 +649,99 @@ const AdminFormSchemaEditor = ({
 
       <div className="p-8 border-b border-light-border bg-gray-50/20 space-y-6">
         {uuid && (
-          <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div
+            className={`grid-cols-1 sm:grid-cols-3 gap-4 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs border ${
+              directLinkEnabled === false
+                ? 'bg-amber-50/80 border-amber-200/80'
+                : 'bg-indigo-50/70 border-indigo-200/80'
+            }`}
+          >
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
-                <i className="fas fa-link" />
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                  directLinkEnabled === false
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-indigo-100 text-indigo-700'
+                }`}
+              >
+                <i className={`fas ${directLinkEnabled === false ? 'fa-link-slash' : 'fa-link'}`} />
               </div>
               <div>
-                <p className="font-bold text-indigo-950">Direct Public Submission Link</p>
-                <p className="text-indigo-700 font-mono text-[11px] break-all">
+                <p
+                  className={`font-bold ${
+                    directLinkEnabled === false ? 'text-amber-900' : 'text-indigo-950'
+                  }`}
+                >
+                  Direct Public Submission Link
+                  {directLinkEnabled === false && ' (disabled)'}
+                </p>
+                <p
+                  className={`font-mono text-[11px] break-all ${
+                    directLinkEnabled === false ? 'text-amber-700' : 'text-indigo-700'
+                  }`}
+                >
                   {window.location.origin}/{uuid}
                 </p>
               </div>
             </div>
+            <div>
+              <div className="flex items-start gap-3 cursor-pointer">
+                <label className="flex items-start gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={directLinkEnabled !== false}
+                    onChange={(e) => onChangeDirectLinkEnabled(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded accent-indigo-600 cursor-pointer"
+                  />
+                  <span className="min-w-0">
+                    <span className="text-xs font-bold text-dark-primary">Direct public link</span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={roleLinkEnabled !== false}
+                    onChange={(e) => onChangeRoleLinkEnabled(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded accent-indigo-600 cursor-pointer"
+                  />
+                  <span className="min-w-0">
+                    <span className="text-xs font-bold text-dark-primary">
+                      Role-based portal link
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </div>
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/${uuid}`);
-                  showToast(`Direct link copied: ${window.location.origin}/${uuid}`, "success");
-                }}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              >
-                <i className="fas fa-copy" />
-                <span>Copy Link</span>
-              </button>
-              <a
-                href={`/${uuid}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <i className="fas fa-external-link-alt" />
-                <span>Open Form</span>
-              </a>
+              {directLinkEnabled === false ? (
+                <span className="px-3 py-1.5 bg-white text-amber-700 border border-amber-200 rounded-lg font-bold text-xs">
+                  Direct link turned off
+                </span>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/${uuid}`);
+                      showToast(`Direct link copied: ${window.location.origin}/${uuid}`, 'success');
+                    }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  >
+                    <i className="fas fa-copy" />
+                    <span>Copy Link</span>
+                  </button>
+                  <a
+                    href={`/${uuid}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <i className="fas fa-external-link-alt" />
+                    <span>Open Form</span>
+                  </a>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -581,16 +749,14 @@ const AdminFormSchemaEditor = ({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Form Name Input */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
+            <label className="block text-xs font-bold text-gray-400 mb-2">
               Form Identifier (Form Name)
             </label>
             <input
               type="text"
               value={uuid}
               onChange={(e) =>
-                onChangeUuid(
-                  e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""),
-                )
+                onChangeUuid(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))
               }
               disabled={!isNew}
               placeholder="e.g. admission_form"
@@ -605,9 +771,7 @@ const AdminFormSchemaEditor = ({
 
           {/* Form Display Name Input */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
-              Form Display Name
-            </label>
+            <label className="block text-xs font-bold text-gray-400 mb-2">Form Display Name</label>
             <input
               type="text"
               value={displayName}
@@ -622,7 +786,7 @@ const AdminFormSchemaEditor = ({
 
           {/* Sheet Mapping Target Select */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
+            <label className="block text-xs font-bold text-gray-400 mb-2">
               Google Sheet Mapping Target
             </label>
             <div className="flex gap-2">
@@ -657,11 +821,13 @@ const AdminFormSchemaEditor = ({
               <div
                 className={`mt-2 p-2.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 ${
                   testResult.success
-                    ? "bg-green-50 text-green-700 border border-green-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
+                    ? 'bg-green-50 text-green-700 border border-green-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
                 }`}
               >
-                <i className={`fas ${testResult.success ? "fa-check-circle" : "fa-exclamation-circle"}`}></i>
+                <i
+                  className={`fas ${testResult.success ? 'fa-check-circle' : 'fa-exclamation-circle'}`}
+                ></i>
                 <span>{testResult.message}</span>
               </div>
             )}
@@ -669,9 +835,7 @@ const AdminFormSchemaEditor = ({
 
           {/* ID Pattern Input */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
-              ID Pattern
-            </label>
+            <label className="block text-xs font-bold text-gray-400 mb-2">ID Pattern</label>
             <input
               type="text"
               value={idPattern}
@@ -683,14 +847,9 @@ const AdminFormSchemaEditor = ({
               Unique ID prefix & digit padding count (e.g. ADM-XXXXX).
             </p>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-gray-100 pt-6">
           {/* Description Input */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
-              Form Description
-            </label>
+            <label className="block text-xs font-bold text-gray-400 mb-2">Form Description</label>
             <textarea
               value={description}
               onChange={(e) => onChangeDescription(e.target.value)}
@@ -702,7 +861,7 @@ const AdminFormSchemaEditor = ({
 
           {/* Icon Name Input */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
+            <label className="block text-xs font-bold text-gray-400 mb-2">
               Icon FontAwesome Class
             </label>
             <input
@@ -713,17 +872,16 @@ const AdminFormSchemaEditor = ({
               className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all font-mono text-sm bg-white"
             />
             <p className="text-[10px] text-dark-muted mt-1.5">
-              Specify a FontAwesome class prefix (e.g. <code>fa-clipboard-list</code>, <code>fa-briefcase</code>).
+              Specify a FontAwesome class prefix (e.g. <code>fa-clipboard-list</code>,{' '}
+              <code>fa-briefcase</code>).
             </p>
           </div>
 
           {/* Card Theme Dropdown */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
-              Card Theme
-            </label>
+            <label className="block text-xs font-bold text-gray-400 mb-2">Card Theme</label>
             <select
-              value={cardTheme || "orange"}
+              value={cardTheme || 'orange'}
               onChange={(e) => onChangeCardTheme(e.target.value)}
               className="w-full px-4 py-2.5 border border-light-border bg-white rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm font-semibold text-dark-deepblue cursor-pointer"
             >
@@ -739,10 +897,117 @@ const AdminFormSchemaEditor = ({
           </div>
         </div>
 
+        {/* Submission success, tracking and access links */}
+        <div className="border-t border-gray-100 ">
+          <div>
+            <label className="block text-xs font-bold text-gray-400 mb-2">Success Message</label>
+            <p className="text-[10px] text-dark-muted mt-1.5">
+              Shown on the form page after a successful submission. Use{' '}
+              <code className="font-mono">{'{{id}}'}</code> for the tracking ID and{' '}
+              <code className="font-mono">{'{{Field Name}}'}</code> for any submitted value.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+              <div>
+                <textarea
+                  value={successMessage || ''}
+                  onChange={(e) => onChangeSuccessMessage(e.target.value)}
+                  rows={3}
+                  placeholder="Thank you! Your request {{id}} has been received. We will contact you soon."
+                  className="w-full px-4 py-2.5 border border-light-border rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all text-sm bg-white resize-none"
+                />
+              </div>
+              {availableFieldNames.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  {['id', ...availableFieldNames].map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => appendPlaceholder(name)}
+                      className="px-2 py-1 rounded-lg bg-gray-50 border border-light-border text-[10px] font-mono font-bold text-dark-primary hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all cursor-pointer"
+                    >
+                      {`{{${name}}}`}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {!String(successMessage || '').trim() && (
+              <p className="text-[10px] text-amber-700 mt-1.5">
+                {`Left blank, the form shows: "<form> form submitted successfully! Your tracking ID: {{id}}".`}
+              </p>
+            )}
+          </div>
+
+          {/* Track submission search configuration */}
+          <div className="rounded-2xl border border-light-border p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!searchEnabled}
+                onChange={(e) => handleSearchEnabledChange(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded accent-emerald-600 cursor-pointer"
+              />
+              <span>
+                <span className="block text-xs font-bold text-gray-400">
+                  Search Fields For Track Submission
+                </span>
+                <span className="block text-[10px] text-dark-muted mt-0.5">
+                  Adds a Track Submission tab so submitters can find their earlier records and
+                  update the fields their role is allowed to change. The generated tracking ID is
+                  always searchable.
+                </span>
+              </span>
+            </label>
+
+            {searchEnabled && (
+              <div className="mt-3 pl-7">
+                <p className="block text-[11px] font-bold text-dark-deepblue uppercase tracking-wide mb-1.5">
+                  Search Fields
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-1.5 max-h-44 overflow-y-auto p-1 border border-light-border rounded-xl bg-white">
+                  {['id', ...availableFieldNames].map((name) => {
+                    const isSystem = name === 'id';
+                    const isChecked = isSystem || selectedSearchFields.includes(name);
+                    return (
+                      <label
+                        key={name}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                          isChecked ? 'bg-blue-50 text-blue-700' : 'text-dark-primary hover:bg-gray-50'
+                        } ${isSystem ? 'cursor-default' : 'cursor-pointer'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={isSystem}
+                          onChange={() => toggleSearchField(name)}
+                          className="h-3.5 w-3.5 rounded accent-blue-600 cursor-pointer disabled:cursor-default"
+                        />
+                        <span className="truncate" title={name}>
+                          {name}
+                        </span>
+                        {isSystem && (
+                          <span className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1">
+                            primary
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-dark-muted mt-1.5">
+                  Tracking <code className="font-mono">id</code> is always searched first and is
+                  never combined with the other fields: when it is filled, only the ID is used. When
+                  it is left blank, the other selected fields are matched together (AND).
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-gray-100 pt-6">
           {/* Form Visibility Roles Checkboxes */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2.5">
+            <label className="block text-xs font-bold text-gray-400 mb-2.5">
               Form Visibility (Roles)
             </label>
             <MultiSelectDropdown
@@ -759,7 +1024,7 @@ const AdminFormSchemaEditor = ({
 
           {/* Data Visibility Roles Checkboxes */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2.5">
+            <label className="block text-xs font-bold text-gray-400 mb-2.5">
               Submitted Data Visibility (Roles)
             </label>
             <MultiSelectDropdown
@@ -776,7 +1041,7 @@ const AdminFormSchemaEditor = ({
 
           {/* Conversation Visibility Roles Checkboxes */}
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2.5">
+            <label className="block text-xs font-bold text-gray-400 mb-2.5">
               Conversation Visibility (Roles)
             </label>
             <MultiSelectDropdown
@@ -799,8 +1064,8 @@ const AdminFormSchemaEditor = ({
             onClick={() => setJsonMode(false)}
             className={`py-4 px-2 border-b-2 font-bold text-sm transition-all ${
               !jsonMode
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-dark-muted hover:text-dark-deepblue"
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-dark-muted hover:text-dark-deepblue'
             }`}
           >
             UI Builder
@@ -809,8 +1074,8 @@ const AdminFormSchemaEditor = ({
             onClick={() => setJsonMode(true)}
             className={`py-4 px-2 border-b-2 font-bold text-sm transition-all ${
               jsonMode
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-dark-muted hover:text-dark-deepblue"
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-dark-muted hover:text-dark-deepblue'
             }`}
           >
             JSON Editor
@@ -829,7 +1094,7 @@ const AdminFormSchemaEditor = ({
       <div className="p-8">
         {jsonMode ? (
           <div>
-            <label className="block text-sm font-bold text-dark-deepblue mb-2">
+            <label className="block text-xs font-bold text-gray-400 mb-2">
               JSON Configuration Schema
             </label>
             <textarea
@@ -877,17 +1142,12 @@ const AdminFormSchemaEditor = ({
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {fields.map((field, index) => (
-                    <tr
-                      key={index}
-                      className="hover:bg-gray-50/30 transition-colors"
-                    >
+                    <tr key={index} className="hover:bg-gray-50/30 transition-colors">
                       <td className="py-3 pr-4">
                         <input
                           type="text"
-                          value={field["Field Name"] || ""}
-                          onChange={(e) =>
-                            onFieldChange(index, "Field Name", e.target.value)
-                          }
+                          value={field['Field Name'] || ''}
+                          onChange={(e) => onFieldChange(index, 'Field Name', e.target.value)}
                           placeholder="e.g. email"
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all font-mono"
                         />
@@ -895,20 +1155,16 @@ const AdminFormSchemaEditor = ({
                       <td className="py-3 pr-4">
                         <input
                           type="text"
-                          value={field.Label || ""}
-                          onChange={(e) =>
-                            onFieldChange(index, "Label", e.target.value)
-                          }
+                          value={field.Label || ''}
+                          onChange={(e) => onFieldChange(index, 'Label', e.target.value)}
                           placeholder="e.g. Email Address"
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all"
                         />
                       </td>
                       <td className="py-3 pr-4">
                         <select
-                          value={field["Field Type"] || "text"}
-                          onChange={(e) =>
-                            onFieldChange(index, "Field Type", e.target.value)
-                          }
+                          value={field['Field Type'] || 'text'}
+                          onChange={(e) => onFieldChange(index, 'Field Type', e.target.value)}
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all"
                         >
                           {fieldTypes.map((t) => (
@@ -921,17 +1177,12 @@ const AdminFormSchemaEditor = ({
                       <td className="py-3 pr-4">
                         <input
                           type="text"
-                          value={field.List || ""}
-                          onChange={(e) =>
-                            onFieldChange(index, "List", e.target.value)
-                          }
+                          value={field.List || ''}
+                          onChange={(e) => onFieldChange(index, 'List', e.target.value)}
                           disabled={
-                            ![
-                              "select",
-                              "dropdown",
-                              "radio",
-                              "multi-checkbox",
-                            ].includes(field["Field Type"])
+                            !['select', 'dropdown', 'radio', 'multi-checkbox'].includes(
+                              field['Field Type']
+                            )
                           }
                           placeholder="e.g. Admin, User"
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all disabled:bg-gray-50 disabled:opacity-50"
@@ -942,58 +1193,48 @@ const AdminFormSchemaEditor = ({
                           type="checkbox"
                           checked={
                             field.Required === true ||
-                            field.Required === "Yes" ||
-                            field.Required === "true" ||
+                            field.Required === 'Yes' ||
+                            field.Required === 'true' ||
                             field.Required === 1
                           }
-                          onChange={(e) =>
-                            onFieldChange(index, "Required", e.target.checked)
-                          }
+                          onChange={(e) => onFieldChange(index, 'Required', e.target.checked)}
                           className="h-4.5 w-4.5 rounded accent-blue-600 focus:ring-2 focus:ring-blue-50 transition-all cursor-pointer"
                         />
                       </td>
                       <td className="py-3 pr-4">
                         <input
                           type="text"
-                          value={field["Default Value"] || ""}
-                          onChange={(e) =>
-                            onFieldChange(
-                              index,
-                              "Default Value",
-                              e.target.value,
-                            )
-                          }
+                          value={field['Default Value'] || ''}
+                          onChange={(e) => onFieldChange(index, 'Default Value', e.target.value)}
                           placeholder="e.g. Guest"
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all"
                         />
                       </td>
-                       <td className="py-3 pr-4">
+                      <td className="py-3 pr-4">
                         <input
                           type="text"
-                          value={field["Show When"] || ""}
-                          onChange={(e) =>
-                            onFieldChange(index, "Show When", e.target.value)
-                          }
+                          value={field['Show When'] || ''}
+                          onChange={(e) => onFieldChange(index, 'Show When', e.target.value)}
                           placeholder="e.g. role=admin"
                           className="w-full px-3 py-1.5 border border-light-border rounded-lg text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-50 outline-none transition-all"
                         />
                       </td>
                       <td className="py-3 pr-4">
                         <ScreenDropdown
-                          value={field["Screen"]}
-                          onChange={(val) => onFieldChange(index, "Screen", val)}
+                          value={field['Screen']}
+                          onChange={(val) => onFieldChange(index, 'Screen', val)}
                         />
                       </td>
                       <td className="py-3 pr-4">
                         <FieldVisibilityDropdown
-                          value={field["Field Visibility"]}
-                          onChange={(val) => onFieldChange(index, "Field Visibility", val)}
+                          value={field['Field Visibility']}
+                          onChange={(val) => onFieldChange(index, 'Field Visibility', val)}
                         />
                       </td>
                       <td className="py-3 pr-4">
                         <UpdateAllowedDropdown
-                          value={field["Update Allowed"]}
-                          onChange={(val) => onFieldChange(index, "Update Allowed", val)}
+                          value={field['Update Allowed']}
+                          onChange={(val) => onFieldChange(index, 'Update Allowed', val)}
                         />
                       </td>
                       <td className="py-3 text-right">

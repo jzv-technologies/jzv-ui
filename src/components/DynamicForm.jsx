@@ -1,12 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Square, SquareCheckBig, Check, Circle, CircleCheckBig } from 'lucide-react';
+import { ChevronDown, Square, SquareCheckBig, Circle, CircleCheckBig } from 'lucide-react';
 import { CARD_THEMES } from '../utils/cardTheme';
 import { supabase } from '../utils/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { fetchUserDynamicFormConfigByUuid } from '../utils/dynamicFormConfigs';
+import FormSuccessPanel from './forms/FormSuccessPanel';
+import TrackSubmissionPanel from './forms/TrackSubmissionPanel';
 
 const SUPABASE_FORM_CONFIG_TABLE = 'dynamic_form_configs';
 const APPS_SCRIPT_URL = import.meta.env.VITE_APPS_SCRIPT_URL;
+
+// JSONB columns can arrive as an array (normal) or a JSON string (legacy/cached).
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
 
 const getLocalMappingFallback = (uuid) => {
   const mappings = {
@@ -248,51 +264,21 @@ const FloatingLabelField = React.memo(function FloatingLabelField({
 FloatingLabelField.displayName = 'FloatingLabelField';
 
 // =========================
-// SUCCESS MODAL
+// SUCCESS MESSAGE
 // =========================
 
-const SuccessModal = React.memo(function SuccessModal({ message, onClose }) {
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-
-    document.addEventListener('keydown', handleEsc);
-
-    return () => document.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-in fade-in zoom-in duration-200">
-        <div className="text-center">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-5">
-            <Check className="h-8 w-8 text-green-600" />
-          </div>
-
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Success!</h3>
-
-          <p className="text-gray-600 mb-6 leading-relaxed">{message}</p>
-
-          <button
-            onClick={onClose}
-            className="
-              w-full rounded-2xl
-              bg-blue-600 hover:bg-blue-700
-              text-white font-semibold
-              py-3 transition-all duration-200
-              shadow-lg hover:shadow-xl
-            "
-          >
-            Continue
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-SuccessModal.displayName = 'SuccessModal';
+/**
+ * Resolves {{id}} and {{Field Name}} placeholders using the submitted values.
+ * Unknown placeholders resolve to an empty string.
+ */
+const formatSuccessMessage = (template, values = {}) =>
+  String(template || '').replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (_, rawKey) => {
+    const key = String(rawKey).trim();
+    const match = Object.keys(values).find(
+      (candidate) => candidate.toLowerCase() === key.toLowerCase()
+    );
+    return match ? String(values[match] ?? '') : '';
+  });
 
 // =========================
 // EMBEDDED CONVERSATION CHAT
@@ -422,8 +408,11 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [successState, setSuccessState] = useState(null);
+  const [activePanel, setActivePanel] = useState('submit');
   const [successMessage, setSuccessMessage] = useState('');
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [searchEnabled, setSearchEnabled] = useState(false);
+  const [searchFields, setSearchFields] = useState([]);
   const [idPattern, setIdPattern] = useState('ID-XXXXX');
   const [sheetMapping, setSheetMapping] = useState(null);
   // Bumped after a successful submission so the form is re-seeded and internal
@@ -486,8 +475,8 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
       setLoading(true);
       setError('');
 
-      const CACHE_KEY = `form_config_${uuid}`;
-      const CACHE_TIME_KEY = `form_config_${uuid}_time`;
+      const CACHE_KEY = `form_config_v2_${uuid}`;
+      const CACHE_TIME_KEY = `form_config_v2_${uuid}_time`;
       const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache expiry
 
       // Check localStorage cache first
@@ -498,15 +487,19 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
 
         if (cachedData && cachedTime && now - Number(cachedTime) < CACHE_DURATION) {
           const parsed = JSON.parse(cachedData);
-          const fieldsList = Array.isArray(parsed) ? parsed : parsed.fields || [];
-          const idPat = !Array.isArray(parsed) && parsed.idPattern ? parsed.idPattern : 'ID-XXXXX';
-          const sMap = !Array.isArray(parsed) && parsed.sheetMapping ? parsed.sheetMapping : null;
+          const isLegacyArray = Array.isArray(parsed);
+          const fieldsList = isLegacyArray ? parsed : parsed.fields || [];
+          const idPat = !isLegacyArray && parsed.idPattern ? parsed.idPattern : 'ID-XXXXX';
+          const sMap = !isLegacyArray && parsed.sheetMapping ? parsed.sheetMapping : null;
 
           if (fieldsList.length > 0) {
             console.log(`[DynamicForm] Loaded config for ${uuid} from localStorage cache`);
             setFields(fieldsList);
             setIdPattern(idPat);
             setSheetMapping(sMap);
+            setSuccessMessage(!isLegacyArray ? parsed.successMessage || '' : '');
+            setSearchEnabled(!isLegacyArray && parsed.searchEnabled === true);
+            setSearchFields(!isLegacyArray ? parseJsonArray(parsed.searchFields) : []);
 
             setFormData(buildDefaultFormData(fieldsList));
             setValidationErrors({});
@@ -525,6 +518,11 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
         if (!configRecord) {
           throw new Error(`No form configuration record found for "${uuid}" or access denied`);
         }
+
+        if (isDirectLink && configRecord.direct_link_enabled === false) {
+          throw new Error(`The direct link for "${uuid}" has been disabled by the administrator.`);
+        }
+
         const configField = configRecord.fields;
         let fieldsFromSupabase = [];
         if (configField) {
@@ -552,6 +550,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
 
         const cleanFields = fieldsFromSupabase.filter((f) => f['Field Name']?.trim());
         const finalIdPattern = configRecord.id_pattern || 'ID-XXXXX';
+        const finalSuccessMessage = configRecord.success_message || '';
+        const finalSearchEnabled = configRecord.search_enabled === true;
+        const finalSearchFields = parseJsonArray(configRecord.search_fields);
 
         // Cache the retrieved config
         try {
@@ -559,6 +560,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
             fields: cleanFields,
             idPattern: finalIdPattern,
             sheetMapping: resolvedMapping,
+            successMessage: finalSuccessMessage,
+            searchEnabled: finalSearchEnabled,
+            searchFields: finalSearchFields,
           };
           localStorage.setItem(CACHE_KEY, JSON.stringify(cacheObj));
           localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
@@ -569,6 +573,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
         setFields(cleanFields);
         setIdPattern(finalIdPattern);
         setSheetMapping(resolvedMapping);
+        setSuccessMessage(finalSuccessMessage);
+        setSearchEnabled(finalSearchEnabled);
+        setSearchFields(finalSearchFields);
 
         setFormData(buildDefaultFormData(cleanFields));
         setValidationErrors({});
@@ -789,8 +796,7 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
     if (submittingRef.current) return;
 
     setError('');
-    setSuccessMessage('');
-    setShowSuccessModal(false);
+    setSuccessState(null);
 
     if (!validateAllFields()) {
       return;
@@ -864,10 +870,21 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
 
       const submittedId = result.data?.id ?? '';
 
-      const msg = `${uuid} form submitted successfully! Your tracking ID: ${submittedId}`;
+      const messageTemplate =
+        successMessage?.trim() || `${uuid} form submitted successfully! Your tracking ID: {{id}}`;
+      const messageValues = { ...submitData, ...additionalData, id: submittedId };
 
-      setSuccessMessage(msg);
-      setShowSuccessModal(true);
+      setSuccessState({
+        message: formatSuccessMessage(messageTemplate, messageValues),
+        id: submittedId,
+      });
+      setActivePanel('submit');
+      setError('');
+
+      // A successful submission always starts the next request from a clean form.
+      setValidationErrors({});
+      setFormData(buildDefaultFormData(fields));
+      setFormResetKey((key) => key + 1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -876,10 +893,9 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
     }
   };
 
-  // "Continue" on the success modal: close it and start a fresh, empty form
-  const handleSuccessContinue = () => {
-    setShowSuccessModal(false);
-    setSuccessMessage('');
+  // "Submit Another Request": dismiss the success state and show an empty form
+  const handleSuccessReset = () => {
+    setSuccessState(null);
     setError('');
     setValidationErrors({});
     setFormData(buildDefaultFormData(fields));
@@ -1312,6 +1328,22 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
     ['button', 'link'].includes(field['Field Type']?.trim().toLowerCase())
   );
 
+  const configuredSearchFields = (
+    Array.isArray(searchFields) ? searchFields : []
+  ).filter(
+    (name) =>
+      String(name).trim().toLowerCase() === 'id' ||
+      fields.some(
+        (field) => field['Field Name']?.trim().toLowerCase() === String(name).toLowerCase()
+      )
+  );
+  // The tracking id is always available as a search key once search is enabled.
+  const hasIdSearch = configuredSearchFields.some(
+    (name) => String(name).trim().toLowerCase() === 'id'
+  );
+  const effectiveSearchFields = hasIdSearch ? configuredSearchFields : ['id', ...configuredSearchFields];
+  const showTrackSubmission = searchEnabled && effectiveSearchFields.length > 0;
+
   // =========================
   // LOADING
   // =========================
@@ -1330,55 +1362,102 @@ const DynamicForm = ({ uuid, textColor, additionalData = {}, userRoles = [], isD
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-6 text-gray-800">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl mb-6 text-sm font-medium">
-          {error}
-        </div>
-      )}
-
-      {visibleFields.length > 0 && (
-        <div
-          className={`
-            rounded-[32px]
-           bg-white
-          border ${borderColor}/50 bg-white p-6 shadow-md
-          ${safeTextColor}
-            shadow-2xl
-            p-6 md:p-8
-          `}
-        >
-          <form key={formResetKey} onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {visibleFields.map(renderField)}
+      {successState ? (
+        <FormSuccessPanel
+          message={successState.message}
+          onReset={handleSuccessReset}
+          buttonClass={bgColor}
+        />
+      ) : (
+        <>
+          {showTrackSubmission && (
+            <div
+              className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-auto sm:inline-flex mb-5"
+              data-feature-tab="dynamic-form-tabs"
+            >
+              {[
+                { id: 'submit', label: 'New Submission', icon: 'fa-plus' },
+                { id: 'track', label: 'Track Submission', icon: 'fa-magnifying-glass' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActivePanel(tab.id)}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
+                    activePanel === tab.id
+                      ? 'bg-white text-indigo-700 shadow-xs'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon} text-[10px]`} />
+                  {tab.label}
+                </button>
+              ))}
             </div>
+          )}
 
-            {hasSubmitButton && (
-              <button
-                type="submit"
-                disabled={submitting}
-                className={`
-                  mt-8 w-full
-                  rounded-2xl
-                  ${bgColor} hover:opacity-90
-                  text-white font-semibold
-                  py-4
-                  transition-all duration-300
-                  shadow-lg hover:shadow-xl
-                  disabled:opacity-50`}
-              >
-                {submitting ? 'Submitting...' : 'Submit Form'}
-              </button>
-            )}
-          </form>
-        </div>
-      )}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl mb-6 text-sm font-medium">
+              {error}
+            </div>
+          )}
 
-      {!loading && visibleFields.length === 0 && !error && (
-        <p className="text-gray-500 text-center py-8">No form fields configured.</p>
-      )}
+          {activePanel === 'track' && showTrackSubmission ? (
+            <TrackSubmissionPanel
+              uuid={uuid}
+              fields={fields}
+              sheetMapping={sheetMapping || getLocalMappingFallback(uuid)}
+              searchFields={effectiveSearchFields}
+              idPattern={idPattern}
+              userRoles={effectiveRoles}
+              user={currentUserObj}
+              fullName={currentFullName}
+            />
+          ) : (
+            <>
+              {visibleFields.length > 0 && (
+                <div
+                  className={`
+                    rounded-[32px]
+                   bg-white
+                  border ${borderColor}/50 bg-white p-6 shadow-md
+                  ${safeTextColor}
+                    shadow-2xl
+                    p-6 md:p-8
+                  `}
+                >
+                  <form key={formResetKey} onSubmit={handleSubmit}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {visibleFields.map(renderField)}
+                    </div>
 
-      {showSuccessModal && (
-        <SuccessModal message={successMessage} onClose={handleSuccessContinue} />
+                    {hasSubmitButton && (
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className={`
+                          mt-8 w-full
+                          rounded-2xl
+                          ${bgColor} hover:opacity-90
+                          text-white font-semibold
+                          py-4
+                          transition-all duration-300
+                          shadow-lg hover:shadow-xl
+                          disabled:opacity-50`}
+                      >
+                        {submitting ? 'Submitting...' : 'Submit Form'}
+                      </button>
+                    )}
+                  </form>
+                </div>
+              )}
+
+              {visibleFields.length === 0 && !error && (
+                <p className="text-gray-500 text-center py-8">No form fields configured.</p>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   );

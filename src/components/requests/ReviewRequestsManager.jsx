@@ -71,6 +71,12 @@ export const ReviewRequestsManager = ({ user, fullName, userRoles = [], initialS
     fetchSchemas();
   }, [fetchSchemas, refreshTrigger]);
 
+  // The schema can be requested from elsewhere (e.g. the Records button in Form Configurations).
+  useEffect(() => {
+    if (!initialSchema) return;
+    setSelectedSchema(initialSchema);
+  }, [initialSchema]);
+
   const activeSchemaObj = useMemo(() => {
     return (
       schemas.find((s) => s.form_name === selectedSchema) || {

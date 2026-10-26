@@ -10,13 +10,90 @@ const DataGrid = ({
   columnConfig = {},
   onColumnsChange = null,
   mobileCardView = false,
+  selectable = false,
+  getRowKey = null,
+  onSelectionChange = null,
+  selectionResetToken = 0,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [columnFilters, setColumnFilters] = useState({});
   const [visibleColumns, setVisibleColumns] = useState({});
   const [columnOrder, setColumnOrder] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState([]);
   const columnManagerRef = useRef(null);
+
+  // getRowKey is commonly passed inline, so keep it in a ref: the key map must only be rebuilt
+  // when the data changes, otherwise re-renders would rebuild it and re-fire the notify effect.
+  const getRowKeyRef = useRef(getRowKey);
+  useEffect(() => {
+    getRowKeyRef.current = getRowKey;
+  });
+
+  // Stable key per record reference, so selection survives sorting and filtering.
+  const keyByItem = useMemo(() => {
+    const map = new Map();
+    (Array.isArray(data) ? data : []).forEach((item, index) => {
+      const resolveKey = getRowKeyRef.current;
+      const raw =
+        typeof resolveKey === "function"
+          ? resolveKey(item, index)
+          : (item && (item.id ?? item.uuid)) ?? index;
+      map.set(item, String(raw));
+    });
+    return map;
+  }, [data]);
+
+  const selectedSet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  const selectionSignature = useMemo(
+    () => [...selectedKeys].sort().join("|"),
+    [selectedKeys]
+  );
+
+  // Notify the parent without re-triggering on every render (callback kept in a ref, and the
+  // emitted signature compared so an unchanged selection never writes parent state again).
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  });
+  const lastEmittedRef = useRef(null);
+  useEffect(() => {
+    if (!selectable) return;
+    if (lastEmittedRef.current === selectionSignature) return;
+    lastEmittedRef.current = selectionSignature;
+    const items = Array.isArray(data) ? data : [];
+    onSelectionChangeRef.current?.(
+      items.filter((item) => selectedSet.has(keyByItem.get(item)))
+    );
+  }, [selectable, data, keyByItem, selectedSet, selectionSignature]);
+
+  // Drop keys whose records are gone (e.g. after a delete + refresh).
+  useEffect(() => {
+    const validKeys = new Set(keyByItem.values());
+    setSelectedKeys((prev) => {
+      const next = prev.filter((key) => validKeys.has(key));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [keyByItem]);
+
+  // Lets the parent reset the checkboxes (Clear selection / after a delete).
+  const previousResetTokenRef = useRef(selectionResetToken);
+  useEffect(() => {
+    if (previousResetTokenRef.current === selectionResetToken) return;
+    previousResetTokenRef.current = selectionResetToken;
+    lastEmittedRef.current = null;
+    setSelectedKeys([]);
+  }, [selectionResetToken]);
+
+  const toggleRowSelection = (item) => {
+    const key = keyByItem.get(item);
+    if (key === undefined) return;
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((value) => value !== key) : [...prev, key]
+    );
+  };
+
+  const clearSelection = () => setSelectedKeys([]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -201,6 +278,22 @@ const DataGrid = ({
   const processedData = getProcessedData();
   const visibleHeaders = columnOrder.filter((h) => visibleColumns[h] !== false);
 
+  const processedKeys = processedData.map((item) => keyByItem.get(item)).filter(Boolean);
+  const allProcessedSelected =
+    processedKeys.length > 0 && processedKeys.every((key) => selectedSet.has(key));
+  const someProcessedSelected = processedKeys.some((key) => selectedSet.has(key));
+  const toggleAllProcessed = () => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (allProcessedSelected) {
+        processedKeys.forEach((key) => next.delete(key));
+      } else {
+        processedKeys.forEach((key) => next.add(key));
+      }
+      return Array.from(next);
+    });
+  };
+
   return (
     <div className="bg-white border-0 shadow-none overflow-visible rounded-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-full m-0 p-0 flex flex-col">
       {/* Stats & Column Manager Bar */}
@@ -212,6 +305,22 @@ const DataGrid = ({
           records
         </span>
         <div className="flex items-center gap-2">
+          {selectable && selectedKeys.length > 0 && (
+            <span
+              className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-full px-2.5 py-1 flex items-center gap-1.5"
+              data-feature="datagrid-selection-count"
+            >
+              {selectedKeys.length} selected
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                title="Clear selection"
+              >
+                <i className="fas fa-times-circle" />
+              </button>
+            </span>
+          )}
           {Object.values(columnFilters).some(Boolean) && (
             <button
               onClick={() => setColumnFilters({})}
@@ -265,55 +374,68 @@ const DataGrid = ({
               {processedData.map((item, idx) => {
                 const [primaryCol, ...restCols] = visibleHeaders;
                 const primaryValue = String(item[primaryCol] ?? "").trim();
+                const isChecked = selectable && selectedSet.has(keyByItem.get(item));
                 return (
                   <div
                     key={idx}
                     onClick={() => onRowClick && onRowClick(item)}
-                    className={`rounded-2xl border border-light-border bg-white shadow-2xs p-3 space-y-2 ${onRowClick ? "cursor-pointer active:scale-[0.99]" : ""} ${getRowStatusClass(item)}`}
+                    className={`rounded-2xl border bg-white shadow-2xs p-3 space-y-2 ${
+                      isChecked ? "border-indigo-300 ring-1 ring-indigo-200" : "border-light-border"
+                    } ${onRowClick ? "cursor-pointer active:scale-[0.99]" : ""} ${getRowStatusClass(item)}`}
                   >
-                    <div className="min-w-0">
-                      <div className="text-[9px] font-extrabold uppercase tracking-wide text-dark-muted truncate">
-                        {columnConfig[primaryCol]?.label ||
-                          columnConfig[primaryCol]?.Label ||
-                          primaryCol ||
-                          "Record"}
+                    <div className="flex items-start gap-2">
+                      {selectable && (
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleRowSelection(item)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1 h-4 w-4 shrink-0 rounded accent-indigo-600 cursor-pointer"
+                          aria-label="Select record"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="text-[9px] font-extrabold uppercase tracking-wide text-dark-muted truncate">
+                          {columnConfig[primaryCol]?.label ||
+                            columnConfig[primaryCol]?.Label ||
+                            primaryCol ||
+                            "Record"}
+                        </div>
+                        <div className="text-sm font-black text-dark-primary break-words">
+                          {primaryValue || "—"}
+                        </div>
+                        {restCols.map((h) => {
+                          const raw = String(item[h] ?? "").trim();
+                          const isStatus = [
+                            "open",
+                            "in-progress",
+                            "in progress",
+                            "resolved",
+                            "rejected",
+                          ].includes(raw.toLowerCase());
+                          return (
+                            <div
+                              key={h}
+                              className="flex items-start justify-between gap-3 text-[11px] leading-snug"
+                            >
+                              <span className="font-bold text-dark-muted shrink-0 max-w-[45%] truncate">
+                                {columnConfig[h]?.label || columnConfig[h]?.Label || h}
+                              </span>
+                              <span className="text-right text-dark-charcoal break-words min-w-0">
+                                {isStatus ? (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyles(raw)}`}
+                                  >
+                                    {raw}
+                                  </span>
+                                ) : (
+                                  raw || "—"
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="text-sm font-black text-dark-primary break-words">
-                        {primaryValue || "—"}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {restCols.map((h) => {
-                        const raw = String(item[h] ?? "").trim();
-                        const isStatus = [
-                          "open",
-                          "in-progress",
-                          "in progress",
-                          "resolved",
-                          "rejected",
-                        ].includes(raw.toLowerCase());
-                        return (
-                          <div
-                            key={h}
-                            className="flex items-start justify-between gap-3 text-[11px] leading-snug"
-                          >
-                            <span className="font-bold text-dark-muted shrink-0 max-w-[45%] truncate">
-                              {columnConfig[h]?.label || columnConfig[h]?.Label || h}
-                            </span>
-                            <span className="text-right text-dark-charcoal break-words min-w-0">
-                              {isStatus ? (
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusStyles(raw)}`}
-                                >
-                                  {raw}
-                                </span>
-                              ) : (
-                                raw || "—"
-                              )}
-                            </span>
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
                 );
@@ -325,6 +447,7 @@ const DataGrid = ({
             <thead>
               {/* Filter Row - no drag & drop */}
               <tr className="bg-gray-100/50 border-b border-light-border">
+                {selectable && <th className="p-3 w-10" aria-label="Selection column" />}
                 {visibleHeaders.map((h) => {
                   const isDropdown = filterableCols.find(
                     (f) => f.key.toLowerCase() === h.toLowerCase(),
@@ -375,6 +498,21 @@ const DataGrid = ({
 
               {/* Header Row - draggable columns */}
               <tr className="bg-gray-50 text-dark-deepblue uppercase text-xs font-bold tracking-wider border-b border-light-border">
+                {selectable && (
+                  <th className="p-6 border-b w-10">
+                    <input
+                      type="checkbox"
+                      checked={allProcessedSelected}
+                      ref={(node) => {
+                        if (node) node.indeterminate = !allProcessedSelected && someProcessedSelected;
+                      }}
+                      onChange={toggleAllProcessed}
+                      className="h-4 w-4 rounded accent-indigo-600 cursor-pointer"
+                      aria-label="Select all records"
+                      data-feature="datagrid-select-all"
+                    />
+                  </th>
+                )}
                 {visibleHeaders.map((h, idx) => {
                   const columnIndex = columnOrder.indexOf(h);
                   return (
@@ -409,13 +547,27 @@ const DataGrid = ({
             <tbody>
               {processedData.map((item, idx) => {
                 const rowClass = getRowStatusClass(item);
+                const isChecked = selectable && selectedSet.has(keyByItem.get(item));
                 return (
                   <tr
                     key={idx}
                     onClick={() => onRowClick && onRowClick(item)}
-                    className={`border-b border-light-border last:border-0 transition-colors ${onRowClick ? 'cursor-pointer hover:bg-gray-50/50' : 'cursor-default'} ${rowClass}`}
+                    className={`border-b border-light-border last:border-0 transition-colors ${
+                      isChecked ? "bg-indigo-50/60" : rowClass
+                    } ${onRowClick ? 'cursor-pointer hover:bg-gray-50/50' : 'cursor-default'}`}
                     title={onRowClick ? "Click to view details" : ""}
                   >
+                    {selectable && (
+                      <td className="p-4 w-10" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleRowSelection(item)}
+                          className="h-4 w-4 rounded accent-indigo-600 cursor-pointer"
+                          aria-label="Select record"
+                        />
+                      </td>
+                    )}
                     {visibleHeaders.map((h) => {
                       const valStr = String(item[h] ?? "");
                       const valClean = valStr.toLowerCase().trim();

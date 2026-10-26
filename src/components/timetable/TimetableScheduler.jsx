@@ -18,6 +18,7 @@ const TimetableScheduler = ({
   assignments = [],
   onUpdateSlot,
   onMoveSlot,
+  onCopySlot,
   onSwapSlots,
   onBulkUpdateSlots,
   onClearSlots,
@@ -40,12 +41,14 @@ const TimetableScheduler = ({
   const [selectedCells, setSelectedCells] = useState([]);
   const [isSwapMode, setIsSwapMode] = useState(false);
   const [firstSwapCell, setFirstSwapCell] = useState(null);
+  const [copyingSlot, setCopyingSlot] = useState(null); // { day, periodId, subjectId, teacherId }
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (editingSlot) setEditingSlot(null);
         if (movingSlot) setMovingSlot(null);
+        if (copyingSlot) setCopyingSlot(null);
         if (isSwapMode) {
           setIsSwapMode(false);
           setFirstSwapCell(null);
@@ -54,13 +57,14 @@ const TimetableScheduler = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingSlot, movingSlot, isSwapMode]);
+  }, [editingSlot, movingSlot, copyingSlot, isSwapMode]);
 
   useEffect(() => {
     if (!isMultiSelectEnabled) {
       setSelectedCells([]);
     } else {
       setMovingSlot(null);
+      setCopyingSlot(null);
       setIsSwapMode(false);
       setFirstSwapCell(null);
       setEditingSlot(null);
@@ -199,7 +203,9 @@ const TimetableScheduler = ({
       isSwapMode &&
       firstSwapCell?.day === day &&
       String(firstSwapCell?.periodId) === String(period.id);
-    const isActiveSourceCell = isSourceCell || isSwapSourceCell;
+    const isCopySourceCell =
+      copyingSlot && copyingSlot.day === day && String(copyingSlot.periodId) === String(period.id);
+    const isActiveSourceCell = isSourceCell || isSwapSourceCell || isCopySourceCell;
     const isSelectedCell = selectedCells.some(
       (cell) => cell.day === day && String(cell.periodId) === String(period.id)
     );
@@ -212,13 +218,21 @@ const TimetableScheduler = ({
           isReadOnly ? '' : 'cursor-pointer group hover:bg-light-bg/40 transition-colors'
         } ${movingSlot ? 'hover:bg-brand-lbg/10' : ''} ${
           isSelectedCell ? 'ring-2 ring-inset ring-brand-primary bg-brand-lbg/20' : ''
-        } ${isActiveSourceCell ? 'ring-2 ring-inset ring-gray-500 bg-gray-200' : ''}`}
+        } ${
+          isActiveSourceCell
+            ? isCopySourceCell
+              ? 'ring-2 ring-inset ring-gray-400 bg-gray-100'
+              : 'ring-2 ring-inset ring-gray-500 bg-gray-200'
+            : ''
+        }`}
       >
         {isAssigned ? (
           <div
             className={`w-full h-full rounded-xl p-2 flex flex-col justify-center gap-0.5 shadow-sm transition-all duration-300 ${
               isActiveSourceCell
-                ? 'border-2 border-gray-500 bg-gray-200 text-gray-700'
+                ? isCopySourceCell
+                  ? 'border-2 border-gray-400 bg-gray-100 text-gray-600 grayscale'
+                  : 'border-2 border-gray-500 bg-gray-200 text-gray-700'
                 : `${colorClass} ${themeStyles ? `border-l-[6px] border-l-${themeStyles.color}` : 'border'}`
             } ${
               !isReadOnly && !movingSlot
@@ -263,7 +277,7 @@ const TimetableScheduler = ({
                 Not Applicable
               </span>
             )}
-            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && onSwapSlots && (
+            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && !copyingSlot && onSwapSlots && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -277,8 +291,36 @@ const TimetableScheduler = ({
                 <i className="fas fa-exchange-alt text-[9px]"></i>
               </button>
             )}
+            {/* Copy Button: duplicates the subject and teacher into another period */}
+            {!isReadOnly && !movingSlot && !isMultiSelectEnabled && !isSwapMode && onCopySlot && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (copyingSlot) {
+                    setCopyingSlot(null);
+                    return;
+                  }
+                  handleStartCopy(day, period.id, slot);
+                }}
+                className={`absolute bottom-1 left-1 w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-sm ${
+                  isCopySourceCell
+                    ? 'bg-gray-400 text-white'
+                    : 'opacity-0 group-hover:opacity-100 bg-white/90 hover:bg-white text-dark-primary hover:text-emerald-700'
+                }`}
+                title={
+                  isCopySourceCell
+                    ? 'Cancel copy'
+                    : 'Copy this subject and teacher to another period'
+                }
+                aria-label={`Copy ${subjectName} from ${day}`}
+                aria-pressed={Boolean(isCopySourceCell)}
+              >
+                <i className="fas fa-copy text-[9px]"></i>
+              </button>
+            )}
             {/* Move Button */}
-            {!isReadOnly && !movingSlot && !isMultiSelectEnabled && !isSwapMode && (
+            {!isReadOnly && !movingSlot && !isMultiSelectEnabled && !isSwapMode && !copyingSlot && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -318,7 +360,7 @@ const TimetableScheduler = ({
             ) : (
               '+ Assign'
             )}
-            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && onSwapSlots && (
+            {!isReadOnly && !isMultiSelectEnabled && !movingSlot && !isSwapMode && !copyingSlot && onSwapSlots && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -364,6 +406,61 @@ const TimetableScheduler = ({
     setIsSwapMode(true);
     setFirstSwapCell({ day, periodId });
     showToast('Select another period to swap assignments. Press Escape to cancel.', 'info');
+  };
+
+  const handleStartCopy = (day, periodId, slot) => {
+    setMovingSlot(null);
+    setMovingColumnPeriodId(null);
+    setEditingSlot(null);
+    setIsSwapMode(false);
+    setFirstSwapCell(null);
+    setCopyingSlot({
+      day,
+      periodId,
+      subjectId: slot.subject_id,
+      teacherId: slot.teacher_id,
+    });
+    showToast(
+      'Copy mode active. Click the period that should receive this subject and teacher.',
+      'info'
+    );
+  };
+
+  const handleCompleteCopy = (targetDay, targetPeriodId) => {
+    if (!copyingSlot) return;
+    if (copyingSlot.day === targetDay && String(copyingSlot.periodId) === String(targetPeriodId)) {
+      setCopyingSlot(null);
+      return;
+    }
+
+    const targetSlot = getSlotDetails(targetDay, targetPeriodId);
+    const targetSubject = targetSlot?.subject_id ? getSubjectName(targetSlot.subject_id) : '';
+
+    const executeCopy = () => {
+      onCopySlot?.(classId, copyingSlot.day, copyingSlot.periodId, targetDay, targetPeriodId);
+      setCopyingSlot(null);
+    };
+
+    if (targetSubject) {
+      setConfirmConfig({
+        title: 'Override Target Slot?',
+        message: `The target period is already assigned to "${targetSubject}". Replace it with "${getSubjectName(
+          copyingSlot.subjectId
+        )}"?`,
+        confirmText: 'Replace',
+        type: 'danger',
+        onConfirm: () => {
+          setConfirmConfig(null);
+          executeCopy();
+        },
+        onCancel: () => {
+          setConfirmConfig(null);
+          setCopyingSlot(null);
+        },
+      });
+      return;
+    }
+    executeCopy();
   };
 
   const handleCompleteMove = (targetDay, targetPeriodId) => {
@@ -493,6 +590,17 @@ const TimetableScheduler = ({
             )
           : [...current, { day, periodId: period.id }];
       });
+      return;
+    }
+    if (copyingSlot) {
+      if (!isPeriodApplicable(day, period, weekdayConfig) && !getSlotDetails(day, period.id)) {
+        showToast(
+          'A copied slot cannot be placed in a period that is not applicable on this day.',
+          'error'
+        );
+        return;
+      }
+      handleCompleteCopy(day, period.id);
       return;
     }
     if (movingSlot) {
@@ -779,6 +887,30 @@ const TimetableScheduler = ({
             className="rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-bold text-indigo-700"
           >
             Cancel Swap
+          </button>
+        </div>
+      )}
+
+      {copyingSlot && (
+        <div
+          className="bg-gray-100 border border-gray-300 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 print:hidden"
+          data-feature="copy-mode-banner"
+        >
+          <span className="text-xs font-semibold text-gray-700">
+            <i className="fas fa-copy mr-1.5 text-gray-500" />
+            Copying{' '}
+            <span className="font-extrabold uppercase text-gray-900">
+              {getSubjectName(copyingSlot.subjectId)}
+            </span>{' '}
+            ({getTeacherName(copyingSlot.teacherId)}) from {copyingSlot.day}. Click the target period;
+            the source stays unchanged.
+          </span>
+          <button
+            type="button"
+            onClick={() => setCopyingSlot(null)}
+            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700"
+          >
+            Cancel Copy
           </button>
         </div>
       )}

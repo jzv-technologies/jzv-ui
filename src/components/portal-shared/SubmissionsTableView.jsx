@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import DataGrid from '../DataGrid';
 import DetailModal from '../DetailModal';
+import ConfirmModal from '../ConfirmModal';
+import { useCanAccess } from './ConditionalBlock';
 import { supabase } from '../../utils/supabase';
 import { showToast } from '../../utils/toast';
 import {
@@ -80,6 +82,14 @@ export const SubmissionsTableView = ({
   const [selectedNavKey, setSelectedNavKey] = useState(null);
   const [detailColumns, setDetailColumns] = useState(2);
   const [sheetSource, setSheetSource] = useState(null);
+
+  const canAccess = useCanAccess(userRoles);
+  const canDeleteRecords = canAccess('form-config-records-delete');
+  const [bulkSelection, setBulkSelection] = useState([]);
+  const [selectionResetToken, setSelectionResetToken] = useState(0);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deletingRecords, setDeletingRecords] = useState(false);
+  const [sendingConversationKey, setSendingConversationKey] = useState(null);
 
   const fetchSubmissions = useCallback(async () => {
     if (!formUuid) return;
@@ -491,6 +501,109 @@ export const SubmissionsTableView = ({
 
   const { current, total, hasPrev, hasNext } = getCurrentRecordState();
 
+  // Deleting always sends one request with every id: the Apps Script iterates the values
+  // server-side instead of the client looping over single-record requests.
+  const requestDeleteRecords = (records) => {
+    const ids = (Array.isArray(records) ? records : [])
+      .map((record) => record?.id)
+      .filter((id) => id !== undefined && id !== null && id !== '');
+    if (ids.length === 0) {
+      showToast("These records have no 'id' column and cannot be deleted.", 'error');
+      return;
+    }
+    setConfirmDelete({ ids });
+  };
+
+  const handleDeleteRecords = async () => {
+    if (!confirmDelete || deletingRecords) return;
+    const { ids } = confirmDelete;
+    setDeletingRecords(true);
+    try {
+      const payload = applySheetMapping(
+        {
+          action: 'delete',
+          uuid: sheetSource?.uuid || formUuid,
+          matchColumn: 'id',
+          values: ids,
+        },
+        sheetSource
+      );
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Delete failed');
+
+      const removed = Number(result.data?.deleted);
+      showToast(
+        Number.isFinite(removed) && removed > 0
+          ? `${removed} record${removed === 1 ? '' : 's'} deleted.`
+          : 'Records deleted.',
+        'success'
+      );
+      setConfirmDelete(null);
+      setBulkSelection([]);
+      setSelectionResetToken((token) => token + 1);
+      setSelectedRecord(null);
+      setSelectedNavKey((currentKey) =>
+        ids.some((id) => `id:${id}` === currentKey) ? null : currentKey
+      );
+      fetchSubmissions();
+    } catch (err) {
+      showToast(`Failed to delete records: ${err.message}`, 'error');
+    } finally {
+      setDeletingRecords(false);
+    }
+  };
+
+  // Appends one message to a conversation column and saves the whole thread back.
+  const handleSendConversationMessage = async (fieldKey, message) => {
+    if (!selectedRecord || !String(message || '').trim()) return;
+    const recordKey =
+      Object.keys(selectedRecord).find((key) => key.toLowerCase() === fieldKey.toLowerCase()) ||
+      fieldKey;
+    const author = fullName || user?.email || 'Reviewer';
+    const thread = [
+      ...parseConversation(selectedRecord[recordKey]),
+      { sender: author, 'time-stamp': new Date().toLocaleString(), message: String(message).trim() },
+    ];
+
+    setSendingConversationKey(recordKey);
+    try {
+      const payload = applySheetMapping(
+        {
+          action: 'update',
+          uuid: sheetSource?.uuid || formUuid,
+          matchColumn: 'id',
+          records: [{ matchValue: selectedRecord.id, data: { [recordKey]: JSON.stringify(thread) } }],
+        },
+        sheetSource
+      );
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Message could not be saved');
+
+      const updated = { ...selectedRecord, [recordKey]: JSON.stringify(thread) };
+      setSelectedRecord(updated);
+      setSubmissions((prev) =>
+        prev.map((record) =>
+          String(record?.id) === String(selectedRecord.id) ? { ...record, [recordKey]: updated[recordKey] } : record
+        )
+      );
+      showToast('Message sent.', 'success');
+    } catch (err) {
+      showToast(`Message failed: ${err.message}`, 'error');
+    } finally {
+      setSendingConversationKey(null);
+    }
+  };
+
   // Split view: navigation mirrors the first two currently visible/ordered grid columns
   const navColumns = visibleGridColumns.slice(0, 2);
   const activeNavIndex = submissions.findIndex(
@@ -526,9 +639,70 @@ export const SubmissionsTableView = ({
   // Conversation threads are shown inline in split view instead of behind a detail modal
   const conversationColumns = useMemo(() => getConversationColumns(formFields), [formFields]);
 
+  // Conversation fields of the modal's record, with a composer so a reviewer can reply.
+  const selectedRecordConversationFields = useMemo(() => {
+    if (!selectedRecord) return [];
+    const context = { userRoles, user, fullName, record: selectedRecord, fields: formFields };
+    return formFields
+      .filter((field) => isConversationField(field) && isFieldEditableByUser(field, context))
+      .map((field) => {
+        const name = getFieldName(field);
+        const recordKey =
+          Object.keys(selectedRecord).find((key) => key.toLowerCase() === name.toLowerCase()) ||
+          name;
+        return {
+          key: recordKey,
+          label: getFieldLabel(fieldLabels, name),
+          value: parseConversation(selectedRecord[recordKey]),
+          isSending: sendingConversationKey === recordKey,
+          onSendMessage: handleSendConversationMessage,
+        };
+      });
+  }, [
+    selectedRecord,
+    formFields,
+    fieldLabels,
+    userRoles,
+    user,
+    fullName,
+    sendingConversationKey,
+  ]);
+
   return (
     <div className="w-full flex-1 flex flex-col">
       <div className={splitView ? 'hidden' : ''} aria-hidden={splitView}>
+        {canDeleteRecords && bulkSelection.length > 0 && (
+          <div
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-4 py-2.5 rounded-2xl border border-red-200 bg-red-50 mb-3"
+            data-feature="review-requests-bulk-delete"
+          >
+            <span className="text-xs font-bold text-red-800">
+              <i className="fas fa-square-check mr-1.5" />
+              {bulkSelection.length} record{bulkSelection.length === 1 ? '' : 's'} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkSelection([]);
+                  setSelectionResetToken((token) => token + 1);
+                }}
+                className="px-3 py-1.5 rounded-xl border border-red-200 bg-white text-xs font-bold text-red-700 hover:bg-red-100 transition-all cursor-pointer"
+              >
+                Clear selection
+              </button>
+              <button
+                type="button"
+                onClick={() => requestDeleteRecords(bulkSelection)}
+                disabled={deletingRecords}
+                className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <i className="fas fa-trash-alt" />
+                Delete selected
+              </button>
+            </div>
+          </div>
+        )}
         <DataGrid
           data={submissions}
           loading={loading}
@@ -539,6 +713,10 @@ export const SubmissionsTableView = ({
           columnConfig={gridColumnConfig}
           onColumnsChange={handleGridColumnsChange}
           mobileCardView
+          selectable={canDeleteRecords}
+          getRowKey={(record, index) => getRecordKey(record, index)}
+          onSelectionChange={setBulkSelection}
+          selectionResetToken={selectionResetToken}
         />
       </div>
 
@@ -618,6 +796,19 @@ export const SubmissionsTableView = ({
                       >
                         <i className="fas fa-pen text-[10px]" />
                         <span className="hidden sm:inline">Update</span>
+                      </button>
+                    )}
+                    {canDeleteRecords && (
+                      <button
+                        type="button"
+                        onClick={() => requestDeleteRecords([activeNavRecord])}
+                        disabled={deletingRecords}
+                        className="h-8 px-3 rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 transition-all shadow-xs active:scale-95 disabled:opacity-50 cursor-pointer"
+                        title="Delete this record"
+                        data-feature="review-requests-delete-record"
+                      >
+                        <i className="fas fa-trash-alt text-[10px]" />
+                        <span className="hidden sm:inline">Delete</span>
                       </button>
                     )}
                     <span className="hidden sm:inline text-[10px] font-extrabold uppercase tracking-wider text-dark-muted">
@@ -740,9 +931,24 @@ export const SubmissionsTableView = ({
           currentRecordIndex={current}
           totalRecords={total}
           isSaving={savingRecord}
+          conversationFields={selectedRecordConversationFields}
           title={title || 'Details'}
         />
       )}
+
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        title={confirmDelete?.ids?.length > 1 ? 'Delete Records' : 'Delete Record'}
+        message={
+          confirmDelete?.ids?.length > 1
+            ? `Delete ${confirmDelete.ids.length} records? This removes the rows from the linked Google Sheet and cannot be undone.`
+            : `Delete record "${confirmDelete?.ids?.[0] ?? ''}"? This removes the row from the linked Google Sheet and cannot be undone.`
+        }
+        type="danger"
+        confirmText={deletingRecords ? 'Deleting…' : 'Delete'}
+        onConfirm={handleDeleteRecords}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 };
