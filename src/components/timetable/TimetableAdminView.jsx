@@ -2218,20 +2218,25 @@ const TimetableAdminView = ({
       />
       {/* ── Header ── */}
       <div className="pb-2 border-b border-light-border mb-4 print:hidden space-y-2.5">
-        {/* MOBILE / TABLET VIEW (< lg): filters in two columns, actions on their own row */}
-        <div
-          className="lg:hidden grid grid-cols-2 gap-2 w-full items-start"
-          data-feature-sub-tab-for="scheduler-setup-mobile"
-        >
-          {/* Filters: two per row (e.g. Teachers + Classes for Assigned Teachers) */}
-          <div className="min-w-0 w-full col-span-2 grid grid-cols-2 gap-2 items-start">
-            {standaloneViewPicker}
-            {/* Active Filter/Selector matching the selected view.
-                `contents` lets each control become its own grid cell, so paired filters
-                (Teachers + Classes) sit side by side instead of stacking. */}
-            <div className="contents">
-              {myTab === 'my' && myTeacher && (
-                <div className="flex bg-light-lbg border border-light-border rounded-xl p-0.5 items-center w-full">
+        {/* MOBILE / TABLET VIEW (< lg): two-column filter grid. When an odd number of filters
+            leaves a gap, the action icons dock into that empty cell instead of starting a new row. */}
+        {(() => {
+          const mobileFilters = [];
+
+          if (standaloneViewPicker) {
+            mobileFilters.push(
+              <div key="view-picker" className="min-w-0 w-full">
+                {standaloneViewPicker}
+              </div>
+            );
+          }
+
+          if (myTab === 'my' && myTeacher) {
+            mobileFilters.push(
+              <div
+                key="my-view"
+                className="flex bg-light-lbg border border-light-border rounded-xl p-0.5 items-center w-full"
+              >
                   {[
                     { id: 'today', label: 'Today', icon: 'fa-sun' },
                     { id: 'weekly', label: 'Weekly', icon: 'fa-calendar-week' },
@@ -2249,10 +2254,14 @@ const TimetableAdminView = ({
                       {v.label}
                     </button>
                   ))}
-                </div>
-              )}
+              </div>
+            );
+          }
 
-              {!lockedClassId && myTab === 'class' && (
+          // Only one of the view-specific controls renders, so `contents` keeps it a single cell.
+          if (!lockedClassId && myTab === 'class') {
+            mobileFilters.push(
+              <div key="view-filters" className="contents">
                 <>
                   {(viewType === 'class' || viewType === 'scheduler') && (
                     <SingleSelectDropdown
@@ -2315,28 +2324,41 @@ const TimetableAdminView = ({
                     />
                   )}
                 </>
-              )}
-            </div>
+              </div>
+            );
+          }
 
-            {/* Secondary filter for Assigned Teachers */}
-            {myTab === 'class' && viewType === 'assigned_teachers' && (
-              <MultiSelectDropdown
-                label="Classes"
-                options={classOptions}
-                selected={selAssignedClasses}
-                onChange={setSelAssignedClasses}
-                fullWidth={true}
-              />
-            )}
-          </div>
+          // The Assigned Teachers class filter pairs up with the Teachers filter above.
+          if (myTab === 'class' && viewType === 'assigned_teachers') {
+            mobileFilters.push(
+              <div key="assigned-classes" className="contents">
+                <MultiSelectDropdown
+                  label="Classes"
+                  options={classOptions}
+                  selected={selAssignedClasses}
+                  onChange={setSelAssignedClasses}
+                  fullWidth={true}
+                />
+              </div>
+            );
+          }
 
-          {/* Scheduler Setup draft version controls: a full-width row of its own so they are
-            visible on every breakpoint (they used to sit inside the desktop-only row). */}
-          {draftPanel && <div className="col-span-2 w-full min-w-0">{draftPanel}</div>}
+          // An odd filter count leaves one empty cell in the last row: the icons take it.
+          const actionsShareRow = mobileFilters.length % 2 === 1;
 
-          {/* Action Icons */}
-          <div className="min-w-0 col-span-2 flex flex-wrap items-center justify-end gap-1.5">
-            {!(myTab === 'my' && !myTeacher) &&
+          return (
+            <div
+              className="lg:hidden grid grid-cols-2 gap-2 w-full items-start"
+              data-feature-sub-tab-for="scheduler-setup-mobile"
+            >
+              {mobileFilters}
+
+              {/* Action Icons */}
+              <div
+                className={`min-w-0 flex flex-wrap items-center justify-end gap-1.5 ${
+                  actionsShareRow ? 'col-span-1' : 'col-span-2'
+                }`}
+              >            {!(myTab === 'my' && !myTeacher) &&
               (myTab === 'my'
                 ? myView === 'weekly'
                 : viewType === 'class' || viewType === 'teacher' || viewType === 'scheduler') && (
@@ -2394,8 +2416,14 @@ const TimetableAdminView = ({
                   <i className="fas fa-eraser text-sm" />
                 </button>
               )}
-          </div>
-        </div>
+              </div>
+
+              {/* Scheduler Setup draft version controls: a full-width row of its own so they are
+                  visible on every breakpoint (they used to sit inside the desktop-only row). */}
+              {draftPanel && <div className="col-span-2 w-full min-w-0">{draftPanel}</div>}
+            </div>
+          );
+        })()}
 
         {/* DESKTOP VIEW (>= lg): Single combined row layout */}
         <div

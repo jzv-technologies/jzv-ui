@@ -132,14 +132,20 @@ const ReleaseToParentsPanel = ({ schedule, classId, students = [], canRelease })
         <div>
           <h4 className="text-xs font-black text-dark-primary flex items-center gap-2">
             <i className="fas fa-user-check text-indigo-600" />
-            Release to parents
+            Release to parents (per student)
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
               {loading ? '…' : `${releasedInView.length}/${visibleStudents.length} released`}
             </span>
+            {!loading && pendingInView.length > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                {pendingInView.length} held
+              </span>
+            )}
           </h4>
           <p className="text-[11px] font-semibold text-dark-muted mt-0.5">
-            {schedule.name} · choose the wards whose reports the parents may see. Use{' '}
-            <strong>Release all</strong> for the whole class.
+            {schedule.name} · the publish switch says the reports are final; this list decides which
+            wards the parents may actually see. Use <strong>Release</strong> to publish a report and{' '}
+            <strong>Remove</strong> to hold it back.
           </p>
         </div>
 

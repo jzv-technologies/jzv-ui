@@ -6,7 +6,7 @@ import { DEFAULT_BLOCK_STYLE } from '../../report-card-designer/constants';
  * Print renderer for the school header block.
  * Extracted from the original ReportCardGenerator.jsx
  */
-export const renderSchoolHeader = ({ bleed, activeTemplate, schoolHeaderPrint }) => {
+export const renderSchoolHeader = ({ bleed, activeTemplate, schoolHeaderPrint, examTitleOverride = null }) => {
   if (!activeTemplate.showSchoolHeader) return null;
   const hdr = activeTemplate.schoolHeader || {};
   const isCompact = hdr.size === 'compact';
@@ -94,7 +94,7 @@ export const renderSchoolHeader = ({ bleed, activeTemplate, schoolHeaderPrint })
               fontSize: `${schoolHeaderPrint.examTitleFontSize}px`,
             }}
           >
-            {hdr?.examTitle || 'Official Progress Report'}
+            {examTitleOverride || hdr?.examTitle || 'Official Progress Report'}
           </span>
         </div>
       )}

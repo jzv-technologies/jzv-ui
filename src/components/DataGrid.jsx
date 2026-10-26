@@ -1,5 +1,29 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 
+// Sheet/DB timestamps arrive as UTC ISO strings. Render them in the viewer's own time zone so a
+// record created at 23:45 UTC does not look like it was created the next morning.
+const ISO_DATETIME_RE =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/i;
+
+const formatLocalDateTime = (value) => {
+  const str = String(value ?? "").trim();
+  if (!ISO_DATETIME_RE.test(str)) return null;
+  const parsed = new Date(str.replace(" ", "T"));
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const displayValue = (value) => {
+  const str = String(value ?? "");
+  return formatLocalDateTime(str) ?? str;
+};
+
 const DataGrid = ({
   data = [],
   loading = false,
@@ -402,7 +426,7 @@ const DataGrid = ({
                             "Record"}
                         </div>
                         <div className="text-sm font-black text-dark-primary break-words">
-                          {primaryValue || "—"}
+                          {displayValue(primaryValue) || "—"}
                         </div>
                         {restCols.map((h) => {
                           const raw = String(item[h] ?? "").trim();
@@ -429,7 +453,7 @@ const DataGrid = ({
                                     {raw}
                                   </span>
                                 ) : (
-                                  raw || "—"
+                                  displayValue(raw) || "—"
                                 )}
                               </span>
                             </div>
@@ -582,7 +606,7 @@ const DataGrid = ({
                               {item[h]}
                             </span>
                           ) : (
-                            valStr
+                            displayValue(item[h])
                           )}
                         </td>
                       );

@@ -11,11 +11,7 @@ import { useCanAccess } from '../portal-shared/ConditionalBlock';
  * Parent view for published student examination progress reports.
  * Restricted strictly to published exam schedules and the parent's enrolled ward(s).
  */
-const ParentProgressReportView = ({
-  user,
-  userRoles = ['parent'],
-  onNavigate = null,
-}) => {
+const ParentProgressReportView = ({ user, userRoles = ['parent'], onNavigate = null }) => {
   const canAccess = useCanAccess(userRoles);
 
   // 1. Resolve Parent's Ward(s)
@@ -30,7 +26,8 @@ const ParentProgressReportView = ({
       const raw = localStorage.getItem('jzv_parent_session');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.user?.students && Array.isArray(parsed.user.students)) return parsed.user.students;
+        if (parsed.user?.students && Array.isArray(parsed.user.students))
+          return parsed.user.students;
         if (parsed.user?.student) return [parsed.user.student];
         if (parsed.student) return [parsed.student];
       }
@@ -48,6 +45,8 @@ const ParentProgressReportView = ({
   const [paperSize, setPaperSize] = useState('a4');
   const [orientation, setOrientation] = useState('portrait');
   const [loading, setLoading] = useState(true);
+  const [unreleasedCount, setUnreleasedCount] = useState(0);
+  const [classNameById, setClassNameById] = useState({});
 
   // Derive initial ward from session
   const rawActiveStudent = useMemo(() => {
@@ -105,12 +104,60 @@ const ParentProgressReportView = ({
 
   const activeStudent = dbStudent || rawActiveStudent;
   const targetClassId = activeStudent?.class_id ? String(activeStudent.class_id) : null;
+  const activeStudentClassId = activeStudent?.class_id || null;
+
+  // Resolve class labels ("PCC-4") instead of raw ids ("Class 4") for every ward in the session.
+  const wardClassIds = useMemo(() => {
+    const ids = new Set();
+    sessionStudents.forEach((stu) => {
+      if (stu?.class_id) ids.add(String(stu.class_id));
+    });
+    if (activeStudentClassId) ids.add(String(activeStudentClassId));
+    return Array.from(ids);
+  }, [sessionStudents, activeStudentClassId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const loadClassNames = async () => {
+      if (wardClassIds.length === 0) {
+        setClassNameById({});
+        return;
+      }
+      try {
+        const numericIds = wardClassIds.filter((id) => /^\d+$/.test(id)).map(Number);
+        const { data, error } = await supabase
+          .from('classes')
+          .select('id, name')
+          .in('id', numericIds.length > 0 ? numericIds : [-1]);
+        if (isCancelled) return;
+        if (error) {
+          setClassNameById({});
+          return;
+        }
+        const map = {};
+        (data || []).forEach((row) => {
+          map[String(row.id)] = row.name;
+        });
+        setClassNameById(map);
+      } catch (_) {
+        if (!isCancelled) setClassNameById({});
+      }
+    };
+    loadClassNames();
+    return () => {
+      isCancelled = true;
+    };
+  }, [wardClassIds]);
+
+  const classLabelFor = (classId, fallbackName = null) =>
+    classNameById[String(classId)] || fallbackName || (classId ? `Class ${classId}` : 'Unassigned');
+  const classLabel = classLabelFor(activeStudent?.class_id, activeStudent?.class_name);
 
   // Load published schedules only, then keep the ones actually released to this ward. The
   // schedule-level flag says the reports are final; exam_report_releases says which wards may see
   // them, so a parent only gets a schedule that appears in both.
   const wardAdmissionNo = rawActiveStudent?.admission_no || dbStudent?.admission_no || null;
-  const wardStudentId = dbStudent?.id ?? (rawActiveStudent?.id ?? null);
+  const wardStudentId = dbStudent?.id ?? rawActiveStudent?.id ?? null;
 
   useEffect(() => {
     let isMounted = true;
@@ -163,6 +210,7 @@ const ParentProgressReportView = ({
 
         if (!isMounted) return;
         setPublishedSchedules(visible);
+        setUnreleasedCount(Math.max(0, published.length - visible.length));
         setSelectedScheduleId((prev) => {
           if (visible.length === 0) return null;
           if (prev && visible.some((p) => String(p.id) === String(prev))) return prev;
@@ -186,8 +234,6 @@ const ParentProgressReportView = ({
   // Payload from get_progress_report_data (delivered by ReportCardGenerator, no extra calls)
   const [reportData, setReportData] = useState(null);
   const handleReportDataLoaded = useCallback((data) => setReportData(data), []);
-
-  const studentClass = reportData?.class || null;
 
   const wardRankData = useMemo(() => {
     const r = activeStudent?.id ? reportData?.ranks?.[String(activeStudent.id)] : null;
@@ -240,7 +286,7 @@ const ParentProgressReportView = ({
                 >
                   {sessionStudents.map((stu) => (
                     <option key={stu.id || stu.admission_no} value={stu.id || stu.admission_no}>
-                      {stu.student_name || stu.name} ({stu.class_name || `Class ${stu.class_id}`})
+                      {stu.student_name || stu.name} ({classLabelFor(stu.class_id, stu.class_name)})
                     </option>
                   ))}
                 </select>
@@ -354,12 +400,7 @@ const ParentProgressReportView = ({
                 Admission No:{' '}
                 <span className="font-mono font-semibold">{activeStudent.admission_no}</span>
                 <span className="mx-2 opacity-40">·</span>
-                Class:{' '}
-                <span className="font-bold text-indigo-700">
-                  {studentClass?.name ||
-                    activeStudent.class_name ||
-                    (activeStudent.class_id ? `Class ${activeStudent.class_id}` : 'Unassigned')}
-                </span>
+                Class: <span className="font-bold text-indigo-700">{classLabel}</span>
               </p>
             </div>
           </div>
@@ -424,7 +465,9 @@ const ParentProgressReportView = ({
             <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl mx-auto mb-4">
               <i className="fas fa-chalkboard-user" />
             </div>
-            <h3 className="text-base font-bold text-dark-primary mb-1">Class Assignment Required</h3>
+            <h3 className="text-base font-bold text-dark-primary mb-1">
+              Class Assignment Required
+            </h3>
             <p className="text-xs text-dark-muted max-w-md mx-auto">
               Student {activeStudent.student_name || activeStudent.name} does not have an active
               class section assigned. Report cards will appear once a class section is assigned.
@@ -436,15 +479,29 @@ const ParentProgressReportView = ({
               <i className="fas fa-file-circle-exclamation" />
             </div>
             <h3 className="text-base font-bold text-dark-primary mb-1">
-              No Published Progress Reports
+              {unreleasedCount > 0 ? 'Report Not Released Yet' : 'No Published Progress Reports'}
             </h3>
             <p className="text-xs text-dark-muted max-w-md mx-auto">
-              Progress reports have not yet been published by the school administration for{' '}
-              <span className="font-semibold text-dark-primary">
-                {activeStudent.student_name || activeStudent.name}
-              </span>
-              . Once the examination results are published, the official report card will be viewable
-              and downloadable here.
+              {unreleasedCount > 0 ? (
+                <>
+                  {unreleasedCount} examination
+                  {unreleasedCount === 1 ? ' report has' : ' reports have'} been finalised for{' '}
+                  <span className="font-semibold text-dark-primary">
+                    {activeStudent.student_name || activeStudent.name}
+                  </span>
+                  , but the institution has not released {unreleasedCount === 1 ? 'it' : 'them'} to
+                  parents yet. Please contact the admin office.
+                </>
+              ) : (
+                <>
+                  Progress reports have not yet been published by the school administration for{' '}
+                  <span className="font-semibold text-dark-primary">
+                    {activeStudent.student_name || activeStudent.name}
+                  </span>
+                  . Once the examination results are published, the official report card will be
+                  viewable and downloadable here.
+                </>
+              )}
             </p>
           </div>
         ) : !selectedScheduleId ? (

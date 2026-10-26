@@ -456,7 +456,7 @@ export const handleTogglePublishReport = async ({
   const confirmData = {
     title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
     message: willPublish
-      ? `Publish progress report cards for "${selectedSchedule.name}"? Parents will immediately be able to view their ward's results in the parent portal.`
+      ? `Publish progress report cards for "${selectedSchedule.name}"? Every ward with marks in this examination is released to parents, who can then view the report in the parent portal. Individual wards can still be withheld from the Release to parents list.`
       : `Unpublish progress report cards for "${selectedSchedule.name}"? Parents will no longer be able to view report cards for this examination.`,
     confirmText: willPublish ? 'Publish to Parents' : 'Unpublish',
     type: willPublish ? 'success' : 'warning',
@@ -469,6 +469,14 @@ export const handleTogglePublishReport = async ({
           .eq('id', selectedSchedule.id);
 
         if (error) throw error;
+
+        // The parent-facing gates require a release row per ward, so publishing has to release
+        // them too (and unpublishing withdraws them).
+        const { error: releaseError } = await supabase.rpc('publish_exam_report_releases', {
+          p_schedule_id: selectedSchedule.id,
+          p_publish: willPublish,
+        });
+        if (releaseError) throw releaseError;
 
         setSchedules((prev) =>
           prev.map((s) =>
@@ -485,7 +493,7 @@ export const handleTogglePublishReport = async ({
 
         showToast(
           willPublish
-            ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
+            ? `Progress report for "${selectedSchedule.name}" published and released to parents. Use the Release to parents list to withhold an individual ward.`
             : `Progress report for "${selectedSchedule.name}" unpublished.`,
           'success'
         );

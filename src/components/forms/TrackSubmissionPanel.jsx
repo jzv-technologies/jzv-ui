@@ -37,12 +37,21 @@ const SYSTEM_RESULT_COLUMNS = [
   'created',
   'created_at',
   'createdat',
+  'created at',
   'updated',
   'updated_at',
   'updatedat',
+  'updated at',
   'timestamp',
   'time-stamp',
 ];
+
+// The same columns stay hidden in the record detail: showing the stored email would let anyone who
+// opens a search result read the address and replay it in the verification box.
+const SYSTEM_RESULT_COLUMN_SET = new Set(
+  SYSTEM_RESULT_COLUMNS.map((column) => column.toLowerCase())
+);
+const isSystemRecordColumn = (key) => SYSTEM_RESULT_COLUMN_SET.has(String(key).toLowerCase().trim());
 
 const isSystemSearchField = (name) => String(name).trim().toLowerCase() === SYSTEM_SEARCH_KEY;
 
@@ -138,7 +147,7 @@ const Control = ({ field, value, onChange, placeholder }) => {
  * Shows the existing thread and appends a message to it. The stored value stays the JSON array
  * the rest of the app (detail modal, review screen) already understands.
  */
-const ConversationEditor = ({ field, value, onChange, author }) => {
+const ConversationEditor = ({ field, value, onChange, author, readOnly = false }) => {
   const [draft, setDraft] = useState('');
   const messages = parseConversation(value);
 
@@ -179,24 +188,26 @@ const ConversationEditor = ({ field, value, onChange, author }) => {
           ))
         )}
       </div>
-      <div className="flex flex-col sm:flex-row gap-2">
-        <textarea
-          rows={2}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={`Add a comment to ${field.Label || getFieldName(field)}…`}
-          className={`${INPUT_CLASS} resize-none flex-1`}
-        />
-        <button
-          type="button"
-          onClick={addMessage}
-          disabled={!draft.trim()}
-          className="self-end px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50"
-        >
-          <i className="fas fa-plus mr-1.5" />
-          Add Comment
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex flex-col sm:flex-row gap-2">
+          <textarea
+            rows={2}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={`Add a comment to ${field.Label || getFieldName(field)}…`}
+            className={`${INPUT_CLASS} resize-none flex-1`}
+          />
+          <button
+            type="button"
+            onClick={addMessage}
+            disabled={!draft.trim()}
+            className="self-end px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50"
+          >
+            <i className="fas fa-plus mr-1.5" />
+            Add Comment
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -224,6 +235,9 @@ const TrackSubmissionPanel = ({
   const [selected, setSelected] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [verifyEmail, setVerifyEmail] = useState('');
+  // Set once the submitter proves the email on the record; it becomes their identity so that
+  // `Update Allowed: Reporter` fields unlock even though nobody is signed in.
+  const [verifiedEmail, setVerifiedEmail] = useState('');
   const [saving, setSaving] = useState(false);
 
   // ID is always offered, ahead of every configured field.
@@ -303,7 +317,14 @@ const TrackSubmissionPanel = ({
 
   const editableFields = useMemo(() => {
     if (!selected) return [];
-    const context = { userRoles, user, fullName, record: selected, fields };
+    const identityUser = verifiedEmail ? { ...(user || {}), email: verifiedEmail } : user;
+    const context = {
+      userRoles,
+      user: identityUser,
+      fullName: verifiedEmail || fullName,
+      record: selected,
+      fields,
+    };
     return fields
       .filter((field) => getFieldName(field))
       .filter((field) => isFieldEditableByUser(field, context))
@@ -312,10 +333,19 @@ const TrackSubmissionPanel = ({
           (key) => key.toLowerCase() === getFieldName(field).toLowerCase()
         )
       );
-  }, [selected, fields, userRoles, user, fullName]);
+  }, [selected, fields, userRoles, user, fullName, verifiedEmail]);
+
+  const editableKeys = useMemo(
+    () => new Set(editableFields.map((field) => getFieldName(field).toLowerCase())),
+    [editableFields]
+  );
 
   const recordEmailColumn = selected ? findEmailColumn(selected) : null;
   const needsEmailCheck = Boolean(recordEmailColumn);
+  const recordEmailValue = recordEmailColumn
+    ? String(selected?.[recordEmailColumn] ?? '').trim()
+    : '';
+  const isVerified = needsEmailCheck ? Boolean(verifiedEmail) : Boolean(user);
 
   const openRecord = (record) => {
     const initial = {};
@@ -333,11 +363,24 @@ const TrackSubmissionPanel = ({
     const emailColumn = findEmailColumn(record);
     const recordEmail = emailColumn ? String(record[emailColumn] ?? '').trim() : '';
     const accountEmail = String(user?.email || '').trim();
-    setVerifyEmail(
-      recordEmail && accountEmail && recordEmail.toLowerCase() === accountEmail.toLowerCase()
-        ? recordEmail
-        : ''
-    );
+    const accountMatches =
+      recordEmail && accountEmail && recordEmail.toLowerCase() === accountEmail.toLowerCase();
+    setVerifyEmail(accountMatches ? recordEmail : '');
+    setVerifiedEmail(accountMatches ? recordEmail : '');
+  };
+
+  const handleVerifyEmail = () => {
+    const provided = verifyEmail.trim();
+    if (!provided) {
+      showToast('Enter the email address used in this submission.', 'error');
+      return;
+    }
+    if (provided.toLowerCase() !== recordEmailValue.toLowerCase()) {
+      showToast('That email does not match the address on this submission.', 'error');
+      return;
+    }
+    setVerifiedEmail(provided);
+    showToast('Email verified. You can now edit the allowed details.', 'success');
   };
 
   const handleSave = async () => {
@@ -347,17 +390,10 @@ const TrackSubmissionPanel = ({
       return;
     }
 
-    // Submitters are not signed in, so the email they used for the submission is the proof of
-    // ownership. Records without an email column fall back to requiring an authenticated user.
+    // Submitters are not signed in, so the verified email is the proof of ownership.
     if (needsEmailCheck) {
-      const provided = verifyEmail.trim().toLowerCase();
-      const onRecord = String(selected[recordEmailColumn] ?? '').trim().toLowerCase();
-      if (!provided) {
-        showToast('Enter the email address used in this submission to update it.', 'error');
-        return;
-      }
-      if (provided !== onRecord) {
-        showToast('That email does not match the address on this submission.', 'error');
+      if (!verifiedEmail) {
+        showToast('Verify the email used in this submission before saving.', 'error');
         return;
       }
     } else if (!user) {
@@ -431,6 +467,47 @@ const TrackSubmissionPanel = ({
     () => buildColumnConfig(results || [], labelMap),
     [results, labelMap]
   );
+
+  // Every schema field on the record, editable or not, so the submitter can read the full
+  // submission instead of a truncated grid cell. Extra sheet columns are appended read-only, but
+  // the system-generated ones (id, email, created, updated, …) are never rendered.
+  const recordEntries = useMemo(() => {
+    if (!selected) return [];
+    const seen = new Set();
+    const entries = [];
+    fields.forEach((field) => {
+      const name = getFieldName(field);
+      if (!name || isSystemRecordColumn(name)) return;
+      const recordKey = Object.keys(selected).find(
+        (candidate) => candidate.toLowerCase() === name.toLowerCase()
+      );
+      if (!recordKey) return;
+      seen.add(recordKey.toLowerCase());
+      entries.push({
+        field,
+        key: name,
+        recordKey,
+        value: selected[recordKey],
+        editable: editableKeys.has(name.toLowerCase()),
+      });
+    });
+    Object.keys(selected).forEach((recordKey) => {
+      const lower = recordKey.toLowerCase();
+      if (seen.has(lower) || isSystemRecordColumn(recordKey)) return;
+      entries.push({
+        field: {
+          'Field Name': recordKey,
+          Label: labelMap[recordKey] || recordKey,
+          'Field Type': 'text',
+        },
+        key: recordKey,
+        recordKey,
+        value: selected[recordKey],
+        editable: false,
+      });
+    });
+    return entries;
+  }, [selected, fields, editableKeys, labelMap]);
 
   const authorName = fullName || user?.email || 'Reporter';
 
@@ -518,7 +595,7 @@ const TrackSubmissionPanel = ({
             </h3>
             {results.length > 0 && (
               <p className="text-[11px] font-semibold text-gray-500">
-                Select a record to update the fields your role may change.
+                Select a record to view every field and update the ones you may change.
               </p>
             )}
           </div>
@@ -550,7 +627,7 @@ const TrackSubmissionPanel = ({
             <div>
               <h3 className="text-sm font-black text-gray-900">Update submission</h3>
               <p className="text-[11px] font-semibold text-gray-500">
-                Record ID: {String(selected.id ?? '—')}
+                Tracking ID: {String(selected.id ?? '—')}
               </p>
             </div>
             <button
@@ -562,94 +639,162 @@ const TrackSubmissionPanel = ({
             </button>
           </div>
 
-          {needsEmailCheck && (
+          {needsEmailCheck && !isVerified && (
             <div
-              className="rounded-2xl border border-amber-200 bg-amber-50 p-3 sm:p-4"
+              className="rounded-2xl border border-amber-200 bg-amber-50 p-3 sm:p-4 space-y-2"
               data-feature="track-submission-verify"
             >
-              <label className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-amber-900 mb-1.5">
+              <label className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-amber-900">
                 <i className="fas fa-shield-halved" />
-                Verify your email
+                Verify your email to edit
               </label>
-              <input
-                type="email"
-                value={verifyEmail}
-                onChange={(e) => setVerifyEmail(e.target.value)}
-                placeholder={`Email used in this submission (${recordEmailColumn})`}
-                className={INPUT_CLASS}
-              />
-              <p className="text-[10px] font-semibold text-amber-800 mt-1.5">
-                Saving is allowed only when this matches the {recordEmailColumn} on the record.
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  value={verifyEmail}
+                  onChange={(e) => setVerifyEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleVerifyEmail();
+                    }
+                  }}
+                  placeholder="Email used in this submission"
+                  className={`${INPUT_CLASS} flex-1`}
+                />
+                <button
+                  type="button"
+                  onClick={handleVerifyEmail}
+                  className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shrink-0"
+                >
+                  <i className="fas fa-unlock mr-1.5" />
+                  Verify
+                </button>
+              </div>
+              <p className="text-[10px] font-semibold text-amber-800">
+                The details below stay read-only until this matches the email address recorded on
+                this submission.
               </p>
             </div>
           )}
 
-          {editableFields.length === 0 ? (
+          {needsEmailCheck && isVerified && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2"
+              data-feature="track-submission-verified"
+            >
+              <p className="text-[11px] font-bold text-emerald-800">
+                <i className="fas fa-circle-check mr-1.5" />
+                Verified as {verifiedEmail}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setVerifiedEmail('');
+                  setVerifyEmail('');
+                }}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline"
+              >
+                Use a different email
+              </button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-feature="track-submission-record">
+            {recordEntries.map(({ field, key, value, editable }) => {
+              const type = normalizeType(field);
+              const raw = value === null || value === undefined ? '' : value;
+              const text = typeof raw === 'object' ? JSON.stringify(raw, null, 2) : String(raw);
+              const isWide =
+                isConversationField(field) ||
+                ['textarea', 'description', 'conversation'].includes(type) ||
+                text.length > 80 ||
+                text.includes('\n');
+
+              if (isConversationField(field)) {
+                return (
+                  <div key={key} className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                      {field.Label || key}
+                    </label>
+                    <ConversationEditor
+                      field={field}
+                      value={editValues[key] ?? raw}
+                      author={authorName}
+                      readOnly={!editable}
+                      onChange={(next) => setEditValues((prev) => ({ ...prev, [key]: next }))}
+                    />
+                  </div>
+                );
+              }
+
+              return (
+                <div key={key} className={isWide ? 'sm:col-span-2' : undefined}>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
+                    <span>
+                      {field.Label || key}
+                      {editable && isRequiredValue(field?.['Required']) && (
+                        <span className="text-red-500 ml-1">*</span>
+                      )}
+                    </span>
+                    {!editable && (
+                      <i className="fas fa-lock text-[9px] text-gray-400" title="Read only" />
+                    )}
+                  </label>
+                  {editable ? (
+                    <Control
+                      field={field}
+                      value={editValues[key]}
+                      onChange={(next) => setEditValues((prev) => ({ ...prev, [key]: next }))}
+                    />
+                  ) : (
+                    <div
+                      className={`rounded-xl border px-3.5 py-2.5 text-sm font-semibold break-words whitespace-pre-wrap ${
+                        text === ''
+                          ? 'border-gray-100 bg-gray-50/60 text-gray-400 italic'
+                          : 'border-gray-200 bg-gray-50 text-gray-800'
+                      }`}
+                    >
+                      {text === '' ? 'Not provided' : text}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {!isVerified ? (
             <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
-              Your role cannot update this submission. Contact the office if something needs to
-              change.
+              Verify the email on this submission to unlock the details you are allowed to change.
+            </p>
+          ) : editableFields.length === 0 ? (
+            <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3">
+              You can view this submission but your role cannot change any of its details. Contact
+              the office if something needs to change.
             </p>
           ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {editableFields.map((field) => {
-                  const key = getFieldName(field);
-                  if (isConversationField(field)) {
-                    return (
-                      <ConversationEditor
-                        key={key}
-                        field={field}
-                        value={editValues[key]}
-                        author={authorName}
-                        onChange={(value) =>
-                          setEditValues((prev) => ({ ...prev, [key]: value }))
-                        }
-                      />
-                    );
-                  }
-                  return (
-                    <div key={key}>
-                      <label className="block text-[11px] font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
-                        {field.Label || key}
-                        {isRequiredValue(field?.['Required']) && (
-                          <span className="text-red-500 ml-1">*</span>
-                        )}
-                      </label>
-                      <Control
-                        field={field}
-                        value={editValues[key]}
-                        onChange={(value) =>
-                          setEditValues((prev) => ({ ...prev, [key]: value }))
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelected(null)}
-                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
-                >
-                  {saving ? (
-                    <i className="fas fa-spinner fa-spin mr-2" />
-                  ) : (
-                    <i className="fas fa-save mr-2" />
-                  )}
-                  Save changes
-                </button>
-              </div>
-            </>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
+              >
+                {saving ? (
+                  <i className="fas fa-spinner fa-spin mr-2" />
+                ) : (
+                  <i className="fas fa-save mr-2" />
+                )}
+                Save changes
+              </button>
+            </div>
           )}
         </div>
       )}

@@ -8,7 +8,6 @@ import RankHolders from '../RankHolders';
 import ConfirmModal from '../../ConfirmModal';
 import { useCanAccess } from '../../portal-shared/ConditionalBlock';
 import { isScheduleReportPublished, broadcastSchedulePublishedChange } from '../../../utils/examScheduleUtils';
-import ReleaseToParentsPanel from './ReleaseToParentsPanel';
 import { ExtraComponentLayers } from './components/ExtraComponentLayers';
 import GradingScaleLegend from './components/GradingScaleLegend';
 import {
@@ -29,6 +28,7 @@ import {
   getLegendProps,
   getBlockBackgroundStyle,
   getBlockBleedStyles,
+  getDynamicClassesPerPage,
   BLOCK_DEFAULT_BG,
   hexToRgba,
   formatDataLabel,
@@ -78,6 +78,33 @@ import {
 import { ExamRemarksModal, ExamAttendanceUploadModal } from './modals';
 
 const TEMPLATES_CONFIG_KEY = 'exam_progress_report_templates';
+
+// One block's resolved style, shared by the student cards and the rank holder pages so both honour
+// the template exactly as the designer saved it.
+const buildBlockStyle = (activeTemplate, blockKey) => {
+  switch (blockKey) {
+    case 'schoolHeader':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.schoolHeader?.style || {}) };
+    case 'studentInfo':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.studentInfoConfig?.style || {}) };
+    case 'attendanceBar':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.attendanceBarConfig?.style || {}) };
+    case 'rankHolders':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.rankHoldersConfig?.style || {}) };
+    case 'subjectTable':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.subjectTableConfig?.style || {}) };
+    case 'summaryCalculations':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.summaryConfig?.style || {}) };
+    case 'charts':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.chartConfig?.style || {}) };
+    case 'remarks':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.remarksConfig?.style || {}) };
+    case 'signatures':
+      return { ...DEFAULT_BLOCK_STYLE, ...(activeTemplate?.signaturesConfig?.style || {}) };
+    default:
+      return DEFAULT_BLOCK_STYLE;
+  }
+};
 
 /**
  * Progress Report Generator & Card Renderer
@@ -328,6 +355,52 @@ const ReportCardGenerator = ({
   const [results, setResults] = useState([]);
   const [entries, setEntries] = useState([]);
   const [attendanceMap, setAttendanceMap] = useState({});
+
+  // Attendance rows are keyed by admission number (or student id for legacy rows). The bar block
+  // reads them off the student, so every card is rendered with the record merged in — otherwise
+  // uploaded attendance still showed as "Attendance details pending upload".
+  const withAttendance = useCallback(
+    (stu) => {
+      const admKey = String(stu?.admission_no || stu?.admission_number || '').trim().toLowerCase();
+      const admKeyNoLeadingZero = admKey.replace(/^0+/, '');
+      const stuIdKey = String(stu?.id || '');
+      const att =
+        attendanceMap[admKey] ||
+        (admKeyNoLeadingZero ? attendanceMap[admKeyNoLeadingZero] : null) ||
+        (stuIdKey ? attendanceMap[stuIdKey] : null);
+
+      if (!att) {
+        return {
+          ...stu,
+          hasAttendanceRecorded: Boolean(
+            stu?.attendance && stu.attendance !== '—' && stu.attendance !== '0%'
+          ),
+        };
+      }
+
+      const present = Number(att.present || 0);
+      const absent = Number(att.absent || 0);
+      const leave = Number(att.on_leave || 0);
+      const totalWorking =
+        att.total_days !== undefined && att.total_days !== null
+          ? Number(att.total_days)
+          : present + absent + leave;
+      const recordedDays = present + absent + leave;
+      const divisor = totalWorking > 0 ? totalWorking : recordedDays > 0 ? recordedDays : 1;
+      const pct = Math.round((present / divisor) * 100);
+
+      return {
+        ...stu,
+        total_working_days: totalWorking,
+        present_days: present,
+        absent_days: absent,
+        leave_days: leave,
+        attendance: totalWorking > 0 || recordedDays > 0 ? `${pct}%` : '—',
+        hasAttendanceRecorded: true,
+      };
+    },
+    [attendanceMap]
+  );
   const [serverRanksMap, setServerRanksMap] = useState({});
   const [internalAttendanceModalOpen, setInternalAttendanceModalOpen] = useState(false);
   const isAttendanceModalOpen =
@@ -495,7 +568,7 @@ const ReportCardGenerator = ({
       if (data?.classifications?.length)
         setInternalClassifications((prev) => mergeById(prev, data.classifications));
       if (data?.class) setInternalClasses((prev) => mergeById(prev, [data.class]));
-      applyAttendance(data?.attendance, selectedScheduleId, propAttendanceMap);
+      setAttendanceMap(applyAttendance(data?.attendance, selectedScheduleId, propAttendanceMap));
       onReportDataLoaded?.(data);
     } catch (err) {
       console.warn(
@@ -546,7 +619,7 @@ const ReportCardGenerator = ({
         setResults(resData);
         setEntries(entryData);
         setServerRemarks(remRes?.data || []);
-        applyAttendance(attRes?.data, selectedScheduleId, propAttendanceMap);
+        setAttendanceMap(applyAttendance(attRes?.data, selectedScheduleId, propAttendanceMap));
       } catch (e) {
         console.error('Error loading report card data:', e);
         showToast('Error loading report card data', 'error');
@@ -618,12 +691,15 @@ const ReportCardGenerator = ({
     };
   }, [templates, selectedTemplateId]);
 
-  // If propStudents is passed, sync students state directly
+  // If propStudents is passed, sync students state directly.
+  // Rank holder mode loads every class itself, so this single-class sync must not overwrite it
+  // (with no class selected it would filter everything away and leave the report empty).
   useEffect(() => {
+    if (reportMode === 'rank_holder') return;
     if (propStudents && Array.isArray(propStudents)) {
       setStudents(propStudents.filter((s) => String(s.class_id) === String(selectedClassId)));
     }
-  }, [propStudents, selectedClassId]);
+  }, [reportMode, propStudents, selectedClassId]);
 
   // Selected schedule object
   const selectedSchedule = useMemo(() => {
@@ -641,7 +717,7 @@ const ReportCardGenerator = ({
     setConfirmModalData({
       title: willPublish ? 'Publish Progress Report' : 'Unpublish Progress Report',
       message: willPublish
-        ? `Publish progress report cards for "${selectedSchedule.name}"? Parents will immediately be able to view their ward's results in the parent portal.`
+        ? `Publish progress report cards for "${selectedSchedule.name}"? Every ward with marks in this examination is released to parents, who can then view the report in the parent portal. Individual wards can still be withheld from the Release to parents list below.`
         : `Unpublish progress report cards for "${selectedSchedule.name}"? Parents will no longer be able to view report cards for this examination.`,
       confirmText: willPublish ? 'Publish to Parents' : 'Unpublish',
       type: willPublish ? 'success' : 'warning',
@@ -655,6 +731,14 @@ const ReportCardGenerator = ({
             .eq('id', selectedSchedule.id);
 
           if (error) throw error;
+
+          // The parent-facing gates require a release row per ward, so publishing has to release
+          // them too (and unpublishing withdraws them).
+          const { error: releaseError } = await supabase.rpc('publish_exam_report_releases', {
+            p_schedule_id: selectedSchedule.id,
+            p_publish: willPublish,
+          });
+          if (releaseError) throw releaseError;
 
           setInternalSchedules((prev) =>
             prev.map((s) =>
@@ -671,7 +755,7 @@ const ReportCardGenerator = ({
 
           showToast(
             willPublish
-              ? `Progress report for "${selectedSchedule.name}" published! Parents can now view results for their wards.`
+              ? `Progress report for "${selectedSchedule.name}" published and released to parents. Use the Release to parents list to withhold an individual ward.`
               : `Progress report for "${selectedSchedule.name}" unpublished.`,
             'success'
           );
@@ -730,8 +814,49 @@ const ReportCardGenerator = ({
     isParentView,
   ]);
 
+  // Rank holder mode loads every class at once, so the single metrics map above rates each student
+  // against every class's papers (87 marks out of 5 classes' 500 → "F" → no rank holders at all).
+  // Metrics are therefore rebuilt per class here.
+  const rankHolderMetricsByClass = useMemo(() => {
+    if (reportMode !== 'rank_holder') return {};
+    const map = {};
+    const classIds = new Set(students.map((s) => String(s.class_id ?? '')));
+    classIds.forEach((clsId) => {
+      const classStudents = students.filter((s) => String(s.class_id ?? '') === clsId);
+      // `== null` (not `!r.class_id`) so a class id of 0 is a real class, not "no class": a loose
+      // falsy check pulled every other class's papers in and graded everyone against them.
+      const classResults = results.filter(
+        (r) => r.class_id == null || String(r.class_id) === clsId
+      );
+      const resultIds = new Set(classResults.map((r) => String(r.id)));
+      const classEntries = entries.filter((e) => resultIds.has(String(e.result_id)));
+      map[clsId] = buildStudentMetricsMap(
+        classStudents,
+        classResults,
+        classEntries,
+        internalSubjects,
+        internalClassifications,
+        activeTemplate,
+        clsId || null,
+        { studentRanksMap, serverRanksMap, isParentView }
+      );
+    });
+    return map;
+  }, [
+    reportMode,
+    students,
+    results,
+    entries,
+    internalSubjects,
+    internalClassifications,
+    activeTemplate,
+    studentRanksMap,
+    serverRanksMap,
+    isParentView,
+  ]);
+
   // Class rank holders for rank_holder mode
-  // Rank holders per class. Built from the same metrics map the class progress report uses, and
+  // Rank holders per class. Built from the same metrics the class progress report uses, and
   // failed students are dropped before ranking, so a class shows Rank 1, 2, 3 ... with no gaps.
   const classRankHoldersMap = useMemo(() => {
     if (!students || students.length === 0 || !studentMetricsMap) return {};
@@ -739,7 +864,10 @@ const ReportCardGenerator = ({
     const byClass = {};
     students.forEach((stu) => {
       const clsId = String(stu.class_id || selectedClassId || 'default');
-      const metrics = studentMetricsMap[String(stu.id)] || {};
+      const metrics =
+        rankHolderMetricsByClass?.[String(stu.class_id ?? '')]?.[String(stu.id)] ||
+        studentMetricsMap[String(stu.id)] ||
+        {};
       const hasFailed =
         metrics.hasFailed === true || metrics.status === 'FAIL' || metrics.overallGrade === 'F';
 
@@ -780,7 +908,15 @@ const ReportCardGenerator = ({
     });
 
     return result;
-  }, [students, studentMetricsMap, selectedClassId, internalClasses, classes, selectedClass]);
+  }, [
+    students,
+    studentMetricsMap,
+    rankHolderMetricsByClass,
+    selectedClassId,
+    internalClasses,
+    classes,
+    selectedClass,
+  ]);
 
   // Rank holder classes to render
   const rankHolderClassesToRender = useMemo(() => {
@@ -805,6 +941,19 @@ const ReportCardGenerator = ({
       })
       .filter((item) => isExplicit || item.students.length > 0);
   }, [reportMode, propSelectedClassIds, internalClasses, classes, classRankHoldersMap]);
+
+  // Rank holder mode prints one page per class (or per chunk of classes when the template repeats
+  // every class on a page), so the page count follows the number of classes, not the students.
+  const rankHolderPages = useMemo(() => {
+    if (reportMode !== 'rank_holder') return [];
+    const rkCfg = activeTemplate.rankHoldersConfig || {};
+    const classesPerPage = rkCfg.repeatForEveryClass ? getDynamicClassesPerPage(rkCfg) : 1;
+    const pages = [];
+    for (let i = 0; i < rankHolderClassesToRender.length; i += classesPerPage) {
+      pages.push(rankHolderClassesToRender.slice(i, i + classesPerPage));
+    }
+    return pages;
+  }, [reportMode, rankHolderClassesToRender, activeTemplate.rankHoldersConfig]);
 
   const handlePrint = () => {
     window.print();
@@ -1315,25 +1464,235 @@ const ReportCardGenerator = ({
               </div>
             )}
           </div>
-
-          {/* Per-student release: the publish switch above says the reports are final, this decides
-              which wards may actually see them. */}
-          {canPublishReport && selectedSchedule && !hideControlBar && (
-            <div className="mt-4">
-              <ReleaseToParentsPanel
-                schedule={selectedSchedule}
-                classId={selectedClassId}
-                students={students.length > 0 ? students : propStudents || []}
-                canRelease={canPublishReport}
-              />
-            </div>
-          )}
         </div>
         )}
 
       {/* ── Report Cards ── */}
       <div className="space-y-6">
-        {displayedStudents.length === 0 || results.length === 0 ? (
+        {reportMode === 'rank_holder' ? (
+          !selectedScheduleId ? (
+            <div className="bg-white rounded-2xl border border-light-border p-12 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-2xl text-slate-400 mb-4">
+                <i className="fas fa-trophy" />
+              </div>
+              <h3 className="text-lg font-black text-dark-primary mb-2">Select an Examination</h3>
+              <p className="text-dark-muted text-sm">
+                Choose an examination event above to generate Rank Holder Reports for the selected
+                classes.
+              </p>
+            </div>
+          ) : rankHolderClassesToRender.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-light-border p-12 text-center">
+              <div className="w-16 h-16 mx-auto rounded-full bg-amber-50 flex items-center justify-center text-2xl text-amber-500 mb-4">
+                <i className="fas fa-trophy" />
+              </div>
+              <h3 className="text-lg font-black text-dark-primary mb-2">No Rank Holders Found</h3>
+              <p className="text-dark-muted text-sm">
+                {loading
+                  ? 'Loading report data...'
+                  : `No students or exam results recorded for the selected classes in ${
+                      selectedSchedule?.name || 'this examination'
+                    }.`}
+              </p>
+            </div>
+          ) : (
+            <>
+              {!activeTemplate.showRankHolders && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] font-semibold text-amber-800 print:hidden">
+                  <i className="fas fa-triangle-exclamation mr-1.5" />
+                  The selected template does not render the Rank Holders block. Enable it in the
+                  designer, or pick a template built for rank holders.
+                </div>
+              )}
+              <div className="space-y-8 print:space-y-0 print-cards-container">
+              <style dangerouslySetInnerHTML={{ __html: printStyles }} />
+              {rankHolderPages.map((pageClasses, pageIdx) => {
+                const pageNumber = pageIdx + 1;
+                const totalPages = rankHolderPages.length;
+                const isStacked = pageClasses.length > 1;
+                const rkCfg = activeTemplate.rankHoldersConfig || {};
+                const headerClassName = pageClasses.map((cls) => cls.name).join(', ');
+
+                return (
+                  <div
+                    key={`rank-holder-page-${pageIdx}`}
+                    style={{ '--page-pad-x': '24px', '--page-pad-y': '24px' }}
+                    className="bg-white border-2 border-slate-900 rounded-3xl p-6 shadow-md print:shadow-none print:border-none print:rounded-none print:m-0 print:p-0 progress-report-card-page max-w-4xl mx-auto relative overflow-hidden flex flex-col min-h-[920px] print:min-h-0"
+                  >
+                    <ExtraComponentLayers
+                      currentConfig={activeTemplate}
+                      position="background"
+                      pageNumber={pageNumber}
+                      totalPages={totalPages}
+                    />
+
+                    <div
+                      className="relative z-10 flex flex-col flex-1 h-full min-h-0 w-full"
+                      style={{
+                        gap: isStacked
+                          ? `${Math.min(activeTemplate.blockSpacing ?? 12, 12)}px`
+                          : `${activeTemplate.blockSpacing ?? 16}px`,
+                      }}
+                    >
+                      {/* Blocks follow the template's order/styles, exactly like the designer */}
+                      {activeTemplate.blockOrder.map((blockKey) => {
+                        const blockSt = buildBlockStyle(activeTemplate, blockKey);
+                        const bleed = getBlockBleedStyles(blockSt, blockKey);
+
+                        const blockContent = (() => {
+                          switch (blockKey) {
+                            case 'schoolHeader':
+                              return renderSchoolHeader({
+                                bleed,
+                                activeTemplate,
+                                schoolHeaderPrint,
+                                examTitleOverride: `${selectedSchedule?.name || 'Rank Holder Report'} · Rank Holder Report · ${headerClassName}`,
+                              });
+
+                            case 'rankHolders':
+                              return (
+                                <div
+                                  key="rankHolders"
+                                  className="rank-holders-print-block my-auto py-2 flex-1 flex flex-col justify-center gap-3"
+                                >
+                                  {!activeTemplate.showRankHolders
+                                    ? null
+                                    : pageClasses.map((clsItem, clsIdx) => (
+                                        <div key={clsItem.id || clsIdx} className="w-full">
+                                          {clsIdx > 0 && (
+                                            <div className="w-full border-t border-slate-200/80 my-2" />
+                                          )}
+                                          <RankHolders
+                                            students={clsItem.students}
+                                            classNameText={rkCfg.classNameText || clsItem.name}
+                                            config={rkCfg}
+                                            size={isStacked ? 'compact' : rkCfg.size}
+                                            isCompact={isStacked || rkCfg.size === 'compact'}
+                                          />
+                                        </div>
+                                      ))}
+                                </div>
+                              );
+
+                            case 'remarks':
+                              if (activeTemplate.showTeacherRemarks === false) return null;
+                              return (
+                                <div
+                                  key="remarks"
+                                  className={`border border-amber-200 rounded-2xl print:rounded-lg space-y-1.5 print:space-y-0.5 ${
+                                    activeTemplate.remarksConfig?.size === 'compact'
+                                      ? 'p-2 print:p-1'
+                                      : 'p-3.5 print:p-1.5'
+                                  }`}
+                                  style={bleed.innerBgStyle('rgb(255 251 235 / 0.6)')}
+                                >
+                                  <span
+                                    className="font-black uppercase tracking-wider block remarks-label"
+                                    style={{
+                                      color:
+                                        activeTemplate.remarksConfig?.style?.labelColor || '#78350f',
+                                      fontSize: `${remarksPrint.labelFontSize}px`,
+                                    }}
+                                  >
+                                    {activeTemplate.remarksConfig?.title || 'Remarks'}:
+                                  </span>
+                                  <p
+                                    className="italic font-medium remarks-content"
+                                    style={{
+                                      fontSize: `${remarksPrint.contentFontSize}px`,
+                                      color:
+                                        activeTemplate.remarksConfig?.style?.contentColor ||
+                                        '#0f172a',
+                                    }}
+                                  >
+                                    &quot;
+                                    {activeTemplate.remarksText ||
+                                      activeTemplate.remarksConfig?.defaultRemarks ||
+                                      'Congratulations to all the rank holders and high achievers for their outstanding academic performance and dedication!'}
+                                    &quot;
+                                  </p>
+                                </div>
+                              );
+
+                            case 'signatures':
+                              return renderSignatures({
+                                bleed,
+                                activeTemplate,
+                                signaturesPrint,
+                              });
+
+                            // Per-student blocks (info, attendance, subject table, summary,
+                            // charts) do not apply to a class rank holder page.
+                            default:
+                              return null;
+                          }
+                        })();
+
+                        if (!blockContent) return null;
+
+                        let shouldPrint = true;
+                        let preserveSpace = false;
+
+                        if (blockKey === 'schoolHeader') {
+                          const printRule =
+                            activeTemplate.schoolHeader?.printPages || 'everyPage';
+                          shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                          preserveSpace = !!activeTemplate.schoolHeader?.preserveSpace;
+                        } else if (blockKey === 'signatures') {
+                          const printRule =
+                            activeTemplate.signaturesConfig?.printPages || 'everyPage';
+                          shouldPrint = shouldPrintBlockOnPage(printRule, pageNumber, totalPages);
+                          preserveSpace = !!activeTemplate.signaturesConfig?.preserveSpace;
+                        }
+
+                        if (!shouldPrint && !preserveSpace) return null;
+
+                        const isHiddenReserved = !shouldPrint && preserveSpace;
+
+                        return (
+                          <div
+                            key={blockKey}
+                            className={`relative transition-all ${!bleed.isPageWidth ? 'w-full' : ''} ${
+                              blockKey === 'signatures'
+                                ? 'mt-auto report-card-signatures-wrapper'
+                                : ''
+                            }`}
+                            style={{
+                              ...bleed.wrapperStyle,
+                              ...(isHiddenReserved
+                                ? { visibility: 'hidden', pointerEvents: 'none' }
+                                : {}),
+                            }}
+                            aria-hidden={isHiddenReserved ? 'true' : undefined}
+                            {...bleed.wrapperAttrs}
+                          >
+                            {renderBlockTitle(blockSt, DEFAULT_BLOCK_TITLES[blockKey])}
+                            {blockContent}
+                          </div>
+                        );
+                      })}
+
+                      {activeTemplate.showGradingScale && activeTemplate.gradingScale?.length > 0 && (
+                        <GradingScaleLegend
+                          currentConfig={activeTemplate}
+                          gradingScalePrint={gradingScalePrint}
+                        />
+                      )}
+                    </div>
+
+                    <ExtraComponentLayers
+                      currentConfig={activeTemplate}
+                      position="foreground"
+                      pageNumber={pageNumber}
+                      totalPages={totalPages}
+                    />
+                  </div>
+                );
+              })}
+              </div>
+            </>
+          )
+        ) : displayedStudents.length === 0 || results.length === 0 ? (
           <div className="bg-white rounded-2xl border border-light-border p-12 text-center">
             <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-2xl text-slate-400 mb-4">
               <i className="fas fa-file-invoice" />
@@ -1352,10 +1711,10 @@ const ReportCardGenerator = ({
         ) : (
           <>
             <style dangerouslySetInnerHTML={{ __html: printStyles }} />
-            {displayedStudents.map((student, studentIndex) => {
+            {displayedStudents.map((rawStudent, studentIndex) => {
+              const student = withAttendance(rawStudent);
               const metrics = studentMetricsMap[String(student.id)] || {};
               const subjectScores = metrics.subjectScores || [];
-
               // Build grouped sections for subject table
               const { groupedSections, ungroupedScores } = buildGroupedSections(
                 subjectScores,
@@ -1393,59 +1752,7 @@ const ReportCardGenerator = ({
                   >
                     {/* ── Render Blocks according to activeTemplate.blockOrder ── */}
                     {activeTemplate.blockOrder.map((blockKey) => {
-                      const getBlockStyleObj = () => {
-                        switch (blockKey) {
-                          case 'schoolHeader':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.schoolHeader?.style || {}),
-                            };
-                          case 'studentInfo':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.studentInfoConfig?.style || {}),
-                            };
-                          case 'attendanceBar':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.attendanceBarConfig?.style || {}),
-                            };
-                          case 'rankHolders':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.rankHoldersConfig?.style || {}),
-                            };
-                          case 'subjectTable':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.subjectTableConfig?.style || {}),
-                            };
-                          case 'summaryCalculations':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.summaryConfig?.style || {}),
-                            };
-                          case 'charts':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.chartConfig?.style || {}),
-                            };
-                          case 'remarks':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.remarksConfig?.style || {}),
-                            };
-                          case 'signatures':
-                            return {
-                              ...DEFAULT_BLOCK_STYLE,
-                              ...(activeTemplate.signaturesConfig?.style || {}),
-                            };
-                          default:
-                            return DEFAULT_BLOCK_STYLE;
-                        }
-                      };
-
-                      const blockSt = getBlockStyleObj();
+                      const blockSt = buildBlockStyle(activeTemplate, blockKey);
                       const bleed = getBlockBleedStyles(blockSt, blockKey);
 
                       const blockContent = (() => {
