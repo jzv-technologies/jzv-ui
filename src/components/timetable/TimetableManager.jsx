@@ -64,6 +64,7 @@ const SCHEDULER_VIEW_OPTIONS = [
   { id: 'subject_unassigned', label: 'Subject Pending', icon: 'fa-book-open' },
   { id: 'free_teachers', label: 'Free Teachers', icon: 'fa-user-clock' },
   { id: 'assigned_teachers', label: 'Assigned Teachers', icon: 'fa-chalkboard-teacher' },
+  { id: 'weekly_periods_view', label: 'Weekly Periods Allocation', icon: 'fa-pallet' },
 ];
 
 const draftSlotKey = (slot) => `${slot.class_id}|${slot.day}|${slot.period_id}`;
@@ -2831,9 +2832,11 @@ const TimetableManager = ({ userRoles, user, initialTab = null }) => {
       teacherId &&
       slots.some(
         (slot) =>
-          !(String(slot.class_id) === String(classId) &&
+          !(
+            String(slot.class_id) === String(classId) &&
             slot.day === targetDay &&
-            String(slot.period_id) === String(targetPeriodId)) &&
+            String(slot.period_id) === String(targetPeriodId)
+          ) &&
           slot.day === targetDay &&
           String(slot.period_id) === String(targetPeriodId) &&
           String(slot.teacher_id) === String(teacherId)

@@ -477,7 +477,10 @@ const DataGrid = ({
                     (f) => f.key.toLowerCase() === h.toLowerCase(),
                   );
                   return (
-                    <th key={`filter-${h}`} className="p-3">
+                    <th
+                      key={`filter-${h}`}
+                      className={`p-3 ${columnConfig[h]?.stickyFilterClassName || ""}`}
+                    >
                       {isDropdown ? (
                         <select
                           value={columnFilters[h] || ""}
@@ -543,7 +546,7 @@ const DataGrid = ({
                     <th
                       key={h}
                       onClick={() => handleSort(h)}
-                      className="p-6 border-b whitespace-nowrap cursor-move hover:bg-gray-100/70 transition-colors select-none group"
+                      className={`p-6 border-b whitespace-nowrap cursor-move hover:bg-gray-100/70 transition-colors select-none group ${columnConfig[h]?.stickyHeaderClassName || ""}`}
                       draggable
                       onDragStart={(e) => handleDragStart(e, columnIndex)}
                       onDragOver={handleDragOver}
@@ -599,9 +602,16 @@ const DataGrid = ({
                       return (
                         <td
                           key={h}
-                          className="p-6 text-sm text-dark-charcoal whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis"
+                          className={`p-6 text-sm text-dark-charcoal whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis ${columnConfig[h]?.stickyCellClassName || ""}`}
+                          style={
+                            columnConfig[h]?.mutedValues?.includes(valStr)
+                              ? { color: '#9ca3af' }
+                              : undefined
+                          }
                         >
-                          {isStatus ? (
+                          {typeof columnConfig[h]?.renderCell === "function" ? (
+                            columnConfig[h].renderCell(item[h], item)
+                          ) : isStatus ? (
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusStyles(item[h])}`}>
                               {item[h]}
                             </span>

@@ -1,6 +1,7 @@
 // src/components/portals/admin/timetable/TimetableAdminView.jsx
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import DataGrid from '../DataGrid';
 import TimetableOverview from './TimetableOverview';
 import TimetableScheduler from './TimetableScheduler';
 import ConfirmModal from '../ConfirmModal';
@@ -1465,6 +1466,7 @@ const ALL_VIEWS = [
   'subject_unassigned',
   'free_teachers',
   'assigned_teachers',
+  'weekly_periods_view',
 ];
 
 const viewOptionsMap = {
@@ -1482,6 +1484,11 @@ const viewOptionsMap = {
     id: 'assigned_teachers',
     label: 'Assigned Teachers',
     icon: 'fa-chalkboard-teacher',
+  },
+  weekly_periods_view: {
+    id: 'weekly_periods_view',
+    label: 'Weekly Periods Allocation',
+    icon: 'fa-pallet',
   },
 };
 
@@ -1732,8 +1739,11 @@ const TimetableAdminView = ({
     }
     onActiveViewChange({
       viewType,
-      classId: selectedClassId ? String(selectedClassId) : null,
-      teacherId: selectedTeacherId ? String(selectedTeacherId) : null,
+      classId:
+        (viewType === 'scheduler' || viewType === 'class') && selectedClassId
+          ? String(selectedClassId)
+          : null,
+      teacherId: viewType === 'teacher' && selectedTeacherId ? String(selectedTeacherId) : null,
       viewLabel,
       entityName,
     });
@@ -1741,7 +1751,8 @@ const TimetableAdminView = ({
 
   const isSchedulerView = viewType === 'scheduler';
   const isGridView = viewType === 'class' || viewType === 'teacher';
-  const isOverviewView = !isGridView && !isSchedulerView;
+  const isWeeklyPeriodsView = viewType === 'weekly_periods_view';
+  const isOverviewView = !isGridView && !isSchedulerView && !isWeeklyPeriodsView;
 
   // Close popover on Escape
   useEffect(() => {
@@ -2376,7 +2387,7 @@ const TimetableAdminView = ({
                       <i className="fa-solid fa-retweet text-xs" />
                     </button>
                   )}
-                {!(myTab === 'my' && !myTeacher) && (
+                {!(myTab === 'my' && !myTeacher) && !isWeeklyPeriodsView && (
                   <button
                     onClick={() => setShowBreaks((v) => !v)}
                     title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
@@ -2389,7 +2400,7 @@ const TimetableAdminView = ({
                     <i className="fas fa-mug-hot text-xs" />
                   </button>
                 )}
-                {!(myTab === 'my' && !myTeacher) && (
+                {!(myTab === 'my' && !myTeacher) && !isWeeklyPeriodsView && (
                   <button
                     onClick={handleExportCSV}
                     disabled={
@@ -2406,6 +2417,7 @@ const TimetableAdminView = ({
                   </button>
                 )}
                 {myTab === 'class' &&
+                  !isWeeklyPeriodsView &&
                   (viewType === 'class' || viewType === 'scheduler') &&
                   selectedId &&
                   typeof onClearSlots === 'function' && (
@@ -2580,7 +2592,7 @@ const TimetableAdminView = ({
                 </button>
               )}
 
-            {!(myTab === 'my' && !myTeacher) && (
+            {!(myTab === 'my' && !myTeacher) && !isWeeklyPeriodsView && (
               <button
                 onClick={() => setShowBreaks((v) => !v)}
                 title={showBreaks ? 'Hide Breaks' : 'Show Breaks'}
@@ -2594,7 +2606,7 @@ const TimetableAdminView = ({
               </button>
             )}
 
-            {!(myTab === 'my' && !myTeacher) && (
+            {!(myTab === 'my' && !myTeacher) && !isWeeklyPeriodsView && (
               <button
                 onClick={handleExportCSV}
                 disabled={
@@ -2610,6 +2622,7 @@ const TimetableAdminView = ({
             )}
 
             {myTab === 'class' &&
+              !isWeeklyPeriodsView &&
               (viewType === 'class' || viewType === 'scheduler') &&
               selectedId &&
               typeof onClearSlots === 'function' && (
@@ -2685,6 +2698,16 @@ const TimetableAdminView = ({
         )
       ) : (
         <>
+          {isWeeklyPeriodsView && (
+            <WeeklyPeriodsView
+              classes={classes}
+              subjects={subjects}
+              classifications={classifications}
+              periods={periods}
+              slots={slots}
+            />
+          )}
+
           {/* ── Overview sub-views ── */}
           {isOverviewView && (
             <TimetableOverview
@@ -3163,6 +3186,137 @@ const TimetableAdminView = ({
         />
       )}
     </div>
+  );
+};
+
+const WEEKLY_PERIODS_EXCLUDED_COLUMNS = ['id', 'classificationTheme'];
+
+const WeeklyPeriodsView = ({
+  classes = [],
+  subjects = [],
+  classifications = [],
+  periods = [],
+  slots = [],
+}) => {
+  const sortedClasses = useMemo(
+    () => [...classes].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [classes]
+  );
+  const classColumnKeys = useMemo(
+    () => sortedClasses.map((cls) => `class_${encodeURIComponent(String(cls.id))}`),
+    [sortedClasses]
+  );
+  const columnConfig = useMemo(() => {
+    const renderClassificationCell = (value, row) => {
+      if (value === '-' || value === 'N/A') {
+        return (
+          <span className="-mx-6 -my-6 flex min-h-full items-center border-l-4 border-gray-200 bg-gray-50 px-6 py-6 text-gray-400">
+            {value}
+          </span>
+        );
+      }
+
+      const themeStyles = CARD_THEMES[row.classificationTheme] || CARD_THEMES.charcoal;
+      return (
+        <span
+          className={`-mx-6 -my-6 flex min-h-full items-center border-l-4 border-${themeStyles.border} bg-${themeStyles.bg} px-6 py-6 text-${themeStyles.color}`}
+        >
+          {value}
+        </span>
+      );
+    };
+    const config = {
+      classification: {
+        label: 'Classification',
+        stickyFilterClassName: 'sticky left-0 z-30 bg-gray-100/50 w-48 min-w-48 max-w-48',
+        stickyHeaderClassName: 'sticky left-0 z-30 bg-gray-50 w-48 min-w-48 max-w-48',
+        stickyCellClassName: 'sticky left-0 z-20 bg-white w-48 min-w-48 max-w-48',
+        renderCell: renderClassificationCell,
+      },
+      subject: {
+        label: 'Subject Name',
+        stickyFilterClassName: 'sticky left-48 z-30 bg-gray-100/50 w-56 min-w-56 max-w-56',
+        stickyHeaderClassName: 'sticky left-48 z-30 bg-gray-50 w-56 min-w-56 max-w-56',
+        stickyCellClassName: 'sticky left-48 z-20 bg-white w-56 min-w-56 max-w-56',
+        renderCell: renderClassificationCell,
+      },
+    };
+    sortedClasses.forEach((cls, index) => {
+      config[classColumnKeys[index]] = {
+        label: cls.name || 'Unnamed Class',
+        mutedValues: ['-'],
+        renderCell: renderClassificationCell,
+      };
+    });
+    return config;
+  }, [sortedClasses, classColumnKeys]);
+
+  const rows = useMemo(() => {
+    const classificationNameById = new Map(
+      classifications.map((classification) => [String(classification.id), classification.name])
+    );
+    const classificationById = new Map(
+      classifications.map((classification) => [String(classification.id), classification])
+    );
+    const isBreakByPeriodId = new Map(
+      periods.map((period) => [String(period.id), Boolean(period.is_break)])
+    );
+    const occurrencesByClassAndSubject = new Map();
+
+    slots.forEach((slot) => {
+      if (!slot.subject_id || isBreakByPeriodId.get(String(slot.period_id))) return;
+      const key = JSON.stringify([String(slot.class_id), String(slot.subject_id)]);
+      if (!occurrencesByClassAndSubject.has(key)) {
+        occurrencesByClassAndSubject.set(key, new Set());
+      }
+      occurrencesByClassAndSubject.get(key).add(JSON.stringify([slot.day, String(slot.period_id)]));
+    });
+
+    return [...subjects]
+      .sort((a, b) => {
+        const classificationA =
+          classificationNameById.get(String(a.classification_id)) || 'Unclassified';
+        const classificationB =
+          classificationNameById.get(String(b.classification_id)) || 'Unclassified';
+        return (
+          classificationA.localeCompare(classificationB) ||
+          (a.name || '').localeCompare(b.name || '')
+        );
+      })
+      .map((subject) => {
+        const classification =
+          classificationNameById.get(String(subject.classification_id)) || 'Unclassified';
+        const subjectClassification = classificationById.get(String(subject.classification_id));
+        const row = {
+          id: String(subject.id),
+          classification,
+          classificationTheme: subjectClassification?.theme || 'charcoal',
+          subject: subject.name || 'Unnamed Subject',
+        };
+        sortedClasses.forEach((cls, index) => {
+          const key = JSON.stringify([String(cls.id), String(subject.id)]);
+          const count = occurrencesByClassAndSubject.get(key)?.size || 0;
+          row[classColumnKeys[index]] = count > 0 ? `${count}pds` : '-';
+        });
+        return row;
+      });
+  }, [classColumnKeys, classifications, periods, slots, subjects, sortedClasses]);
+
+  return (
+    <section
+      className="w-full space-y-3"
+      data-feature="weekly-periods-view"
+      aria-label="Weekly periods by class and subject"
+    >
+      <div className="overflow-x-auto rounded-xl border border-light-border bg-white">
+        <DataGrid
+          data={rows}
+          excludeColumns={WEEKLY_PERIODS_EXCLUDED_COLUMNS}
+          columnConfig={columnConfig}
+          getRowKey={(row) => row.id}
+        />
+      </div>
+    </section>
   );
 };
 
